@@ -37,3 +37,14 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Decision:** public repo `eshin087/gcdAbyss`; Vercel project `gcdabyss` builds `npm run build`
   and serves `dist/` at gcdabyss.vercel.app; every push to `main` deploys, PRs get previews.
 - **Consequences:** `main` must always be shippable; CI runs tests + build on every push/PR.
+
+## ADR-006 — Protected main, PR-only changes, lean deployments (2026-11-01)
+- **Context:** the owner wants every change reviewed through a PR and auto-deployed, and Vercel
+  deployment storage across the owner's projects had grown far past the quota from stale deployments.
+- **Decision:** GitHub branch protection on `main`: PR required (0 approvals, enforced for admins),
+  required check `test-and-build` with up-to-date branches, linear history, no force-push/deletion;
+  squash/rebase merges only, branches auto-delete. Vercel: Git integration only (no CLI deploys),
+  30-day retention for every deployment state, and an `ignoreCommand` that skips docs/tests-only
+  commits.
+- **Consequences:** releases happen by merging PRs; production is always the latest merged `main`;
+  previews exist per PR and expire automatically.
