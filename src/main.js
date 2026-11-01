@@ -201,6 +201,7 @@ async function boot() {
     safe('flow', () => game.flow.update(dt, realDt));
     safe('player', () => game.player.update(dt));
     safe('dragon', () => game.dragon.update(dt));
+    safe('lab', () => game.lab.postUpdate?.()); // hitbox overlay matches this frame
     safe('camera', () => updateCameraFocus(realDt));
     updateSharedUniforms();
     safe('world', () => game.world.update(dt));
