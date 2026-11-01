@@ -4,6 +4,26 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
+Look pass from the owner's v0.2 review (awaiting approval on the PR preview).
+
+### Added
+- Lab **Showroom** button (VIEW): fight on, AI off, god mode, hero 7 m in front of the wyrm,
+  camera zoomed in — for reviewing the hero, the wyrm and the grass up close. "Camera default" resets.
+
+### Changed
+- Grass is the v0.1 world-anchored glyph-stroke field again (no shimmer when the camera moves),
+  about 20 % darker with slower, smaller wind so the ground stays calm and the characters pop.
+- Hero and wyrm render as crisp glyphs printed on the body (sized to stay legible, drawn larger
+  inside each cell, sharp edges) over near-black gaps, instead of the blurry v0.2 screen grid.
+- The hero's black coat gets a thin moonlit outline and brighter silver / blade accents.
+- Attack tells are visual only (see COMBAT.md): dodge-only attacks make the wyrm glow and flash red
+  (plus red ground danger zones for area attacks); parryable attacks are read from the wind-up and
+  marked by a brief white glint at the timing moment.
+
+### Removed
+- PARRY / DODGE text marks, ◆ / ! icons, closing rings and off-screen arrows over the enemy, and the
+  tell tips in the log.
+- The ASCII-pass grass path (`GRASS` class, meadow texture).
 
 ## [0.2.0] - 2026-11-01
 Combat & presentation pass.

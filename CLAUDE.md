@@ -59,7 +59,8 @@ In Claude Code the preview config is `.claude/launch.json` (`abyss-dev`).
 - **Deployment hygiene (Vercel storage):** the project keeps deployments 30 days (preview,
   production, canceled, errored). `vercel.json` `ignoreCommand` skips deployments for commits that
   only touch docs / *.md / tests / .github / .claude — keep doc-only work in its own commits.
-  Don't create manual CLI deployments (`vercel deploy`); let the Git integration deploy.
+  It only diffs the pushed tip against its parent (HEAD^..HEAD), so on a PR branch make the LAST
+  pushed commit a code commit when you need a fresh preview. Don't create manual CLI deployments (`vercel deploy`); let the Git integration deploy.
 - **Releases**: bump `version` in `package.json`, move `[Unreleased]` to a version heading in the
   changelog, tag `vX.Y.Z`.
 

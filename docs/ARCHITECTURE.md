@@ -38,7 +38,7 @@ flow, lab — constructors must not dereference modules built later.
 | `debugTimeScale` | Lab multiplier on game time (1 = normal). Only the Lab writes it. |
 | `lights` | `add({x,y,z,color:[r,g,b],intensity,radius,life,fade,fadeIn,flicker})` → light (mutable `x,y,z`, `.set()`, `.kill()`) |
 | `fx.add` / `fx.alpha` | glyph particles, additive-HDR / alpha-blended. `spawn({x,y,z,vx,vy,vz,life,size,sizeEnd,glyph,color,colorEnd,alpha,alphaEnd,gravity,drag,spin,rot,flicker,stretch})`. `glyph`: char, string of chars (random pick) or atlas index. |
-| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `meadow.density(x, z)` (grass cover 0..1; the grass itself is drawn by the ASCII pass); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)` |
+| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)` |
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
@@ -48,13 +48,20 @@ Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `
 `tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code.
 
 Render helpers for creature modules:
-- `createSurfaceGlyphMaterial(U, opts)` (`render/materials.js`). **v0.2: pass `ascii: <set>`** so the
-  part renders through the screen character grid with glyphs that follow the surface direction
-  (aGUV +y = "glyph up"). Sets: `'scales'` (chevrons along the flow), `'strands'` (line strokes along
-  the flow: hair, cloth folds, membrane veins, blades), `'plates'` (`= #` bands across the flow:
-  belly, armour), `'smooth'` (density ramp `. : o O 0 @`: skin, eyes, gems). In ascii mode the cell
-  colour is the lit `ink` (per-cell `inkAlt` variation via `altChance`); `base`/`glyphs`/`cell` are
-  ignored. Runtime uniforms: `uGlow` (emissive seams/brightness), `uInkGlow`, `uFlash`, `uDissolve`, `uTint`.
+- `createSurfaceGlyphMaterial(U, opts)` (`render/materials.js`). **v0.3: crisp surface glyphs.** One
+  glyph per aGUV cell is printed on the body (aGUV +y = "glyph up"), picked by local light, over
+  near-black gaps (`base`). Pass `ascii: <set>` to pick the default ramp + cell (`SURFACE_SETS`):
+  - `'scales'`: `. v ^ A` chevrons along the flow
+  - `'strands'`: `. : | I` strokes for hair, cloth folds, membrane veins and blades
+  - `'plates'`: `. - = #` bands for belly and armour
+  - `'smooth'`: `. : o 0` for skin, eyes and gems
+
+  Override per part with `glyphs`, `cell` (meters; keep glyphs ≥ ~6 screen px), `rowShift`,
+  `lumScale`, `glyphZoom` (default 0.72) and `outline` (moonlit silhouette line, default 1.1; use 0
+  on large bodies; falloff pow 6). `grid: true` keeps the v0.2 screen-grid rendering (unused). Runtime uniforms: `uGlow` (emissive seams/brightness), `uInkGlow`, `uFlash`, `uDissolve`, `uTint`,
+  `uWarn` (vec4: rgb + strength in `.w`; glow on glyphs and the silhouette rim). Actors drive `uWarn`
+  on all their materials for the red (dodge-only) tell — colour and ramp numbers in
+  `TELL_STYLE.red.warn`, timing in COMBAT.md "Tell presentation".
 - `limbGeometry`, `ellipsoidGeometry`, `hornGeometry`, `cylindricalGUV`, `planarGUV` (`render/glyphGeometry.js`).
 - `markCaster(object)` (`render/pipeline.js`) — casts moon shadows.
 - `gi(ch)`, `gis(str)` (`render/glyphs.js`).
@@ -124,7 +131,15 @@ debug: {                                // used by the Lab (generic shape every 
 }
 ```
 Damages the player only via `game.player.takeHit(...)` with tell data; announces tells with
-`combat:tell` / `combat:flash` and shows an in-world glyph flash in the tell colour.
+`combat:tell` / `combat:flash` and shows them on its own body (no HUD marks):
+- red (dodge-only) hits: `uWarn` on every material (`model.mats`), driven in `_updateWarn` from the
+  running action's beats — strength ramps 0.1 → 0.38 from the hit's `combat:tell` to its
+  `combat:flash`, spikes to 1.6 on the flash, decays to 0 in 0.25 s (game time). A replaced action
+  (stagger, posture break, parry recoil, death, Lab interrupt) drops it at once; `reset()` and death
+  zero it. Plus a red glyph burst + red light at the striking part on the flash (`fx.tellFlash`).
+- parryable (normal / blue) hits: nothing during the windup; on the flash a white glint (star core,
+  four-point sparkle, short rays, small white light) at the striking part, ×1.5 for blue.
+- parries throw white/gold sparks (bigger for blue).
 
 ### HUD — `src/ui/hud.js` exports `class Hud`
 ```
@@ -138,8 +153,11 @@ showStats(rows)                      // victory / death run stats
 prompt(text|null)                    // interaction prompt, e.g. "[E] Rest at bonfire"
 showTitle() / hideTitle();  showPause(bool);  toggleHelp()
 ```
-Also renders combat tells (world-anchored ◆ PARRY / ! DODGE marks on `combat:tell`, a pulse on
-`combat:flash`), parry / Ghostep / guard-break call-outs, the posture bar, and the crit-window cue.
+Renders no attack tells of its own: no text, icons, rings or arrows (tells are read from the
+attacker — COMBAT.md). Its only tell cue is a brief red screen-edge flash (~0.25 s, game time,
+stronger on the attacker's side) on a red `combat:flash`, dropped by a stagger / posture break /
+death / retry (`ui/tells.js`). Also renders parry / Ghostep / guard-break call-outs, the cyan
+Ghostep edge pulse, the posture bar, and the crit-window cue.
 
 ### Flow — `src/game/flow.js` exports `class GameFlow`
 ```

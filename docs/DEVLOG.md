@@ -5,6 +5,40 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-01 — Session 3: look pass from the v0.2 review
+**Owner feedback on v0.2 (live):**
+- The grass is TOO ascii: noisy, distracting, and the ground seems to move, which makes the game dizzy.
+- The main character is barely visible, and the hero and dragon are blurry.
+- No PARRY / DODGE text notices: dodge-only attacks should be a red warning flash from the boss,
+  and parryable attacks should be read from animation.
+
+They want previews to approve. Their answers to my questions: v0.1 grass but calmer; crisp surface
+glyphs for the creatures; a brighter outline to find the hero; red flash + white glint tells.
+
+**Done**
+- Grass: restored v0.1 `world/grass.js` / `ground.js` / world wiring / quality presets; tips ~20 %
+  darker; wind amplitude 0.07 → 0.04 and slower. Removed the grass path from the ASCII pass.
+- Creatures: `createSurfaceGlyphMaterial` is surface-glyph by default again. It uses `SURFACE_SETS`
+  defaults per `ascii` set, `glyphZoom` 0.72, sharpened coverage, darker gaps and an `outline` term
+  (pow 6 falloff; a wide falloff shaded the coat flare like plastic).
+  - Wyrm: cells = v0.1 × 1.3, `lumScale` 3.3–3.5, lit gaps, no outline.
+  - Hero: cells 0.045–0.12 m, coat ink brighter, outline 0.8–1.7.
+
+  Tuned live against v0.1 (scratch worktree at `v0.1.0`) and v0.2 (production).
+- Tells (sub-agent): text/icon marks and log tips removed. The wyrm drives `uWarn`: red glow through
+  a red attack's windup and a hard red flash at the timing cue. Parryable attacks get a white glint
+  (bigger for blue). See ADR-010 and COMBAT.md.
+- Lab: Showroom + Camera default buttons.
+
+**Decisions:** ADR-010 (tells on the attacker), ADR-011 (hybrid rendering).
+
+**Open issues / next**
+- Owner approval of the previews; then merge and release v0.3.0.
+- The hero is still small at the default zoom (the owner chose outline only, not a closer camera).
+- Not yet done: wind-up animations exaggerated for parry reads, if the glint alone isn't enough.
+
+---
+
 ## 2026-11-01 — Session 2: combat & presentation pass (v0.2.0)
 **Goal:** the owner's v0.2 feedback (see Session 1) plus a long-term repo/deploy setup.
 
