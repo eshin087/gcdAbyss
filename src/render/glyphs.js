@@ -69,28 +69,59 @@ export function createGlyphAtlas(renderer) {
   return { texture: tex, canvas };
 }
 
-// Screen-grid ramps: 14 luminance levels x 4 variants (variants are picked per cell by hash
-// so large flat areas read as hand-typed text rather than a repeating stamp).
+// Screen-grid ramps. Each atlas row holds up to GRID_COLS glyphs; the ASCII pass in
+// pipeline.js indexes them (row constants below must stay in sync with its shader).
+//  - ramp rows (stone, leaf, smooth): 14 luminance levels x 4 variants (variant picked per cell by
+//    hash, so large flat areas read as hand-typed text rather than a repeating stamp)
+//  - grass row: 11 categories x 4 variants (see GRASS_CATS)
+//  - directional rows (scales, strands, plates): 7 levels x 8 screen directions
+//    (dir 0 = right, counter-clockwise in 45° steps, so 2 = up, 4 = left, 6 = down)
+//  - edge row: 4 orientations (|, -, /, \) x 4 variants, used to outline stone silhouettes
 export const GRID_LEVELS = 14;
 export const GRID_VARIANTS = 4;
-const RAMPS = {
-  stone: [
-    '    ', '.`.,', ":'-.", ';~_:', '=+/\\', 'il|(', 'cvzr', 'sunx',
-    'oeaw', 'pqdb', 'OQ0%', '&8$#', 'BNWM', '@MW#',
-  ],
-  leaf: [
+export const GRID_COLS = 64;
+export const GRID_ROW = { stone: 0, leaf: 1, grass: 2, scales: 3, strands: 4, plates: 5, smooth: 6, edge: 7 };
+
+const ramp = (levels) => levels.flatMap((l) => [...l.padEnd(4, ' ')]);
+const directional = (levels) => levels.flatMap((l) => (l.length === 1 ? Array(8).fill(l) : [...l]));
+
+// grass categories (4 variants each); order matters, the shader indexes by category
+export const GRASS_CATS = ['empty', 'dots', 'tufts', 'upright', 'leanR', 'leanL', 'wide', 'flat', 'ash', 'ember', 'flower'];
+const RAMP_ROWS = {
+  // stone favours symbols over lowercase letters so rocks read as carved texture, not words
+  stone: ramp([
+    '    ', '.  .', '.`.,', ":.:'", ';:-:', '-=~-', '=+=-', '+*=+',
+    '*+%x', '%*#x', '#%&8', '8&#$', 'B8@&', '@MW#',
+  ]),
+  leaf: ramp([
     '    ', '..,`', ",:.'", ':;oc', 'ocoe', 'oeao', '0oOe', 'O0Qo',
     '08O&', '8&%0', '@8&%', '@#8@', '@@#8', '@@@#',
-  ],
+  ]),
+  // grass strokes only (no letters that read as words): dots, tufts, blades, leaning blades,
+  // wide tufts, trampled, ash, embers, flowers
+  grass: ramp([
+    '    ', '.,`.', ",'\"`", '|¦|!', '//)/', '\\\\(\\', 'vwVY', '_-~,', '.,`:', "*'.`", '*o°·',
+  ]),
+  // chevrons point along the surface flow (toward the head on a dragon)
+  scales: directional([' ', '.', ':', '>^^^<vvv', '>^^^<vvv', '»AAA«VVV', '»AAA«VVV']),
+  // strokes along the flow: hair, cloth folds, membrane veins, blades
+  strands: directional([' ', '.', "-/|\\-/|\\", "-/|\\-/|\\", "-/|\\-/|\\", '=/I\\=/I\\', '=/I\\=/I\\']),
+  // bands across the flow: belly plates, armour
+  plates: directional([' ', '.', ':', '|\\-/|\\-/', '|\\=/|\\=/', 'HX=XHX=X', '#']),
+  smooth: ramp([
+    '    ', '..  ', '..,.', ':.:.', '::;:', 'oc:o', 'ocoe', 'oOoe',
+    'O0oQ', '0O8Q', '08@0', '@8@0', '@@#8', '@@@@',
+  ]),
+  edge: ramp(['||!|', '-_-~', '////', '\\\\\\\\']),
 };
-export const GRID_ROWS = ['stone', 'leaf'];
 
-/** Pixel-exact atlas: row 0 = stone ramp, row 1 = leaf ramp. Each glyph is cellW x cellH px. */
+/** Pixel-exact atlas: one row per GRID_ROW entry, each glyph exactly cellW x cellH px. */
 export function createGridAtlas(cellW, cellH) {
-  const cols = GRID_LEVELS * GRID_VARIANTS;
+  const cols = GRID_COLS;
+  const rowNames = Object.keys(GRID_ROW);
   const canvas = document.createElement('canvas');
   canvas.width = cols * cellW;
-  canvas.height = GRID_ROWS.length * cellH;
+  canvas.height = rowNames.length * cellH;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#fff';
@@ -98,19 +129,17 @@ export function createGridAtlas(cellW, cellH) {
   ctx.textBaseline = 'middle';
   const size = Math.max(7, Math.round(cellH * 0.98));
   ctx.font = `700 ${size}px ${FONT_STACK}`;
-  GRID_ROWS.forEach((name, row) => {
-    RAMPS[name].forEach((level, li) => {
-      [...level].forEach((ch, vi) => {
-        const col = li * GRID_VARIANTS + vi;
-        ctx.fillText(ch, col * cellW + cellW / 2, row * cellH + cellH / 2 + 0.5);
-      });
+  for (const name of rowNames) {
+    const row = GRID_ROW[name];
+    RAMP_ROWS[name].slice(0, cols).forEach((ch, col) => {
+      if (ch !== ' ') ctx.fillText(ch, col * cellW + cellW / 2, row * cellH + cellH / 2 + 0.5);
     });
-  });
+  }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.NoColorSpace;
   tex.generateMipmaps = false;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
-  return { texture: tex, cols, rows: GRID_ROWS.length };
+  return { texture: tex, cols, rows: rowNames.length };
 }

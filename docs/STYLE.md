@@ -30,16 +30,37 @@ grid, I arrange them to create those patterns… our brains recognize shapes and
 **UI.** Monospace everything; thin bars; translucent dark panels with 1px light borders; a chat/log
 panel bottom-left with tabs; minimap top-right with a zone name; FPS readout; hotbar bottom-centre.
 
-## How this codebase does it
+## How this codebase does it (v0.2)
 
+The owner's verdict after v0.1: **the trees are the gold standard** ("perfect ASCII feel"), while
+the 3D-quad grass and surface-glyph creatures looked "too solid / not ASCII". So in v0.2 *everything
+except FX* goes through ONE screen-space character grid (pixel-exact terminal glyphs). Materials
+write their lit colour + an alpha **class code**; the ASCII pass (`render/pipeline.js`) draws one
+glyph per cell from the class's ramp in the grid atlas (`render/glyphs.js`, `GRID_ROW`).
+
+| Class (alpha) | Glyph logic | Used by |
+|---|---|---|
+| `LEAF` 0.6 | blobby density ramp `. : o 0 O 8 @` by luminance | canopies |
+| `STONE` 1.0 | symbol ramp `. : - = + * % # 8 & @ M W` + **outline glyphs** (`| - / \`) on silhouettes / depth steps of raised stones | rocks, ruins, trunks, bones, bonfire |
+| `GRASS` 0.5 | per cell: meadow density + clumping noise decide presence; wind waves, trample pushers and wing gusts tip glyphs between `| ¦ !`, `/`, `\`, flatten to `_ - ~`; tufts `, ' "`, `v w V Y`; flowers `* o ° ·`; scorch → ash `. , \``, embers `*` | the ground plane (`world/ground.js`, field baked in `world/grass.js`) |
+| `CREATURE` 0.04–0.44 | value packs a glyph **set** + the **screen-space flow angle** (direction in which the surface's aGUV +y grows). `scales`: chevrons `> ^ < v` / bold `» A « V` pointing along the body; `strands`: strokes `- / | \` (hair, cloth folds, membranes, blades); `plates`: bands across the flow `= | H #`; `smooth`: `. : o O 0 @` (skin, eyes) | dragon, hero (`createSurfaceGlyphMaterial({ ascii })`) |
+
+Rules of thumb that make it read like the trees:
+- **Gaps matter.** Dark background cells (the slab colour is the cell colour × ~0.1–0.16) are what
+  make shapes legible; clump density, use AO/hollows, never fill every cell.
+- **Contrast drives glyph density.** Lit faces should climb to dense glyphs, shadow sides drop to
+  dots. Flat lighting = a wall of mid-level text.
+- **Avoid lowercase words.** Ramps favour symbols and blocky capitals so areas read as texture.
+- **Silhouette first.** Hero hair spikes, coat flare, wing outlines carry identity at ~60 px.
+- Wind/trample animate *which glyph* is shown, not geometry — the meadow ripples as text.
+
+Other techniques:
 | Thing | Technique | Where |
 |---|---|---|
-| Grass | instanced glyph quads, wind, trample pushers, gusts, scorch | `src/world/grass.js` |
-| Rocks / trees / bones | lit mesh writes alpha FLAG → post pass converts to char grid | `render/materials.js` (AsciiObject), `render/pipeline.js` |
-| Dragon / player | SurfaceGlyph material: glyph cells in surface (aGUV) space, glyph picked by local light | `render/materials.js`, `render/glyphGeometry.js` |
-| FX | camera-facing glyph particles, additive HDR (bloom) or alpha | `render/particles.js` |
+| FX | camera-facing glyph particles, additive HDR (bloom) or alpha, drawn after the grid pass | `render/particles.js` |
 | Fire light | pooled point lights (8 visible) lighting every shader | `render/lights.js` |
 | Shadows | moon orthographic shadow map, casters on layer 1 (`markCaster`) | `render/pipeline.js` |
+| Legacy surface glyphs | `createSurfaceGlyphMaterial` without `ascii` still draws glyphs on the surface (kept for special props) | `render/materials.js` |
 
 ### Colour rules (all shader colours are LINEAR; final pass applies ACES + gamma)
 - Dark skin/base between glyphs: 0.01–0.03. Glyph ink: 0.3–0.7 (lighting multiplies it).
@@ -48,12 +69,10 @@ panel bottom-left with tabs; minimap top-right with a zone name; FPS readout; ho
   `[0.28,0.05,0.04]`. Dragon ink = bone/ash `[0.42,0.34,0.3]` with ember-red alt `[0.75,0.16,0.05]`.
 
 ### Glyph choice rules
-- Pick 4 glyphs ordered dark → bright for each SurfaceGlyph part (shadowed cells show the first).
-  Scales `'.v^A'`, belly plates `'.-=≡'`→ use `'.-=#'`, membranes `'.,/\\'` → `'.:/|'`,
-  armour `'.:=#'`, mail `'.oO0'`, horns/claws `'.:|I'`.
-- Cell sizes: dragon 0.18–0.28 m, player 0.06–0.1 m (the player is small on screen).
-- Rotate meaning with geometry: aGUV +y should run along the limb toward the tip/head so chevrons
-  point "forward".
+- Creatures: pick the `ascii` set per part (scales / strands / plates / smooth) and make aGUV +y run
+  along the limb toward the tip/head so chevrons point "forward" and strokes follow folds/hair.
+- Colour carries material; glyph carries form. Keep inks desaturated except glow/fire.
+- New ramps go into `glyphs.js` `RAMP_ROWS` + `GRID_ROW`, and the pass must index them.
 
 ### Available glyphs (world atlas)
 ```

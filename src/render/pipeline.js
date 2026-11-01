@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
-import { FS_VERT } from './shaderLib.js';
-import { createGridAtlas, GRID_LEVELS, GRID_VARIANTS } from './glyphs.js';
+import { FS_VERT, MAX_PUSH } from './shaderLib.js';
+import { createGridAtlas, GRID_COLS, GRID_ROW } from './glyphs.js';
 
 // Frame pipeline:
 //   1. moon shadow map  (casters = objects on LAYER_CASTER)
@@ -73,64 +73,230 @@ export class Pipeline {
     U.uShadowMap.value = this.shadowRT.depthTexture;
     this.shadowCenter = new THREE.Vector3();
 
-    // --- ASCII grid pass
+    // --- ASCII grid pass (see FLAG in materials.js and GRID_ROW in glyphs.js)
     this.cell = new THREE.Vector2(7, 12);
     this.grid = null;
     this.asciiMat = new THREE.ShaderMaterial({
       uniforms: {
         tScene: { value: this.sceneRT.texture },
+        tDepth: { value: this.sceneRT.depthTexture },
         tGrid: { value: null },
         uRes: { value: new THREE.Vector2(1, 1) },
         uCell: { value: this.cell },
-        uGridCols: { value: GRID_LEVELS * GRID_VARIANTS },
-        uLevels: { value: GRID_LEVELS },
-        uVariants: { value: GRID_VARIANTS },
+        uGridCols: { value: GRID_COLS },
+        uGridRows: { value: Object.keys(GRID_ROW).length },
         uGain: { value: 2.4 },
         uBg: { value: 0.16 },
         uLumMap: { value: 13.0 },
+        uCreatureGain: { value: 1.9 },
+        uCreatureLum: { value: 4.2 },
+        uGrassGain: { value: 2.3 },
+        uGrassBg: { value: 0.1 },
+        uInvViewProj: { value: new THREE.Matrix4() },
+        uNear: { value: 1 },
+        uFar: { value: 200 },
+        uWorldCell: { value: new THREE.Vector2(0.15, 0.3) },
+        uTime: U.uTime,
+        uPushers: U.uPushers,
+        uGust: U.uGust,
+        uScorch: U.uScorch,
+        uScorchBounds: U.uScorchBounds,
+        uMeadow: { value: null },
+        uMeadowBounds: { value: new THREE.Vector4(-75, -75, 150, 0) },
       },
       vertexShader: FS_VERT,
       fragmentShader: /* glsl */ `
+        #define MAX_PUSH ${MAX_PUSH}
         uniform sampler2D tScene;
+        uniform sampler2D tDepth;
         uniform sampler2D tGrid;
         uniform vec2 uRes;
         uniform vec2 uCell;
         uniform float uGridCols;
-        uniform float uLevels;
-        uniform float uVariants;
+        uniform float uGridRows;
         uniform float uGain;
         uniform float uBg;
         uniform float uLumMap;
+        uniform float uCreatureGain;
+        uniform float uCreatureLum;
+        uniform float uGrassGain;
+        uniform float uGrassBg;
+        uniform mat4 uInvViewProj;
+        uniform float uNear;
+        uniform float uFar;
+        uniform vec2 uWorldCell;
+        uniform float uTime;
+        uniform vec4 uPushers[MAX_PUSH];
+        uniform vec4 uGust;
+        uniform sampler2D uScorch;
+        uniform vec4 uScorchBounds;
+        uniform sampler2D uMeadow;
+        uniform vec4 uMeadowBounds;
         varying vec2 vUv;
+
         float hash12(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
           p3 += dot(p3, p3.yzx + 33.33);
           return fract((p3.x + p3.y) * p3.z);
         }
+        float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p), f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
+        }
+        // glyph mask from the pixel-exact grid atlas (row 0 at the top of the canvas)
+        float glyphAt(float row, float col, vec2 local) {
+          vec2 auv = vec2((col + local.x) / uGridCols, (uGridRows - 1.0 - row + local.y) / uGridRows);
+          return texture2D(tGrid, auv).a;
+        }
+        float linDepth(vec2 uv) {
+          float z = texture2D(tDepth, uv).r * 2.0 - 1.0;
+          return (2.0 * uNear * uFar) / (uFar + uNear - z * (uFar - uNear));
+        }
+        vec3 worldAt(vec2 uv) {
+          float d = texture2D(tDepth, uv).r;
+          vec4 w = uInvViewProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+          return w.xyz / w.w;
+        }
+        bool isStone(float a) { return a > 0.8; }
+
+        // ---- grass: one glyph per cell from the meadow field + wind / trample / gust / scorch
+        vec3 grassCell(vec4 c, vec2 cuv, vec2 local) {
+          vec3 wp = worldAt(cuv);
+          vec2 q = floor(wp.xz / uWorldCell);
+          float h1 = hash12(q + 17.0), h2 = hash12(q + 91.3), h3 = hash12(q * 1.7 + 5.1);
+          vec2 meadow = textureLod(uMeadow, (wp.xz - uMeadowBounds.xy) / uMeadowBounds.z, 0.0).rg;
+          float dens = meadow.r, tall = meadow.g;
+          vec2 suv = (wp.xz - uScorchBounds.xy) / uScorchBounds.z;
+          vec2 sc = (suv.x > 0.0 && suv.y > 0.0 && suv.x < 1.0 && suv.y < 1.0) ? textureLod(uScorch, suv, 0.0).rg : vec2(0.0);
+          float burn = sc.x, heat = sc.y;
+
+          // wind: travelling waves read as glyphs tipping between the upright and leaning sets
+          float w = sin(uTime * 1.5 + wp.x * 0.32 + wp.z * 0.2) + 0.55 * sin(uTime * 2.7 + wp.x * 0.85 - wp.z * 0.55);
+          float lean = w * 0.42 + (h2 - 0.5) * 0.55;
+          float flatten = 0.0;
+          for (int i = 0; i < MAX_PUSH; i++) {
+            vec4 P = uPushers[i];
+            if (P.w <= 0.0 || P.y > 1.5) continue;
+            vec2 d = wp.xz - P.xz;
+            float dist = length(d);
+            if (dist < P.w) {
+              float k = 1.0 - dist / P.w;
+              lean += (d.x / max(dist, 1e-3)) * k * 2.2;
+              flatten = max(flatten, k * 1.4 - 0.25);
+            }
+          }
+          if (uGust.z > 0.0) {
+            vec2 d = wp.xz - uGust.xy;
+            float dist = length(d);
+            float k = clamp(1.0 - dist / uGust.w, 0.0, 1.0) * uGust.z;
+            float wave = 0.55 + 0.45 * sin(dist * 0.8 - uTime * 13.0);
+            lean += (d.x / max(dist, 1e-3)) * k * wave * 2.4;
+            flatten = max(flatten, k * wave * 0.7);
+          }
+
+          // tufts grow in clumps (~2 m) so the meadow has dark gaps to breathe, like the canopies
+          float clump = smoothstep(0.25, 0.75, vnoise(wp.xz * 0.55) * 0.7 + vnoise(wp.xz * 1.7 + 7.0) * 0.3);
+          float cover = dens * mix(0.32, 0.95, clump);
+          float cat; // GRASS_CATS order in glyphs.js
+          vec3 fg = c.rgb * uGrassGain * (0.75 + 0.35 * tall) * (0.5 + 0.75 * h2);
+          if (burn > 0.45) {
+            bool ember = heat > 0.3 && h2 > 0.5;
+            cat = h1 < 0.6 ? (ember ? 9.0 : 8.0) : 0.0;
+            if (ember) fg = vec3(2.8, 0.75, 0.12) * (0.4 + heat);
+          } else if (h1 > cover) {
+            cat = h1 < cover + 0.12 ? 1.0 : 0.0; // sparse dots at the edge of a clump
+          } else if (h3 < 0.022 * dens) {
+            cat = 10.0; // flowers / dew
+            fg = vec3(0.75, 0.74, 0.68) * clamp(luma(c.rgb) * 10.0, 0.15, 2.5);
+          } else if (flatten > 0.55) {
+            cat = 7.0;
+          } else if (lean > 0.5) {
+            cat = 4.0;
+          } else if (lean < -0.5) {
+            cat = 5.0;
+          } else if (tall < 0.38 && h2 < 0.65) {
+            cat = 2.0;
+          } else if (h2 > 0.84) {
+            cat = 6.0;
+          } else {
+            cat = 3.0;
+          }
+          float col = cat * 4.0 + floor(h3 * 4.0);
+          float m = glyphAt(2.0, col, local);
+          return mix(c.rgb * uGrassBg, fg, m);
+        }
+
+        // ---- stone: luminance ramp + outline glyphs on silhouettes and depth steps
+        vec3 stoneCell(vec4 c, vec2 cell, vec2 local) {
+          vec2 cuv = (cell + 0.5) * uCell / uRes;
+          vec2 dx = vec2(uCell.x, 0.0) / uRes, dy = vec2(0.0, uCell.y) / uRes;
+          float sL = isStone(texture2D(tScene, cuv - dx).a) ? 1.0 : 0.0;
+          float sR = isStone(texture2D(tScene, cuv + dx).a) ? 1.0 : 0.0;
+          float sD = isStone(texture2D(tScene, cuv - dy).a) ? 1.0 : 0.0;
+          float sU = isStone(texture2D(tScene, cuv + dy).a) ? 1.0 : 0.0;
+          float dC = linDepth(cuv);
+          float jx = (linDepth(cuv + dx) - linDepth(cuv - dx)) / dC;
+          float jy = (linDepth(cuv + dy) - linDepth(cuv - dy)) / dC;
+          float gx = (sR - sL) + clamp(jx * 6.0, -1.0, 1.0) * step(0.035, abs(jx));
+          float gy = (sU - sD) + clamp(jy * 6.0, -1.0, 1.0) * step(0.035, abs(jy));
+          float h = hash12(cell);
+          float lum = luma(c.rgb);
+          // outline only stones that stand above the ground (flagstones stay pure texture)
+          bool raised = worldAt(cuv).y > 0.22;
+          if (raised && abs(gx) + abs(gy) > 0.9) {
+            float orient = abs(gx) > 2.0 * abs(gy) ? 0.0 : abs(gy) > 2.0 * abs(gx) ? 1.0 : (gx * gy > 0.0 ? 3.0 : 2.0);
+            float m = glyphAt(7.0, orient * 4.0 + floor(h * 4.0), local);
+            return mix(c.rgb * uBg, c.rgb * uGain * 1.35 + vec3(0.01), m);
+          }
+          float l = 1.0 - exp(-lum * uLumMap);
+          float level = clamp(floor(l * 14.0), 0.0, 13.0);
+          float m = glyphAt(0.0, level * 4.0 + floor(h * 4.0), local);
+          return mix(c.rgb * uBg, c.rgb * uGain, m);
+        }
+
+        // ---- creature: glyph oriented along the encoded surface flow
+        vec3 creatureCell(vec4 c, vec2 cell, vec2 local) {
+          float code = clamp(floor((c.a - 0.04) / 0.4 * 96.0), 0.0, 95.0);
+          float set = floor(code / 24.0);
+          float ang = (code - set * 24.0) / 24.0 * 6.2831853;
+          float l = 1.0 - exp(-luma(c.rgb) * uCreatureLum);
+          float m;
+          if (set > 2.5) {
+            float level = clamp(floor(l * 14.0), 1.0, 13.0);
+            m = glyphAt(6.0, level * 4.0 + floor(hash12(cell) * 4.0), local);
+          } else {
+            float level = clamp(floor(l * 7.0), 1.0, 6.0);
+            float dir = mod(floor(ang / 0.7853982 + 0.5), 8.0);
+            m = glyphAt(3.0 + set, level * 8.0 + dir, local);
+          }
+          return mix(c.rgb * uBg, c.rgb * uCreatureGain, m);
+        }
+
         void main() {
           vec2 px = gl_FragCoord.xy;
           vec2 cell = floor(px / uCell);
-          vec2 center = (cell + 0.5) * uCell;
-          vec4 c = texture2D(tScene, center / uRes);
-          vec4 self = texture2D(tScene, px / uRes);
-          if (c.a < 0.3) {
-            // not an ASCII cell: pass the pixel through (fill flagged fringes with dark)
-            gl_FragColor = vec4(self.a > 0.3 ? self.rgb * uBg : self.rgb, 1.0);
-            return;
-          }
-          float lum = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
-          // perceptual mapping of HDR luminance into ramp levels
-          float l = 1.0 - exp(-lum * uLumMap);
-          float level = clamp(floor(l * uLevels), 0.0, uLevels - 1.0);
-          float variant = floor(hash12(cell) * uVariants);
-          float row = c.a > 0.8 ? 0.0 : 1.0;
+          vec2 cuv = (cell + 0.5) * uCell / uRes;
+          vec4 c = texture2D(tScene, cuv);
           vec2 local = (px - cell * uCell) / uCell;
-          float col = level * uVariants + variant;
-          vec2 auv = vec2((col + local.x) / uGridCols, (1.0 - row) * 0.5 + local.y * 0.5);
-          float m = texture2D(tGrid, auv).a;
-          vec3 fg = c.rgb * uGain * (row > 0.5 ? 0.78 : 1.0); // foliage a touch softer than stone
-          vec3 bg = c.rgb * uBg;
-          gl_FragColor = vec4(mix(bg, fg, m), 1.0);
+          float a = c.a;
+          vec3 col;
+          if (a < 0.03) {
+            col = texture2D(tScene, px / uRes).rgb; // untagged: pass through
+          } else if (a < 0.46) {
+            col = creatureCell(c, cell, local);
+          } else if (a < 0.55) {
+            col = grassCell(c, cuv, local);
+          } else if (a < 0.8) {
+            float l = 1.0 - exp(-luma(c.rgb) * uLumMap);
+            float level = clamp(floor(l * 14.0), 0.0, 13.0);
+            float m = glyphAt(1.0, level * 4.0 + floor(hash12(cell) * 4.0), local);
+            col = mix(c.rgb * uBg, c.rgb * uGain * 0.78, m); // foliage a touch softer than stone
+          } else {
+            col = stoneCell(c, cell, local);
+          }
+          gl_FragColor = vec4(col, 1.0);
         }
       `,
       depthTest: false,
@@ -241,6 +407,29 @@ export class Pipeline {
     this.height = 1;
   }
 
+  /** Meadow density field (world/grass.js) used by the grass cells of the ASCII pass. */
+  setMeadow(meadow) {
+    this.asciiMat.uniforms.uMeadow.value = meadow.texture;
+    this.asciiMat.uniforms.uMeadowBounds.value.copy(meadow.bounds);
+  }
+
+  /** Camera-dependent uniforms of the ASCII pass (world reconstruction, grass cell size). */
+  _updateAsciiCamera() {
+    const u = this.asciiMat.uniforms;
+    const cam = this.camera;
+    u.uInvViewProj.value.multiplyMatrices(cam.matrixWorld, cam.projectionMatrixInverse);
+    u.uNear.value = cam.near;
+    u.uFar.value = cam.far;
+    // world size of one character cell at the focus: the meadow is sampled ~1 tuft per cell
+    const f = this.U.uFocus.value;
+    const a = (this._pa ??= new THREE.Vector3()).set(f.x, 0, f.z).project(cam);
+    const b = (this._pb ??= new THREE.Vector3()).set(f.x + 1, 0, f.z).project(cam);
+    const c = (this._pc ??= new THREE.Vector3()).set(f.x, 0, f.z + 1).project(cam);
+    const pxX = Math.max(1e-3, Math.abs(b.x - a.x) * this.width * 0.5);
+    const pxZ = Math.max(1e-3, Math.abs(c.y - a.y) * this.height * 0.5);
+    u.uWorldCell.value.set(this.cell.x / pxX, this.cell.y / pxZ);
+  }
+
   registerParticles(particleSystem) {
     this.fxParticleMaterials.push(particleSystem);
     particleSystem.uniforms.uDepth.value = this.sceneRT.depthTexture;
@@ -312,6 +501,7 @@ export class Pipeline {
     r.render(this.scene, this.camera);
 
     // 3. ASCII grid
+    this._updateAsciiCamera();
     this.fs.render(r, this.asciiMat, this.compRT);
 
     // 4. FX particles on top (manual soft depth test)
