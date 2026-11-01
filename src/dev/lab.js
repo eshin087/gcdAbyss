@@ -411,7 +411,30 @@ export class Lab {
     this._syncBadge();
   }
 
-  _teleport(where) {
+  /**
+   * Look-dev preset for reviewing the hero, the wyrm and the grass up close: starts the fight with
+   * the AI off and god mode on, puts the hero 7 m in front of the wyrm and zooms the camera in.
+   */
+  showroom() {
+    const g = this.game;
+    if (g.state !== 'boss' || DRAGON_DOWN.has(this.target?.state)) this._startFight();
+    if (this.target?.debug?.aiEnabled !== false) this._dragon('setAI', false);
+    const dbg = g.player?.debug;
+    if (dbg && typeof dbg === 'object') dbg.god = true;
+    this._teleport('front', 7);
+    this._cameraDistance(CONFIG.camera.minDistance);
+    this._status('showroom: AI off, god mode, camera close (wheel / "Camera default" to reset)', 'ok');
+    this._refresh();
+    this._syncBadge();
+  }
+
+  _cameraDistance(d) {
+    const rig = this.game.cameraRig;
+    if (!rig) return;
+    rig.targetDistance = Number.isFinite(d) ? d : CONFIG.camera.distance;
+  }
+
+  _teleport(where, dist = 8) {
     const g = this.game, p = g.player, d = this.target;
     const cfg = g.CONFIG ?? CONFIG;
     let x, z, yaw;
@@ -429,8 +452,8 @@ export class Lab {
       }
       const dy = finite(d.yaw);
       const s = where === 'front' ? 1 : -1;
-      x = dp.x + Math.sin(dy) * 8 * s;
-      z = dp.z + Math.cos(dy) * 8 * s;
+      x = dp.x + Math.sin(dy) * dist * s;
+      z = dp.z + Math.cos(dy) * dist * s;
       // keep it inside the clearing
       const r = Math.hypot(x, z), lim = finite(cfg?.world?.arenaRadius, 30) - 1;
       if (r > lim) {
@@ -636,6 +659,10 @@ export class Lab {
 
   _buildView(root) {
     const { body } = this._section(root, 'view', 'VIEW');
+    const show = el('div', 'lab-grid c2', null, body);
+    button(show, 'Showroom', () => this.showroom()).title =
+      'look-dev: fight on, AI off, god mode, hero 7 m in front of the wyrm, camera zoomed in';
+    button(show, 'Camera default', () => this._cameraDistance(null)).title = 'back to the default camera distance';
     const row = el('div', 'lab-row', null, body);
     this.ui.hitBtn = button(row, 'Hitboxes', () => this.setHitboxes(!this.hitboxes));
     setClass(this.ui.hitBtn, 'on', this.hitboxes);
