@@ -1,23 +1,28 @@
 import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
 import { clamp, damp, lerp } from '../core/math.js';
+import { DEFENSE } from '../combat/rules.js';
 import { ScreenGrade } from './grade.js';
 import { RunStats } from './stats.js';
 
 // Game flow: owns game.state and every transition
 //   title → explore → bossIntro → boss → dead | victory   (+ paused from explore/bossIntro/boss)
 // plus bonfire rest (E), retry after death, victory restart (R), pause (Esc), F2 quality, M mute,
-// F3 fps, H help, the camera override for establishing / intro shots, and the screen grade.
+// F3 fps, H help, the camera override for establishing / intro shots, the screen grade, run stats,
+// and `debug.toState(name)` for the Lab (jump to explore / boss / dead / victory from any state).
 // Gameplay events are queued and handled at the start of the next frame (robust to ordering and to
 // events arriving while paused); every transition emits 'state' {from, to}.
 
 const PLAY = new Set(['explore', 'bossIntro', 'boss']);
 const FIGHTING = new Set(['combat', 'staggered', 'airborne']);
 // settings keys don't skip screens; nor do modifiers / function keys (Alt-Tab, F11 fullscreen, F12 devtools)
-const NON_DISMISS = new Set(['KeyM', 'KeyH', 'Escape', 'ContextMenu', 'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen']);
+// (Backquote opens the Lab)
+const NON_DISMISS = new Set(['KeyM', 'KeyH', 'Escape', 'Backquote', 'ContextMenu', 'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen']);
 const NON_DISMISS_RE = /^(F\d+|Alt|Control|Meta|OS)/;
 const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:death', 'dragon:dead', 'player:died'];
 const AREA = 'Cinderwood Hollow';
+const DEBUG_STATES = new Set(['explore', 'boss', 'dead', 'victory']);
+const DRAGON_DOWN = new Set(['dying', 'dead']);
 const PHASE2_TEXT = "THE CINDER WYRM'S FURY IGNITES";
 
 const TUNE = {
@@ -36,6 +41,7 @@ const TUNE = {
   warmBoss: 0.35,
   warmPhase2: 0.7,
   warmVictory: 0.12,
+  debugVictoryTimeout: 12, // s: Lab 'victory' forces the state if the dragon never reports its death
 };
 
 const finite = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -75,7 +81,21 @@ export class GameFlow {
     this.audioUnlocked = false;
     this.autoPause = false;
     this.swallowInput = false;
+    this.debugVictoryT = -1;
+    this._ghostAt = -10;
     this._errors = 0;
+
+    /** Lab hooks (contract): jump straight to a flow state with consistent side effects. */
+    this.debug = {
+      toState: (name) => {
+        try {
+          return this._debugToState(name);
+        } catch (err) {
+          this._report(`debug.toState(${name})`, err);
+          return false;
+        }
+      },
+    };
 
     const ev = game.events;
     for (const name of QUEUED) ev?.on(name, () => this.queue.push(name));
@@ -93,6 +113,19 @@ export class GameFlow {
       this.stats.hits++;
     });
     ev?.on('player:dodge', () => this.stats.dodges++);
+    ev?.on('player:parry', () => this.stats.parries++);
+    ev?.on('player:block', () => this.stats.blocks++);
+    ev?.on('player:guardBreak', () => this.stats.guardBreaks++);
+    // a perfect dodge and its Ghostep blink normally arrive together: count / pulse once
+    const ghostep = () => {
+      const now = finite(this.game.realTime);
+      if (now - this._ghostAt < 0.4) return;
+      this._ghostAt = now;
+      this.stats.perfectDodges++;
+      this.grade.ghostPulse(DEFENSE.ghostep.slowmoTime);
+    };
+    ev?.on('player:perfectDodge', ghostep);
+    ev?.on('player:ghostep', ghostep);
 
     // Unlock audio inside the first real DOM gesture (autoplay policies), F3 must not open find.
     addEventListener('pointerdown', () => this._unlockAudio());
@@ -381,7 +414,6 @@ export class GameFlow {
       if (typeof p?.restAtBonfire === 'function') p.restAtBonfire();
       else if (p) {
         p.hp = p.maxHp;
-        p.stamina = p.maxStamina;
         p.flasks = p.maxFlasks;
       }
     }, 'player.restAtBonfire');
@@ -456,6 +488,14 @@ export class GameFlow {
       this._enterDead();
       return;
     }
+    // Lab 'victory': the dragon never reported its death
+    if (this.debugVictoryT > 0) {
+      this.debugVictoryT -= rdt;
+      if (this.debugVictoryT <= 0) {
+        this._enterVictory();
+        return;
+      }
+    }
     // fallbacks if 'dragon:dead' never arrives
     if (this.dragonDownT >= 0) {
       this.dragonDownT += rdt;
@@ -510,6 +550,7 @@ export class GameFlow {
   _enterVictory() {
     const g = this.game;
     if (g.state === 'victory') return;
+    this.debugVictoryT = -1;
     this._setState('victory');
     this.victoryT = 0;
     this.statsShown = false;
@@ -563,12 +604,21 @@ export class GameFlow {
   /** Runs while the screen is fully black. */
   _doRespawn(resetRun) {
     const g = this.game;
-    const S = CONFIG.world.playerSpawn;
+    this._resetWorld();
+    if (resetRun) this.stats.reset();
+    else this.stats.attemptTime = 0;
+
+    this._setState('explore');
+    g.events?.emit('game:retry');
+    g.audio?.setMusic?.('ambient');
+    this._log(resetRun ? 'The wyrm sleeps once more. The hollow waits.' : 'You rise again at the bonfire.', 'lore');
+  }
+
+  /** Player at the bonfire spawn, dragon asleep in its nest, scorch/FX cleared, HUD + flow reset. */
+  _resetWorld() {
+    const g = this.game;
     const p = g.player;
-    this._try(() => {
-      if (typeof p?.respawn === 'function') p.respawn(S.x, S.z);
-      else p?.position?.set(S.x, 0, S.z);
-    }, 'player.respawn');
+    this._respawnPlayer();
     this._try(() => g.dragon?.reset?.(), 'dragon.reset');
     this._try(() => g.world?.scorch?.reset?.(), 'scorch.reset');
     this._try(() => g.world?.clearPushers?.(1), 'world.clearPushers');
@@ -604,13 +654,173 @@ export class GameFlow {
       if (p?.position) this._try(() => rig.snap?.(p.position), 'cameraRig.snap');
     }
     this.grade.resetInstant();
-    if (resetRun) this.stats.reset();
-    else this.stats.attemptTime = 0;
+    this.debugVictoryT = -1;
+  }
 
+  _respawnPlayer() {
+    const S = CONFIG.world.playerSpawn;
+    const p = this.game.player;
+    this._try(() => {
+      if (typeof p?.respawn === 'function') p.respawn(S.x, S.z);
+      else p?.position?.set(S.x, 0, S.z);
+    }, 'player.respawn');
+  }
+
+  // ------------------------------------------------------------------ Lab (debug.toState)
+  _debugToState(name) {
+    const to = String(name ?? '');
+    if (!DEBUG_STATES.has(to)) return false;
+    this._debugPrelude();
+    if (to === 'explore') this._debugExplore();
+    else if (to === 'boss') this._debugBoss();
+    else if (to === 'dead') this._debugDead();
+    else this._debugVictory();
+    this._log(`[lab] state → ${to}`, 'system');
+    return true;
+  }
+
+  /** Leave whatever screen we are on (title / pause / death / victory / a respawn fade) cleanly. */
+  _debugPrelude() {
+    const g = this.game;
+    if (g.state === 'paused') {
+      this.pausedFrom = null;
+      g.hud?.showPause?.(false);
+    }
+    if (g.state === 'title') {
+      g.hud?.hideTitle?.();
+      this.titleFramed = true;
+      this.stats.reset();
+    }
+    this._unlockAudio();
+    this._try(() => g.audio?.unlock?.(), 'audio.unlock');
+    if (g.input && !g.input.enabled) g.input.enabled = true;
+    this.swallowInput = false;
+    this.respawning = null;
+    this.queue.length = 0; // stale events from before the jump
+    this.slowmo = 1;
+    this.slowmoHold = 0;
+    this.hitWhileAsleep = false;
+    this.bossBarHideT = -1;
+    this.dragonDownT = -1;
+    this.deadPollT = 0;
+    this.debugVictoryT = -1;
+    this.deathBanner = false;
+    this.canRetry = false;
+    this.statsShown = false;
+    const hud = g.hud;
+    hud?.clearBanner?.(true);
+    hud?.bannerHint?.(null);
+    hud?.showStats?.(null);
+    hud?.prompt?.(null);
+    this.grade.fadeTo(0, 4);
+    this.grade.desatTo(0, 4);
+    this._ovW = 0;
+    this._ovZ = 0;
+    this._ovLambda = 3;
+  }
+
+  _debugExplore() {
+    const g = this.game;
+    this._resetWorld();
+    this.grade.fade = 0;
+    this.grade.desat = 0;
+    this.stats.attemptTime = 0;
     this._setState('explore');
     g.events?.emit('game:retry');
     g.audio?.setMusic?.('ambient');
-    this._log(resetRun ? 'The wyrm sleeps once more. The hollow waits.' : 'You rise again at the bonfire.', 'lore');
+  }
+
+  _debugBoss() {
+    const g = this.game;
+    const d = g.dragon;
+    if (this._playerDead()) this._respawnPlayer();
+    if (d && DRAGON_DOWN.has(d.state)) this._try(() => d.reset?.(), 'dragon.reset');
+    this._try(() => {
+      if (typeof d?.debug?.startFight === 'function') d.debug.startFight();
+      else d?.startIntro?.();
+    }, 'dragon.debug.startFight');
+    this.phase2 = d?.phase === 2;
+    this.grade.desat = 0;
+    this._setState('boss');
+    g.hud?.showBossBar?.(d?.name ?? 'VAELGRIM, THE CINDER WYRM');
+    g.audio?.setMusic?.(this.phase2 ? 'boss2' : 'boss');
+  }
+
+  _debugDead() {
+    const g = this.game;
+    if (this._playerDead()) {
+      // already down: just make sure the flow agrees
+      if (g.state !== 'dead') this._enterDead();
+      return;
+    }
+    // takeHit ignores hits on the title / victory screens: stand in a play state first
+    if (!PLAY.has(g.state)) {
+      const ds = g.dragon?.state;
+      this._setState(ds && FIGHTING.has(ds) ? 'boss' : 'explore');
+    }
+    this._killPlayer();
+    if (this._playerDead()) this._enterDead();
+  }
+
+  _debugVictory() {
+    const g = this.game;
+    const d = g.dragon;
+    if (this._playerDead()) this._respawnPlayer();
+    if (g.state === 'victory') {
+      // replay the victory beat (the prelude cleared the banner and the record)
+      this.victoryT = 0;
+      g.hud?.banner?.('WYRM VANQUISHED', 'victory');
+      return;
+    }
+    if (!d || d.state === 'dead' || typeof d.debug?.kill !== 'function') {
+      this._enterVictory();
+      return;
+    }
+    // stand in the boss state so the death events are handled the normal way
+    if (g.state !== 'boss') {
+      this._setState('boss');
+      g.hud?.showBossBar?.(d.name ?? 'VAELGRIM, THE CINDER WYRM');
+      g.audio?.setMusic?.(d.phase === 2 ? 'boss2' : 'boss');
+    }
+    this.debugVictoryT = TUNE.debugVictoryTimeout;
+    this._try(() => d.debug.kill(), 'dragon.debug.kill');
+  }
+
+  /** Kill the player through its normal death path (takeHit), with fallbacks. */
+  _killPlayer() {
+    const g = this.game;
+    const p = g.player;
+    if (!p || this._playerDead()) return;
+    if (typeof p.debug?.kill === 'function') this._try(() => p.debug.kill(), 'player.debug.kill');
+    if (!this._playerDead() && typeof p.takeHit === 'function') {
+      const dbg = p.debug && typeof p.debug === 'object' ? p.debug : null;
+      const god = dbg ? dbg.god : undefined;
+      if (dbg) dbg.god = false;
+      const pos = p.position;
+      this._try(
+        () =>
+          p.takeHit({
+            damage: Math.ceil(Math.max(1, finite(p.hp, 1))) + 1,
+            from: { x: finite(pos?.x), z: finite(pos?.z) - 1 },
+            knockback: 0,
+            kind: 'lab',
+            tell: 'normal',
+            parryable: false,
+            blockable: false,
+            attack: 'lab',
+            attacker: g.dragon ?? null,
+          }),
+        'player.takeHit',
+      );
+      if (dbg) dbg.god = god;
+    }
+    // i-frames (roll / Ghostep) swallowed the hit: last resort
+    if (!this._playerDead()) {
+      this._try(() => {
+        p.hp = 0;
+        if (typeof p._die === 'function') p._die();
+      }, 'player.die');
+    }
   }
 
   // ------------------------------------------------------------------ helpers

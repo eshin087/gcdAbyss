@@ -1,8 +1,10 @@
 import { clamp } from '../core/math.js';
-import { createNoiseBuffers, createImpulse, limiterCurve, num } from './dsp.js';
+import { DEFENSE } from '../combat/rules.js';
+import { createNoiseBuffers, createImpulse, limiterCurve, holdAt, num } from './dsp.js';
 import { Voice } from './voice.js';
 import { SFX } from './sfx.js';
 import { ForestAmbience, BreathLoop } from './ambience.js';
+import { ChargeHum } from './charge.js';
 import { createMusic } from './music.js';
 
 // Procedural WebAudio engine: every sound is synthesised at runtime (no sample files).
@@ -10,18 +12,21 @@ import { createMusic } from './music.js';
 // also unlocks itself on the first pointer/key gesture). Every method is a no-op before that.
 //
 // Graph:
-//   sfx / music / ambient buses ─┐
-//   reverb return (2.8 s hall) ──┴→ mix → pause-duck LPF → master (volume/mute)
-//   ui bus (blips, never ducked) ──────────────────────────→ master → compressor → soft limiter → out
+//   sfx / music(→ dip) / ambient buses ─┐
+//   reverb return (2.8 s hall) ─────────┴→ mix → Ghostep LPF+gain → pause-duck LPF → master
+//   cue bus (tells, timing flash, Ghostep: never Ghostep-ducked) ──→ pause-duck LPF ─┘
+//   ui bus (blips, never ducked) ─────────────────────────────────→ master → compressor → limiter → out
 //   every voice / layer also feeds a send into the convolution reverb.
 //
 // play(name, opts) one-shots — opts.x/opts.z spatialise against the player (pan by Δx,
 // full level within 8 m, ≈ −12 dB at 35 m), opts.gain, opts.pan, opts.delay (s):
 //   player   swing{heavy,combo} hit{heavy,crit,part} hurt{damage,kind} sizzle roll
-//            footstep{sprint} heal noStamina noFlask lockOn{on} dodge gong
+//            footstep{sprint} heal noFlask lockOn{on} dodge gong
+//   combat   tellBlue tellRed tellTick flash{tell} parry{tell} block{tell} guardBreak
+//            ghostep{slow}   (+ the sustained charge hum: player:charge → release/interrupt)
 //   dragon   roar{strength,pitch} wake dragonStep{heavy} wingFlap{strength} takeoff land bite
-//            windup{name} dragonSwipe dragonPain fireball explosion{radius} stagger
-//            phase2{roar} dragonDeath emberHiss
+//            windup{name} dragonSwipe dragonPain dragonRecoil{tell} postureBreak{roar}
+//            fireball explosion{radius} stagger phase2{roar} dragonDeath emberHiss
 //   world/ui bonfire victory area retry blip{kind: select|start|pause|resume|error}
 //   aliases  ui click select confirm start pause resume back cancel error → blip variants
 //
@@ -32,7 +37,16 @@ import { createMusic } from './music.js';
 const MODES = new Set(['none', 'ambient', 'boss', 'boss2', 'victory', 'death']);
 const XFADE = 1.5;
 const MASTER = 0.9;
-const BUS = { sfx: 1, music: 0.42, ambient: 0.55, reverb: 0.6, ui: 0.8 };
+const BUS = { sfx: 1, music: 0.42, ambient: 0.55, reverb: 0.6, ui: 0.8, cue: 1 };
+// Ghostep slow-mo: the world mix is low-passed + ducked for the slow-mo (real seconds, rules.js)
+const SLOW_HZ = 900;
+const SLOW_GAIN = 0.55;
+const GHOST_DEDUPE = 0.4; // s: 'player:perfectDodge' + 'player:ghostep' describe the same blink
+// s after a Ghostep in which i-frame "dodges" (later hits of the same attack) stay silent
+const GHOST_QUIET = num(DEFENSE.ghostep?.slowmoTime, 0.6) + 0.4;
+// timing flash: the music dips briefly so the cue cuts through
+const DIP_LEVEL = 0.5;
+const DIP_HOLD = 0.2;
 const POOL_CAPS = { sfx: 24, music: 18, amb: 6 };
 const BREATH_MAX = 12; // s of unpaused breath before the safety stop
 const VICTORY_SETTLE = 10; // s of victory pad before settling to ambient
@@ -64,6 +78,7 @@ export class AudioEngine {
     this.music = null; // active music layer
     this.ambience = null;
     this.breath = null;
+    this.charge = null; // heavy-attack charge hum (built with the graph)
     this._fading = []; // layers crossfading out
     this._musicSince = 0;
     this.pools = { sfx: [], music: [], amb: [] };
@@ -81,6 +96,15 @@ export class AudioEngine {
     this._staggerAt = -10;
     this._hurtAt = -10;
     this._painPending = false;
+    // end-of-frame decisions (events of one blow can arrive in any order within a frame)
+    this._staggerPending = false;
+    this._breakAt = -10;
+    this._dodgePending = false;
+    this._hurtPending = false;
+    this._hurtOpts = { damage: 0, kind: '' };
+    this._blockFrame = -1;
+    this._ghostFrame = -1;
+    this._ghostAt = -10;
     this._failed = false;
     this._gestured = false;
     this._resumeAt = 0;
@@ -126,7 +150,8 @@ export class AudioEngine {
       this.ctx = null;
       this._failed = true;
       this.master = this.duck = this.sfxBus = this.musicBus = this.ambientBus = this.uiBus = null;
-      this.reverbIn = this.ambience = this.breath = this.music = null;
+      this.cueBus = this.slowLp = this.slowGain = this.musicDip = null;
+      this.reverbIn = this.ambience = this.breath = this.charge = this.music = null;
       this._fading.length = 0;
       for (const l of this._poolLists) l.length = 0;
       return;
@@ -175,7 +200,7 @@ export class AudioEngine {
       pan = sp.pan;
       gain *= sp.gain;
     }
-    const bus = def.bus === 'ui' ? this.uiBus : this.sfxBus;
+    const bus = def.bus === 'ui' ? this.uiBus : def.bus === 'cue' ? this.cueBus || this.sfxBus : this.sfxBus;
     const v = this._voice('sfx', { bus, pan, gain, rev: def.rev ?? 0.12, prio: def.prio ?? 2 });
     if (!v) return false;
     try {
@@ -236,7 +261,13 @@ export class AudioEngine {
     this.duck.type = 'lowpass';
     this.duck.frequency.value = this._openHz;
     this.duck.Q.value = 0.5;
-    this.mix.connect(this.duck).connect(this.master);
+    // Ghostep slow-mo: its own low-pass + gain on the world mix (the pause duck stays separate)
+    this.slowLp = ctx.createBiquadFilter();
+    this.slowLp.type = 'lowpass';
+    this.slowLp.frequency.value = this._openHz;
+    this.slowLp.Q.value = 0.7;
+    this.slowGain = ctx.createGain();
+    this.mix.connect(this.slowLp).connect(this.slowGain).connect(this.duck).connect(this.master);
 
     const bus = (level, dest) => {
       const g = ctx.createGain();
@@ -245,8 +276,10 @@ export class AudioEngine {
       return g;
     };
     this.sfxBus = bus(BUS.sfx, this.mix);
-    this.musicBus = bus(BUS.music, this.mix);
+    this.musicDip = bus(1, this.mix);
+    this.musicBus = bus(BUS.music, this.musicDip);
     this.ambientBus = bus(BUS.ambient, this.mix);
+    this.cueBus = bus(BUS.cue, this.duck);
     this.uiBus = bus(BUS.ui, this.master);
 
     this.reverb = ctx.createConvolver();
@@ -256,6 +289,7 @@ export class AudioEngine {
 
     this.ambience = new ForestAmbience(this);
     this.breath = new BreathLoop(this);
+    this.charge = new ChargeHum(this);
 
     this._applyMaster(0.35);
     if (this._ducked) this._duck(true);
@@ -277,6 +311,31 @@ export class AudioEngine {
     const now = this.ctx.currentTime;
     this.duck.frequency.setTargetAtTime(on ? DUCK_HZ : this._openHz, now, on ? 0.05 : 0.12);
     this.musicBus.gain.setTargetAtTime(BUS.music * (on ? 0.6 : 1), now, 0.1);
+  }
+
+  /** Ghostep: low-pass + duck the world mix for `hold` real seconds, then release. */
+  _slowDuck(hold) {
+    if (!this.ctx || !this.slowLp || !this.slowGain) return;
+    const now = this.ctx.currentTime;
+    const h = clamp(num(hold, 0.6), 0.1, 3);
+    const f = this.slowLp.frequency;
+    holdAt(f, now);
+    f.setTargetAtTime(SLOW_HZ, now, 0.03);
+    f.setTargetAtTime(this._openHz, now + h, 0.16);
+    const g = this.slowGain.gain;
+    holdAt(g, now);
+    g.setTargetAtTime(SLOW_GAIN, now, 0.04);
+    g.setTargetAtTime(1, now + h, 0.18);
+  }
+
+  /** Brief music dip under the timing flash. */
+  _dipMusic() {
+    if (!this.ctx || !this.musicDip) return;
+    const now = this.ctx.currentTime;
+    const g = this.musicDip.gain;
+    holdAt(g, now);
+    g.setTargetAtTime(DIP_LEVEL, now, 0.012);
+    g.setTargetAtTime(1, now + DIP_HOLD, 0.12);
   }
 
   // --- per frame ----------------------------------------------------------------------------
@@ -302,6 +361,24 @@ export class AudioEngine {
       this._painPending = false;
       this.play('dragonPain', this._atDragon());
     }
+    // a posture break carries its own impact + roar: no extra stagger crunch on top
+    if (this._staggerPending) {
+      this._staggerPending = false;
+      if (!(now >= this._breakAt && now - this._breakAt < 0.3)) this.play('stagger', this._atDragon());
+    }
+    // a blocked blow's chip damage gets the block thud, not a hurt grunt
+    if (this._hurtPending) {
+      this._hurtPending = false;
+      if (this._blockFrame !== this._frame && this.play('hurt', this._hurtOpts)) this._hurtAt = now;
+    }
+    // a perfect dodge has its own (Ghostep) sound, and the rest of that attack passing through the
+    // Ghostep i-frames must not whoosh over the slow-mo
+    if (this._dodgePending) {
+      this._dodgePending = false;
+      const sinceGhost = now - this._ghostAt;
+      if (this._ghostFrame !== this._frame && !(sinceGhost >= 0 && sinceGhost < GHOST_QUIET)) this.play('dodge');
+    }
+    this.charge?.update(now, dt, this.game);
 
     if (this.music) this.music.schedule(now, 0.3);
     for (let i = this._fading.length - 1; i >= 0; i--) {
@@ -412,6 +489,26 @@ export class AudioEngine {
     return o;
   }
 
+  /** opts object at an event's x/z (combat:tell / combat:flash), else at the dragon. */
+  _atEvent(d) {
+    const x = num(d?.x, NaN);
+    const z = num(d?.z, NaN);
+    if (Number.isFinite(x) && Number.isFinite(z)) return { x, z };
+    return this._atDragon();
+  }
+
+  /** Perfect dodge → Ghostep: one whoosh + one slow-mo duck per blink (both events may arrive). */
+  _ghostep() {
+    const now = this.ctx.currentTime;
+    this._ghostFrame = this._frame;
+    if (now >= this._ghostAt && now - this._ghostAt < GHOST_DEDUPE) return;
+    this._ghostAt = now;
+    this.charge?.stop(0.05);
+    const slow = num(DEFENSE.ghostep?.slowmoTime, 0.6);
+    this.play('ghostep', { slow });
+    this._slowDuck(slow);
+  }
+
   // --- music --------------------------------------------------------------------------------
 
   _setMusic(mode) {
@@ -495,11 +592,17 @@ export class AudioEngine {
       });
 
     // player
-    on('player:attack', (d) => this.play('swing', { heavy: d.kind === 'heavy', combo: d.combo }));
+    on('player:attack', (d) => {
+      // releasing a charged heavy (or any swing) ends the charge hum
+      if (this.charge?.active) this.charge.stop(d.kind === 'heavy' ? 0.05 : 0.08);
+      this.play('swing', { heavy: d.kind === 'heavy', combo: d.combo });
+    });
+    on('player:charge', (d) => this.charge?.start(d));
     on('player:hitDragon', (d) =>
       this.play('hit', { heavy: d.heavy, crit: d.crit, part: d.part, damage: d.damage, x: d.point?.x, z: d.point?.z }),
     );
     on('player:hurt', (d) => {
+      // (a hit that interrupts a charge is caught by the charge hum's player-state poll)
       // burn DoT ticks (every 0.5 s) and the breath's contact ticks (every 0.15 s) would grunt
       // like a machine gun: they get a short sizzle, the full impact + grunt at most per GRUNT_GAP
       const kind = String(d.kind || '');
@@ -508,16 +611,60 @@ export class AudioEngine {
         this.play('sizzle');
         return;
       }
-      if (this.play('hurt', d)) this._hurtAt = now;
+      // played at the end of the frame (see _tick); the biggest blow of the frame wins
+      const dmg = num(d.damage, 0);
+      const h = this._hurtOpts;
+      if (!this._hurtPending || dmg > h.damage) {
+        h.damage = dmg;
+        h.kind = kind;
+      }
+      this._hurtPending = true;
     });
-    on('player:dodge', () => this.play('dodge'));
-    on('player:roll', () => this.play('roll'));
+    on('player:dodge', () => {
+      this._dodgePending = true;
+    });
+    on('player:roll', () => {
+      this.charge?.stop(0.06);
+      this.play('roll');
+    });
     on('player:heal', () => this.play('heal'));
-    on('player:noStamina', () => this.play('noStamina'));
     on('player:noFlask', () => this.play('noFlask'));
     on('player:lockOn', (d) => this.play('lockOn', d));
     on('player:footstep', (d) => this.play('footstep', d));
+
+    // defence answers
+    on('player:block', (d) => {
+      this._blockFrame = this._frame;
+      this.play('block', { tell: d.tell, damage: d.damage });
+    });
+    on('player:parry', (d) => {
+      this.charge?.stop(0.05);
+      this.play('parry', { tell: d.tell });
+    });
+    on('player:guardBreak', () => {
+      this.charge?.stop(0.05);
+      this.play('guardBreak');
+    });
+    on('player:perfectDodge', () => this._ghostep());
+    on('player:ghostep', () => this._ghostep());
+
+    // attack tells (any attacker): the player's reaction cues
+    on('combat:tell', (d) => {
+      const o = this._atEvent(d);
+      if (d.tell === 'blue') this.play('tellBlue', o);
+      else if (d.tell === 'red') {
+        this.play('tellRed', o);
+        this._dipMusic();
+      } else this.play('tellTick', o);
+    });
+    on('combat:flash', (d) => {
+      const o = this._atEvent(d);
+      o.tell = d.tell === 'blue' || d.tell === 'red' ? d.tell : 'normal';
+      if (this.play('flash', o)) this._dipMusic();
+    });
+
     on('player:died', () => {
+      this.charge?.stop(0.1);
       this.breath?.stop(0.3);
       // flow counts a death after the wyrm has fallen as a victory: no toll in that case
       const ds = this.game.dragon?.state;
@@ -554,7 +701,24 @@ export class AudioEngine {
       this._staggerAt = this.ctx.currentTime;
       this._painPending = false;
       this.breath?.stop(0.2);
-      this.play('stagger', this._atDragon());
+      this._staggerPending = true; // played in update() unless a posture break claims it
+    });
+    on('dragon:parried', (d) => {
+      this._painPending = false;
+      this.play('dragonRecoil', this._atDragon({ tell: d.tell }));
+    });
+    on('dragon:postureBreak', () => {
+      const now = this.ctx.currentTime;
+      this._breakAt = now;
+      this._staggerAt = now;
+      this._painPending = false;
+      this._staggerPending = false;
+      this.breath?.stop(0.2);
+      // like phase2: a 'dragon:roar' in the same frame already roared, so the break claims the slot
+      const last = this._last.get('roar');
+      const roared = last !== undefined && now >= last && now - last < 0.3;
+      this.play('postureBreak', this._atDragon({ roar: !roared }));
+      this._last.set('roar', now);
     });
     on('dragon:phase2', () => {
       // the dragon emits dragon:roar in the same frame: the phase2 sting carries the enraged
@@ -580,6 +744,7 @@ export class AudioEngine {
       this.play('bonfire', bf ? { x: bf.x, z: bf.z } : EMPTY);
     });
     on('game:retry', () => {
+      this.charge?.stop(0.05);
       this.breath?.stop(0.08);
       this.play('retry');
     });

@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config.js';
-import { button, controlsGrid, el, fillKeyText } from './dom.js';
+import { button, controlsGrid, el, fillKeyText, tellLegend } from './dom.js';
 
 // Full-screen / panel UI: title, pause menu, help panel, victory record.
 
@@ -18,15 +18,18 @@ const SHIMMER_HZ = 12;
 
 const TITLE_KEYS = [
   '[WASD] move',
-  '[LMB] attack',
-  '[RMB] heavy',
-  '[Space] roll',
+  '[Mouse] aim',
+  '[LMB] attack · hold: heavy',
+  '[RMB] block · tap: parry',
+  '[Space] dodge',
   '[Shift] sprint',
-  '[F] heal',
+  '[F] flask',
   '[Tab] lock-on',
   '[E] rest',
   '[Esc] pause',
   '[H] help',
+  '[M] mute',
+  '[F1] lab',
 ];
 
 export class TitleScreen {
@@ -36,11 +39,14 @@ export class TitleScreen {
     inner.style.cssText = 'display:flex;flex-direction:column;align-items:center';
     this.logo = el('pre', 'ab-logo', LOGO.join('\n'), inner);
     el('div', 'ab-title-rule', '◆', inner);
-    el('div', 'ab-title-sub', 'an ASCII soulslike  ·  demo: the Cinder Wyrm', inner);
+    el('div', 'ab-title-sub', 'an ASCII action RPG  ·  demo: the Cinder Wyrm', inner);
     el('div', 'ab-press', 'PRESS ANY KEY', inner);
     const ctrl = el('div', 'ab-title-ctrl', null, inner);
     for (const item of TITLE_KEYS) fillKeyText(el('span', 'item', null, ctrl), item);
-    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.1", this.root);
+    const legend = tellLegend(inner);
+    legend.classList.add('title');
+    el('span', 'it hint', 'perfect dodge = Ghostep', legend);
+    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.2", this.root);
 
     // shimmer: a sweeping column of '▓' plus a few random '▒' over the solid blocks
     this.chars = [...LOGO.join('\n')];
@@ -117,6 +123,7 @@ export class PauseMenu {
     this.muteVal = el('span', 'v', '', this.btnMute);
     el('div', 'ab-sep', null, panel);
     controlsGrid(panel);
+    tellLegend(panel, { normal: true });
     this.on = false;
     this._q = null;
     this._m = null;
@@ -151,6 +158,8 @@ export class HelpPanel {
     el('span', '', 'CONTROLS', head);
     fillKeyText(el('span', '', null, head), '[H] close');
     controlsGrid(this.root);
+    el('div', 'ab-help-sub', 'ATTACK TELLS', this.root);
+    tellLegend(this.root, { normal: true });
     this.on = false;
   }
 

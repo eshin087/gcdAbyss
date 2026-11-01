@@ -22,6 +22,10 @@ export class RunStats {
     this.damageDealt = 0;
     this.hits = 0;
     this.dodges = 0;
+    this.parries = 0;
+    this.perfectDodges = 0;
+    this.blocks = 0;
+    this.guardBreaks = 0;
   }
 
   snapshot() {
@@ -34,6 +38,10 @@ export class RunStats {
       damageDealt: Math.round(this.damageDealt),
       hits: this.hits,
       dodges: this.dodges,
+      parries: this.parries,
+      perfectDodges: this.perfectDodges,
+      blocks: this.blocks,
+      guardBreaks: this.guardBreaks,
     };
   }
 
@@ -46,6 +54,9 @@ export class RunStats {
       ['Damage taken', String(Math.round(this.damageTaken))],
       ['Damage dealt', String(Math.round(this.damageDealt))],
       ['Hits landed', String(this.hits)],
+      ['Parries', String(this.parries)],
+      ['Ghosteps (perfect dodges)', String(this.perfectDodges)],
+      ['Blocks', String(this.blocks)],
       ['Dodges', String(this.dodges)],
     ];
   }

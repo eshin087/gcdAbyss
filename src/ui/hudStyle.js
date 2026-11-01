@@ -1,5 +1,20 @@
+import { TELL_STYLE } from '../combat/rules.js';
+
 // HUD stylesheet, injected from JS so the module owns its look (style.css stays foundation-only).
 // Ansenjeo-style MMO UI: tiny monospace text, thin 1px borders, translucent dark panels.
+// Tell colours come from TELL_STYLE (src/combat/rules.js) so HUD, FX and audio agree.
+
+/** '#rrggbb' -> 'rgba(r, g, b, a)'. */
+function rgba(hex, a) {
+  const h = String(hex).replace('#', '');
+  const full = h.length === 3 ? h[0] + h[0] + h[1] + h[1] + h[2] + h[2] : h;
+  const n = parseInt(full, 16) || 0;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+const BLUE = TELL_STYLE.blue.css;
+const RED = TELL_STYLE.red.css;
+const WHITE = TELL_STYLE.normal.css;
+const CYAN = '#7ff6ff';
 
 const CSS = `
 .ab-root {
@@ -70,8 +85,6 @@ const CSS = `
 .ab-bar.hp > .fill { background: linear-gradient(180deg, #d4483c, #8a1912); }
 .ab-bar.hp > .chunk { background: rgba(255, 228, 210, 0.78); }
 .ab-bar.hp.low > .fill { animation: ab-pulse 0.9s ease-in-out infinite; }
-.ab-bar.st { height: 4px; }
-.ab-bar.st > .fill { background: linear-gradient(180deg, #a9b465, #5b672b); }
 .ab-bar.flash { animation: ab-flash 0.55s ease-out; }
 @keyframes ab-pulse { 50% { filter: brightness(1.55); } }
 @keyframes ab-flash {
@@ -120,6 +133,27 @@ const CSS = `
   transition: opacity 0.18s;
 }
 .ab-lock.on { opacity: 1; }
+/* crit window (after a Ghostep): hidden row that lights up cyan */
+.ab-crit { margin-top: 2px; opacity: 0; transition: opacity 0.12s; }
+.ab-crit.on { opacity: 1; }
+.ab-crit .clbl {
+  width: 64px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: ${CYAN};
+  white-space: nowrap;
+}
+.ab-crit.on .clbl { animation: ab-crit-glow 0.5s ease-in-out infinite alternate; }
+.ab-bar.crit { height: 4px; border-color: ${rgba(CYAN, 0.35)}; }
+.ab-bar.crit > .fill {
+  background: linear-gradient(90deg, ${rgba(CYAN, 0.55)}, ${CYAN});
+  box-shadow: 0 0 6px ${rgba(CYAN, 0.8)};
+}
+@keyframes ab-crit-glow {
+  from { text-shadow: 0 0 3px ${rgba(CYAN, 0.5)}; }
+  to { text-shadow: 0 0 9px ${rgba(CYAN, 1)}, 0 0 2px #fff; }
+}
 
 /* ---------- minimap (top-right) ---------- */
 .ab-map {
@@ -220,6 +254,47 @@ const CSS = `
 .ab-boss.p2 .ab-bar.boss > .fill { background: linear-gradient(180deg, #ffa24f, #c2410c); }
 .ab-boss.p2 .ab-bar.boss { box-shadow: 0 0 9px rgba(255, 138, 61, 0.45); border-color: rgba(255, 138, 61, 0.45); }
 .ab-boss.p2 .ab-boss-name { color: #ffd2a4; }
+/* posture: thin gold bar under the HP bar, grows from the centre toward a break */
+.ab-boss-post { position: relative; display: flex; justify-content: center; margin-top: 3px; }
+.ab-bar.post {
+  flex: none;
+  width: 62%;
+  height: 4px;
+  border-color: rgba(216, 184, 106, 0.3);
+  background: rgba(10, 8, 2, 0.7);
+  transition: box-shadow 0.12s, border-color 0.12s;
+}
+.ab-bar.post > .fill {
+  transform-origin: 50% 50%;
+  transform: scaleX(0);
+  background: linear-gradient(180deg, #f3d98e, #a07a2a);
+  transition: filter 0.12s;
+}
+.ab-bar.post.hot { border-color: rgba(255, 214, 120, 0.6); box-shadow: 0 0 6px rgba(255, 196, 90, 0.45); }
+.ab-bar.post.hit > .fill { filter: brightness(1.8); }
+.ab-bar.post.break { animation: ab-post-break 0.7s ease-out; }
+@keyframes ab-post-break {
+  0% { box-shadow: 0 0 0 rgba(255, 220, 140, 0); }
+  15% { box-shadow: 0 0 16px rgba(255, 226, 150, 1); border-color: #fff3c9; }
+  100% { box-shadow: 0 0 0 rgba(255, 220, 140, 0); }
+}
+.ab-broken {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  margin-top: 3px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  padding-left: 0.4em;
+  color: #ffe09a;
+  text-shadow: 0 0 8px rgba(255, 200, 90, 0.9), 0 1px 2px #000;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.ab-boss.broken .ab-broken { opacity: 1; animation: ab-pulse 0.5s ease-in-out infinite; }
+.ab-boss.broken .ab-bar.post > .fill { animation: ab-pulse 0.5s ease-in-out infinite; }
 
 /* ---------- interaction prompt ---------- */
 .ab-prompt {
@@ -250,7 +325,189 @@ const CSS = `
   color: #f4f6fb;
   text-shadow: 0 0 2px #000, 0 1px 2px #000, 0 0 7px rgba(0, 0, 0, 0.9);
 }
-.ab-tag.foe > span { color: #ffd6c8; }
+.ab-tag.foe > span { color: #ffd6c8; transition: opacity 0.15s; }
+.ab-tag.foe.dim > span { opacity: 0.25; }
+
+/* ---------- combat tells (world-anchored above the attacker) ---------- */
+.ab-tells { position: absolute; inset: 0; overflow: hidden; z-index: 2; }
+.ab-tell { position: absolute; left: 0; top: 0; visibility: hidden; will-change: transform; }
+.ab-tell.on { visibility: visible; }
+.ab-tell > .in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -100%);
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+}
+.ab-tell.edge > .in { transform-origin: 50% 50%; }
+.ab-tell .gbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(30px, 2.4vw, 42px);
+  height: clamp(30px, 2.4vw, 42px);
+}
+.ab-tell .gl {
+  position: relative;
+  font-size: clamp(22px, 1.8vw, 32px);
+  font-weight: 800;
+  line-height: 1;
+  color: ${WHITE};
+}
+.ab-tell .ring {
+  position: absolute;
+  inset: -3px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+}
+.ab-tell .lb {
+  margin-top: 1px;
+  padding: 1px 7px 1px calc(7px + 0.28em);
+  font-size: clamp(12px, 0.95vw, 16px);
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  white-space: nowrap;
+  background: rgba(3, 5, 10, 0.62);
+  border: 1px solid currentColor;
+}
+.ab-tell.t-normal .lb, .ab-tell.t-normal .ring { display: none; }
+.ab-tell.t-normal .gbox { width: 22px; height: 22px; }
+.ab-tell.t-normal .gl {
+  font-size: clamp(16px, 1.2vw, 22px);
+  text-shadow: 0 0 6px ${rgba(WHITE, 0.95)}, 0 0 14px ${rgba(WHITE, 0.5)}, 0 0 2px #000;
+  animation: ab-glint 0.6s linear infinite;
+}
+@keyframes ab-glint { 50% { opacity: 0.55; } }
+.ab-tell.t-blue { color: ${BLUE}; }
+.ab-tell.t-blue .gl { color: ${BLUE}; text-shadow: 0 0 8px ${rgba(BLUE, 0.95)}, 0 0 18px ${rgba(BLUE, 0.55)}, 0 0 2px #000; }
+.ab-tell.t-blue .lb { color: #dff0ff; border-color: ${rgba(BLUE, 0.75)}; text-shadow: 0 0 6px ${rgba(BLUE, 0.95)}; box-shadow: 0 0 10px ${rgba(BLUE, 0.35)}; }
+.ab-tell.t-red { color: ${RED}; }
+.ab-tell.t-red .gl { color: ${RED}; animation: ab-red-glow 0.32s ease-in-out infinite alternate; }
+.ab-tell.t-red .lb {
+  color: #ffe2dc;
+  border-color: ${rgba(RED, 0.85)};
+  text-shadow: 0 0 6px ${rgba(RED, 1)};
+  animation: ab-red-box 0.32s ease-in-out infinite alternate;
+}
+@keyframes ab-red-glow {
+  from { text-shadow: 0 0 6px ${rgba(RED, 0.7)}, 0 0 2px #000; }
+  to { text-shadow: 0 0 14px ${rgba(RED, 1)}, 0 0 28px ${rgba(RED, 0.7)}, 0 0 2px #000; }
+}
+@keyframes ab-red-box {
+  from { box-shadow: 0 0 6px ${rgba(RED, 0.3)}; }
+  to { box-shadow: 0 0 16px ${rgba(RED, 0.85)}; }
+}
+/* the timing cue: everything goes hot-white for an instant */
+.ab-tell.flash .gl { color: #ffffff; }
+.ab-tell.flash .ring { border-width: 3px; }
+.ab-tell.t-blue.flash .lb { background: ${rgba(BLUE, 0.4)}; color: #fff; }
+.ab-tell.t-red.flash .lb { background: ${rgba(RED, 0.45)}; color: #fff; }
+.ab-tell.t-normal.flash .gl { animation: none; text-shadow: 0 0 10px #fff, 0 0 22px ${rgba(WHITE, 0.9)}; }
+/* off-screen: arrow orbiting the edge-clamped mark, pointing at the attacker */
+.ab-tell-arrow { position: absolute; left: 0; top: 0; width: 0; height: 0; display: none; }
+.ab-tell.edge .ab-tell-arrow { display: block; }
+.ab-tell-arrow > span {
+  position: absolute;
+  left: -7px;
+  top: -52px;
+  width: 14px;
+  text-align: center;
+  font-size: 13px;
+  line-height: 14px;
+  color: currentColor;
+  text-shadow: 0 0 6px currentColor, 0 0 2px #000;
+}
+
+/* ---------- screen-edge pulses: red (unblockable tell) / cyan (Ghostep) ---------- */
+.ab-edges { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.ab-edge { position: absolute; opacity: 0; will-change: opacity; }
+.ab-edge.l { left: 0; top: 0; bottom: 0; width: 16vw; background: linear-gradient(90deg, ${rgba(RED, 0.55)}, ${rgba(RED, 0)}); }
+.ab-edge.r { right: 0; top: 0; bottom: 0; width: 16vw; background: linear-gradient(270deg, ${rgba(RED, 0.55)}, ${rgba(RED, 0)}); }
+.ab-edge.t { left: 0; right: 0; top: 0; height: 16vh; background: linear-gradient(180deg, ${rgba(RED, 0.5)}, ${rgba(RED, 0)}); }
+.ab-edge.b { left: 0; right: 0; bottom: 0; height: 16vh; background: linear-gradient(0deg, ${rgba(RED, 0.5)}, ${rgba(RED, 0)}); }
+.ab-edge-cool {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  box-shadow: inset 0 0 18vh ${rgba(CYAN, 0.45)};
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, ${rgba('#2a6f8a', 0.25)});
+  will-change: opacity;
+}
+
+/* ---------- call-outs over the player + damage numbers ---------- */
+.ab-calls { position: absolute; inset: 0; overflow: hidden; z-index: 2; }
+.ab-call, .ab-num {
+  position: absolute;
+  left: 0;
+  top: 0;
+  visibility: hidden;
+  transform-origin: 0 0;
+  will-change: transform, opacity;
+}
+.ab-call.on, .ab-num.on { visibility: visible; }
+.ab-call > .t, .ab-num > .t {
+  position: relative;
+  display: block;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  font-weight: 800;
+  text-shadow: 0 0 2px #000, 0 1px 2px #000;
+}
+.ab-call > .t { font-size: clamp(14px, 1.15vw, 19px); letter-spacing: 0.24em; padding-left: 0.24em; }
+.ab-call > .streak {
+  position: absolute;
+  left: -70px;
+  width: 140px;
+  top: -11px;
+  height: 2px;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, ${rgba(CYAN, 0)}, ${rgba(CYAN, 0.95)} 45%, #ffffff 50%, ${rgba(CYAN, 0.95)} 55%, ${rgba(CYAN, 0)});
+  box-shadow: 0 0 8px ${rgba(CYAN, 0.9)};
+}
+.ab-call.k-parry > .t { color: #fff6e6; text-shadow: 0 0 10px rgba(255, 226, 170, 0.95), 0 0 2px #000, 0 1px 2px #000; }
+.ab-call.k-deflect > .t { color: #e8f4ff; font-size: clamp(16px, 1.3vw, 22px); text-shadow: 0 0 12px ${rgba(BLUE, 1)}, 0 0 24px ${rgba(BLUE, 0.6)}, 0 0 2px #000; }
+.ab-call.k-ghostep > .t { color: ${CYAN}; font-size: clamp(16px, 1.3vw, 22px); font-style: italic; text-shadow: 0 0 12px ${rgba(CYAN, 1)}, -8px 0 10px ${rgba(CYAN, 0.45)}, 0 0 2px #000; }
+.ab-call.k-gbreak > .t { color: #ff6a55; text-shadow: 0 0 10px ${rgba(RED, 0.95)}, 0 0 2px #000, 0 1px 2px #000; }
+.ab-call.k-block > .t { color: #b9c3d8; font-size: 11px; font-weight: 700; letter-spacing: 0.3em; }
+.ab-num > .t { font-size: 12px; color: #f2e9d8; font-variant-numeric: tabular-nums; }
+.ab-num.k-heavy > .t { font-size: 14px; color: #ffd08a; }
+.ab-num.k-crit > .t { font-size: clamp(15px, 1.2vw, 19px); color: ${CYAN}; text-shadow: 0 0 9px ${rgba(CYAN, 0.95)}, 0 0 2px #000, 0 1px 2px #000; }
+
+/* ---------- small mid-screen banner (POSTURE BROKEN) ---------- */
+.ab-mini {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 4;
+}
+.ab-mini.on { visibility: visible; }
+.ab-mini .txt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--ab-serif);
+  font-size: clamp(17px, 1.6vw, 26px);
+  letter-spacing: 0.32em;
+  padding-left: 0.32em;
+  color: #ffe09a;
+  white-space: nowrap;
+  text-shadow: 0 0 14px rgba(255, 196, 90, 0.75), 0 1px 3px #000;
+}
+.ab-mini .txt::before,
+.ab-mini .txt::after { content: ''; width: 70px; height: 1px; background: linear-gradient(90deg, rgba(255, 224, 154, 0), rgba(255, 224, 154, 0.85)); }
+.ab-mini .txt::after { background: linear-gradient(270deg, rgba(255, 224, 154, 0), rgba(255, 224, 154, 0.85)); }
+.ab-mini .sub { margin-top: 4px; font-size: 10px; letter-spacing: 0.3em; color: #d7c08a; text-shadow: 0 1px 2px #000; }
 .ab-reticle > span {
   display: flex;
   align-items: center;
@@ -373,7 +630,7 @@ const CSS = `
 }
 .ab-stats.on { opacity: 1; }
 .ab-stats-title { text-align: center; font-size: 10px; letter-spacing: 0.3em; color: var(--ab-gold); margin-bottom: 6px; }
-.ab-stats .row { display: flex; justify-content: space-between; font-size: 11px; line-height: 18px; }
+.ab-stats .row { display: flex; justify-content: space-between; font-size: 11px; line-height: 17px; }
 .ab-stats .row .k { color: var(--ab-dim); }
 .ab-stats .row .v { color: #eef1f8; font-variant-numeric: tabular-nums; }
 
@@ -396,6 +653,16 @@ const CSS = `
 .ab-ctrls { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; text-align: left; font-size: 10.5px; }
 .ab-ctrls .k { text-align: right; white-space: nowrap; }
 .ab-ctrls .a { color: var(--ab-dim); line-height: 15px; }
+.ab-help-sub { margin: 9px 0 3px; font-size: 10px; letter-spacing: 0.2em; color: var(--ab-dim); }
+.ab-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 14px; margin-top: 8px; font-size: 10.5px; color: var(--ab-dim); }
+.ab-help .ab-legend { justify-content: flex-start; margin-top: 2px; }
+.ab-legend .it { white-space: nowrap; }
+.ab-legend b { font-weight: 800; }
+.ab-legend .n b { color: ${WHITE}; text-shadow: 0 0 5px ${rgba(WHITE, 0.7)}; }
+.ab-legend .b b { color: ${BLUE}; text-shadow: 0 0 6px ${rgba(BLUE, 0.8)}; }
+.ab-legend .r b { color: ${RED}; text-shadow: 0 0 6px ${rgba(RED, 0.8)}; }
+.ab-legend.title { margin-top: 12px; font-size: 11px; text-shadow: 0 1px 2px #000; }
+.ab-legend .hint { color: ${CYAN}; opacity: 0.8; }
 
 /* ---------- title ---------- */
 .ab-title {

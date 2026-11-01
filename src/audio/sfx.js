@@ -7,7 +7,8 @@ import { env, perc, glide, spikes, rnd, mtof, num } from './dsp.js';
 //   rev      reverb send level
 //   gap      minimum seconds between two plays of the same name
 //   falloff  distance attenuation multiplier for spatial sounds (<1 = carries further)
-//   bus      'ui' bypasses the pause duck; default is the sfx bus
+//   bus      'ui' bypasses the pause duck; 'cue' (combat cues) bypasses the Ghostep low-pass but
+//            not the pause duck; default is the sfx bus
 // `v` is a Voice (node factory whose output is v.out), `t` the start time in ctx seconds.
 
 const RX_FIRE = /burn|fire|flame|breath|blaze|inferno|ball/i;
@@ -310,19 +311,6 @@ export const SFX = {
     },
   },
 
-  noStamina: {
-    prio: 1, rev: 0.03, gap: 0.25,
-    play(v, t) {
-      const s = v.osc('triangle', 200, t, t + 0.12);
-      glide(s.frequency, t, 200, 140, 0.06);
-      const lp = v.filter('lowpass', 900, 0.7);
-      const g = v.gain(0);
-      perc(g.gain, t, 0.28, 0.002, 0.06);
-      s.connect(lp).connect(g).connect(v.out);
-      burst(v, t, 'brown', 'lowpass', 600, 0.7, 0.15, 0.035, 0.001);
-    },
-  },
-
   noFlask: {
     prio: 1, rev: 0.05, gap: 0.3,
     play(v, t) {
@@ -361,6 +349,272 @@ export const SFX = {
       const g = v.gain(0);
       perc(g.gain, t, 0.035, 0.01, 0.3);
       s.connect(g).connect(v.out);
+    },
+  },
+
+  // ===== combat cues: tells, timing flash, defence answers =====
+  // Tell / flash / Ghostep sounds use the 'cue' bus (past the Ghostep low-pass, still muffled by
+  // pause) and a low falloff: they are the player's reaction cues and must cut through the mix.
+
+  /** Blue tell (parry it): bright rising "shing" — a blade drawn on steel into a rising bell. */
+  tellBlue: {
+    prio: 6, rev: 0.3, gap: 0.12, falloff: 0.25, bus: 'cue',
+    play(v, t) {
+      const bp = swish(v, t, 'white', 'bandpass', 2400, 2.6, [[0, 0], [0.025, 0.34], [0.14, 0.14], [0.42, 0]]);
+      glide(bp.frequency, t, 2400, 8200, 0.32);
+      // inharmonic bell partials that glide up a fourth as they ring (the "rising" part)
+      const f = mtof(88);
+      for (const [r, a, d] of [[1, 0.17, 0.9], [2.0, 0.07, 0.6], [2.76, 0.06, 0.45], [5.4, 0.03, 0.25]]) {
+        const s = v.osc('sine', f * r, t, t + d + 0.06);
+        glide(s.frequency, t, f * r * 0.75, f * r, 0.12);
+        const g = v.gain(0);
+        perc(g.gain, t, a, 0.004, d);
+        s.connect(g).connect(v.out);
+      }
+      ping(v, t + 0.06, 'sine', mtof(100), 0.05, 0.32);
+    },
+  },
+
+  /** Red tell (dodge it): ominous low brass stab with grit — a distorted, sagging horn chord. */
+  tellRed: {
+    prio: 6, rev: 0.35, gap: 0.12, falloff: 0.25, bus: 'cue',
+    play(v, t) {
+      const D = 0.72;
+      const lp = v.filter('lowpass', 260, 3);
+      env(lp.frequency, t, [[0, 260], [0.05, 2300], [0.25, 950], [D, 380]]);
+      const grit = v.shaper(22);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.022, 0.42], [0.18, 0.3], [D * 0.8, 0.17], [D, 0]]);
+      lp.connect(grit).connect(g).connect(v.out);
+      // D2 power chord + a minor-second rub for menace; the pitch sags at the tail
+      for (const [m, a] of [[38, 0.3], [45, 0.22], [50, 0.17], [39, 0.11]]) {
+        const f = mtof(m);
+        for (const det of [-9, 9]) {
+          const o = v.osc('sawtooth', f, t, t + D + 0.05, det);
+          glide(o.frequency, t + 0.32, f, f * 0.94, D - 0.32);
+          const og = v.gain(a);
+          o.connect(og).connect(lp);
+        }
+      }
+      thump(v, t, 72, 36, 0.25, 0.7, 0.42);
+      // raspy breath of the horn
+      const n = v.noise('pink', t, t + 0.4);
+      const nb = v.filter('bandpass', 700, 1.2);
+      const ns = v.shaper(40);
+      const ng = v.gain(0);
+      perc(ng.gain, t, 0.16, 0.006, 0.28);
+      n.connect(nb).connect(ns).connect(ng).connect(v.out);
+    },
+  },
+
+  /** Normal tell: a faint tick (the white glint carries it visually). */
+  tellTick: {
+    prio: 3, rev: 0.05, gap: 0.12, falloff: 0.4, bus: 'cue',
+    play(v, t) {
+      ping(v, t, 'triangle', 3400, 0.045, 0.03, 0.001);
+      burst(v, t, 'white', 'highpass', 5000, 0.7, 0.035, 0.015, 0.0008);
+    },
+  },
+
+  /**
+   * combat:flash — the TIMING cue (~0.35 s before impact). opts.tell: blue → crystal ping,
+   * red → whoosh-crack, normal → short glint. Instant attacks so the cue lands on the beat.
+   */
+  flash: {
+    prio: 6, rev: 0.22, gap: 0.08, falloff: 0.2, bus: 'cue',
+    play(v, t, o) {
+      if (o.tell === 'red') {
+        // a short rising air rip that snaps into a sharp crack
+        const W = 0.06;
+        const bp = swish(v, t, 'white', 'bandpass', 600, 1.2, [[0, 0.06], [W, 0.5], [W + 0.01, 0]]);
+        glide(bp.frequency, t, 600, 5200, W);
+        const c = t + W;
+        const n = v.noise('white', c, c + 0.12);
+        const hp = v.filter('highpass', 1500, 0.7);
+        const sh = v.shaper(60);
+        const g = v.gain(0);
+        perc(g.gain, c, 0.5, 0.0008, 0.07);
+        n.connect(hp).connect(sh).connect(g).connect(v.out);
+        thump(v, c, 180, 60, 0.06, 0.55, 0.12);
+        ping(v, c, 'square', 1900, 0.05, 0.02, 0.0005);
+      } else if (o.tell === 'blue') {
+        // crystal ping: glassy high partials with an instant attack
+        for (const [f, a, d] of [[2637, 0.2, 0.45], [3951, 0.13, 0.35], [5274, 0.08, 0.25], [7040, 0.05, 0.16]]) {
+          ping(v, t, 'sine', f, a, d, 0.001);
+        }
+        burst(v, t, 'white', 'highpass', 7000, 0.7, 0.16, 0.03, 0.0005);
+      } else {
+        ping(v, t, 'sine', 3136, 0.1, 0.12, 0.001);
+        ping(v, t + 0.03, 'sine', 4699, 0.06, 0.1, 0.001);
+        burst(v, t, 'white', 'highpass', 6500, 0.7, 0.08, 0.02, 0.0005);
+      }
+    },
+  },
+
+  /** player:parry — steel clang + an ascending sparkle ring. opts.tell 'blue': bigger, held shimmer. */
+  parry: {
+    prio: 6, rev: 0.4, gap: 0.06,
+    play(v, t, o) {
+      const big = o.tell === 'blue';
+      const k = big ? 1.25 : 1;
+      const len = big ? 1.5 : 1;
+      // struck steel: inharmonic partials, instant attack, ringing decay (+ a detuned twin = beating)
+      const f0 = (big ? 740 : 880) * rnd(0.98, 1.02);
+      for (const [r, a, d] of [[1, 0.2, 0.7], [1.006, 0.1, 0.8], [2.32, 0.15, 0.55], [3.7, 0.11, 0.4], [5.1, 0.08, 0.3], [6.9, 0.05, 0.22]]) {
+        ping(v, t, 'sine', f0 * r, a * k, d * len, 0.001);
+      }
+      burst(v, t, 'white', 'bandpass', 4200, 1.5, 0.5 * k, 0.05, 0.0006);
+      burst(v, t, 'white', 'highpass', 8000, 0.7, 0.2 * k, 0.08, 0.0005);
+      thump(v, t, 160, 70, 0.08, 0.5 * k, 0.15);
+      // sparkle ring: quick ascending glints
+      const notes = big ? [88, 91, 95, 100, 103] : [91, 95, 100];
+      notes.forEach((m, i) => ping(v, t + 0.04 + i * 0.035, 'sine', mtof(m), 0.05 * k, 0.35, 0.002));
+      if (big) {
+        // deflect: a crystalline shimmer blooming over the clang + rising air
+        for (const det of [0, 7]) {
+          const s = v.osc('sine', mtof(100), t + 0.02, t + 1.32, det);
+          const g = v.gain(0);
+          env(g.gain, t + 0.02, [[0, 0], [0.08, 0.05], [1.28, 0]]);
+          s.connect(g).connect(v.out);
+        }
+        const bp = swish(v, t, 'white', 'bandpass', 3000, 2, [[0, 0], [0.05, 0.12], [0.6, 0]]);
+        glide(bp.frequency, t, 3000, 9000, 0.6);
+      }
+    },
+  },
+
+  /** player:block — dull metal thud (muffled steel, no ring). opts.tell 'blue': heavier + scrape. */
+  block: {
+    prio: 4, rev: 0.12, gap: 0.06,
+    play(v, t, o) {
+      const big = o.tell === 'blue';
+      const k = big ? 1.3 : 1;
+      thump(v, t, big ? 120 : 140, 55, 0.1, 0.8 * k, big ? 0.28 : 0.2);
+      burst(v, t, 'brown', 'lowpass', 600, 0.8, 0.7 * k, 0.12);
+      const lp = v.filter('lowpass', 1300, 0.8);
+      lp.connect(v.out);
+      for (const [f, a, d] of [[310, 0.16, 0.18], [720, 0.1, 0.14], [1130, 0.06, 0.1]]) {
+        const s = v.osc('triangle', f * rnd(0.97, 1.03), t, t + d + 0.03);
+        const g = v.gain(0);
+        perc(g.gain, t, a * k, 0.001, d);
+        s.connect(g).connect(lp);
+      }
+      burst(v, t, 'white', 'bandpass', 2000, 1.2, 0.18 * k, 0.03, 0.0008);
+      if (big) swish(v, t + 0.03, 'pink', 'lowpass', 900, 0.7, [[0, 0], [0.02, 0.2], [0.3, 0]]);
+    },
+  },
+
+  /** player:guardBreak — crunch: saturated fracture + crackle, a bent falling clank, heavy thump. */
+  guardBreak: {
+    prio: 6, rev: 0.3, gap: 0.3,
+    play(v, t) {
+      const n = v.noise('white', t, t + 0.4);
+      const bp = v.filter('bandpass', 2200, 0.8);
+      env(bp.frequency, t, [[0, 2200], [0.3, 600]]);
+      const sh = v.shaper(45);
+      const g = v.gain(0);
+      perc(g.gain, t, 0.55, 0.001, 0.25);
+      n.connect(bp).connect(sh).connect(g).connect(v.out);
+      const c = v.noise('white', t, t + 0.36);
+      const hp = v.filter('highpass', 1800, 0.7);
+      const cg = v.gain(0);
+      spikes(cg.gain, t, 0.3, 12, 0.7, 0.002, 0.008, 0.7);
+      c.connect(hp).connect(cg).connect(v.out);
+      const s = v.osc('triangle', 520, t, t + 0.46);
+      glide(s.frequency, t, 520, 180, 0.4);
+      const lp = v.filter('lowpass', 1600, 0.8);
+      const sg = v.gain(0);
+      perc(sg.gain, t, 0.22, 0.002, 0.4);
+      s.connect(lp).connect(sg).connect(v.out);
+      thump(v, t, 110, 34, 0.22, 1.0, 0.4);
+      burst(v, t, 'brown', 'lowpass', 380, 0.8, 0.7, 0.22);
+    },
+  },
+
+  /**
+   * Ghostep (perfect dodge): time-slow whoosh. A blink thump and an air rush that falls in pitch,
+   * a sagging tape-stop tone, then a reverse-cymbal swell that cuts off as time snaps back.
+   * opts.slow: slow-mo length in real seconds.
+   */
+  ghostep: {
+    prio: 6, rev: 0.45, gap: 0.4, bus: 'cue',
+    play(v, t, o) {
+      const S = clamp(num(o.slow, 0.6), 0.25, 2);
+      const bp = swish(v, t, 'pink', 'bandpass', 3600, 1.1, [[0, 0], [0.03, 0.45], [0.35, 0.12], [0.6, 0]]);
+      glide(bp.frequency, t, 3600, 380, 0.5);
+      thump(v, t, 95, 30, 0.3, 0.9, 0.45);
+      const s = v.osc('sine', 330, t, t + S + 0.12);
+      glide(s.frequency, t, 330, 70, S);
+      const sg = v.gain(0);
+      env(sg.gain, t, [[0, 0], [0.03, 0.16], [S, 0.08], [S + 0.08, 0]]);
+      s.connect(sg).connect(v.out);
+      // reverse cymbal: exponential rise of bright noise + metal partials, cut at the snap-back
+      const rs = t + 0.05;
+      const R = Math.max(0.2, S - 0.05);
+      const n = v.noise('white', rs, rs + R + 0.03);
+      const hp = v.filter('highpass', 2500, 0.7);
+      glide(hp.frequency, rs, 2500, 6500, R);
+      const ng = v.gain(0);
+      ng.gain.setValueAtTime(0.0001, rs);
+      ng.gain.exponentialRampToValueAtTime(0.28, rs + R);
+      ng.gain.linearRampToValueAtTime(0, rs + R + 0.015);
+      n.connect(hp).connect(ng).connect(v.out);
+      for (const f of [3520, 4980, 6230]) {
+        const m = v.osc('sine', f, rs, rs + R + 0.03);
+        const mg = v.gain(0);
+        mg.gain.setValueAtTime(0.0001, rs);
+        mg.gain.exponentialRampToValueAtTime(0.03, rs + R);
+        mg.gain.linearRampToValueAtTime(0, rs + R + 0.015);
+        m.connect(mg).connect(v.out);
+      }
+      thump(v, rs + R, 70, 40, 0.1, 0.4, 0.2);
+    },
+  },
+
+  // ===== dragon: combat reactions =====
+  /** dragon:parried — pained recoil: a yelp that drops into a growl + a jaw/scale rattle. */
+  dragonRecoil: {
+    prio: 5, rev: 0.35, gap: 0.4, falloff: 0.6,
+    play(v, t, o) {
+      const big = o.tell === 'blue';
+      const D = big ? 0.85 : 0.6;
+      vocal(v, t + 0.02, {
+        D, peak: big ? 0.75 : 0.6,
+        ampPts: [[0, 0], [0.03, 0.9], [0.12, 1], [D * 0.6, 0.6], [D, 0]],
+        pitch: [[0, 130], [0.08, 165], [D, 70]],
+        f1: [[0, 820], [D, 520]], f2: [[0, 1350], [D, 900]], f3: [[0, 2800], [D, 2100]],
+        rough: 0.55, roughHz: 36, breath: 0.5, sub: 0.25, body: 0.25,
+      });
+      const c = v.noise('white', t, t + 0.22);
+      const bp = v.filter('bandpass', 1800, 1);
+      const cg = v.gain(0);
+      spikes(cg.gain, t, 0.2, 7, 0.4, 0.002, 0.007, 0.5);
+      c.connect(bp).connect(cg).connect(v.out);
+    },
+  },
+
+  /** dragon:postureBreak — heavy impact (boom, crunch, cracked-gong ring) then a strained roar. */
+  postureBreak: {
+    prio: 6, rev: 0.5, gap: 1, falloff: 0.4,
+    play(v, t, o, E) {
+      thump(v, t, 64, 20, 0.6, 1.2, 0.9);
+      const n = v.noise('brown', t, t + 0.95);
+      const lp = v.filter('lowpass', 900, 0.8);
+      env(lp.frequency, t, [[0, 900], [0.7, 150]]);
+      const sh = v.shaper(10);
+      const ng = v.gain(0);
+      perc(ng.gain, t, 0.85, 0.002, 0.7);
+      n.connect(lp).connect(sh).connect(ng).connect(v.out);
+      const c = v.noise('white', t, t + 0.3);
+      const cb = v.filter('bandpass', 1300, 0.9);
+      const cs = v.shaper(30);
+      const cg = v.gain(0);
+      perc(cg.gain, t, 0.4, 0.001, 0.2);
+      c.connect(cb).connect(cs).connect(cg).connect(v.out);
+      for (const [f, a, d] of [[311, 0.12, 1.4], [466, 0.08, 1.1], [740, 0.06, 0.8], [1180, 0.04, 0.6]]) {
+        ping(v, t, 'sine', f, a, d, 0.002);
+      }
+      if (o.roar !== false) SFX.roar.play(v, t + 0.25, { strength: 1.0, pitch: 1.2 }, E);
     },
   },
 
