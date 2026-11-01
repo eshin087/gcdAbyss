@@ -80,7 +80,7 @@ getChestPos(out: Vector3): Vector3
 respawn(x, z)                          // full restore, idle, facing north, clears burn/lock/crit
 restAtBonfire()                        // refill hp/flasks (no teleport)
 update(dt)
-debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z) }   // used by the Lab
+debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill() }   // used by the Lab
 ```
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
 light combo, LMB hold ≥ 0.3 s then release = charged heavy · RMB hold = block, RMB tap before impact =
@@ -88,7 +88,11 @@ parry · Space = dodge roll · Shift = sprint · F = flask · Tab / MMB = lock-o
 Deals damage via `game.dragon.takeHit(...)` using `game.dragon.hurtSpheres`; pushes itself out of
 `game.dragon.bodyCircles` and resolves vs `game.world.resolve(pos, radius, CONFIG.world.playerBound)`.
 On `perfectDodge` it performs Ghostep using `attacker.position`/`attacker.yaw` (teleport behind,
-`game.hitstop(slowmoTime, slowmoScale)`, opens `critTimer`).
+`game.hitstop(slowmoTime, slowmoScale)`, opens `critTimer`). A harsher freeze already running defers the
+slow-mo until it ends; actors skip a short freeze while a longer, gentler slow-mo runs, so impact
+freezes never swallow a Ghostep.
+RMB cancels a charge (the LMB press is consumed); an RMB press during one's own swing is queued and
+raises the guard when recovery starts. Streams (breath) only Ghostep when the roll starts into them.
 
 ### Dragon — `src/entities/dragon/dragon.js` exports `class Dragon`
 ```
@@ -103,16 +107,20 @@ isTargetable(): boolean                 // false while sleeping/dying/dead
 lockPoint(out): Vector3                  // chest/neck base, for lock-on + camera
 startIntro()                            // wake → rise → roar; emits 'dragon:introDone' when the fight starts
 takeHit({ damage, part, point:{x,y,z}, dir:{x,z}, poise, heavy, crit }): number   // returns damage dealt; adds posture
-onParried({ attack, tell }): void       // called after player.takeHit returned 'parried': recoil + posture damage
+                                        // phase gate: with the AI on, phase-1 damage stops at the phase-2
+                                        // threshold until the transition starts (no skipping phase 2)
+onParried({ attack, tell }): void       // the dragon calls this itself when player.takeHit returns 'parried'
+hitstop(sec, scale)                     // game.hitstop that won't crush a running Ghostep slow-mo
 reset()                                 // back to sleeping at the nest, full HP/posture, phase 1, all FX/lights cleared
 update(dt)
 debug: {                                // used by the Lab (generic shape every future enemy implements)
-  abilities(): Array<{ name, label, tell, phase }>,
-  trigger(name): boolean,               // force an ability now (wakes/starts the fight if needed)
+  abilities(): Array<{ name, label, tell, phase }>,   // includes 'roar' (the phase-2 shock ring)
+  trigger(name): boolean,               // force an ability now (wakes/starts the fight if needed); false while busy
   setAI(enabled: boolean), aiEnabled: boolean,
-  wake(), startFight(),                 // startFight skips the intro straight into combat
+  wake(), startFight(),                 // startFight skips the intro straight into combat (no-op if fighting)
   phase2(), stagger(), postureBreak(), kill(), reset(), setHp(fraction 0..1),
-  hitboxes(): Array<{ x, y, z, r, kind: 'hurt'|'attack' }>   // for the Lab overlay
+  hitboxes(): Array<{ x, y, z, r, kind: 'hurt'|'attack' }>,  // for the Lab overlay
+  currentAction?(): string|null         // optional, Lab readout
 }
 ```
 Damages the player only via `game.player.takeHit(...)` with tell data; announces tells with
@@ -124,7 +132,9 @@ constructor(game)          // builds DOM under #ui (inject its own <style>; do n
 update(realDt)
 log(text, channel='system')          // channel: 'system'|'combat'|'warn'|'lore'
 showBossBar(name) / hideBossBar()    // boss HP + posture bar
-banner(text, kind)                   // kind: 'death'|'victory'|'area'|'bonfire'|'phase'
+banner(text, kind, opts)             // kind: 'death'|'victory'|'area'|'bonfire'|'phase'
+bannerHint(text) / clearBanner(instant)   // sub-line under the current banner; flow uses both
+showStats(rows)                      // victory / death run stats
 prompt(text|null)                    // interaction prompt, e.g. "[E] Rest at bonfire"
 showTitle() / hideTitle();  showPause(bool);  toggleHelp()
 ```
@@ -154,7 +164,8 @@ toggleMute(); muted: boolean;  setVolume(0..1)
 ### Lab — `src/dev/lab.js` exports `class Lab`
 ```
 constructor(game)          // hidden unless URL has ?lab or the user presses F1 / backquote
-update(realDt)             // panel refresh + hitbox overlay
+update(realDt)             // panel refresh + hitbox overlay (runs before flow)
+postUpdate()               // main.js calls it after the actors update so the overlay matches this frame
 open: boolean
 ```
 Debug panel to test the fight without playing it: trigger any `dragon.debug.abilities()`, phase /
@@ -163,20 +174,22 @@ AI on/off, hitbox overlay, teleport. Talks only to the `debug` APIs above.
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:
-- `player:attack {kind:'light'|'heavy', combo, charge}` (swing starts), `player:charge {t}` (heavy charge start),
+- `player:attack {kind:'light'|'heavy', combo, charge}` (swing starts), `player:charge {t}` (heavy charge start; t = seconds to full charge),
   `player:hitDragon {damage, part, point, heavy, crit}`, `player:hurt {damage, kind, hp}`,
   `player:block {damage, tell}`, `player:parry {tell, attack}`, `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}`,
-  `player:ghostep {x, z}`, `player:roll`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
+  `player:ghostep {x, z}`, `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
   `player:footstep {x, z, sprint}`, `player:lockOn {on}`
 Dragon (any attacker) → hud/audio/flow:
-- `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit),
-  `combat:flash {source:'dragon', attack, tell, x, y, z}` (~0.35 s before impact)
+- `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit; x/z = the
+  striking part; impactIn is a first estimate in game seconds),
+  `combat:flash {source:'dragon', attack, tell, x, y, z}` (~0.35 s before impact — the **authoritative**
+  timing cue: moving targets (charge, fireball) re-time it after the tell)
 - `dragon:wake`, `dragon:roar {strength}`, `dragon:introDone`, `dragon:windup {name}`, `dragon:attack {name}`,
   `dragon:step {x, z, heavy}`, `dragon:wingFlap {strength}`, `dragon:takeoff`, `dragon:land {x, z}`,
   `dragon:breathStart`, `dragon:breathEnd`, `dragon:fireball {x, y, z}`, `dragon:explosion {x, z, radius}`,
   `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell}`,
-  `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger`, `dragon:phase2`,
+  `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
   `dragon:death`, `dragon:dead`
 Flow → hud/audio:
 - `state {from, to}`, `bonfire:rest`, `game:retry`, `game:victory`, `area {name}`

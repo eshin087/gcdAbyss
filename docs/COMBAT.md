@@ -22,11 +22,15 @@ colour-coded attacks. Numbers live in `src/combat/rules.js` (shared) and each ac
    Holding RMB after the press keeps blocking.
 5. **Perfect dodge** = a dodge started ≤ `perfectDodgeWindow` (0.2 s) before impact → **Ghostep**:
    the player blinks behind the attacker, time slows (×0.3 for 0.6 s), and for 1.6 s the player's
-   hits crit (×1.8). A dodge outside the window is a normal i-frame dodge.
+   hits crit (×1.8). A dodge outside the window is a normal i-frame dodge. A dodge with no
+   direction held is a **backstep** (shorter i-frames 0.03–0.22 s). Streams (fire breath) only
+   Ghostep when the roll starts into them; rolling out of one is a plain dodge.
 6. **Posture.** Enemies have a posture meter (gold bar under the boss HP). Parries and weapon hits
    fill it; at max the enemy is **broken** for 3.2 s (open: ×2.2 crits). It recovers after 3 s
    without posture damage.
-7. **Fairness checklist for every new attack:** tell type set · windup ≥ 0.7 s (melee) · flash
+7. **Phase gate.** While the AI runs the fight, phase-1 damage stops at the phase-2 threshold until
+   the transition starts, so burst crits can't skip phase 2 (damage numbers still show).
+8. **Fairness checklist for every new attack:** tell type set · windup ≥ 0.7 s (melee) · flash
    ~0.35 s before impact · hitbox matches the visual · recovery window to punish · no unavoidable
    chip (AoE red attacks show a ground ring).
 

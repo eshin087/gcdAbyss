@@ -72,6 +72,11 @@ Other techniques:
 - Creatures: pick the `ascii` set per part (scales / strands / plates / smooth) and make aGUV +y run
   along the limb toward the tip/head so chevrons point "forward" and strokes follow folds/hair.
 - Colour carries material; glyph carries form. Keep inks desaturated except glow/fire.
+- Creature cells sit on a near-black backing (`uCreatureBg` 0.04, not the props' `uBg`): bright inks
+  otherwise fill their cells and read as solid tiles. Brightness -> glyph level uses `uCreatureLum`
+  (3.0); higher saturates every cell to the boldest glyph (flat "VVVV" bodies).
+- Near-black materials (the hero's coat) still get an ink-independent moon rim
+  (`rim * uMoonColor * 0.12` in `asciiMain`) so their silhouette reads on dark grass.
 - New ramps go into `glyphs.js` `RAMP_ROWS` + `GRID_ROW`, and the pass must index them.
 
 ### Available glyphs (world atlas)

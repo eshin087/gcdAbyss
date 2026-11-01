@@ -48,3 +48,33 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   commits.
 - **Consequences:** releases happen by merging PRs; production is always the latest merged `main`;
   previews exist per PR and expire automatically.
+
+## ADR-007 — Everything visible goes through the screen-space ASCII grid (2026-11-01)
+- **Context:** v0.1 grass (instanced stroke quads) and creatures (surface glyphs) read as "solid",
+  while the screen-grid trees were the owner's reference for the right ASCII feel.
+- **Decision:** one pixel-exact character grid for the whole frame. Materials write lit colour plus
+  an alpha class code: grass (procedural meadow drawn in the pass from depth -> world position),
+  leaf, stone (with outline glyphs on raised stones) and creatures, whose code packs a glyph set
+  (scales / strands / plates / smooth) and the screen-space flow angle so glyphs follow the body.
+  Creature cells use their own dark backing and brightness ramp.
+- **Consequences:** every glyph on screen is aligned to the same grid. New looks are new grid rows
+  + class codes in `glyphs.js` / `pipeline.js`, not new geometry. Instanced grass is gone (cheaper).
+
+## ADR-008 — Tell-driven combat without stamina (Phantom Blade Zero model) (2026-11-01)
+- **Context:** v0.1 was a stamina-gated soulslike; the owner wants an approachable RPG/MMO fight
+  where skill means reading tells.
+- **Decision:** remove stamina. Every enemy attack declares `normal` / `blue` (parryable) / `red`
+  (dodge only) in data; shared windows and posture numbers live in `src/combat/rules.js`;
+  `takeHit` returns a `RESULT`; perfect dodges trigger Ghostep (blink behind, slow-mo, crit window);
+  parries and hits fill a posture meter that breaks into a crit window. `combat:flash` is the
+  single authoritative timing cue.
+- **Consequences:** new enemies only declare data + call the shared contract; the HUD, audio and
+  Lab render any attacker's tells for free. Balance is tuned in data, not code.
+
+## ADR-009 — Phase gate on boss HP (2026-11-01)
+- **Context:** stacked Ghostep / posture-break crits could take the wyrm from >50 % HP to dead,
+  skipping phase 2 and its transition entirely.
+- **Decision:** while the AI runs the fight, phase-1 damage clamps at the phase-2 threshold until
+  the transition starts. The Lab (AI off) bypasses the gate.
+- **Consequences:** every player sees phase 2. Hits at the threshold still show damage numbers but
+  don't move the bar; revisit if it reads as unfair in playtests.
