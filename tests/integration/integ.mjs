@@ -20,7 +20,7 @@ const { createSharedUniforms } = await imp('src/render/shaderLib.js');
 const { LightPool } = await imp('src/render/lights.js');
 const { GlyphParticles } = await imp('src/render/particles.js');
 const { Colliders } = await imp('src/world/colliders.js');
-const { TELL, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
+const { TELL, TELL_STYLE, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
 const { Player } = await imp('src/entities/player/player.js');
 const { Dragon } = await imp('src/entities/dragon/dragon.js');
 const { TUNING } = await imp('src/entities/dragon/tuning.js');
@@ -130,12 +130,12 @@ function build() {
   const pushers = new Map();
   const finalU = { uHurt: { value: 0 }, uFade: { value: 0 }, uDesat: { value: 0 }, uWarm: { value: 0 }, uExposure: { value: 1 }, uBloom: { value: 1 } };
   const counters = { scorchReset: 0, burn: 0, spawns: 0 };
-  // world mock: the v0.2 world API (grass is drawn by the ASCII pass: no grass mesh, no setGrassQuality)
+  // world mock: the world API (grass = instanced glyph strokes; no-op quality hook)
   const world = {
     colliders,
     bonfire: { ...CONFIG.world.bonfire }, nest: { x: -3, z: -15.5 },
     forest: { treeSpots: [], bonfire: { ...CONFIG.world.bonfire } },
-    meadow: { density: () => 1 },
+    setGrassQuality() {},
     resolve: (pos, r, b) => colliders.resolve(pos, r, b),
     setPusher(slot, x, y, z, r) { if (![x, y, z, r].every(Number.isFinite)) throw new Error(`NaN pusher ${slot}`); pushers.set(slot, [x, y, z, r]); },
     clearPushers(a = 0, b = 10) { for (let i = a; i < b; i++) pushers.delete(i); },
@@ -443,6 +443,36 @@ function forceAttack(G, name, plan = {}) {
   return rec;
 }
 const evn = (rec, n) => rec.ev[n] || 0;
+
+/**
+ * Force `name` (player left where it is) and sample, every frame: dragon.warn, whether every
+ * material's uWarn.w matches it, and the HUD's red edge opacity. tellI / flashI = first sample
+ * after the attack's combat:tell / combat:flash. `stop(tr)` ends the trace early.
+ */
+function warnTrace(G, name, seconds, stop = null) {
+  const { game } = G;
+  const d = game.dragon, mats = Object.values(d.model.mats);
+  const tr = { trigger: false, tellI: -1, flashI: -1, w: [], edge: [], uniformOk: true, finite: true };
+  let told = false, flashed = false;
+  G.watch = (n, dd) => {
+    if (dd?.attack !== name) return;
+    if (n === 'combat:tell') told = true;
+    if (n === 'combat:flash') flashed = true;
+  };
+  tr.trigger = game.lab.trigger(name);
+  for (let i = 0; i < Math.round(seconds / DT); i++) {
+    G.tick(DT);
+    if (told && tr.tellI < 0) tr.tellI = i;
+    if (flashed && tr.flashI < 0) tr.flashI = i;
+    tr.w.push(d.warn);
+    tr.edge.push(Number(cls('ab-edge')?.style.opacity ?? 0) || 0);
+    if (!Number.isFinite(d.warn)) tr.finite = false;
+    if (!mats.every((m) => m.uniforms.uWarn?.value?.w === d.warn)) tr.uniformOk = false;
+    if (stop?.(tr)) break;
+  }
+  G.watch = null;
+  return tr;
+}
 
 // ================================================================== scenario: win (god-mode bot that defends)
 async function scenarioWin() {
@@ -787,6 +817,41 @@ async function scenarioRed() {
   const { game, input } = G;
   fightSetup(G);
   const d = game.dragon, p = game.player;
+  // the wyrm itself warns (no HUD marks): uWarn ramps through the red windup, spikes on the timing
+  // flash and decays; the HUD only flashes the screen edges on the cue; parryable windups never glow
+  {
+    const W = TELL_STYLE.red.warn;
+    const mats = Object.values(d.model.mats);
+    assert(mats.length > 0 && mats.every((m) => m.uniforms.uWarn?.value?.isVector4), 'every dragon material has a uWarn vec4');
+    assert(!cls('ab-tell') && !cls('ab-tells'), 'no HUD tell marks exist');
+    settle(G);
+    place(G, 16); // out of reach: only watch the tell
+    const tr = warnTrace(G, 'tail', 5);
+    const { tellI: ti, flashI: fi } = tr;
+    const wind = tr.w.slice(ti, fi);
+    const after = fi + Math.ceil(W.decay / DT) + 1;
+    out(`   tail warn: tell@${ti} flash@${fi} · windup ${wind[0]?.toFixed(3)} → ${wind[wind.length - 1]?.toFixed(3)} · flash ${tr.w[fi]?.toFixed(3)} · +${W.decay}s ${tr.w[after]?.toFixed(3)} · edge at flash ${tr.edge[fi]}`);
+    assert(tr.trigger && ti >= 0 && fi > ti, `tail tell + flash seen (tell@${ti} flash@${fi})`);
+    assert(tr.w.slice(0, ti).every((v) => v === 0), 'no red glow before the red tell');
+    assert(wind.length > 10 && near(wind[0], W.from, 0.03) && wind[wind.length - 1] > W.to - 0.1 && wind.every((v, i) => v >= W.from - 1e-9 && v <= W.to + 1e-9 && (i === 0 || v >= wind[i - 1] - 1e-9)), 'red windup glow ramps from→to between tell and flash');
+    assert(near(tr.w[fi], W.spike, 1e-6), `red glow spikes on the timing flash (${tr.w[fi]})`);
+    assert(tr.w.slice(fi, after).every((v, i, a) => i === 0 || v <= a[i - 1] + 1e-9) && tr.w[after] === 0, 'spike decays to 0 within the decay time');
+    assert(tr.uniformOk && tr.finite, 'every material uWarn.w follows dragon.warn (finite)');
+    assert(tr.edge.slice(0, fi).every((v) => v === 0) && tr.edge[fi] > 0.2, `HUD red edge only flashes on the cue (${tr.edge[fi]})`);
+    assert(tr.edge[tr.edge.length - 1] === 0, 'HUD red edge flash fades out');
+    // parryable: no glow, no edge flash (the white glint is a particle burst)
+    settle(G);
+    place(G, 16);
+    const bt = warnTrace(G, 'bite', 3);
+    assert(bt.flashI >= 0 && Math.max(...bt.w) === 0 && Math.max(...bt.edge) === 0, `blue bite: no red glow / edge (flash@${bt.flashI} max ${Math.max(...bt.w)})`);
+    // a stagger mid-windup clears the glow at once
+    settle(G);
+    place(G, 16);
+    const st = warnTrace(G, 'tail', 5, (t) => t.w[t.w.length - 1] > 0.3);
+    assert(st.w[st.w.length - 1] > 0.3 && d.debug.stagger() === true, 'stagger mid red windup');
+    G.tick(DT);
+    assert(d.warn === 0 && mats.every((m) => m.uniforms.uWarn.value.w === 0), `stagger clears the red glow (${d.warn})`);
+  }
   // holding block against red: guard break, full damage
   settle(G);
   place(G, 6);
