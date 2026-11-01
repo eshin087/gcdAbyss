@@ -1,0 +1,261 @@
+import * as THREE from 'three';
+import { CONFIG } from './core/config.js';
+import { Input } from './core/input.js';
+import { Events } from './core/events.js';
+import { CameraRig } from './core/cameraRig.js';
+import { clamp, damp } from './core/math.js';
+import { createSharedUniforms } from './render/shaderLib.js';
+import { createGlyphAtlas, loadFonts } from './render/glyphs.js';
+import { Pipeline } from './render/pipeline.js';
+import { LightPool } from './render/lights.js';
+import { GlyphParticles } from './render/particles.js';
+import { World } from './world/world.js';
+import { Player } from './entities/player/player.js';
+import { Dragon } from './entities/dragon/dragon.js';
+import { Hud } from './ui/hud.js';
+import { AudioEngine } from './audio/audio.js';
+import { GameFlow } from './game/flow.js';
+
+// Boot + main loop. Builds the shared `game` context every module receives (see ARCHITECTURE.md).
+
+async function boot() {
+  await loadFonts();
+
+  const canvas = document.getElementById('game');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // final pass gamma-encodes itself
+  renderer.setClearColor(0x000000, 1);
+
+  const U = createSharedUniforms();
+  U.uGlyphAtlas.value = createGlyphAtlas(renderer).texture;
+
+  const scene = new THREE.Scene();
+  const fxScene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(CONFIG.camera.fov, 1, CONFIG.camera.near, CONFIG.camera.far);
+  const pipeline = new Pipeline(renderer, scene, fxScene, camera, U);
+
+  const game = {
+    THREE,
+    CONFIG,
+    renderer,
+    scene,
+    fxScene,
+    camera,
+    pipeline,
+    U,
+    events: new Events(),
+    input: new Input(canvas),
+    cameraRig: new CameraRig(camera),
+    lights: new LightPool(U),
+    fx: {
+      alpha: new GlyphParticles(U, { max: 3000, additive: false }),
+      add: new GlyphParticles(U, { max: 7000, additive: true }),
+    },
+    time: 0,
+    realTime: 0,
+    timeScale: 1,
+    hitstopTimer: 0,
+    hitstopScale: 1,
+    mouseGround: new THREE.Vector3(),
+    state: 'title',
+    settings: { quality: CONFIG.defaultQuality, showFps: false },
+    /** Freeze-frame on impacts: time runs at `scale` for `seconds` of real time. */
+    hitstop(seconds, scale = 0.04) {
+      this.hitstopTimer = Math.max(this.hitstopTimer, seconds);
+      this.hitstopScale = Math.min(this.hitstopScale, scale);
+    },
+    shake(amount) {
+      this.cameraRig.addTrauma(amount);
+    },
+  };
+  pipeline.registerParticles(game.fx.alpha);
+  pipeline.registerParticles(game.fx.add);
+
+  game.world = new World(game);
+  game.audio = new AudioEngine(game);
+  game.player = new Player(game);
+  game.dragon = new Dragon(game);
+  game.hud = new Hud(game);
+  game.flow = new GameFlow(game);
+
+  const applyQuality = () => {
+    const q = CONFIG.quality[game.settings.quality];
+    game.world.setGrassQuality(q.grass);
+    pipeline.setSize(innerWidth, innerHeight, Math.min(q.dpr, devicePixelRatio || 1, CONFIG.render.maxPixelRatio));
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+  };
+  game.applyQuality = applyQuality;
+  applyQuality();
+  addEventListener('resize', applyQuality);
+
+  game.cameraRig.snap(game.player.position);
+
+  // --- per-frame helpers
+  const ray = new THREE.Raycaster();
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  const ndc = new THREE.Vector2();
+  const focus = new THREE.Vector3();
+  const tmp = new THREE.Vector3();
+  const camFwd = new THREE.Vector3();
+  const lock = new THREE.Vector3();
+
+  const updateMouseGround = () => {
+    ndc.set(game.input.mouse.ndcX, game.input.mouse.ndcY);
+    ray.setFromCamera(ndc, camera);
+    if (ray.ray.intersectPlane(groundPlane, tmp)) game.mouseGround.copy(tmp);
+  };
+
+  const updateCameraFocus = (dt) => {
+    const p = game.player.position;
+    focus.copy(p);
+    const d = game.dragon;
+    let zoomOut = 0;
+    if (game.player.lockOn && d && d.isTargetable?.()) {
+      d.lockPoint(lock);
+      focus.x = p.x + (lock.x - p.x) * 0.38;
+      focus.z = p.z + (lock.z - p.z) * 0.38;
+      zoomOut = clamp(Math.hypot(lock.x - p.x, lock.z - p.z) * 0.35 - 2, 0, 12);
+    } else {
+      // gentle look-ahead toward the mouse
+      const mx = clamp(game.mouseGround.x - p.x, -8, 8);
+      const mz = clamp(game.mouseGround.z - p.z, -8, 8);
+      focus.x += mx * 0.18;
+      focus.z += mz * 0.18;
+    }
+    if (game.flow.cameraOverride) {
+      const o = game.flow.cameraOverride;
+      focus.lerp(o.focus, o.weight);
+      zoomOut = Math.max(zoomOut, o.zoom ?? 0);
+    }
+    game.cameraRig.extraZoom = damp(game.cameraRig.extraZoom, zoomOut, 2.5, dt);
+    game.cameraRig.update(dt, focus);
+  };
+
+  const updateSharedUniforms = () => {
+    U.uTime.value = game.time;
+    U.uCamPos.value.copy(camera.position);
+    U.uFocus.value.copy(game.player.position);
+    const m = camera.matrixWorld.elements;
+    U.uCamRight.value.set(m[0], m[1], m[2]).normalize();
+    U.uCamUp.value.set(m[4], m[5], m[6]).normalize();
+    U.uBladeUp.value.set(0, 1, 0).lerp(U.uCamUp.value, 0.55).normalize();
+    // player screen position + view depth for canopy fade
+    tmp.copy(game.player.position);
+    tmp.y += 1.0;
+    camera.getWorldDirection(camFwd);
+    const depth = tmp.clone().sub(camera.position).dot(camFwd);
+    tmp.project(camera);
+    U.uPlayerScreen.value.set(tmp.x * 0.5 + 0.5, tmp.y * 0.5 + 0.5, depth, 0);
+  };
+
+  // --- loop
+  let last = performance.now();
+  let fpsAcc = 0, fpsFrames = 0;
+  game.fps = 0;
+  const frame = (now) => {
+    requestAnimationFrame(frame);
+    const realDt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    fpsAcc += realDt;
+    fpsFrames++;
+    if (fpsAcc > 0.5) {
+      game.fps = Math.round(fpsFrames / fpsAcc);
+      fpsAcc = 0;
+      fpsFrames = 0;
+    }
+    tick(realDt);
+  };
+
+  // A failing module must not freeze the whole frame: log its first few errors and carry on.
+  const errorCounts = new Map();
+  const safe = (name, fn) => {
+    try {
+      fn();
+    } catch (err) {
+      const n = (errorCounts.get(name) ?? 0) + 1;
+      errorCounts.set(name, n);
+      if (n <= 3) console.error(`[${name}] update failed`, err);
+    }
+  };
+
+  const tick = (realDt) => {
+    let scale = game.timeScale;
+    if (game.hitstopTimer > 0) {
+      game.hitstopTimer -= realDt;
+      scale *= game.hitstopScale;
+      if (game.hitstopTimer <= 0) game.hitstopScale = 1;
+    }
+    const dt = realDt * scale;
+    game.realTime += realDt;
+    game.time += dt;
+    game.dt = dt;
+    game.realDt = realDt;
+
+    if (game.input.wheel) game.cameraRig.zoom(game.input.wheel);
+    updateMouseGround();
+
+    safe('flow', () => game.flow.update(dt, realDt));
+    safe('player', () => game.player.update(dt));
+    safe('dragon', () => game.dragon.update(dt));
+    safe('camera', () => updateCameraFocus(realDt));
+    updateSharedUniforms();
+    safe('world', () => game.world.update(dt));
+    game.lights.update(dt, game.player.position);
+    game.fx.alpha.update(dt, game.time);
+    game.fx.add.update(dt, game.time);
+    safe('hud', () => game.hud.update(realDt));
+    safe('audio', () => game.audio.update(realDt));
+
+    pipeline.updateShadowCamera(game.cameraRig.focus);
+    pipeline.render();
+    if (inspect.rect) inspect.draw();
+    game.input.endFrame();
+  };
+  requestAnimationFrame(frame);
+
+  // Dev aid: advance the simulation manually (works even when rAF is throttled), e.g.
+  // window.__tick(1 / 60, 120) runs two seconds of game time.
+  window.__tick = (dt = 1 / 60, frames = 1) => {
+    for (let i = 0; i < frames; i++) tick(Math.min(0.05, dt));
+    return { state: game.state, time: +game.time.toFixed(2) };
+  };
+
+  // Dev aid: window.__inspect(x, y, w, h) magnifies a device-pixel region of the live frame
+  // into a full-window overlay (nearest-neighbour); window.__inspect() hides it.
+  const inspect = {
+    rect: null,
+    canvas: null,
+    draw() {
+      const [x, y, w, h] = this.rect;
+      const c = this.canvas;
+      c.width = w;
+      c.height = h;
+      c.getContext('2d').drawImage(renderer.domElement, x, y, w, h, 0, 0, w, h);
+    },
+  };
+  window.__inspect = (x, y, w, h) => {
+    if (x === undefined) {
+      inspect.rect = null;
+      inspect.canvas?.remove();
+      inspect.canvas = null;
+      return 'off';
+    }
+    if (!inspect.canvas) {
+      inspect.canvas = document.createElement('canvas');
+      inspect.canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:contain;image-rendering:pixelated;z-index:50;background:#000;pointer-events:none';
+      document.body.appendChild(inspect.canvas);
+    }
+    inspect.rect = [x, y, w, h];
+    return [renderer.domElement.width, renderer.domElement.height];
+  };
+  window.__game = game; // handy for debugging in the console
+}
+
+boot().catch((err) => {
+  console.error(err);
+  const el = document.createElement('pre');
+  el.style.cssText = 'position:fixed;inset:0;margin:0;padding:24px;color:#f88;background:#000;font:14px monospace;white-space:pre-wrap;z-index:99';
+  el.textContent = `ABYSS failed to start:\n\n${err?.stack || err}`;
+  document.body.appendChild(el);
+});

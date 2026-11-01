@@ -1,0 +1,343 @@
+import * as THREE from 'three';
+import { CONFIG } from '../core/config.js';
+import { FS_VERT } from './shaderLib.js';
+import { createGridAtlas, GRID_LEVELS, GRID_VARIANTS } from './glyphs.js';
+
+// Frame pipeline:
+//   1. moon shadow map  (casters = objects on LAYER_CASTER)
+//   2. world -> sceneRT (HDR colour, alpha = ASCII flag, + depth texture)
+//   3. ASCII pass: flagged pixels become a screen-space character grid  -> compRT
+//   4. FX pass: glyph particles, soft depth-tested against sceneRT depth   -> compRT
+//   5. bloom + tone map + grade + vignette + feedback overlays             -> screen
+
+export const LAYER_CASTER = 1;
+/** Make an object (and children) cast moon shadows. */
+export function markCaster(obj) {
+  obj.traverse((o) => o.layers.enable(LAYER_CASTER));
+  return obj;
+}
+
+class FullscreenPass {
+  constructor() {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+    this.mesh = new THREE.Mesh(g);
+    this.mesh.frustumCulled = false;
+    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  }
+  render(renderer, material, target) {
+    this.mesh.material = material;
+    renderer.setRenderTarget(target);
+    renderer.render(this.mesh, this.camera);
+  }
+}
+
+export class Pipeline {
+  constructor(renderer, scene, fxScene, camera, U) {
+    this.renderer = renderer;
+    this.scene = scene;
+    this.fxScene = fxScene;
+    this.camera = camera;
+    this.U = U;
+    this.fs = new FullscreenPass();
+    this.fxParticleMaterials = [];
+
+    const canHalf = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
+    const type = canHalf ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    const rt = (opts = {}) =>
+      new THREE.WebGLRenderTarget(1, 1, { type, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, ...opts });
+
+    this.sceneRT = new THREE.WebGLRenderTarget(1, 1, {
+      type,
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+      depthTexture: new THREE.DepthTexture(1, 1),
+    });
+    this.compRT = rt();
+    this.brightRT = rt();
+    this.blur = [rt(), rt(), rt(), rt()];
+
+    // --- shadows
+    const S = CONFIG.render.shadowSize;
+    this.shadowRT = new THREE.WebGLRenderTarget(S, S, {
+      depthTexture: new THREE.DepthTexture(S, S),
+      minFilter: THREE.NearestFilter,
+      magFilter: THREE.NearestFilter,
+    });
+    const E = CONFIG.render.shadowExtent;
+    this.shadowCam = new THREE.OrthographicCamera(-E, E, E, -E, 1, 320);
+    this.shadowCam.layers.set(LAYER_CASTER);
+    this.shadowMat = new THREE.MeshDepthMaterial({ side: THREE.DoubleSide });
+    this.shadowBias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+    U.uShadowMap.value = this.shadowRT.depthTexture;
+    this.shadowCenter = new THREE.Vector3();
+
+    // --- ASCII grid pass
+    this.cell = new THREE.Vector2(7, 12);
+    this.grid = null;
+    this.asciiMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tScene: { value: this.sceneRT.texture },
+        tGrid: { value: null },
+        uRes: { value: new THREE.Vector2(1, 1) },
+        uCell: { value: this.cell },
+        uGridCols: { value: GRID_LEVELS * GRID_VARIANTS },
+        uLevels: { value: GRID_LEVELS },
+        uVariants: { value: GRID_VARIANTS },
+        uGain: { value: 2.4 },
+        uBg: { value: 0.16 },
+        uLumMap: { value: 13.0 },
+      },
+      vertexShader: FS_VERT,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tScene;
+        uniform sampler2D tGrid;
+        uniform vec2 uRes;
+        uniform vec2 uCell;
+        uniform float uGridCols;
+        uniform float uLevels;
+        uniform float uVariants;
+        uniform float uGain;
+        uniform float uBg;
+        uniform float uLumMap;
+        varying vec2 vUv;
+        float hash12(vec2 p) {
+          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+          p3 += dot(p3, p3.yzx + 33.33);
+          return fract((p3.x + p3.y) * p3.z);
+        }
+        void main() {
+          vec2 px = gl_FragCoord.xy;
+          vec2 cell = floor(px / uCell);
+          vec2 center = (cell + 0.5) * uCell;
+          vec4 c = texture2D(tScene, center / uRes);
+          vec4 self = texture2D(tScene, px / uRes);
+          if (c.a < 0.3) {
+            // not an ASCII cell: pass the pixel through (fill flagged fringes with dark)
+            gl_FragColor = vec4(self.a > 0.3 ? self.rgb * uBg : self.rgb, 1.0);
+            return;
+          }
+          float lum = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+          // perceptual mapping of HDR luminance into ramp levels
+          float l = 1.0 - exp(-lum * uLumMap);
+          float level = clamp(floor(l * uLevels), 0.0, uLevels - 1.0);
+          float variant = floor(hash12(cell) * uVariants);
+          float row = c.a > 0.8 ? 0.0 : 1.0;
+          vec2 local = (px - cell * uCell) / uCell;
+          float col = level * uVariants + variant;
+          vec2 auv = vec2((col + local.x) / uGridCols, (1.0 - row) * 0.5 + local.y * 0.5);
+          float m = texture2D(tGrid, auv).a;
+          vec3 fg = c.rgb * uGain * (row > 0.5 ? 0.78 : 1.0); // foliage a touch softer than stone
+          vec3 bg = c.rgb * uBg;
+          gl_FragColor = vec4(mix(bg, fg, m), 1.0);
+        }
+      `,
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    // --- bloom
+    this.brightMat = new THREE.ShaderMaterial({
+      uniforms: { tSrc: { value: null }, uThreshold: { value: CONFIG.render.bloomThreshold } },
+      vertexShader: FS_VERT,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tSrc;
+        uniform float uThreshold;
+        varying vec2 vUv;
+        void main() {
+          vec3 c = texture2D(tSrc, vUv).rgb;
+          float l = max(c.r, max(c.g, c.b));
+          gl_FragColor = vec4(c * smoothstep(uThreshold, uThreshold + 0.6, l), 1.0);
+        }
+      `,
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.blurMat = new THREE.ShaderMaterial({
+      uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } },
+      vertexShader: FS_VERT,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tSrc;
+        uniform vec2 uDir;
+        varying vec2 vUv;
+        void main() {
+          vec3 c = texture2D(tSrc, vUv).rgb * 0.227027;
+          c += texture2D(tSrc, vUv + uDir * 1.3846).rgb * 0.316216;
+          c += texture2D(tSrc, vUv - uDir * 1.3846).rgb * 0.316216;
+          c += texture2D(tSrc, vUv + uDir * 3.2308).rgb * 0.070270;
+          c += texture2D(tSrc, vUv - uDir * 3.2308).rgb * 0.070270;
+          gl_FragColor = vec4(c, 1.0);
+        }
+      `,
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    // --- final grade
+    this.finalMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tComp: { value: this.compRT.texture },
+        tBloomA: { value: this.blur[1].texture },
+        tBloomB: { value: this.blur[3].texture },
+        uBloom: { value: CONFIG.render.bloomStrength },
+        uExposure: { value: CONFIG.render.exposure },
+        uTime: U.uTime,
+        uAspect: { value: 1 },
+        uHurt: { value: 0 }, // red edge flash 0..1
+        uFade: { value: 0 }, // fade to black 0..1
+        uDesat: { value: 0 }, // death desaturation 0..1
+        uWarm: { value: 0 }, // boss-fight warm grade 0..1
+      },
+      vertexShader: FS_VERT,
+      fragmentShader: /* glsl */ `
+        uniform sampler2D tComp;
+        uniform sampler2D tBloomA;
+        uniform sampler2D tBloomB;
+        uniform float uBloom;
+        uniform float uExposure;
+        uniform float uTime;
+        uniform float uAspect;
+        uniform float uHurt;
+        uniform float uFade;
+        uniform float uDesat;
+        uniform float uWarm;
+        varying vec2 vUv;
+        vec3 aces(vec3 x) {
+          return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+        }
+        float hash12(vec2 p) {
+          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+          p3 += dot(p3, p3.yzx + 33.33);
+          return fract((p3.x + p3.y) * p3.z);
+        }
+        void main() {
+          vec3 col = texture2D(tComp, vUv).rgb;
+          vec3 bloom = texture2D(tBloomA, vUv).rgb * 0.6 + texture2D(tBloomB, vUv).rgb * 0.9;
+          col += bloom * uBloom;
+          col *= uExposure;
+          col = aces(col);
+          // cool shadows / slightly warm highlights
+          float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+          col = mix(col, col * vec3(0.92, 0.98, 1.08), (1.0 - l) * 0.5);
+          col = mix(col, col * vec3(1.06, 0.98, 0.9), uWarm * 0.6);
+          col = mix(col, vec3(l), uDesat * 0.85);
+          vec2 q = (vUv - 0.5) * vec2(uAspect, 1.0);
+          float r = length(q);
+          col *= mix(0.45, 1.0, smoothstep(0.95, 0.25, r));
+          float edge = smoothstep(0.35, 0.95, r);
+          col = mix(col, vec3(0.55, 0.02, 0.01), uHurt * edge * 0.75);
+          col *= 1.0 - uFade;
+          col = pow(max(col, 0.0), vec3(1.0 / 2.2));
+          col += (hash12(gl_FragCoord.xy + fract(uTime * 7.3) * 113.0) - 0.5) * 0.018;
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    this.width = 1;
+    this.height = 1;
+  }
+
+  registerParticles(particleSystem) {
+    this.fxParticleMaterials.push(particleSystem);
+    particleSystem.uniforms.uDepth.value = this.sceneRT.depthTexture;
+    this.fxScene.add(particleSystem.mesh);
+  }
+
+  setSize(cssW, cssH, dpr) {
+    const r = this.renderer;
+    r.setPixelRatio(dpr);
+    r.setSize(cssW, cssH, false);
+    const W = Math.max(1, Math.floor(cssW * dpr));
+    const H = Math.max(1, Math.floor(cssH * dpr));
+    this.width = W;
+    this.height = H;
+    this.sceneRT.setSize(W, H);
+    this.compRT.setSize(W, H);
+    this.brightRT.setSize(Math.max(1, W >> 1), Math.max(1, H >> 1));
+    this.blur[0].setSize(Math.max(1, W >> 2), Math.max(1, H >> 2));
+    this.blur[1].setSize(Math.max(1, W >> 2), Math.max(1, H >> 2));
+    this.blur[2].setSize(Math.max(1, W >> 3), Math.max(1, H >> 3));
+    this.blur[3].setSize(Math.max(1, W >> 3), Math.max(1, H >> 3));
+    this.U.uResolution.value.set(W, H);
+    this.asciiMat.uniforms.uRes.value.set(W, H);
+    this.finalMat.uniforms.uAspect.value = W / H;
+
+    // character cell scales with vertical resolution (terminal-sized glyphs at 1080p)
+    const cellH = Math.max(9, Math.min(24, Math.round(H / 90)));
+    const cellW = Math.max(5, Math.round(cellH * 0.6));
+    if (!this.grid || cellW !== this.cell.x || cellH !== this.cell.y) {
+      this.grid?.texture.dispose();
+      this.cell.set(cellW, cellH);
+      this.grid = createGridAtlas(cellW, cellH);
+      this.asciiMat.uniforms.tGrid.value = this.grid.texture;
+    }
+  }
+
+  updateShadowCamera(center) {
+    const E = CONFIG.render.shadowExtent;
+    const dir = this.U.uMoonDir.value;
+    // snap to texel grid to avoid shimmering when the center moves
+    const texel = (2 * E) / CONFIG.render.shadowSize;
+    this.shadowCenter.set(Math.round(center.x / texel) * texel, 0, Math.round(center.z / texel) * texel);
+    this.shadowCam.position.copy(this.shadowCenter).addScaledVector(dir, 160);
+    this.shadowCam.lookAt(this.shadowCenter);
+    this.shadowCam.updateMatrixWorld();
+    this.U.uShadowMatrix.value
+      .copy(this.shadowBias)
+      .multiply(this.shadowCam.projectionMatrix)
+      .multiply(this.shadowCam.matrixWorldInverse);
+  }
+
+  render() {
+    const r = this.renderer;
+    const prevAutoClear = r.autoClear;
+
+    // 1. shadows
+    this.scene.overrideMaterial = this.shadowMat;
+    r.setRenderTarget(this.shadowRT);
+    r.setClearColor(0xffffff, 1);
+    r.clear();
+    r.render(this.scene, this.shadowCam);
+    this.scene.overrideMaterial = null;
+
+    // 2. world
+    const fog = this.U.uFogColor.value;
+    r.setRenderTarget(this.sceneRT);
+    r.setClearColor(fog, 0);
+    r.clear();
+    r.render(this.scene, this.camera);
+
+    // 3. ASCII grid
+    this.fs.render(r, this.asciiMat, this.compRT);
+
+    // 4. FX particles on top (manual soft depth test)
+    for (const p of this.fxParticleMaterials) {
+      p.uniforms.uNear.value = this.camera.near;
+      p.uniforms.uFar.value = this.camera.far;
+    }
+    r.autoClear = false;
+    r.setRenderTarget(this.compRT);
+    r.render(this.fxScene, this.camera);
+    r.autoClear = prevAutoClear;
+
+    // 5. bloom
+    this.brightMat.uniforms.tSrc.value = this.compRT.texture;
+    this.fs.render(r, this.brightMat, this.brightRT);
+    const blurPass = (src, dst, dx, dy) => {
+      this.blurMat.uniforms.tSrc.value = src.texture;
+      this.blurMat.uniforms.uDir.value.set(dx / src.width, dy / src.height);
+      this.fs.render(r, this.blurMat, dst);
+    };
+    blurPass(this.brightRT, this.blur[0], 1, 0);
+    blurPass(this.blur[0], this.blur[1], 0, 1);
+    blurPass(this.blur[1], this.blur[2], 1, 0);
+    blurPass(this.blur[2], this.blur[3], 0, 1);
+
+    // 6. final
+    this.fs.render(r, this.finalMat, null);
+  }
+}

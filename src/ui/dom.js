@@ -1,0 +1,108 @@
+// Tiny DOM helpers shared by the HUD widgets (no framework, no innerHTML with dynamic text).
+
+export function el(tag, className = '', text = null, parent = null) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text != null) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/** Finite number or a fallback. */
+export const num = (v, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+
+/** Clamp a frame delta coming from the outside world. */
+export const safeDt = (dt) => {
+  const v = num(dt, 0);
+  return v < 0 ? 0 : v > 0.1 ? 0.1 : v;
+};
+
+/** Seconds → "mm:ss". */
+export function fmtClock(seconds) {
+  const s = Math.max(0, Math.floor(num(seconds)));
+  const m = Math.floor(s / 60);
+  return `${m < 10 ? '0' : ''}${m}:${s % 60 < 10 ? '0' : ''}${s % 60}`;
+}
+
+/** Fill `target` with text where "[E]" style tokens become keycaps. */
+export function fillKeyText(target, text) {
+  target.textContent = '';
+  const str = String(text ?? '');
+  const re = /\[([^\]]+)\]/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(str))) {
+    if (m.index > last) target.appendChild(document.createTextNode(str.slice(last, m.index)));
+    el('span', 'ab-key', m[1], target);
+    last = re.lastIndex;
+  }
+  if (last < str.length) target.appendChild(document.createTextNode(str.slice(last)));
+}
+
+/** Append text where numbers are emphasised (<b>), e.g. combat log damage values. */
+export function fillNumberText(target, text) {
+  const parts = String(text ?? '').split(/(\d+)/);
+  for (let i = 0; i < parts.length; i++) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) el('b', '', parts[i], target);
+    else target.appendChild(document.createTextNode(parts[i]));
+  }
+}
+
+/** Restart a one-shot CSS animation class (forces one reflow; only used on rare events). */
+export function flashClass(node, cls = 'flash') {
+  if (!node) return;
+  node.classList.remove(cls);
+  void node.offsetWidth;
+  node.classList.add(cls);
+}
+
+/** A HUD button that never keeps focus (Space/Enter must stay game keys). */
+export function button(parent, className, onClick) {
+  const b = el('button', `ab-btn ${className}`.trim(), null, parent);
+  b.type = 'button';
+  b.tabIndex = -1;
+  b.addEventListener('mousedown', (e) => e.preventDefault());
+  b.addEventListener('click', (e) => {
+    e.preventDefault();
+    b.blur();
+    try {
+      onClick();
+    } catch (err) {
+      console.error('[hud] button handler failed', err);
+    }
+  });
+  return b;
+}
+
+// Shared controls reference (title, pause menu, help panel).
+export const CONTROLS = [
+  ['WASD', 'move'],
+  ['Mouse', 'aim'],
+  ['LMB', 'light attack (combo)'],
+  ['RMB', 'heavy attack'],
+  ['Space', 'roll'],
+  ['Shift', 'sprint'],
+  ['F', 'drink flask'],
+  ['Tab / MMB', 'lock-on'],
+  ['E', 'rest at bonfire'],
+  ['Esc', 'pause'],
+  ['M', 'mute'],
+  ['F2', 'quality'],
+  ['F3', 'fps'],
+  ['Wheel', 'zoom'],
+  ['H', 'help'],
+];
+
+export function controlsGrid(parent) {
+  const grid = el('div', 'ab-ctrls', null, parent);
+  for (const [k, a] of CONTROLS) {
+    const kc = el('span', 'k', null, grid);
+    for (const part of k.split(' / ')) {
+      if (kc.childNodes.length) kc.appendChild(document.createTextNode(' '));
+      el('span', 'ab-key', part, kc);
+    }
+    el('span', 'a', a, grid);
+  }
+  return grid;
+}

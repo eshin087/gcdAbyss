@@ -1,0 +1,23 @@
+{
+  "name": "abyss-ascii-soulslike",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node tests/integration/integ.mjs . all && node tests/glyphcheck.mjs ."
+  },
+  "description": "ASCII soulslike demo: a wyvern boss fight in a moonlit forest",
+  "dependencies": {
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  },
+  "type": "module",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eshin087/gcdAbyss.git"
+  },
+  "homepage": "https://gcdabyss.vercel.app"
+}
