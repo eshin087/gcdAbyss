@@ -199,7 +199,8 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vec3 V = normalize(uCamPos - vW);
         float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * uRim;
         vec3 inkC = mix(uInk, uInkAlt, step(1.0 - uAltChance, fract(h * 7.31))) * uTint;
-        vec3 col = inkC * (L * uGain * 0.55 + rim * uMoonColor * 1.5) + inkC * uInkGlow;
+        // the rim floor (not scaled by ink) keeps near-black materials (the hero's coat) outlined
+        vec3 col = inkC * (L * uGain * 0.55 + rim * uMoonColor * 1.5) + rim * uMoonColor * 0.12 + inkC * uInkGlow;
         col += uEmissive * uGlow * uGlowMask * (0.35 + 0.65 * step(0.72, fract(h * 3.7)));
         col += vec3(1.0, 0.92, 0.85) * uFlash * 0.8;
         col = applyFog(col, vW);

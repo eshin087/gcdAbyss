@@ -88,9 +88,10 @@ export class Pipeline {
         uGain: { value: 2.4 },
         uBg: { value: 0.16 },
         uLumMap: { value: 13.0 },
-        uCreatureGain: { value: 1.9 },
-        uCreatureLum: { value: 4.2 },
-        uGrassGain: { value: 2.3 },
+        uCreatureGain: { value: 1.8 },
+        uCreatureLum: { value: 3.0 },
+        uCreatureBg: { value: 0.04 }, // dark cell backing: bright inks must not fill their cells
+        uGrassGain: { value: 1.9 },
         uGrassBg: { value: 0.1 },
         uInvViewProj: { value: new THREE.Matrix4() },
         uNear: { value: 1 },
@@ -119,6 +120,7 @@ export class Pipeline {
         uniform float uLumMap;
         uniform float uCreatureGain;
         uniform float uCreatureLum;
+        uniform float uCreatureBg;
         uniform float uGrassGain;
         uniform float uGrassBg;
         uniform mat4 uInvViewProj;
@@ -271,7 +273,7 @@ export class Pipeline {
             float dir = mod(floor(ang / 0.7853982 + 0.5), 8.0);
             m = glyphAt(3.0 + set, level * 8.0 + dir, local);
           }
-          return mix(c.rgb * uBg, c.rgb * uCreatureGain, m);
+          return mix(c.rgb * uCreatureBg, c.rgb * uCreatureGain, m);
         }
 
         void main() {
