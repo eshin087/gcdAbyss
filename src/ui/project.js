@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 
-// World → screen projection shared by the world-anchored HUD widgets (tells, call-outs, damage
-// numbers). Results are CSS pixels from the top-left of the window. No allocations per call.
+// World → screen projection shared by the world-anchored HUD widgets (call-outs, damage numbers,
+// the side of the red tell edge flash). Results are CSS pixels from the top-left of the window.
+// No allocations per call.
 
 export class ScreenProjector {
   constructor(game) {

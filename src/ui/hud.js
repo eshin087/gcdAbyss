@@ -10,11 +10,12 @@ import { Minimap } from './minimap.js';
 import { NameTags } from './nameTags.js';
 import { ScreenProjector } from './project.js';
 import { HelpPanel, PauseMenu, StatsPanel, TitleScreen } from './screens.js';
-import { TellMarks } from './tells.js';
+import { TellEdges } from './tells.js';
 
 // HUD: Ansenjeo-style MMO overlay (player frame, minimap, tabbed log, name tags) plus the boss bar
-// (HP + posture), combat tells (◆ PARRY / ! DODGE marks + red edge pulse), call-outs (PARRY,
-// GHOSTEP, GUARD BROKEN, damage numbers), banners, title and pause screens. Pure DOM under #ui;
+// (HP + posture), screen-edge cues (red flash on a dodge-only tell's timing cue, cyan Ghostep pulse;
+// the tells themselves are shown in the world, never as HUD text), call-outs (PARRY, GHOSTEP,
+// GUARD BROKEN, damage numbers), banners, title and pause screens. Pure DOM under #ui;
 // update(realDt) only writes to the DOM when a shown value changes. Screen-grade uniforms are
 // driven by GameFlow (src/game/grade.js).
 
@@ -31,7 +32,7 @@ export class Hud {
     this._warned = 0;
     this.proj = new ScreenProjector(game);
 
-    this.tells = new TellMarks(game, this.root, this.proj);
+    this.tells = new TellEdges(game, this.root, this.proj);
     this._buildPlayerFrame();
     this.map = new Minimap(game, this.root);
     this.logPanel = new LogPanel(game, this.root);
@@ -86,7 +87,6 @@ export class Hud {
       (dt) => this._updateBoss(dt),
       (dt) => this.tags.update(dt),
       (dt) => this.tells.update(dt),
-      () => this.tags.setFoeDim(this.tells.active),
       (dt) => this.calls.update(dt),
       (dt) => this.map.update(dt),
       (dt) => this.bannerUi.update(dt),

@@ -4,17 +4,27 @@ import { TELL_STYLE } from '../../combat/rules.js';
 
 // Dragon FX: fire breath stream (glyph particles + pooled lights + scorch), fireball projectiles,
 // roar shock rings, dust, nostril embers, eye glints, phase-2 / death embers, and the combat
-// read-outs: tell flashes (TELL_STYLE colours), red ground warning rings, parry sparks, posture
-// break. Every light this module creates is tracked so reset() can kill them.
+// read-outs: timing flashes (red alarm burst for dodge-only tells, a white glint for parryable
+// ones — no colour coding or text for parry), red ground warning rings, white/gold parry sparks,
+// posture break. Every light this module creates is tracked so reset() can kill them.
 // Body-linked sizes / distances scale with the wyrm (SCALE); projectile blasts do not.
 
 const S = SCALE;
 const FIRE = '*#%@&~^';
 const EMBER = ".'`*";
 const DUST = ",.`:'";
-// atlas glyphs only (STYLE.md): sparks for normal / blue tells, alarm marks for red
-const TELL_GLYPHS = { normal: '*+x', blue: '*+x', red: '!#' };
-const TELL_CORE = { normal: '+', blue: '*', red: '!' };
+// atlas glyphs only (STYLE.md): alarm marks for the red flash; a star + line rays for the glint
+const RED_GLYPHS = '!#';
+const RED_CORE = '!';
+const GLINT_CORE = '*';
+const GLINT_RAY = '|';
+// four-point sparkle strokes (screen-space rotation of '|'): vertical, horizontal, two diagonals
+const SPARKLE_ROT = [0, Math.PI / 2, Math.PI / 4, -Math.PI / 4];
+// parry sparks: hot white core, white + gold sparks (blue parries are bigger, not blue)
+const PARRY_WHITE = [3.4, 3.2, 2.8];
+const PARRY_GOLD = [3.4, 2.3, 0.75];
+const PARRY_END = [0.8, 0.5, 0.2];
+const PARRY_LIGHT = [1, 0.88, 0.62];
 // red warning ring: '!' marks between dots
 const RING_MARK = '!';
 const RING_DOT = '·';
@@ -438,29 +448,92 @@ export class DragonFx {
     }
   }
 
-  /** Timing flash of a tell: a burst of glyphs in the tell colour at the striking part. */
+  /**
+   * Timing flash of a tell at the striking part (combat:flash). Red (dodge only): an alarm burst of
+   * red glyphs + a red light. Normal / blue (parryable): a white glint — see _glint.
+   */
   tellFlash(tell, x, y, z) {
     if (!Number.isFinite(x + y + z)) return;
-    const c = tellStyle(tell).color;
-    const red = tell === 'red';
-    const glyphs = TELL_GLYPHS[tell] ?? TELL_GLYPHS.normal;
-    // hard core glint
+    if (tell === 'red') this._redFlash(x, y, z);
+    else this._glint(x, y, z, tellStyle(tell));
+  }
+
+  _redFlash(x, y, z) {
+    const c = TELL_STYLE.red.color;
+    // hard core mark
     this._spawn(this.add, {
-      x, y, z, life: 0.3, size: (red ? 1.7 : 1.4) * S, sizeEnd: 0.4 * S, glyph: TELL_CORE[tell] ?? '+',
-      color: [c[0] * 1.6, c[1] * 1.6, c[2] * 1.6], colorEnd: c, alpha: 1, alphaEnd: 0, rot: red ? 0 : rand(0, 0.8),
+      x, y, z, life: 0.3, size: 1.7 * S, sizeEnd: 0.4 * S, glyph: RED_CORE,
+      color: [c[0] * 1.6, c[1] * 1.6, c[2] * 1.6], colorEnd: c, alpha: 1, alphaEnd: 0,
     });
-    const n = red ? 18 : 14;
+    const n = 18;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2 + rand(-0.15, 0.15);
       const sp = rand(4, 9) * S;
       this._spawn(this.add, {
         x, y, z,
         vx: Math.cos(a) * sp, vy: rand(-1.5, 3.5), vz: Math.sin(a) * sp,
-        life: rand(0.22, 0.4), size: rand(0.35, 0.55) * S, sizeEnd: 0.1, glyph: glyphs,
-        color: c, colorEnd: [c[0] * 0.3, c[1] * 0.3, c[2] * 0.3], alpha: 1, alphaEnd: 0, drag: 4, flicker: red ? 0.3 : 0,
+        life: rand(0.22, 0.4), size: rand(0.35, 0.55) * S, sizeEnd: 0.1, glyph: RED_GLYPHS,
+        color: c, colorEnd: [c[0] * 0.3, c[1] * 0.3, c[2] * 0.3], alpha: 1, alphaEnd: 0, drag: 4, flicker: 0.3,
       });
     }
-    this._light({ x, y: Math.max(0.8, y), z, color: lightColor(c), intensity: red ? 4 : 3, radius: 6 * S, life: 0.3, fade: 0.25 });
+    this._light({ x, y: Math.max(0.8, y), z, color: lightColor(c), intensity: 4, radius: 6 * S, life: 0.3, fade: 0.25 });
+  }
+
+  /**
+   * White glint (parry timing): a star core, a four-point sparkle (long screen-aligned cross + short
+   * diagonals) and a few short rays shooting out in the screen plane, plus a small white light.
+   * `st.glint` scales size and brightness (blue = 1.5: a heavier blow, same white). Pulled toward
+   * the camera so the body doesn't swallow it.
+   */
+  _glint(x, y, z, st) {
+    const k = st.glint > 0 ? st.glint : 1;
+    const c = st.color;
+    const cam = this.game.camera?.position;
+    if (cam) {
+      const dx = cam.x - x, dy = cam.y - y, dz = cam.z - z;
+      const l = Math.hypot(dx, dy, dz);
+      if (l > 1e-3) {
+        const o = (0.7 * S) / l;
+        x += dx * o; y += dy * o; z += dz * o;
+      }
+    }
+    const add = this.add;
+    // star core
+    this._spawn(add, {
+      x, y, z, life: 0.26, size: 1.15 * S * k, sizeEnd: 0.25 * S * k, glyph: GLINT_CORE,
+      color: [c[0] * 1.6 * k, c[1] * 1.6 * k, c[2] * 1.6 * k], colorEnd: [c[0] * 0.5, c[1] * 0.5, c[2] * 0.5],
+      alpha: 1, alphaEnd: 0, rot: rand(0, 0.6), spin: 2.5,
+    });
+    // four-point sparkle: long vertical + horizontal strokes, shorter diagonals (rot is screen-space)
+    for (let i = 0; i < 4; i++) {
+      const long = i < 2;
+      const sz = (long ? 0.62 : 0.4) * S * k;
+      this._spawn(add, {
+        x, y, z, life: long ? 0.24 : 0.18, size: sz, sizeEnd: 0, glyph: GLINT_RAY,
+        rot: SPARKLE_ROT[i], stretch: long ? 2.6 : 1.4,
+        color: [c[0] * 1.3 * k, c[1] * 1.3 * k, c[2] * 1.3 * k], colorEnd: c, alpha: 1, alphaEnd: 0.2,
+      });
+    }
+    // a few short rays flying out in the screen plane, each stroke aligned with its direction
+    const U = this.game.U;
+    const R = U?.uCamRight?.value, Up = U?.uCamUp?.value;
+    const rx = R?.x ?? 1, ry = R?.y ?? 0, rz = R?.z ?? 0;
+    const ux = Up?.x ?? 0, uy = Up?.y ?? 1, uz = Up?.z ?? 0;
+    const n = k > 1 ? 8 : 6;
+    const a0 = rand(0, Math.PI * 2);
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i / n) * Math.PI * 2 + rand(-0.12, 0.12);
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const sp = rand(6, 9) * S * k;
+      this._spawn(add, {
+        x, y, z,
+        vx: (rx * ca + ux * sa) * sp, vy: (ry * ca + uy * sa) * sp, vz: (rz * ca + uz * sa) * sp,
+        life: rand(0.16, 0.24), size: 0.3 * S * k, sizeEnd: 0.06 * S, glyph: GLINT_RAY,
+        rot: a - Math.PI / 2, stretch: 0.9,
+        color: [c[0] * k, c[1] * k, c[2] * k], colorEnd: [c[0] * 0.25, c[1] * 0.25, c[2] * 0.25], alpha: 1, alphaEnd: 0, drag: 7,
+      });
+    }
+    this._light({ x, y: Math.max(0.8, y), z, color: lightColor(c), intensity: 2.2 * k, radius: 4 * S * k, life: 0.22, fade: 0.2 });
   }
 
   /** Impact cue for AoE tells: the ring flares and throws its glyphs up. */
@@ -497,24 +570,26 @@ export class DragonFx {
     }
   }
 
-  /** Parry: a hard white/blue spark burst where the blow was turned aside. */
+  /** Parry: a hard white/gold spark burst where the blow was turned aside (blue: bigger, still white/gold). */
   parrySpark(x, y, z, tell = 'normal') {
     if (!Number.isFinite(x + y + z)) return;
-    const c = tell === 'blue' ? TELL_STYLE.blue.color : [3.2, 3.0, 2.6];
+    const big = tell === 'blue';
+    const w = PARRY_WHITE;
     this._spawn(this.add, {
-      x, y, z, life: 0.22, size: 1.8 * S, sizeEnd: 0.5 * S, glyph: '*',
-      color: [c[0] * 1.5, c[1] * 1.5, c[2] * 1.5], colorEnd: c, alpha: 1, alphaEnd: 0,
+      x, y, z, life: big ? 0.26 : 0.22, size: (big ? 2.3 : 1.8) * S, sizeEnd: 0.5 * S, glyph: '*',
+      color: [w[0] * 1.5, w[1] * 1.5, w[2] * 1.5], colorEnd: PARRY_GOLD, alpha: 1, alphaEnd: 0,
     });
-    for (let i = 0; i < 26; i++) {
-      const a = Math.random() * Math.PI * 2, sp = rand(5, 13);
+    const n = big ? 36 : 26;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, sp = rand(5, big ? 15 : 13);
       this._spawn(this.add, {
         x, y, z,
         vx: Math.cos(a) * sp, vy: rand(-1, 6), vz: Math.sin(a) * sp,
         life: rand(0.2, 0.45), size: rand(0.25, 0.45), sizeEnd: 0.05, glyph: "*+x'`",
-        color: Math.random() < 0.5 ? [3.6, 3.3, 2.8] : c, colorEnd: [0.8, 0.5, 0.2], alpha: 1, alphaEnd: 0, drag: 3, gravity: 8, stretch: 0.3,
+        color: Math.random() < 0.5 ? w : PARRY_GOLD, colorEnd: PARRY_END, alpha: 1, alphaEnd: 0, drag: 3, gravity: 8, stretch: 0.3,
       });
     }
-    this._light({ x, y: Math.max(0.8, y), z, color: lightColor(c), intensity: 5, radius: 7, life: 0.25, fade: 0.2 });
+    this._light({ x, y: Math.max(0.8, y), z, color: PARRY_LIGHT, intensity: big ? 6 : 5, radius: big ? 8.5 : 7, life: 0.25, fade: 0.2 });
   }
 
   /** Posture break: a gold burst off the head as it slumps. */

@@ -2,7 +2,7 @@ import { TELL_STYLE } from '../combat/rules.js';
 
 // HUD stylesheet, injected from JS so the module owns its look (style.css stays foundation-only).
 // Ansenjeo-style MMO UI: tiny monospace text, thin 1px borders, translucent dark panels.
-// Tell colours come from TELL_STYLE (src/combat/rules.js) so HUD, FX and audio agree.
+// Tell colours come from TELL_STYLE (src/combat/rules.js) so HUD, FX and the Lab agree.
 
 /** '#rrggbb' -> 'rgba(r, g, b, a)'. */
 function rgba(hex, a) {
@@ -325,104 +325,9 @@ const CSS = `
   color: #f4f6fb;
   text-shadow: 0 0 2px #000, 0 1px 2px #000, 0 0 7px rgba(0, 0, 0, 0.9);
 }
-.ab-tag.foe > span { color: #ffd6c8; transition: opacity 0.15s; }
-.ab-tag.foe.dim > span { opacity: 0.25; }
+.ab-tag.foe > span { color: #ffd6c8; }
 
-/* ---------- combat tells (world-anchored above the attacker) ---------- */
-.ab-tells { position: absolute; inset: 0; overflow: hidden; z-index: 2; }
-.ab-tell { position: absolute; left: 0; top: 0; visibility: hidden; will-change: transform; }
-.ab-tell.on { visibility: visible; }
-.ab-tell > .in {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  transform: translate(-50%, -100%);
-  transform-origin: 50% 100%;
-  will-change: transform, opacity;
-}
-.ab-tell.edge > .in { transform-origin: 50% 50%; }
-.ab-tell .gbox {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: clamp(30px, 2.4vw, 42px);
-  height: clamp(30px, 2.4vw, 42px);
-}
-.ab-tell .gl {
-  position: relative;
-  font-size: clamp(22px, 1.8vw, 32px);
-  font-weight: 800;
-  line-height: 1;
-  color: ${WHITE};
-}
-.ab-tell .ring {
-  position: absolute;
-  inset: -3px;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  opacity: 0;
-  will-change: transform, opacity;
-}
-.ab-tell .lb {
-  margin-top: 1px;
-  padding: 1px 7px 1px calc(7px + 0.28em);
-  font-size: clamp(12px, 0.95vw, 16px);
-  font-weight: 800;
-  letter-spacing: 0.28em;
-  white-space: nowrap;
-  background: rgba(3, 5, 10, 0.62);
-  border: 1px solid currentColor;
-}
-.ab-tell.t-normal .lb, .ab-tell.t-normal .ring { display: none; }
-.ab-tell.t-normal .gbox { width: 22px; height: 22px; }
-.ab-tell.t-normal .gl {
-  font-size: clamp(16px, 1.2vw, 22px);
-  text-shadow: 0 0 6px ${rgba(WHITE, 0.95)}, 0 0 14px ${rgba(WHITE, 0.5)}, 0 0 2px #000;
-  animation: ab-glint 0.6s linear infinite;
-}
-@keyframes ab-glint { 50% { opacity: 0.55; } }
-.ab-tell.t-blue { color: ${BLUE}; }
-.ab-tell.t-blue .gl { color: ${BLUE}; text-shadow: 0 0 8px ${rgba(BLUE, 0.95)}, 0 0 18px ${rgba(BLUE, 0.55)}, 0 0 2px #000; }
-.ab-tell.t-blue .lb { color: #dff0ff; border-color: ${rgba(BLUE, 0.75)}; text-shadow: 0 0 6px ${rgba(BLUE, 0.95)}; box-shadow: 0 0 10px ${rgba(BLUE, 0.35)}; }
-.ab-tell.t-red { color: ${RED}; }
-.ab-tell.t-red .gl { color: ${RED}; animation: ab-red-glow 0.32s ease-in-out infinite alternate; }
-.ab-tell.t-red .lb {
-  color: #ffe2dc;
-  border-color: ${rgba(RED, 0.85)};
-  text-shadow: 0 0 6px ${rgba(RED, 1)};
-  animation: ab-red-box 0.32s ease-in-out infinite alternate;
-}
-@keyframes ab-red-glow {
-  from { text-shadow: 0 0 6px ${rgba(RED, 0.7)}, 0 0 2px #000; }
-  to { text-shadow: 0 0 14px ${rgba(RED, 1)}, 0 0 28px ${rgba(RED, 0.7)}, 0 0 2px #000; }
-}
-@keyframes ab-red-box {
-  from { box-shadow: 0 0 6px ${rgba(RED, 0.3)}; }
-  to { box-shadow: 0 0 16px ${rgba(RED, 0.85)}; }
-}
-/* the timing cue: everything goes hot-white for an instant */
-.ab-tell.flash .gl { color: #ffffff; }
-.ab-tell.flash .ring { border-width: 3px; }
-.ab-tell.t-blue.flash .lb { background: ${rgba(BLUE, 0.4)}; color: #fff; }
-.ab-tell.t-red.flash .lb { background: ${rgba(RED, 0.45)}; color: #fff; }
-.ab-tell.t-normal.flash .gl { animation: none; text-shadow: 0 0 10px #fff, 0 0 22px ${rgba(WHITE, 0.9)}; }
-/* off-screen: arrow orbiting the edge-clamped mark, pointing at the attacker */
-.ab-tell-arrow { position: absolute; left: 0; top: 0; width: 0; height: 0; display: none; }
-.ab-tell.edge .ab-tell-arrow { display: block; }
-.ab-tell-arrow > span {
-  position: absolute;
-  left: -7px;
-  top: -52px;
-  width: 14px;
-  text-align: center;
-  font-size: 13px;
-  line-height: 14px;
-  color: currentColor;
-  text-shadow: 0 0 6px currentColor, 0 0 2px #000;
-}
-
-/* ---------- screen-edge pulses: red (unblockable tell) / cyan (Ghostep) ---------- */
+/* ---------- screen-edge cues: red (dodge-only timing flash) / cyan (Ghostep) ---------- */
 .ab-edges { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .ab-edge { position: absolute; opacity: 0; will-change: opacity; }
 .ab-edge.l { left: 0; top: 0; bottom: 0; width: 16vw; background: linear-gradient(90deg, ${rgba(RED, 0.55)}, ${rgba(RED, 0)}); }
@@ -658,8 +563,7 @@ const CSS = `
 .ab-help .ab-legend { justify-content: flex-start; margin-top: 2px; }
 .ab-legend .it { white-space: nowrap; }
 .ab-legend b { font-weight: 800; }
-.ab-legend .n b { color: ${WHITE}; text-shadow: 0 0 5px ${rgba(WHITE, 0.7)}; }
-.ab-legend .b b { color: ${BLUE}; text-shadow: 0 0 6px ${rgba(BLUE, 0.8)}; }
+.ab-legend .n b { color: #ffffff; text-shadow: 0 0 5px ${rgba(WHITE, 0.9)}, 0 0 10px ${rgba(WHITE, 0.5)}; }
 .ab-legend .r b { color: ${RED}; text-shadow: 0 0 6px ${rgba(RED, 0.8)}; }
 .ab-legend.title { margin-top: 12px; font-size: 11px; text-shadow: 0 1px 2px #000; }
 .ab-legend .hint { color: ${CYAN}; opacity: 0.8; }

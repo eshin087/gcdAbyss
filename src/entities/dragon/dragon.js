@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../../core/config.js';
 import { markCaster, LAYER_CASTER } from '../../render/pipeline.js';
 import { damp, lerp, clamp, turnToward, yawTo, angleDiff, wrapAngle } from '../../core/math.js';
-import { TELL, RESULT, POSTURE, tellDefaults } from '../../combat/rules.js';
+import { TELL, TELL_STYLE, RESULT, POSTURE, tellDefaults } from '../../combat/rules.js';
 import { TUNING, SCALE } from './tuning.js';
 import { buildWyvern } from './model.js';
 import { Rig, createPose, resetPose } from './rig/anim.js';
@@ -14,6 +14,8 @@ import { DragonFx } from './fx.js';
 // Wiring: Brain (ai.js) writes pose targets + root motion and runs the attack tell beats, Rig
 // (rig/anim.js) solves the body, attacks test hitboxes after the rig, DragonFx owns particles /
 // lights / projectiles. Combat rules (tells, parry, posture) come from src/combat/rules.js.
+// Tells are shown on the wyrm itself: red (dodge-only) hits glow red through the windup (uWarn on
+// every material, see _updateWarn), parryable hits glint white on the timing cue (fx.tellFlash).
 
 const S = SCALE;
 const TARGETABLE = new Set(['waking', 'combat', 'staggered', 'airborne']);
@@ -28,6 +30,9 @@ const HURT = [
   ['leg', 0.6], ['leg', 0.42], ['leg', 0.6], ['leg', 0.42],
 ];
 const MAX_ATK_BOXES = 32;
+// red windup glow (TELL_STYLE.red.warn): rgb + strength ramp / spike / decay
+const WARN = TELL_STYLE.red.warn ?? { color: [1.0, 0.12, 0.05], from: 0.15, to: 0.6, spike: 1.6, decay: 0.25 };
+const WARN_RGB = WARN.color;
 
 export class Dragon {
   constructor(game) {
@@ -81,6 +86,9 @@ export class Dragon {
     this._lastParry = -1;
     this._postureSent = -1;
     this.postureTimer = 0;
+    this.warn = 0; // current red tell glow strength (uWarn.a)
+    this._warnAt = -1; // this.time of the last red timing flash (-1 = no spike)
+    this._warnAction = null; // the action that flashed it (a replaced action drops the spike)
 
     this.pose = createPose();
     this.rig = new Rig(this.model, this);
@@ -200,6 +208,7 @@ export class Dragon {
       this.resetting = false;
     }
     this.fx.reset();
+    this._clearWarn();
     this.state = 'sleeping';
     this.hp = this.maxHp;
     this.phase = 1;
@@ -412,10 +421,17 @@ export class Dragon {
     this.emit('combat:tell', { source: 'dragon', attack: b.attack, tell: b.tell, impactIn: b.impactIn, x: p.x, z: p.z });
   }
 
-  /** The timing cue, flashLead s before impact: 'combat:flash' + a glyph burst at the striking part. */
+  /**
+   * The timing cue, flashLead s before impact: 'combat:flash' + the in-world flash at the striking
+   * part (white glint for parryable tells, red burst for red) and, for red, the body's warning spike.
+   */
   flashTell(a, b) {
     const p = this.partPos(b.part, a, b, this._part);
     this.emit('combat:flash', { source: 'dragon', attack: b.attack, tell: b.tell, x: p.x, y: p.y, z: p.z });
+    if (b.tell === TELL.RED) {
+      this._warnAt = this.time;
+      this._warnAction = a;
+    }
     if (b.part === 'wrists') {
       const w = this.rig.pt.wings;
       this.fx.tellFlash(b.tell, w[0].wrist.x, w[0].wrist.y, w[0].wrist.z);
@@ -486,6 +502,7 @@ export class Dragon {
     this.state = 'dead';
     this.dissolve = 1;
     this.broken = false;
+    this._clearWarn();
     this.object3d.visible = false;
     this.hurtSpheres.length = 0;
     this.bodyCircles.length = 0;
@@ -648,10 +665,63 @@ export class Dragon {
     m.neck.uniforms.uGlow.value = Math.max(body, this.throatGlow * 1.1);
     m.eye.uniforms.uGlow.value = eyes;
     m.eye.uniforms.uInkGlow.value = eyes * 2.5;
+    const warn = this._updateWarn();
     for (const k in m) {
       const u = m[k].uniforms;
       u.uFlash.value = flash;
       u.uDissolve.value = this.dissolve;
+      const w = u.uWarn?.value;
+      if (w?.isVector4) w.set(WARN_RGB[0], WARN_RGB[1], WARN_RGB[2], warn);
+    }
+  }
+
+  /**
+   * Red (dodge-only) tell glow, uWarn.a on every material. From a red hit's windup start
+   * ('combat:tell') to its timing cue ('combat:flash', flashLead s before impact) it ramps
+   * WARN.from -> WARN.to; the cue spikes it to WARN.spike, then it decays to 0 over WARN.decay s.
+   * The ramp is read from the running action's beats every frame, so a replaced action (stagger,
+   * posture break, parry recoil, death, Lab interrupt) drops it at once; the spike belongs to the
+   * action that flashed it and goes with it. Game time: slow-mo stretches it with the attack.
+   */
+  _updateWarn() {
+    const a = this.brain.action;
+    let w = 0;
+    if (a && this.state !== 'dying' && this.state !== 'dead') {
+      const B = a.beats, lead = TUNING.flashLead;
+      for (let i = 0; i < B.length; i++) {
+        const b = B[i];
+        if (!b.told) break; // beats are in time order
+        if (b.flashed || b.tell !== TELL.RED) continue;
+        const k = clamp((a.T - b.at) / Math.max(0.05, b.impactIn - lead), 0, 1);
+        const v = WARN.from + (WARN.to - WARN.from) * k;
+        if (v > w) w = v;
+      }
+    }
+    if (this._warnAt >= 0) {
+      const age = this.time - this._warnAt;
+      if ((a && a !== this._warnAction) || !(age >= 0) || age >= WARN.decay) {
+        this._warnAt = -1;
+        this._warnAction = null;
+      } else {
+        const f = 1 - age / WARN.decay;
+        const v = WARN.spike * f * f;
+        if (v > w) w = v;
+      }
+    }
+    this.warn = Number.isFinite(w) ? w : 0;
+    return this.warn;
+  }
+
+  /** Drop the red tell glow now (reset, death) and write it to the materials. */
+  _clearWarn() {
+    this.warn = 0;
+    this._warnAt = -1;
+    this._warnAction = null;
+    const m = this.model?.mats;
+    if (!m) return;
+    for (const k in m) {
+      const w = m[k].uniforms?.uWarn?.value;
+      if (w?.isVector4) w.w = 0;
     }
   }
 }

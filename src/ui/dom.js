@@ -108,16 +108,19 @@ export function controlsGrid(parent) {
   return grid;
 }
 
-/** One-line attack-tell legend: "◆ blue = parry   ! red = dodge" (+ optional white glint). */
-export function tellLegend(parent, { normal = false } = {}) {
+/**
+ * One-line attack-tell legend for the title / pause / help screens (the tells themselves are only
+ * shown in the world): "red flash = dodge only · white glint = parry timing · perfect dodge = Ghostep".
+ */
+export function tellLegend(parent) {
   const row = el('div', 'ab-legend', null, parent);
-  const item = (cls, glyph, text) => {
+  const item = (cls, cue, text) => {
     const s = el('span', `it ${cls}`, null, row);
-    el('b', '', glyph, s);
-    s.appendChild(document.createTextNode(` ${text}`));
+    el('b', '', cue, s);
+    s.appendChild(document.createTextNode(` = ${text}`));
   };
-  if (normal) item('n', '+', 'white = any defence');
-  item('b', '◆', 'blue = parry');
-  item('r', '!', 'red = dodge');
+  item('r', 'red flash', 'dodge only');
+  item('n', 'white glint', 'parry timing');
+  el('span', 'it hint', 'perfect dodge = Ghostep', row);
   return row;
 }

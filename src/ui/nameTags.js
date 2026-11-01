@@ -36,21 +36,12 @@ export class NameTags {
     this.reticle = new Tag(this.layer, 'ab-tag ab-reticle', '◇');
     this.v = new THREE.Vector3();
     this.lock = new THREE.Vector3();
-    this._foeDim = false;
     this.w = window.innerWidth || 1;
     this.h = window.innerHeight || 1;
     addEventListener('resize', () => {
       this.w = window.innerWidth || 1;
       this.h = window.innerHeight || 1;
     });
-  }
-
-  /** Dim the foe name while a combat tell is shown just above it. */
-  setFoeDim(on) {
-    on = !!on;
-    if (on === this._foeDim) return;
-    this._foeDim = on;
-    this.dragon.node.classList.toggle('dim', on);
   }
 
   /** Project world (x,y,z) into the tag; hides it when behind the camera or off-screen. */
