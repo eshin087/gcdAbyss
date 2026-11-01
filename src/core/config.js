@@ -34,11 +34,11 @@ export const CONFIG = {
     bloomThreshold: 0.55,
   },
 
-  // Quality presets (cycle with F2): render resolution (device pixel ratio cap).
+  // Quality presets (cycle with F2). grass = blade instances drawn.
   quality: [
-    { name: 'LOW', dpr: 1 },
-    { name: 'MEDIUM', dpr: 1.25 },
-    { name: 'HIGH', dpr: 2 },
+    { name: 'LOW', grass: 90000, dpr: 1 },
+    { name: 'MEDIUM', grass: 170000, dpr: 1.25 },
+    { name: 'HIGH', grass: 260000, dpr: 2 },
   ],
   defaultQuality: 2,
 };

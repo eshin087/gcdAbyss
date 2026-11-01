@@ -1,8 +1,9 @@
+import { CONFIG } from '../core/config.js';
 import { MAX_PUSH } from '../render/shaderLib.js';
 import { Colliders } from './colliders.js';
 import { createGround } from './ground.js';
 import { createForest } from './forest.js';
-import { createMeadow } from './grass.js';
+import { createGrass, meadowDensity, meadowHeight } from './grass.js';
 import { Scorch } from './scorch.js';
 import { Atmosphere } from './atmosphere.js';
 
@@ -18,14 +19,16 @@ export class World {
     this.game = game;
     const U = game.U;
     this.colliders = new Colliders();
+    this.ground = createGround(U);
+    game.scene.add(this.ground);
     this.forest = createForest(U, this.colliders);
     game.scene.add(this.forest.group);
     this.scorch = new Scorch(U, game);
-    // grass = ASCII glyphs drawn by the post pass from this density field (see grass.js)
-    this.meadow = createMeadow(this.colliders, this.forest.treeSpots, this.forest.bare, 150);
-    game.pipeline.setMeadow(this.meadow);
-    this.ground = createGround(U, this.meadow);
-    game.scene.add(this.ground);
+    const extent = 150;
+    const density = meadowDensity(this.colliders, this.forest.treeSpots, this.forest.bare, extent);
+    const q = CONFIG.quality[CONFIG.quality.length - 1];
+    this.grass = createGrass(U, { count: q.grass, extent, density, height: meadowHeight });
+    game.scene.add(this.grass.mesh);
     this.atmosphere = new Atmosphere(game, this.forest);
     this.bonfire = this.forest.bonfire;
     this.nest = this.forest.nest;
@@ -48,6 +51,10 @@ export class World {
   gust(x, z, strength = 1, radius = 12) {
     // keep the strongest recent gust
     if (strength >= this._gust.strength * 0.6) Object.assign(this._gust, { x, z, strength, radius });
+  }
+
+  setGrassQuality(count) {
+    this.grass.setCount(count);
   }
 
   update(dt) {

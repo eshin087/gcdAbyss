@@ -83,6 +83,7 @@ async function boot() {
 
   const applyQuality = () => {
     const q = CONFIG.quality[game.settings.quality];
+    game.world.setGrassQuality?.(q.grass);
     pipeline.setSize(innerWidth, innerHeight, Math.min(q.dpr, devicePixelRatio || 1, CONFIG.render.maxPixelRatio));
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
