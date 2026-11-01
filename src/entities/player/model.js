@@ -193,46 +193,57 @@ function hairGeometries() {
   return out;
 }
 
+// v0.3: crisp surface glyphs. Cells are sized so a glyph stays >= ~6 screen px at the default camera
+// (smaller cells blur into a solid texture); `outline` is the moonlit silhouette line that keeps the
+// black coat readable on the dark meadow, silver trim and the blade are the bright accents.
 export function createHeroMaterials(U) {
   return {
-    // dark spiky hair with cool blue-steel highlight strokes
+    // dark spiky hair: spikes point along aGUV +y, cool blue-steel highlight cells
     hair: createSurfaceGlyphMaterial(U, {
-      ascii: 'strands', ink: [0.06, 0.07, 0.11], inkAlt: [0.2, 0.25, 0.4], altChance: 0.3,
-      gain: 2.8, rim: 1.1, seed: 4.2,
+      ascii: 'strands', glyphs: ".'^A", cell: [0.075, 0.09], base: [0.006, 0.007, 0.012],
+      ink: [0.1, 0.12, 0.18], inkAlt: [0.28, 0.34, 0.52], altChance: 0.3,
+      gain: 2.8, rim: 1.1, outline: 1.55, seed: 4.2,
     }),
     // pale face / neck
     skin: createSurfaceGlyphMaterial(U, {
-      ascii: 'smooth', ink: [0.78, 0.62, 0.54], gain: 1.7, rim: 0.3, seed: 9.1,
+      ascii: 'smooth', glyphs: '.:oO', cell: [0.055, 0.06], base: [0.05, 0.035, 0.03],
+      ink: [0.82, 0.66, 0.58], gain: 1.8, rim: 0.3, outline: 0.8, seed: 9.1,
     }),
-    // long black leather coat: vertical fold strokes, a few cooler cells, strong moon rim so the
-    // silhouette separates from the night meadow
+    // long black leather coat: vertical fold strokes, a few cooler cells
     coat: createSurfaceGlyphMaterial(U, {
-      ascii: 'strands', ink: [0.07, 0.07, 0.09], inkAlt: [0.12, 0.13, 0.18], altChance: 0.22,
-      gain: 3.2, rim: 1.25, side: THREE.DoubleSide, seed: 17.5,
+      ascii: 'strands', glyphs: '.:|I', cell: [0.085, 0.12], base: [0.006, 0.006, 0.009],
+      ink: [0.18, 0.18, 0.22], inkAlt: [0.32, 0.35, 0.48], altChance: 0.22,
+      gain: 3.2, rim: 1.3, outline: 1.7, side: THREE.DoubleSide, seed: 17.5,
     }),
-    // subtle silver trim: belt, closure line, crossguard, pommel
+    // silver trim: belt, closure line, crossguard, pommel — the brightest cloth accent
     trim: createSurfaceGlyphMaterial(U, {
-      ascii: 'plates', ink: [0.55, 0.58, 0.65], gain: 2.2, rim: 0.5, seed: 2.7,
+      ascii: 'plates', glyphs: '.-=#', cell: [0.06, 0.06], base: [0.02, 0.022, 0.026],
+      ink: [0.75, 0.8, 0.9], gain: 2.6, rim: 0.6, outline: 1.05, seed: 2.7,
     }),
     pants: createSurfaceGlyphMaterial(U, {
-      ascii: 'strands', ink: [0.05, 0.05, 0.065], inkAlt: [0.08, 0.085, 0.11], altChance: 0.15,
-      gain: 2.8, rim: 0.9, seed: 13.3,
+      ascii: 'strands', glyphs: '.:|I', cell: [0.075, 0.11], base: [0.005, 0.005, 0.007],
+      ink: [0.08, 0.08, 0.1], inkAlt: [0.12, 0.13, 0.17], altChance: 0.15,
+      gain: 2.8, rim: 0.9, outline: 1.45, seed: 13.3,
     }),
     boots: createSurfaceGlyphMaterial(U, {
-      ascii: 'plates', ink: [0.1, 0.09, 0.095], gain: 2.6, rim: 0.8, seed: 21.4,
+      ascii: 'plates', glyphs: '.-=#', cell: [0.06, 0.07], base: [0.008, 0.007, 0.008],
+      ink: [0.14, 0.13, 0.14], gain: 2.6, rim: 0.8, outline: 1.3, seed: 21.4,
     }),
     // fingerless gloves / sword grip
     glove: createSurfaceGlyphMaterial(U, {
-      ascii: 'smooth', ink: [0.09, 0.085, 0.09], gain: 2.2, rim: 0.6, seed: 6.6,
+      ascii: 'smooth', glyphs: '.:oO', cell: [0.045, 0.05], base: [0.008, 0.007, 0.008],
+      ink: [0.12, 0.11, 0.12], gain: 2.2, rim: 0.6, outline: 1.2, seed: 6.6,
     }),
     // dark blade with a cool glowing edge; uInkGlow / uGlow carry strike, charge and crit glow
     blade: createSurfaceGlyphMaterial(U, {
-      ascii: 'strands', ink: [0.45, 0.55, 0.75], inkAlt: [0.75, 0.9, 1.25], altChance: 0.25,
-      gain: 2.6, rim: 0.9, inkGlow: 0.3, emissive: [0.5, 0.85, 1.8], glowMask: 1, seed: 1.9,
+      ascii: 'strands', glyphs: '.-|I', cell: [0.045, 0.1], base: [0.03, 0.035, 0.05],
+      ink: [0.55, 0.66, 0.9], inkAlt: [0.85, 1.0, 1.35], altChance: 0.25,
+      gain: 2.8, rim: 0.9, outline: 1.3, inkGlow: 0.45, emissive: [0.5, 0.85, 1.8], glowMask: 1, seed: 1.9,
     }),
     // flask (only while drinking)
     flask: createSurfaceGlyphMaterial(U, {
-      ascii: 'smooth', ink: [1.1, 0.85, 0.3], gain: 1.4, rim: 0.3, inkGlow: 1.4, glowMask: 0, seed: 3.1,
+      ascii: 'smooth', glyphs: '.:o0', cell: [0.035, 0.04], base: [0.12, 0.08, 0.02],
+      ink: [1.1, 0.85, 0.3], gain: 1.4, rim: 0.3, outline: 0.4, inkGlow: 1.4, glowMask: 0, seed: 3.1,
     }),
   };
 }

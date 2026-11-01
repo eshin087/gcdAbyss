@@ -12,17 +12,21 @@ import { WingMembrane } from './membrane.js';
 /** Set true to make tail chevrons point back toward the body instead of toward the tip. */
 export const TAIL_FLIP = false;
 
-// v0.2: every part renders through the screen character grid (`ascii` sets, see ARCHITECTURE.md
-// "Render helpers"): the material writes the lit ink colour + the screen direction of aGUV +y and
-// the post pass draws glyphs that follow it. aGUV +y runs toward the head on the body / neck and
-// toward the tips on the tail, limbs, fingers, horns and claws, so chevrons point "forward".
-// Cell colour = lit ink (bone/ash) with ember-red inkAlt cells; uGlow lights hot cells (phase 2).
+// v0.3: crisp glyphs printed ON the surface (aGUV cells in MODEL units; the root scale makes them
+// x1.25 in the world) over near-black gaps, with a moonlit silhouette outline. aGUV +y runs toward
+// the head on the body / neck and toward the tips on the tail, limbs, fingers, horns and claws, so
+// chevrons point "forward". Ink = bone/ash with ember-red inkAlt cells; uGlow lights hot cells
+// (phase 2); uWarn is the red dodge-only tell glow.
 const SCALE_INK = {
+  base: [0.03, 0.025, 0.028],
+  cell: [0.26, 0.31],
+  lumScale: 3.3,
   ink: [0.42, 0.34, 0.3],
   inkAlt: [0.75, 0.16, 0.05],
   altChance: 0.25,
   gain: 2.5,
   rim: 0.35,
+  outline: 0,
   emissive: [1.0, 0.28, 0.04],
 };
 
@@ -31,10 +35,14 @@ export function createDragonMaterials(U) {
     // back / flanks / tail / limbs: chevron scales along the body flow
     scales: createSurfaceGlyphMaterial(U, { ascii: 'scales', ...SCALE_INK, seed: 11.3 }),
     // neck + head get their own instance so the throat can charge (uGlow) independently
-    neck: createSurfaceGlyphMaterial(U, { ascii: 'scales', ...SCALE_INK, seed: 23.7 }),
+    neck: createSurfaceGlyphMaterial(U, { ascii: 'scales', ...SCALE_INK, cell: [0.23, 0.29], seed: 23.7 }),
     // belly: '= #' plate bands across the flow
     belly: createSurfaceGlyphMaterial(U, {
       ascii: 'plates',
+      cell: [0.42, 0.26],
+      base: [0.075, 0.042, 0.022],
+      lumScale: 3.5,
+      outline: 0,
       ink: [0.5, 0.31, 0.12],
       inkAlt: [0.62, 0.36, 0.12],
       altChance: 0.15,
@@ -47,6 +55,11 @@ export function createDragonMaterials(U) {
     // wing membranes: vein strokes running out along the finger bones
     membrane: createSurfaceGlyphMaterial(U, {
       ascii: 'strands',
+      glyphs: '.:/|',
+      cell: [0.34, 0.42],
+      base: [0.045, 0.018, 0.015],
+      lumScale: 3.5,
+      outline: 0,
       ink: [0.36, 0.11, 0.06],
       inkAlt: [0.55, 0.15, 0.06],
       altChance: 0.15,
@@ -60,6 +73,10 @@ export function createDragonMaterials(U) {
     // horns, claws, spikes, fangs: strokes toward the tip
     bone: createSurfaceGlyphMaterial(U, {
       ascii: 'strands',
+      cell: [0.16, 0.21],
+      base: [0.15, 0.125, 0.11],
+      lumScale: 3.5,
+      outline: 0,
       ink: [0.78, 0.72, 0.62],
       gain: 2.4,
       rim: 0.4,
@@ -69,6 +86,11 @@ export function createDragonMaterials(U) {
     // eyes: density ramp, self-lit through uInkGlow / uGlow while awake
     eye: createSurfaceGlyphMaterial(U, {
       ascii: 'smooth',
+      glyphs: '%@#@',
+      cell: [0.1, 0.1],
+      base: [0.075, 0.015, 0.005],
+      lumScale: 2.2,
+      outline: 0,
       ink: [1.0, 0.36, 0.06],
       gain: 1.0,
       rim: 0,
