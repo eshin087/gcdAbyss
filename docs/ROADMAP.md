@@ -14,14 +14,14 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Single-file build, headless tests
 
 ## M1 — Combat & presentation pass (v0.2)
-- [~] Repo, CI, Vercel deploy, agent docs & history
-- [~] Remove stamina; block (hold RMB), parry (tap RMB on impact), perfect dodge → Ghostep
-- [~] Attack tell system: normal / blue (parry) / red (perfect dodge only) with clear indicators
-- [~] Enemy posture bar, parry/posture break → open window
-- [~] Approachable balance
-- [~] Lab / debug mode (trigger abilities, phases, god mode, slow-mo, hitboxes)
-- [~] Anime-style (SAO-inspired) black-coat swordsman protagonist
-- [~] ASCII-ify creatures and grass; more detailed stone ASCII; bigger dragon
+- [x] Repo, CI, Vercel deploy, agent docs & history; protected `main`, PR-only workflow
+- [x] Remove stamina; block (hold RMB), parry (tap RMB on impact), perfect dodge → Ghostep
+- [x] Attack tell system: normal / blue (parry) / red (perfect dodge only) with clear indicators
+- [x] Enemy posture bar, parry/posture break → open window
+- [~] Approachable balance (needs human playtests; bot kills the wyrm in ~20 s of combat)
+- [x] Lab / debug mode (trigger abilities, phases, god mode, slow-mo, hitboxes, timing trainer)
+- [x] Anime-style (SAO-inspired) black-coat swordsman protagonist
+- [x] ASCII-ify creatures and grass; more detailed stone ASCII; bigger dragon (×1.25)
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
@@ -43,6 +43,10 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] Accounts, persistence
 
 ## Tech debt / ideas
+- [ ] Front-on reach: at ×1.25 the wyrm's chest sits above sword height, so only the overhead
+      combo hit lands from straight ahead (flanks/behind are fine) — consider a lunge or hitbox lift
+- [ ] Hero readability at default zoom (~4 cells wide): consider a stronger rim or a ground ring
+- [ ] Separate freeze vs slow-mo timers in `game.hitstop` (today actors guard against it)
 - [ ] Merge static dragon parts (spikes/horns/claws) to cut draw calls (~100 meshes today)
 - [ ] Dissolve-aware shadow material for dying creatures
 - [ ] TypeScript or JSDoc types for the contracts once the API stabilises

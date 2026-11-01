@@ -5,6 +5,39 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-01 — Session 2: combat & presentation pass (v0.2.0)
+**Goal:** the owner's v0.2 feedback (see Session 1) plus a long-term repo/deploy setup.
+
+**Done**
+- GitHub repo `eshin087/gcdAbyss` (public) + Vercel project `gcdabyss` (Git integration, `main` =
+  production, PR previews, 30-day retention). `main` is protected: PR + green `test-and-build`
+  required, even for admins (ADR-006).
+- Rendering: one screen-space ASCII grid for everything (ADR-007) — procedural grass meadow, stone
+  outlines, creature glyph sets with flow angles.
+- A parallel agent workflow (builders → reviewers → integration) built the dragon (tells, posture,
+  ×1.25 size, roar ring), the black-coat hero (block / parry / Ghostep / charged heavy), HUD / audio
+  / flow tell presentation and the Lab. Reviewers fixed ~30 issues (flash timing vs moving players,
+  AI picking attacks that can't land, Ghostep slow-mo turning into a freeze, Lab keys leaking into
+  the game, ...). Integration rewrote the tests: 195 asserts, AI seeds 1–40 all green.
+- Browser playtest (Lab): blue PARRY and red DODGE marks read clearly; perfect dodges at 0.2 /
+  0.15 / 0.1 s before impact all Ghostep; posture break + phase-2 roar work; no console errors.
+  Tuned creature cells: dark backing (`uCreatureBg` 0.04) and `uCreatureLum` 4.2 → 3.0 so the dragon
+  reads as glyphs instead of white tiles; ink-independent moon rim for the black coat; grass gain
+  2.3 → 1.9 so creatures pop.
+- `main.js` calls `lab.postUpdate()` after the actors so the hitbox overlay isn't a frame late.
+
+**Decisions:** ADR-007 (single ASCII grid), ADR-008 (tell-driven combat, no stamina), ADR-009
+(phase gate).
+
+**Open issues / next**
+- Human playtest of balance: the god-mode bot kills the wyrm in ~20 s of combat (crits stack).
+- From straight ahead only the overhead combo hit reaches the bigger wyrm's chest.
+- The hero is small at default zoom; consider a stronger rim / ground ring.
+- Breath can't hit a hero standing under the head (< ~7 m); the AI never picks it there.
+- Not yet heard in a browser: tell audio levels, charge hum, Ghostep low-pass.
+
+---
+
 ## 2026-11-01 — Session 1: from reference study to playable slice (v0.1.0)
 **Goal:** a demo matching @Ansenjeo's ASCII MMORPG look (camera, art style) with a dragon in a forest.
 

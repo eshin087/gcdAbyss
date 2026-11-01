@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 
-// Glyph-particle effects owned by the knight: sword trail, impact sparks, dust, heal glow,
-// burn flames, hurt spray. Every glyph used here is in the world atlas.
+// Glyph-particle effects owned by the Wanderer: sword trail, impact sparks, dust, heal glow, burn
+// flames, hurt spray, and the v0.2 defence set — parry burst, block sparks, guard-break shards,
+// Ghostep afterimage + streak, charge gather / ready glint, crit-window motes. Every glyph used
+// here is in the world atlas.
 
 const R = (a, b) => a + Math.random() * (b - a);
 
@@ -9,16 +11,26 @@ const COL = {
   trail: [1.4, 1.75, 2.5], trailEnd: [0.1, 0.18, 0.45],
   trailHeavy: [1.9, 2.1, 2.9],
   spark: [3.4, 2.7, 1.6], sparkEnd: [1.4, 0.45, 0.1],
+  crit: [2.2, 2.8, 4.2], critEnd: [0.3, 0.55, 1.4],
   flash: [4.2, 3.6, 2.6],
   dust: [0.2, 0.18, 0.14], dustEnd: [0.09, 0.08, 0.065],
   heal: [1.3, 1.9, 0.55], healEnd: [0.25, 0.6, 0.12],
   flame: [3.0, 1.35, 0.32], flameEnd: [0.9, 0.12, 0.02],
   ash: [0.34, 0.035, 0.028], ashEnd: [0.1, 0.012, 0.01],
   hurt: [2.2, 1.8, 1.6], hurtEnd: [0.6, 0.15, 0.08],
+  parry: [4.0, 3.4, 2.2], parryEnd: [1.6, 0.9, 0.25],
+  parryBlue: [1.6, 2.6, 4.6], parryBlueEnd: [0.25, 0.6, 1.8],
+  block: [2.3, 2.0, 1.5], blockEnd: [0.7, 0.35, 0.1],
+  shard: [1.5, 1.5, 1.6], shardEnd: [0.3, 0.3, 0.38],
+  ghost: [1.3, 1.75, 2.6], ghostEnd: [0.12, 0.25, 0.75],
+  ghostCore: [2.6, 3.0, 3.8],
+  charge: [1.0, 1.5, 2.6], chargeEnd: [0.3, 0.6, 1.6],
 };
 
 const TRAIL_ALONG = [0.6, 0.8, 1.0];
 const TRAIL_ALONG_HEAVY = [0.45, 0.62, 0.8, 1.0];
+// screen axes of the fixed camera (pitch 58°): right = +X, up ≈ (0, cos 58°, −sin 58°)
+const UP_Y = 0.53, UP_Z = -0.85;
 
 export class PlayerFx {
   constructor(game, rig) {
@@ -27,6 +39,8 @@ export class PlayerFx {
     this._v = new THREE.Vector3();
     this.flameAcc = 0;
     this.healAcc = 0;
+    this.chargeAcc = 0;
+    this.critAcc = 0;
   }
 
   get add() {
@@ -34,6 +48,10 @@ export class PlayerFx {
   }
   get alpha() {
     return this.game.fx?.alpha ?? null;
+  }
+
+  _light(o) {
+    return this.game.lights?.add?.(o) ?? null;
   }
 
   /** Grey-brown ground puff (roll start/end, landings). */
@@ -54,10 +72,11 @@ export class PlayerFx {
   }
 
   /** Cold streaks along the outer blade, filling the gap between last and current blade. */
-  trail(pa, pb, a, b, heavy) {
+  trail(pa, pb, a, b, heavy, crit = false) {
     const fx = this.add;
     if (!fx) return;
     const along = heavy ? TRAIL_ALONG_HEAVY : TRAIL_ALONG;
+    const col = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
     for (let s = 1; s <= 3; s++) {
       const t = s / 3;
       const ax = pa.x + (a.x - pa.x) * t, ay = pa.y + (a.y - pa.y) * t, az = pa.z + (a.z - pa.z) * t;
@@ -69,51 +88,230 @@ export class PlayerFx {
           x: ax + (bx - ax) * f, y: ay + (by - ay) * f, z: az + (bz - az) * f,
           vx: R(-0.2, 0.2), vy: R(0, 0.3), vz: R(-0.2, 0.2),
           life: R(0.12, 0.2) * (heavy ? 1.3 : 1), size, sizeEnd: size * 0.35,
-          glyph: '-~=/\\', color: heavy ? COL.trailHeavy : COL.trail, colorEnd: COL.trailEnd,
+          glyph: '-~=/\\', color: col, colorEnd: COL.trailEnd,
           alpha: 0.85, alphaEnd: 0, drag: 2, rot: R(-0.4, 0.4),
         });
       }
     }
   }
 
-  /** White-gold sparks at a sword contact. (dx, dz) = swing direction. */
-  sparks(x, y, z, dx, dz, heavy) {
+  /** White-gold sparks at a sword contact (cold blue-white on a crit). (dx, dz) = swing direction. */
+  sparks(x, y, z, dx, dz, heavy, crit = false) {
     const fx = this.add;
     if (!fx) return;
-    const n = heavy ? 22 : 12;
+    const n = heavy || crit ? 22 : 12;
+    const c0 = crit ? COL.crit : COL.spark, c1 = crit ? COL.critEnd : COL.sparkEnd;
     for (let i = 0; i < n; i++) {
       const sp = R(1, 4) * (heavy ? 1.4 : 1);
       fx.spawn({
         x, y, z,
         vx: dx * sp + R(-3, 3), vy: R(0.5, 4.5), vz: dz * sp + R(-3, 3),
         life: R(0.18, 0.42), size: R(0.16, 0.26), sizeEnd: 0.05,
-        glyph: '+x*', color: COL.spark, colorEnd: COL.sparkEnd,
+        glyph: '+x*', color: c0, colorEnd: c1,
         alpha: 1, alphaEnd: 0, gravity: -9, drag: 1.8, spin: R(-6, 6),
       });
     }
     fx.spawn({
-      x, y, z, life: 0.1, size: heavy ? 1.15 : 0.75, sizeEnd: 0.2,
-      glyph: '*', color: COL.flash, colorEnd: COL.spark, alpha: 1, alphaEnd: 0, rot: R(0, 3),
+      x, y, z, life: 0.1, size: heavy || crit ? 1.15 : 0.75, sizeEnd: 0.2,
+      glyph: '*', color: crit ? COL.ghostCore : COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3),
     });
-    this.game.lights?.add({ x, y, z, color: [1, 0.8, 0.5], intensity: heavy ? 3.5 : 2.4, radius: heavy ? 6 : 4.5, life: 0.16, fade: 0.14 });
+    this._light({ x, y, z, color: crit ? [0.6, 0.8, 1.2] : [1, 0.8, 0.5], intensity: heavy || crit ? 3.5 : 2.4, radius: heavy ? 6 : 4.5, life: 0.16, fade: 0.14 });
   }
 
-  /** Heavy-slam impact on the ground. */
-  slam(x, z) {
-    this.dust(x, z, 16, 1.7);
+  /** Charged heavy's release: a short ground gust ring of dust and glints around the feet. */
+  release(x, z, k) {
+    this.dust(x, z, 6 + Math.round(8 * k), 0.8 + 0.8 * k);
+  }
+
+  /** Parry: bright white-gold burst at the blade (blue-tinted for blue tells) + a ring of streaks. */
+  parry(x, y, z, blue) {
     const fx = this.add;
     if (!fx) return;
-    for (let i = 0; i < 6; i++) {
-      const a = Math.random() * Math.PI * 2;
+    const c0 = blue ? COL.parryBlue : COL.parry, c1 = blue ? COL.parryBlueEnd : COL.parryEnd;
+    for (let i = 0; i < 26; i++) {
+      const a = (i / 26) * Math.PI * 2 + R(-0.12, 0.12);
+      const sp = R(3, 7);
       fx.spawn({
-        x, y: 0.1, z, vx: Math.cos(a) * R(1.5, 3), vy: R(1, 3), vz: Math.sin(a) * R(1.5, 3),
-        life: R(0.2, 0.35), size: R(0.14, 0.2), sizeEnd: 0.04, glyph: '+x', color: COL.spark, colorEnd: COL.sparkEnd,
-        alpha: 1, alphaEnd: 0, gravity: -9, drag: 1.5,
+        x, y, z,
+        vx: Math.cos(a) * sp, vy: R(-1, 3.5), vz: Math.sin(a) * sp,
+        life: R(0.16, 0.34), size: R(0.18, 0.3), sizeEnd: 0.04,
+        glyph: '+x*×', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -6, drag: 3.5, spin: R(-8, 8),
+      });
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      fx.spawn({
+        x: x + Math.cos(a) * 0.15, y, z: z + Math.sin(a) * 0.15,
+        vx: Math.cos(a) * 9, vy: 0, vz: Math.sin(a) * 9,
+        life: 0.12, size: 0.3, sizeEnd: 0.1, stretch: 2.5, rot: -a,
+        glyph: '-', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, drag: 10,
+      });
+    }
+    fx.spawn({ x, y, z, life: 0.12, size: 1.6, sizeEnd: 0.3, glyph: '*', color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
+    fx.spawn({ x, y, z, life: 0.16, size: 1.1, sizeEnd: 2.0, glyph: '°', color: c0, colorEnd: c1, alpha: 0.8, alphaEnd: 0 });
+    this._light({ x, y, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5, radius: 7, life: 0.2, fade: 0.18 });
+  }
+
+  /** Blocked blow: '#' sparks thrown off the guard, away from the attacker (nx, nz). */
+  block(x, y, z, nx, nz, heavy) {
+    const fx = this.add;
+    if (!fx) return;
+    const n = heavy ? 16 : 9;
+    for (let i = 0; i < n; i++) {
+      const sp = R(1.5, 4) * (heavy ? 1.3 : 1);
+      fx.spawn({
+        x, y, z,
+        vx: -nx * sp * 0.4 + R(-2.5, 2.5), vy: R(0.5, 3.5), vz: -nz * sp * 0.4 + R(-2.5, 2.5),
+        life: R(0.18, 0.36), size: R(0.16, 0.24), sizeEnd: 0.05,
+        glyph: '#=+', color: COL.block, colorEnd: COL.blockEnd, alpha: 1, alphaEnd: 0, gravity: -9, drag: 2, spin: R(-5, 5),
+      });
+    }
+    fx.spawn({ x, y, z, life: 0.08, size: heavy ? 0.9 : 0.6, sizeEnd: 0.2, glyph: '#', color: COL.flash, colorEnd: COL.block, alpha: 1, alphaEnd: 0 });
+    this._light({ x, y, z, color: [1, 0.85, 0.6], intensity: heavy ? 2.6 : 1.6, radius: 4, life: 0.12, fade: 0.1 });
+  }
+
+  /** Small chip sparks for a blocked stream tick (fire breath on the guard). */
+  blockChip(x, y, z) {
+    const fx = this.add;
+    if (!fx) return;
+    for (let i = 0; i < 2; i++) {
+      fx.spawn({
+        x, y, z, vx: R(-1.5, 1.5), vy: R(0.5, 2), vz: R(-1.5, 1.5),
+        life: R(0.12, 0.22), size: R(0.12, 0.18), sizeEnd: 0.04,
+        glyph: '#+', color: COL.block, colorEnd: COL.blockEnd, alpha: 1, alphaEnd: 0, gravity: -6, drag: 2,
       });
     }
   }
 
-  /** Spray away from the attacker when the knight is hit. (nx, nz) = push direction. */
+  /** Guard break: the guard shatters — grey shards + a hot flash, thrown back with the hero. */
+  guardBreak(x, y, z, nx, nz) {
+    const fx = this.add;
+    if (fx) {
+      for (let i = 0; i < 18; i++) {
+        const sp = R(2, 5);
+        fx.spawn({
+          x, y, z,
+          vx: nx * sp + R(-2.5, 2.5), vy: R(1, 4.5), vz: nz * sp + R(-2.5, 2.5),
+          life: R(0.3, 0.6), size: R(0.18, 0.28), sizeEnd: 0.06,
+          glyph: '/\\#|', color: COL.shard, colorEnd: COL.shardEnd, alpha: 1, alphaEnd: 0, gravity: -10, drag: 1.4, spin: R(-9, 9),
+        });
+      }
+      fx.spawn({ x, y, z, life: 0.12, size: 1.4, sizeEnd: 0.4, glyph: 'X', color: [3.6, 1.2, 0.5], colorEnd: [1.2, 0.2, 0.05], alpha: 1, alphaEnd: 0 });
+    }
+    this.dust(x, z, 10, 1.2);
+    this._light({ x, y, z, color: [1.2, 0.5, 0.25], intensity: 3, radius: 5, life: 0.18, fade: 0.16 });
+  }
+
+  /**
+   * Ghostep: a cold blue-white afterimage traced along the hero's pose at the old spot (`segs`:
+   * flat [ax, ay, az, bx, by, bz, ...] world segments sampled before the blink), a streak to the
+   * new spot, and a reappear burst.
+   */
+  ghostep(segs, nSegs, ox, oz, nx, nz) {
+    const fx = this.add;
+    if (!fx) return;
+    // afterimage: strokes along each bone, oriented to the bone's screen direction
+    for (let s = 0; s < nSegs; s++) {
+      const k = s * 6;
+      const ax = segs[k], ay = segs[k + 1], az = segs[k + 2];
+      const dx = segs[k + 3] - ax, dy = segs[k + 4] - ay, dz = segs[k + 5] - az;
+      const len = Math.hypot(dx, dy, dz);
+      if (!(len > 1e-3) || !Number.isFinite(len)) continue;
+      const rot = Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
+      const n = Math.max(1, Math.round(len / 0.11));
+      for (let i = 0; i <= n; i++) {
+        const f = i / n;
+        fx.spawn({
+          x: ax + dx * f, y: ay + dy * f, z: az + dz * f,
+          vx: R(-0.15, 0.15), vy: R(0.05, 0.35), vz: R(-0.15, 0.15),
+          life: R(0.45, 0.65), size: R(0.2, 0.26), sizeEnd: 0.12,
+          glyph: '|', rot: rot + R(-0.15, 0.15), color: COL.ghost, colorEnd: COL.ghostEnd,
+          alpha: 0.9, alphaEnd: 0, drag: 1.5, flicker: 0.25,
+        });
+      }
+    }
+    // streak from the old spot to the new one
+    const sx = nx - ox, sz = nz - oz;
+    const dist = Math.hypot(sx, sz);
+    if (dist > 0.3 && Number.isFinite(dist)) {
+      const rot = Math.atan2(sz * UP_Z, sx);
+      const n = Math.min(60, Math.round(dist / 0.18));
+      for (let i = 0; i <= n; i++) {
+        const f = i / n;
+        for (let j = 0; j < 2; j++) {
+          fx.spawn({
+            x: ox + sx * f + R(-0.12, 0.12), y: R(0.35, 1.45), z: oz + sz * f + R(-0.12, 0.12),
+            vx: (sx / dist) * R(0.5, 2), vy: R(-0.1, 0.2), vz: (sz / dist) * R(0.5, 2),
+            life: R(0.25, 0.5) * (0.5 + 0.5 * f), size: R(0.18, 0.26), sizeEnd: 0.05, stretch: 1.5,
+            glyph: '-=~·', rot: rot + R(-0.1, 0.1), color: COL.ghost, colorEnd: COL.ghostEnd,
+            alpha: 0.85, alphaEnd: 0, drag: 2.5,
+          });
+        }
+      }
+    }
+    // reappear: a ring of motes collapsing upward + a core flash
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      fx.spawn({
+        x: nx + Math.cos(a) * 0.7, y: R(0.1, 1.5), z: nz + Math.sin(a) * 0.7,
+        vx: -Math.cos(a) * 1.4, vy: R(0.4, 1.4), vz: -Math.sin(a) * 1.4,
+        life: R(0.3, 0.5), size: R(0.14, 0.2), sizeEnd: 0.04,
+        glyph: '·+°', color: COL.ghost, colorEnd: COL.ghostEnd, alpha: 1, alphaEnd: 0, drag: 2, flicker: 0.3,
+      });
+    }
+    fx.spawn({ x: nx, y: 0.95, z: nz, life: 0.18, size: 1.8, sizeEnd: 0.4, glyph: '|', color: COL.ghostCore, colorEnd: COL.ghost, alpha: 1, alphaEnd: 0 });
+    this._light({ x: nx, y: 1.1, z: nz, color: [0.55, 0.75, 1.3], intensity: 3.2, radius: 6, life: 0.5, fade: 0.45, fadeIn: 0.02 });
+  }
+
+  /** Charging: cold motes drawn in toward the blade (rate and brightness scale with k 0..1). */
+  chargeTick(dt, a, b, k) {
+    const fx = this.add;
+    if (!fx || !(k >= 0)) return;
+    this.chargeAcc += dt * (10 + 40 * k);
+    while (this.chargeAcc >= 1) {
+      this.chargeAcc -= 1;
+      const f = R(0.3, 1);
+      const px = a.x + (b.x - a.x) * f, py = a.y + (b.y - a.y) * f, pz = a.z + (b.z - a.z) * f;
+      const ang = Math.random() * Math.PI * 2, r = R(0.35, 0.8);
+      const ox = Math.cos(ang) * r, oz = Math.sin(ang) * r, oy = R(-0.2, 0.5);
+      const life = R(0.22, 0.34);
+      fx.spawn({
+        x: px + ox, y: py + oy, z: pz + oz,
+        vx: -ox / life, vy: -oy / life, vz: -oz / life,
+        life, size: R(0.1, 0.16) * (0.8 + 0.5 * k), sizeEnd: 0.03,
+        glyph: "·'.+", color: COL.charge, colorEnd: COL.chargeEnd, alpha: 0.5 + 0.5 * k, alphaEnd: 0.1,
+      });
+    }
+  }
+
+  /** Full charge reached: a glint on the blade. */
+  chargeReady(x, y, z) {
+    const fx = this.add;
+    if (fx) {
+      fx.spawn({ x, y, z, life: 0.22, size: 1.0, sizeEnd: 0.2, glyph: '+', color: COL.ghostCore, colorEnd: COL.charge, alpha: 1, alphaEnd: 0, spin: 4 });
+      fx.spawn({ x, y, z, life: 0.16, size: 0.5, sizeEnd: 1.3, glyph: '°', color: COL.charge, colorEnd: COL.chargeEnd, alpha: 0.9, alphaEnd: 0 });
+    }
+    this._light({ x, y, z, color: [0.5, 0.75, 1.4], intensity: 2.2, radius: 4, life: 0.25, fade: 0.2 });
+  }
+
+  /** Crit window open: faint cold motes peeling off the blade. */
+  critTick(dt, a, b) {
+    const fx = this.add;
+    if (!fx) return;
+    this.critAcc += dt * 24;
+    while (this.critAcc >= 1) {
+      this.critAcc -= 1;
+      const f = R(0.2, 1);
+      fx.spawn({
+        x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f,
+        vx: R(-0.2, 0.2), vy: R(0.3, 0.8), vz: R(-0.2, 0.2),
+        life: R(0.25, 0.45), size: R(0.1, 0.15), sizeEnd: 0.03,
+        glyph: "·'", color: COL.crit, colorEnd: COL.critEnd, alpha: 0.9, alphaEnd: 0, drag: 1, flicker: 0.4,
+      });
+    }
+  }
+
+  /** Spray away from the attacker when the hero is hit. (nx, nz) = push direction. */
   hurt(x, y, z, nx, nz, big) {
     const fa = this.alpha, fx = this.add;
     const n = big ? 14 : 8;
@@ -194,5 +392,7 @@ export class PlayerFx {
   reset() {
     this.flameAcc = 0;
     this.healAcc = 0;
+    this.chargeAcc = 0;
+    this.critAcc = 0;
   }
 }

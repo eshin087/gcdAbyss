@@ -1,43 +1,65 @@
 import * as THREE from 'three';
-import { clamp } from '../../core/math.js';
+import { clamp, lerp } from '../../core/math.js';
 import { DIM } from './model.js';
 
-// Attack data + the blade sweep used for hit detection.
+// Attack data + the blade sweep used for hit detection. No stamina: pacing comes from windup /
+// recovery only (docs/COMBAT.md).
 //
 // Swing shapes (`anim`) are read by anim.js:
-//   kind 'h' — horizontal slash; a0/a1/a2 = blade azimuth in body space (0 = ahead, + = the
-//              knight's left) at coil / end of active frames / follow-through; elev = blade pitch.
-//   kind 'v' — vertical slash; a0/a1/a2 = blade elevation (π/2 = straight up, 0 = ahead).
-// The arc travels a0 → a1 during the active frames, so the blade crosses the front of the knight
+//   kind 'h'     — horizontal slash; a0/a1/a2 = blade azimuth in body space (0 = ahead, + = the
+//                  hero's left) at coil / end of active frames / follow-through; elev = blade pitch.
+//   kind 'v'     — vertical slash; a0/a1/a2 = blade elevation (π/2 = straight up, 0 = ahead).
+//   kind 'sweep' — the charged heavy: a rising horizontal arc from the drawn-back charge pose;
+//                  azimuth a0 → a1 → a2 while the elevation climbs elev0 → elev1.
+// The arc travels a0 → a1 during the active frames, so the blade crosses the front of the hero
 // exactly while it can hit.
 
 export const LIGHT = [
   {
-    kind: 'light', combo: 1, cost: 14, damage: 30, poise: 12,
+    kind: 'light', combo: 1, damage: 30, poise: 12,
     windup: 0.18, active: 0.12, recovery: 0.35, lunge: 0.45,
     hitstop: 0.055, shake: 0.12,
     anim: { kind: 'h', a0: -1.9, a1: 1.25, a2: 1.75, elev: -0.12 }, // right → left
   },
   {
-    kind: 'light', combo: 2, cost: 14, damage: 32, poise: 12,
+    kind: 'light', combo: 2, damage: 32, poise: 12,
     windup: 0.18, active: 0.12, recovery: 0.35, lunge: 0.45,
     hitstop: 0.055, shake: 0.12,
     anim: { kind: 'h', a0: 1.75, a1: -1.3, a2: -1.85, elev: -0.1 }, // left → right (backhand)
   },
   {
-    kind: 'light', combo: 3, cost: 18, damage: 46, poise: 12,
+    kind: 'light', combo: 3, damage: 46, poise: 12,
     windup: 0.18, active: 0.12, recovery: 0.35, lunge: 0.6,
     hitstop: 0.055, shake: 0.12,
     anim: { kind: 'v', a0: 2.0, a1: -0.8, a2: -0.95 }, // overhead vertical
   },
 ];
 
+/** Charged heavy (hold LMB, release). The charge itself is the windup, so the release is quick. */
 export const HEAVY = {
-  kind: 'heavy', combo: 1, cost: 32, damage: 80, poise: 40,
-  windup: 0.5, active: 0.14, recovery: 0.55, lunge: 0.75,
-  hitstop: 0.095, shake: 0.25,
-  anim: { kind: 'v', a0: 2.5, a1: -0.75, a2: -0.85, heavy: true }, // lean back, overhead slam
+  kind: 'heavy', combo: 1,
+  damage: [70, 110], poise: [30, 50], // lerped by charge (see heavyStats)
+  windup: 0.1, active: 0.16, recovery: 0.5, lunge: 1.3,
+  hitstop: 0.1, shake: 0.28,
+  anim: { kind: 'sweep', a0: -2.35, a1: 1.45, a2: 1.95, elev0: -0.5, elev1: 0.32 },
 };
+
+export const CHARGE = {
+  hold: 0.3, // s LMB must be held before a press becomes a charge (shorter = light attack on release)
+  full: 1.2, // s of hold for full damage
+  maxHold: 2.6, // auto-release (also guards against a lost mouseup)
+  move: 0.5, // movement multiplier while charging
+};
+
+/** Charge fraction 0..1 and the heavy's damage / poise for a hold of `holdT` seconds. */
+export function heavyStats(holdT) {
+  const k = clamp((Number.isFinite(holdT) ? holdT - CHARGE.hold : 0) / (CHARGE.full - CHARGE.hold), 0, 1);
+  return {
+    k,
+    damage: lerp(HEAVY.damage[0], HEAVY.damage[1], k),
+    poise: lerp(HEAVY.poise[0], HEAVY.poise[1], k),
+  };
+}
 
 const BLADE_R = 0.22; // forgiving blade half-width added to sphere radii (giant target, top-down camera)
 
@@ -78,6 +100,11 @@ export class SwordSweep {
     if (!this.valid) return;
     this.pa.copy(this.a);
     this.pb.copy(this.b);
+  }
+
+  /** Point `f` (0 hilt … 1 tip) along the current blade. */
+  point(f, out) {
+    return out.lerpVectors(this.a, this.b, f);
   }
 
   /**

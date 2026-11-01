@@ -15,6 +15,7 @@ import { Dragon } from './entities/dragon/dragon.js';
 import { Hud } from './ui/hud.js';
 import { AudioEngine } from './audio/audio.js';
 import { GameFlow } from './game/flow.js';
+import { Lab } from './dev/lab.js';
 
 // Boot + main loop. Builds the shared `game` context every module receives (see ARCHITECTURE.md).
 
@@ -54,6 +55,7 @@ async function boot() {
     time: 0,
     realTime: 0,
     timeScale: 1,
+    debugTimeScale: 1, // Lab-only multiplier on game time
     hitstopTimer: 0,
     hitstopScale: 1,
     mouseGround: new THREE.Vector3(),
@@ -77,10 +79,10 @@ async function boot() {
   game.dragon = new Dragon(game);
   game.hud = new Hud(game);
   game.flow = new GameFlow(game);
+  game.lab = new Lab(game);
 
   const applyQuality = () => {
     const q = CONFIG.quality[game.settings.quality];
-    game.world.setGrassQuality(q.grass);
     pipeline.setSize(innerWidth, innerHeight, Math.min(q.dpr, devicePixelRatio || 1, CONFIG.render.maxPixelRatio));
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -186,7 +188,7 @@ async function boot() {
       scale *= game.hitstopScale;
       if (game.hitstopTimer <= 0) game.hitstopScale = 1;
     }
-    const dt = realDt * scale;
+    const dt = realDt * scale * (game.debugTimeScale ?? 1);
     game.realTime += realDt;
     game.time += dt;
     game.dt = dt;
@@ -195,9 +197,11 @@ async function boot() {
     if (game.input.wheel) game.cameraRig.zoom(game.input.wheel);
     updateMouseGround();
 
+    safe('lab', () => game.lab.update(realDt));
     safe('flow', () => game.flow.update(dt, realDt));
     safe('player', () => game.player.update(dt));
     safe('dragon', () => game.dragon.update(dt));
+    safe('lab', () => game.lab.postUpdate?.()); // hitbox overlay matches this frame
     safe('camera', () => updateCameraFocus(realDt));
     updateSharedUniforms();
     safe('world', () => game.world.update(dt));

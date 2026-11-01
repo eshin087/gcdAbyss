@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { damp, lerp, clamp, TAU } from '../../../core/math.js';
-import { ANATOMY as A } from '../tuning.js';
+import { ANATOMY as A, SCALE as S } from '../tuning.js';
 import { Chain, aimJoint, constrainDir } from './chain.js';
 import { solveTwoBone } from './ik.js';
 import { Gait } from './gait.js';
@@ -9,6 +9,8 @@ import { Gait } from './gait.js';
 // solves: body (hips/chest) -> neck (FABRIK toward a head goal, head aims at a look goal) ->
 // tail (springs, follow-the-leader) -> legs + wing arms (2-bone IK on planted contacts) ->
 // wing fingers (fold/spread/flap) -> membranes.
+// Units: joint transforms below the root are MODEL units (the root carries scale = SCALE); every
+// world-space quantity (IK bone lengths, chain lengths, contact homes, clearances) is x S.
 
 const V = () => new THREE.Vector3();
 const nrm = (a) => {
@@ -107,10 +109,10 @@ export class Rig {
   constructor(model, dragon) {
     this.m = model;
     this.d = dragon;
-    this.neck = new Chain(model.neck, A.neckLen, { minY: 0.5, maxBend: 0.55, baseBend: 1.1 });
-    const tailMin = [0, ...model.tailRadii.map((r) => r * 0.8 + 0.05)];
-    this.tail = new Chain(model.tail, A.tailLen, { minY: tailMin, maxBend: 0.42, baseBend: 0.8 });
-    this.gait = new Gait((limb) => dragon.onStep?.(limb));
+    this.neck = new Chain(model.neck, A.neckLen * S, { minY: 0.5 * S, maxBend: 0.55, baseBend: 1.1 });
+    const tailMin = [0, ...model.tailRadii.map((r) => (r * 0.8 + 0.05) * S)];
+    this.tail = new Chain(model.tail, A.tailLen * S, { minY: tailMin, maxBend: 0.42, baseBend: 0.8 });
+    this.gait = new Gait((limb) => dragon.onStep?.(limb), S);
     this.s = {
       pitch: 0, roll: 0, lower: 0, twist: 0, alt: 0, airborne: 0, sleep: 0, dead: 0, stagger: 0,
       jaw: 0, spread: [0, 0], ovW: [0, 0], flapAmp: 0, flapPhase: 0, eyes: 0, tailCurl: 0, tailWave: 0.07,
@@ -224,7 +226,7 @@ export class Rig {
     for (let k = 0; k < 2; k++) hindLift = Math.max(hindLift, this.gait.limbs[k].lift);
     const lower = Math.min(1.35, s.lower + s.sleep * 1.22 + s.dead * 1.32 * (1 - s.sleep));
     const bob = -0.07 * hindLift * (1 - s.airborne) + br * 0.03;
-    m.hips.position.set(0, A.hipY - lower + bob + s.alt, A.hipZ);
+    m.hips.position.set(0, A.hipY - lower + bob + s.alt / S, A.hipZ);
     m.hips.rotation.set(s.pitch, s.twist * 0.3, s.roll + s.dead * 0.18);
     m.chest.rotation.set(-br * 0.02 + s.stagger * 0.1, s.twist * 0.7, 0);
     m.root.updateMatrixWorld(true);
@@ -256,9 +258,9 @@ export class Rig {
     this._wp(m.nostrils[1], pt.nostrils[1]);
     this._wp(m.head, pt.head);
     pt.headFwd.set(0, 0, 1).applyQuaternion(this._wq(m.head, this._q[0]));
-    pt.snout.copy(pt.head).addScaledVector(pt.headFwd, 1.05);
+    pt.snout.copy(pt.head).addScaledVector(pt.headFwd, 1.05 * S);
     const qJaw = this._wq(m.jaw, this._q[1]);
-    this._wp(m.jaw, pt.jawTip).addScaledVector(this._v[0].set(0, 0, 1).applyQuaternion(qJaw), 1.15);
+    this._wp(m.jaw, pt.jawTip).addScaledVector(this._v[0].set(0, 0, 1).applyQuaternion(qJaw), 1.15 * S);
 
     // membranes (local to the root)
     this._rootInv.copy(m.root.matrixWorld).invert();
@@ -300,7 +302,7 @@ export class Rig {
 
     // head goal: explicit target or the rest end, plus offsets; smoothed
     const goal = this._v[1].copy(pose.head ?? neck.rest[n]).add(pose.headOffset);
-    if (goal.y < 0.55) goal.y = 0.55;
+    if (goal.y < 0.55 * S) goal.y = 0.55 * S;
     if (!Number.isFinite(goal.x + goal.y + goal.z)) goal.copy(neck.rest[n]);
     if (snap) this.headPos.copy(goal);
     else this.headPos.lerp(goal, 1 - Math.exp(-pose.headRate * dt));
@@ -358,7 +360,7 @@ export class Rig {
     for (let k = 0; k < 2; k++) {
       const side = m.legs[k].side;
       const l = gait.limbs[k];
-      this._rootToWorld(l.home, side * lerp(A.footHome[0], 1.55, lying), 0, lerp(A.footHome[2], -0.2, lying));
+      this._rootToWorld(l.home, side * lerp(A.footHome[0], 1.55, lying) * S, 0, lerp(A.footHome[2], -0.2, lying) * S);
       l.home.addScaledVector(pose.vel, lead);
       l.home.y = 0;
       l.free = s.airborne > 0.3;
@@ -366,9 +368,9 @@ export class Rig {
     for (let k = 0; k < 2; k++) {
       const side = m.wings[k].side;
       const l = gait.limbs[2 + k];
-      this._rootToWorld(l.home, side * lerp(A.wristHome[0], 2.35, lying), lerp(A.wristHome[1], 0.25, lying), lerp(A.wristHome[2], 1.7, lying));
+      this._rootToWorld(l.home, side * lerp(A.wristHome[0], 2.35, lying) * S, lerp(A.wristHome[1], 0.25, lying) * S, lerp(A.wristHome[2], 1.7, lying) * S);
       l.home.addScaledVector(pose.vel, lead);
-      l.home.y = lerp(A.wristHome[1], 0.25, lying);
+      l.home.y = lerp(A.wristHome[1], 0.25, lying) * S;
       l.free = s.spread[k] > 0.35 || s.ovW[k] > 0.35 || s.airborne > 0.3;
     }
     if (snap) gait.snap();
@@ -376,7 +378,7 @@ export class Rig {
 
     // --- hind legs
     const qa = this._q[3], qb = this._q[4], qc = this._q[5], qd = this._q[6];
-    const ankleOff = v[4].set(0, lerp(0.62, 0.22, lying), lerp(-0.42, -0.72, lying));
+    const ankleOff = v[4].set(0, lerp(0.62, 0.22, lying) * S, lerp(-0.42, -0.72, lying) * S);
     for (let k = 0; k < 2; k++) {
       const leg = m.legs[k], side = leg.side, out = pt.legs[k];
       const limb = gait.limbs[k];
@@ -392,14 +394,14 @@ export class Rig {
       ankleT.z += ankleOff.z * fwdFlat.z;
       ankleT.y += ankleOff.y;
       const pole = v[8].copy(fwd).addScaledVector(left, side * 0.35).addScaledVector(up, 0.15);
-      solveTwoBone(out.hip, ankleT, A.thigh, A.shin, pole, out.knee, out.ankle);
+      solveTwoBone(out.hip, ankleT, A.thigh * S, A.shin * S, pole, out.knee, out.ankle);
       this._wq(leg.hip, qa);
       aimJoint(leg.thigh, v[9].subVectors(out.knee, out.hip), qa, qb);
       aimJoint(leg.shin, v[9].subVectors(out.ankle, out.knee), qb, qc);
       const md = v[9].subVectors(toeT, out.ankle);
       if (md.lengthSq() < 1e-6) md.set(0, -1, 0);
       md.normalize();
-      out.toe.copy(out.ankle).addScaledVector(md, A.meta);
+      out.toe.copy(out.ankle).addScaledVector(md, A.meta * S);
       aimJoint(leg.meta, md, qc, qd);
       const toeDir = v[10].copy(fwdFlat).addScaledVector(up, -0.15 - s.airborne * 0.8).normalize();
       aimJoint(leg.toe, toeDir, qd, qa);
@@ -422,11 +424,11 @@ export class Rig {
       const spreadW = v[5].set(shx + rx, shy + ry, 2.4).applyMatrix4(m.hips.matrixWorld);
       const wristT = v[6].copy(limb.pos).lerp(spreadW, spread);
       if (s.ovW[k] > 0.001) wristT.lerp(pose.wingOv[k].pos, s.ovW[k]);
-      if (wristT.y < 0.3) wristT.y = 0.3;
+      if (wristT.y < 0.3 * S) wristT.y = 0.3 * S;
       const poleFold = v[7].copy(left).multiplyScalar(side * 0.6).addScaledVector(up, 0.75).addScaledVector(fwd, -0.35);
       const poleSpread = v[8].copy(up).multiplyScalar(0.35).addScaledVector(fwd, -1.0);
       const pole = poleFold.lerp(poleSpread, Math.max(spread, s.ovW[k] * 0.6));
-      solveTwoBone(out.shoulder, wristT, A.humerus, A.forearm, pole, out.elbow, out.wrist);
+      solveTwoBone(out.shoulder, wristT, A.humerus * S, A.forearm * S, pole, out.elbow, out.wrist);
       this._wq(w.shoulder, qa);
       aimJoint(w.humerus, v[9].subVectors(out.elbow, out.shoulder), qa, qb);
       aimJoint(w.forearm, v[9].subVectors(out.wrist, out.elbow), qb, qc);
@@ -444,15 +446,15 @@ export class Rig {
         dx = tx;
         const dirW = v[10].set(dx, dy, dz).normalize().applyQuaternion(qHips);
         // keep finger tips above the ground (rolled / collapsed body)
-        const len = A.fingers[f];
-        const minDy = (0.15 - out.wrist.y) / len;
+        const len = A.fingers[f] * S;
+        const minDy = (0.15 * S - out.wrist.y) / len;
         if (dirW.y < minDy) {
           dirW.y = Math.min(minDy, 0.95);
           dirW.normalize();
         }
         aimJoint(w.fingers[f], dirW, qc, qd);
-        out.tips[f].copy(out.wrist).addScaledVector(dirW, A.fingers[f]);
-        out.mids[f].copy(out.wrist).addScaledVector(dirW, A.fingers[f] * 0.5);
+        out.tips[f].copy(out.wrist).addScaledVector(dirW, len);
+        out.mids[f].copy(out.wrist).addScaledVector(dirW, len * 0.5);
       }
       const thumbDir = v[11].copy(fwdFlat).multiplyScalar(0.7).addScaledVector(up, -0.7).addScaledVector(left, side * 0.15);
       aimJoint(w.thumb, thumbDir, qc, qd);

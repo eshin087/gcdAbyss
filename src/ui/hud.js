@@ -1,18 +1,25 @@
-import { DelayedBar } from './bars.js';
+import { DEFENSE, POSTURE } from '../combat/rules.js';
+import { DelayedBar, PostureBar } from './bars.js';
 import { Banner } from './banner.js';
+import { Callouts } from './callouts.js';
 import { el, fillKeyText, flashClass, num, safeDt } from './dom.js';
 import { CombatFeed } from './feed.js';
 import { injectHudStyle } from './hudStyle.js';
 import { LogPanel } from './logPanel.js';
 import { Minimap } from './minimap.js';
 import { NameTags } from './nameTags.js';
+import { ScreenProjector } from './project.js';
 import { HelpPanel, PauseMenu, StatsPanel, TitleScreen } from './screens.js';
+import { TellMarks } from './tells.js';
 
-// HUD: Ansenjeo-style MMO overlay (player frame, minimap, tabbed log, name tags) plus souls-style
-// boss bar, banners, title and pause screens. Pure DOM under #ui; update(realDt) only writes to the
-// DOM when a shown value changes. Screen-grade uniforms are driven by GameFlow (src/game/grade.js).
+// HUD: Ansenjeo-style MMO overlay (player frame, minimap, tabbed log, name tags) plus the boss bar
+// (HP + posture), combat tells (◆ PARRY / ! DODGE marks + red edge pulse), call-outs (PARRY,
+// GHOSTEP, GUARD BROKEN, damage numbers), banners, title and pause screens. Pure DOM under #ui;
+// update(realDt) only writes to the DOM when a shown value changes. Screen-grade uniforms are
+// driven by GameFlow (src/game/grade.js).
 
 const DMG_FADE = 1.6; // seconds after the last hit before the boss damage counter fades
+const GHOST_DEDUPE = 0.4; // s: 'player:perfectDodge' + 'player:ghostep' for the same blink
 
 export class Hud {
   constructor(game) {
@@ -22,7 +29,9 @@ export class Hud {
     this.root = el('div', 'ab-root', null, host);
     this.root.dataset.state = game.state || 'title';
     this._warned = 0;
+    this.proj = new ScreenProjector(game);
 
+    this.tells = new TellMarks(game, this.root, this.proj);
     this._buildPlayerFrame();
     this.map = new Minimap(game, this.root);
     this.logPanel = new LogPanel(game, this.root);
@@ -30,6 +39,7 @@ export class Hud {
     this.promptEl = el('div', 'ab-prompt ab-panel', null, this.root);
     this._prompt = null;
     this.tags = new NameTags(game, this.root);
+    this.calls = new Callouts(game, this.root, this.proj);
     this.bannerUi = new Banner(this.root);
     this.statsUi = new StatsPanel(this.root);
     this.help = new HelpPanel(this.root);
@@ -38,21 +48,46 @@ export class Hud {
     this.titleUi = new TitleScreen(this.root, (game.state || 'title') === 'title');
     this.pauseUi = new PauseMenu(game, this.root);
     this.feed = new CombatFeed(game, this);
+    this._ghostAt = -10;
 
     const ev = game.events;
-    ev?.on('state', (e) => {
-      this.root.dataset.state = e?.to ?? game.state ?? '';
+    const on = (name, fn) => ev?.on(name, (d) => fn(d && typeof d === 'object' ? d : {}));
+    on('state', (e) => {
+      this.root.dataset.state = e.to ?? game.state ?? '';
+      if (e.to === 'title' || e.to === 'dead' || (e.to === 'explore' && e.from !== 'paused')) this.calls.clear();
     });
-    ev?.on('dragon:phase2', () => {
+    on('game:retry', () => this.calls.clear());
+    on('dragon:phase2', () => {
       if (this.bossOn) this.bossEl.classList.add('p2');
     });
-    ev?.on('player:noStamina', () => flashClass(this.stBar.root));
-    ev?.on('player:noFlask', () => flashClass(this.pipsEl));
+    on('player:noFlask', () => flashClass(this.pipsEl));
+
+    // posture
+    on('dragon:posture', (d) => {
+      const max = num(d.max, 0);
+      if (max > 0) this.postBar.set(num(d.posture, 0) / max);
+    });
+    on('dragon:postureBreak', () => {
+      this.brokenT = POSTURE.breakTime;
+      flashClass(this.postBar.root, 'break');
+      this.calls.banner('POSTURE BROKEN', `critical hits ×${POSTURE.breakCritMult}`);
+    });
+
+    // call-outs + damage numbers
+    on('player:parry', (d) => this.calls.call(d.tell === 'blue' ? 'deflect' : 'parry'));
+    on('player:block', () => this.calls.call('block'));
+    on('player:guardBreak', () => this.calls.call('gbreak'));
+    on('player:perfectDodge', () => this._ghostep());
+    on('player:ghostep', () => this._ghostep());
+    on('player:hitDragon', (d) => this.calls.number(d.damage, d.point, { crit: !!d.crit, heavy: !!d.heavy }));
 
     this._steps = [
       (dt) => this._updatePlayer(dt),
       (dt) => this._updateBoss(dt),
       (dt) => this.tags.update(dt),
+      (dt) => this.tells.update(dt),
+      () => this.tags.setFoeDim(this.tells.active),
+      (dt) => this.calls.update(dt),
       (dt) => this.map.update(dt),
       (dt) => this.bannerUi.update(dt),
       (dt) => this.titleUi.update(dt),
@@ -65,19 +100,20 @@ export class Hud {
   _buildPlayerFrame() {
     const pf = el('div', 'ab-pf ab-panel ab-play', null, this.root);
     const head = el('div', 'ab-pf-head', null, pf);
-    el('span', 'ab-pf-name', 'WANDERER', head);
+    this.nameEl = el('span', 'ab-pf-name', String(this.game.player?.name || 'Wanderer').toUpperCase(), head);
     el('span', 'ab-pf-lv', 'Lv 12', head);
-    el('div', 'ab-pf-sub', 'Unkindled  ·  Ashen Knight', pf);
+    el('div', 'ab-pf-sub', 'Swordsman  ·  Black Coat', pf);
 
     const hpRow = el('div', 'ab-row', null, pf);
     el('span', 'lbl', 'HP', hpRow);
     this.hpBar = new DelayedBar(hpRow, 'hp', { hold: 0.6, drain: 2.4, rise: 6 });
     this.hpVal = el('span', 'val', '', hpRow);
 
-    const stRow = el('div', 'ab-row', null, pf);
-    el('span', 'lbl', 'ST', stRow);
-    this.stBar = new DelayedBar(stRow, 'st', { hold: 0.35, drain: 3, rise: 14, chunk: false });
-    this.stVal = el('span', 'val dim', '', stRow);
+    // crit window cue (after a Ghostep): glowing cyan label + a bar that shrinks to zero
+    this.critRow = el('div', 'ab-row ab-crit', null, pf);
+    el('span', 'clbl', `CRIT ×${DEFENSE.ghostep.critMult}`, this.critRow);
+    const cb = el('div', 'ab-bar crit', null, this.critRow);
+    this.critFill = el('div', 'fill', null, cb);
 
     const foot = el('div', 'ab-pf-foot', null, pf);
     const fl = el('span', '', null, foot);
@@ -88,10 +124,13 @@ export class Hud {
     this.lockEl = el('span', 'ab-lock', '◎ LOCKED ON', foot);
 
     this._hp = null;
-    this._st = null;
     this._fl = null;
     this._lock = null;
     this._low = null;
+    this._name = null;
+    this._critOn = false;
+    this._critW = -1;
+    this.critMax = DEFENSE.ghostep.critWindow;
   }
 
   _buildBossBar() {
@@ -100,10 +139,15 @@ export class Hud {
     this.bossName = el('span', 'ab-boss-name', '', head);
     this.bossDmg = el('span', 'ab-boss-dmg', '', head);
     this.bossBar = new DelayedBar(this.bossEl, 'boss', { hold: 0.6, drain: 1.8, rise: 2.2 });
+    const post = el('div', 'ab-boss-post', null, this.bossEl);
+    this.postBar = new PostureBar(post);
+    this.brokenEl = el('span', 'ab-broken', 'BROKEN', post);
     this.bossOn = false;
     this.bossHpLast = 0;
     this.dmgAcc = 0;
     this.dmgT = 0;
+    this.brokenT = 0;
+    this._broken = false;
     this._dmgShown = false;
     this._p2 = false;
   }
@@ -125,6 +169,9 @@ export class Hud {
     // fill in from empty, souls-style
     this.bossBar.snap(0);
     this.bossBar.set(hp / max);
+    const pmax = num(d?.maxPosture, 0);
+    this.postBar.snap(pmax > 0 ? num(d?.posture, 0) / pmax : 0);
+    this.brokenT = 0;
     this.bossHpLast = hp;
     this.dmgAcc = 0;
     this.dmgT = 0;
@@ -139,6 +186,7 @@ export class Hud {
     this.bossOn = false;
     this.bossEl.classList.remove('on');
     this._setDmgShown(false);
+    this.brokenT = 0;
   }
 
   banner(text, kind = 'area', opts = {}) {
@@ -196,9 +244,22 @@ export class Hud {
     }
   }
 
+  _ghostep() {
+    const now = num(this.game.realTime);
+    if (now - this._ghostAt < GHOST_DEDUPE) return;
+    this._ghostAt = now;
+    this.calls.call('ghostep');
+    this.tells.ghost(0.6);
+  }
+
   _updatePlayer(dt) {
     const p = this.game.player;
     if (p) {
+      const name = String(p.name || 'Wanderer');
+      if (name !== this._name) {
+        this._name = name;
+        this.nameEl.textContent = name.toUpperCase();
+      }
       const maxHp = Math.max(1, num(p.maxHp, 1));
       const hp = Math.max(0, num(p.hp, maxHp));
       this.hpBar.set(hp / maxHp);
@@ -211,15 +272,6 @@ export class Hud {
       if (low !== this._low) {
         this._low = low;
         this.hpBar.root.classList.toggle('low', low);
-      }
-
-      const maxSt = Math.max(1, num(p.maxStamina, 1));
-      const st = Math.max(0, num(p.stamina, maxSt));
-      this.stBar.set(st / maxSt);
-      const stKey = Math.round(st);
-      if (stKey !== this._st) {
-        this._st = stKey;
-        this.stVal.textContent = String(stKey);
       }
 
       const maxF = Math.max(0, Math.min(9, Math.round(num(p.maxFlasks, 0))));
@@ -236,39 +288,64 @@ export class Hud {
         this._lock = lock;
         this.lockEl.classList.toggle('on', lock);
       }
+
+      // crit window: the bar shrinks from the window length (or the longest seen) to zero
+      const ct = Math.max(0, num(p.critTimer, 0));
+      const critOn = ct > 0 && p.alive !== false;
+      if (critOn !== this._critOn) {
+        this._critOn = critOn;
+        this.critRow.classList.toggle('on', critOn);
+        if (critOn) this.critMax = DEFENSE.ghostep.critWindow;
+      }
+      if (critOn) {
+        this.critMax = Math.max(this.critMax, ct);
+        const w = Math.min(1, ct / Math.max(0.05, this.critMax));
+        if (Math.abs(w - this._critW) > 0.004) {
+          this._critW = w;
+          this.critFill.style.transform = `scaleX(${w.toFixed(3)})`;
+        }
+      }
     }
     this.hpBar.update(dt);
-    this.stBar.update(dt);
   }
 
   _updateBoss(dt) {
-    if (this.bossOn) {
-      const d = this.game.dragon;
-      if (d) {
-        const max = Math.max(1, num(d.maxHp, 1));
-        const hp = Math.max(0, num(d.hp, max));
-        // the damage counter sums consecutive HP losses (authoritative, independent of events)
-        if (hp < this.bossHpLast - 0.01) {
-          if (this.dmgT <= 0) this.dmgAcc = 0;
-          this.dmgAcc += this.bossHpLast - hp;
-          this.dmgT = DMG_FADE;
-          this.bossDmg.textContent = String(Math.round(this.dmgAcc));
-          this._setDmgShown(true);
-        }
-        this.bossHpLast = hp;
-        this.bossBar.set(hp / max);
-        const p2 = d.phase === 2;
-        if (p2 !== this._p2) {
-          this._p2 = p2;
-          this.bossEl.classList.toggle('p2', p2);
-        }
+    const d = this.game.dragon;
+    if (this.bossOn && d) {
+      const max = Math.max(1, num(d.maxHp, 1));
+      const hp = Math.max(0, num(d.hp, max));
+      // the damage counter sums consecutive HP losses (authoritative, independent of events)
+      if (hp < this.bossHpLast - 0.01) {
+        if (this.dmgT <= 0) this.dmgAcc = 0;
+        this.dmgAcc += this.bossHpLast - hp;
+        this.dmgT = DMG_FADE;
+        this.bossDmg.textContent = String(Math.round(this.dmgAcc));
+        this._setDmgShown(true);
+      }
+      this.bossHpLast = hp;
+      this.bossBar.set(hp / max);
+      // posture is polled too (authoritative); 'dragon:posture' only makes rises instant
+      const pmax = num(d.maxPosture, 0);
+      if (pmax > 0 && Number.isFinite(d.posture)) this.postBar.set(d.posture / pmax);
+      const p2 = d.phase === 2;
+      if (p2 !== this._p2) {
+        this._p2 = p2;
+        this.bossEl.classList.toggle('p2', p2);
       }
     }
     if (this.dmgT > 0) {
       this.dmgT -= dt;
       if (this.dmgT <= 0) this._setDmgShown(false);
     }
+    // BROKEN while the dragon says so; the event timer covers a dragon without the flag
+    if (this.brokenT > 0) this.brokenT -= dt;
+    const broken = this.bossOn && (typeof d?.broken === 'boolean' ? d.broken || this.brokenT > POSTURE.breakTime - 0.3 : this.brokenT > 0);
+    if (broken !== this._broken) {
+      this._broken = broken;
+      this.bossEl.classList.toggle('broken', broken);
+    }
     this.bossBar.update(dt);
+    this.postBar.update(dt);
   }
 
   _setDmgShown(on) {

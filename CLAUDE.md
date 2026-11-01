@@ -50,8 +50,16 @@ In Claude Code the preview config is `.claude/launch.json` (`abyss-dev`).
   4. updating `docs/ROADMAP.md` checkboxes.
 - **Commits**: small, imperative subject (`combat: add parry window`), body explains why. Area
   prefixes: `render`, `world`, `player`, `dragon`, `combat`, `ui`, `flow`, `audio`, `lab`, `docs`,
-  `build`, `test`. `main` must always build and pass `npm test` (CI enforces it) because Vercel
-  deploys every push to `main`. Use feature branches + PRs for multi-session work.
+  `build`, `test`.
+- **Every change goes through a PR — `main` is protected** (no direct pushes, even for admins;
+  required check `test-and-build` = `npm test` + `npm run build` on an up-to-date branch; linear
+  history, squash/rebase merge, branches auto-delete). Flow: branch → push → `gh pr create` → CI +
+  Vercel preview deployment on the PR → squash-merge → Vercel deploys `main` to production
+  (gcdabyss.vercel.app). Never bypass the protection.
+- **Deployment hygiene (Vercel storage):** the project keeps deployments 30 days (preview,
+  production, canceled, errored). `vercel.json` `ignoreCommand` skips deployments for commits that
+  only touch docs / *.md / tests / .github / .claude — keep doc-only work in its own commits.
+  Don't create manual CLI deployments (`vercel deploy`); let the Git integration deploy.
 - **Releases**: bump `version` in `package.json`, move `[Unreleased]` to a version heading in the
   changelog, tag `vX.Y.Z`.
 

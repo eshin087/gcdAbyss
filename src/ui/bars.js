@@ -66,3 +66,52 @@ export class DelayedBar {
     }
   }
 }
+
+/**
+ * Enemy posture: a thin gold bar that grows from its centre outward (it fills toward a break).
+ * Rises snap in with a brief brighten ('hit' class); recovery drains smoothly. `hot` near full.
+ */
+export class PostureBar {
+  constructor(parent) {
+    this.root = el('div', 'ab-bar post', null, parent);
+    this.fillEl = el('div', 'fill', null, this.root);
+    this.target = 0;
+    this.fill = 0;
+    this.hitT = 0;
+    this._w = -1;
+    this._hot = null;
+    this._hit = null;
+  }
+
+  /** New value 0..1. */
+  set(v) {
+    v = Math.min(1, Math.max(0, num(v, 0)));
+    if (v > this.target + 0.003) this.hitT = 0.14;
+    this.target = v;
+  }
+
+  snap(v) {
+    this.target = this.fill = Math.min(1, Math.max(0, num(v, 0)));
+    this.hitT = 0;
+  }
+
+  update(dt) {
+    if (this.fill < this.target) this.fill = Math.min(this.target, damp(this.fill, this.target, 22, dt) + 0.002);
+    else if (this.fill > this.target) this.fill = Math.max(this.target, damp(this.fill, this.target, 5, dt) - 0.0005);
+    if (this.hitT > 0) this.hitT -= dt;
+    if (Math.abs(this.fill - this._w) > 0.0005) {
+      this._w = this.fill;
+      this.fillEl.style.transform = `scaleX(${this.fill.toFixed(4)})`;
+    }
+    const hot = this.fill > 0.75;
+    if (hot !== this._hot) {
+      this._hot = hot;
+      this.root.classList.toggle('hot', hot);
+    }
+    const hit = this.hitT > 0;
+    if (hit !== this._hit) {
+      this._hit = hit;
+      this.root.classList.toggle('hit', hit);
+    }
+  }
+}

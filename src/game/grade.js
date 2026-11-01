@@ -3,6 +3,8 @@ import { clamp, damp } from '../core/math.js';
 // Screen feedback through the final pass uniforms (pipeline.finalMat): uHurt (red edge pulse),
 // uFade (black), uDesat (death grey-out), uWarm (boss-fight grade). Owned by GameFlow and updated
 // with real time so it keeps animating while the game is paused or in hit-stop.
+// Ghostep slow-mo adds a short cool pulse: a little desaturation with the warm grade pulled out;
+// it only ever adds on top of the other targets and releases back to them on its own.
 
 const approach = (v, target, step) => (v < target ? Math.min(target, v + step) : Math.max(target, v - step));
 const finite = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -23,6 +25,8 @@ export class ScreenGrade {
     this.dipAmt = 0;
     this.dipT = 0;
     this.dipDur = 1;
+    this.ghost = 0; // Ghostep cool pulse 0..1 (envelope below)
+    this.ghostHold = 0;
     this.t = 0;
   }
 
@@ -55,11 +59,19 @@ export class ScreenGrade {
     this.dipT = this.dipDur;
   }
 
+  /** Ghostep slow-mo: quick cool/desaturated swell held for `hold` seconds, then released. */
+  ghostPulse(hold = 0.6) {
+    this.ghostHold = Math.max(this.ghostHold, clamp(finite(hold, 0.6), 0.05, 3));
+    if (this.ghost < 0.01) this.ghost = 0.01;
+  }
+
   /** Instantly drop all effects (used while the screen is fully black). */
   resetInstant() {
     this.hurt = 0;
     this.warm = 0;
     this.dipT = 0;
+    this.ghost = 0;
+    this.ghostHold = 0;
   }
 
   update(dt) {
@@ -70,6 +82,12 @@ export class ScreenGrade {
     this.desat = approach(this.desat, this.desatTarget, this.desatSpeed * dt);
     this.warm = damp(this.warm, this.warmTarget, 1.4, dt);
     if (this.dipT > 0) this.dipT = Math.max(0, this.dipT - dt);
+    if (this.ghostHold > 0) {
+      this.ghostHold = Math.max(0, this.ghostHold - dt);
+      this.ghost = Math.min(1, this.ghost + dt / 0.08); // fast attack
+    } else if (this.ghost > 0) {
+      this.ghost = Math.max(0, this.ghost - dt / 0.4); // gentle release
+    }
     this._write();
   }
 
@@ -81,7 +99,8 @@ export class ScreenGrade {
     const dip = this.dipT > 0 ? this.dipAmt * Math.sin(Math.PI * (1 - this.dipT / this.dipDur)) : 0;
     if (u.uHurt) u.uHurt.value = clamp(Math.max(this.hurt, beat), 0, 1);
     if (u.uFade) u.uFade.value = clamp(Math.max(this.fade, dip), 0, 1);
-    if (u.uDesat) u.uDesat.value = clamp(this.desat, 0, 1);
-    if (u.uWarm) u.uWarm.value = clamp(this.warm, 0, 1);
+    const g = this.ghost * this.ghost * (3 - 2 * this.ghost);
+    if (u.uDesat) u.uDesat.value = clamp(Math.max(this.desat, g * 0.38), 0, 1);
+    if (u.uWarm) u.uWarm.value = clamp(this.warm * (1 - 0.85 * g), 0, 1);
   }
 }

@@ -79,19 +79,20 @@ export function button(parent, className, onClick) {
 export const CONTROLS = [
   ['WASD', 'move'],
   ['Mouse', 'aim'],
-  ['LMB', 'light attack (combo)'],
-  ['RMB', 'heavy attack'],
-  ['Space', 'roll'],
+  ['LMB', 'attack · hold to charge heavy'],
+  ['RMB', 'hold block · tap to parry'],
+  ['Space', 'dodge · perfect dodge = Ghostep'],
   ['Shift', 'sprint'],
   ['F', 'drink flask'],
   ['Tab / MMB', 'lock-on'],
   ['E', 'rest at bonfire'],
   ['Esc', 'pause'],
+  ['H', 'help'],
   ['M', 'mute'],
+  ['F1', 'lab (debug)'],
   ['F2', 'quality'],
   ['F3', 'fps'],
   ['Wheel', 'zoom'],
-  ['H', 'help'],
 ];
 
 export function controlsGrid(parent) {
@@ -105,4 +106,18 @@ export function controlsGrid(parent) {
     el('span', 'a', a, grid);
   }
   return grid;
+}
+
+/** One-line attack-tell legend: "◆ blue = parry   ! red = dodge" (+ optional white glint). */
+export function tellLegend(parent, { normal = false } = {}) {
+  const row = el('div', 'ab-legend', null, parent);
+  const item = (cls, glyph, text) => {
+    const s = el('span', `it ${cls}`, null, row);
+    el('b', '', glyph, s);
+    s.appendChild(document.createTextNode(` ${text}`));
+  };
+  if (normal) item('n', '+', 'white = any defence');
+  item('b', '◆', 'blue = parry');
+  item('r', '!', 'red = dodge');
+  return row;
 }
