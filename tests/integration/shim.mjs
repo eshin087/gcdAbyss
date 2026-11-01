@@ -56,8 +56,6 @@ globalThis.window = globalThis;
 globalThis.innerWidth = 1920;
 globalThis.innerHeight = 1080;
 globalThis.devicePixelRatio = 1;
-globalThis.addEventListener = (n, f) => (winListeners[n] ||= []).push(f);
-globalThis.removeEventListener = (n, f) => { const l = winListeners[n]; if (l) { const i = l.indexOf(f); if (i >= 0) l.splice(i, 1); } };
 globalThis.document = {
   documentElement: docEl, head, body, hidden: false,
   fonts: null,
@@ -67,7 +65,27 @@ globalThis.document = {
   addEventListener: (n, f) => (winListeners['doc:' + n] ||= []).push(f),
 };
 if (!globalThis.performance) globalThis.performance = { now: () => Date.now() };
-export const fireWin = (n, e = {}) => (winListeners[n] || []).slice().forEach((f) => f({ preventDefault() {}, ...e }));
+/** Dispatch a window event. Returns true when a capture listener stopped it (the game never sees it). */
+export const fireWin = (n, e = {}) => {
+  let stopped = false;
+  const ev = { preventDefault() {}, stopPropagation() { stopped = true; }, ...e };
+  // capture listeners (Lab key handler) run first and may stop the event, like the browser
+  for (const f of (winListeners['capture:' + n] || []).slice()) f(ev);
+  if (stopped) return true;
+  for (const f of (winListeners[n] || []).slice()) f(ev);
+  return false;
+};
+globalThis.addEventListener = (n, f, opts) => {
+  const capture = opts === true || !!opts?.capture;
+  (winListeners[(capture ? 'capture:' : '') + n] ||= []).push(f);
+};
+globalThis.removeEventListener = (n, f, opts) => {
+  const capture = opts === true || !!opts?.capture;
+  const l = winListeners[(capture ? 'capture:' : '') + n];
+  if (l) { const i = l.indexOf(f); if (i >= 0) l.splice(i, 1); }
+};
+/** Drop every window / document listener (each scenario builds a fresh game). */
+export const resetWindow = () => { for (const k of Object.keys(winListeners)) delete winListeners[k]; };
 
 // ---------------------------------------------------------------- WebAudio
 export const AUDIO = { ctx: null };
