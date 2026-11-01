@@ -1,86 +1,76 @@
 import * as THREE from 'three';
 import { createSurfaceGlyphMaterial } from '../../render/materials.js';
 import { limbGeometry, ellipsoidGeometry, hornGeometry } from '../../render/glyphGeometry.js';
-import { ANATOMY as A } from './tuning.js';
+import { ANATOMY as A, SCALE } from './tuning.js';
 import { WingMembrane } from './membrane.js';
 
 // Procedural wyvern: a hierarchy of Object3D joints carrying rigid glyph-skinned meshes.
 // Every bone joint points its local +Z down the bone; the next joint sits at (0, 0, length).
 // Root = ground point under the torso, facing +Z, model-left = +X (side sign s = +1).
+// All numbers here are MODEL units; the root is scaled by SCALE (tuning.js) into world metres.
 
 /** Set true to make tail chevrons point back toward the body instead of toward the tip. */
 export const TAIL_FLIP = false;
 
-const SCALE_BASE = {
-  base: [0.012, 0.01, 0.011],
+// v0.2: every part renders through the screen character grid (`ascii` sets, see ARCHITECTURE.md
+// "Render helpers"): the material writes the lit ink colour + the screen direction of aGUV +y and
+// the post pass draws glyphs that follow it. aGUV +y runs toward the head on the body / neck and
+// toward the tips on the tail, limbs, fingers, horns and claws, so chevrons point "forward".
+// Cell colour = lit ink (bone/ash) with ember-red inkAlt cells; uGlow lights hot cells (phase 2).
+const SCALE_INK = {
   ink: [0.42, 0.34, 0.3],
   inkAlt: [0.75, 0.16, 0.05],
   altChance: 0.25,
-  glyphs: '.v^A',
-  cell: [0.2, 0.24],
-  rowShift: 0.5,
   gain: 2.5,
-  lumScale: 1.5,
   rim: 0.35,
   emissive: [1.0, 0.28, 0.04],
 };
 
 export function createDragonMaterials(U) {
   const mats = {
-    scales: createSurfaceGlyphMaterial(U, { ...SCALE_BASE, seed: 11.3 }),
+    // back / flanks / tail / limbs: chevron scales along the body flow
+    scales: createSurfaceGlyphMaterial(U, { ascii: 'scales', ...SCALE_INK, seed: 11.3 }),
     // neck + head get their own instance so the throat can charge (uGlow) independently
-    neck: createSurfaceGlyphMaterial(U, { ...SCALE_BASE, cell: [0.18, 0.22], seed: 23.7 }),
+    neck: createSurfaceGlyphMaterial(U, { ascii: 'scales', ...SCALE_INK, seed: 23.7 }),
+    // belly: '= #' plate bands across the flow
     belly: createSurfaceGlyphMaterial(U, {
-      base: [0.03, 0.017, 0.009],
+      ascii: 'plates',
       ink: [0.5, 0.31, 0.12],
       inkAlt: [0.62, 0.36, 0.12],
       altChance: 0.15,
-      glyphs: '.-=#',
-      cell: [0.32, 0.2],
-      rowShift: 0,
       gain: 2.2,
-      lumScale: 1.6,
       rim: 0.2,
       emissive: [1.0, 0.32, 0.05],
       glowMask: 0.7,
       seed: 5.1,
     }),
+    // wing membranes: vein strokes running out along the finger bones
     membrane: createSurfaceGlyphMaterial(U, {
-      base: [0.018, 0.007, 0.006],
+      ascii: 'strands',
       ink: [0.36, 0.11, 0.06],
       inkAlt: [0.55, 0.15, 0.06],
       altChance: 0.15,
-      glyphs: '.:/|',
-      cell: [0.26, 0.32],
-      rowShift: 0.5,
       gain: 2.2,
-      lumScale: 1.6,
       rim: 0.25,
       emissive: [1.0, 0.25, 0.04],
       glowMask: 0.35,
       side: THREE.DoubleSide,
       seed: 41.9,
     }),
+    // horns, claws, spikes, fangs: strokes toward the tip
     bone: createSurfaceGlyphMaterial(U, {
-      base: [0.06, 0.05, 0.045],
+      ascii: 'strands',
       ink: [0.78, 0.72, 0.62],
-      glyphs: '.:|I',
-      cell: [0.12, 0.16],
-      rowShift: 0.5,
       gain: 2.4,
-      lumScale: 1.6,
       rim: 0.4,
       glowMask: 0,
       seed: 7.7,
     }),
+    // eyes: density ramp, self-lit through uInkGlow / uGlow while awake
     eye: createSurfaceGlyphMaterial(U, {
-      base: [0.03, 0.006, 0.002],
+      ascii: 'smooth',
       ink: [1.0, 0.36, 0.06],
-      glyphs: '%@#@',
-      cell: [0.08, 0.08],
-      rowShift: 0,
       gain: 1.0,
-      lumScale: 1.0,
       rim: 0,
       emissive: [3.0, 0.75, 0.12],
       glowMask: 1,
@@ -117,6 +107,7 @@ export function buildWyvern(U) {
   const mats = createDragonMaterials(U);
   const root = new THREE.Group();
   root.name = 'dragon';
+  root.scale.setScalar(SCALE); // model units -> world metres (see tuning.js SCALE)
 
   // --- hips / torso
   const hips = joint(root, 0, A.hipY, A.hipZ, 'hips');

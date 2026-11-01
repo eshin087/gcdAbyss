@@ -3,6 +3,7 @@ import * as THREE from 'three';
 // Foot planting for the four ground contacts (two hind feet, two wing wrists / knuckles).
 // Contacts stay planted until their home (root-relative rest spot + velocity lead) drifts
 // beyond a stride threshold, then step in diagonal pairs (trot): {footL, wingR} / {footR, wingL}.
+// `scale` = body size (tuning SCALE): stride thresholds and step heights grow with the body.
 
 const GROUPS = [
   [0, 3],
@@ -29,8 +30,9 @@ function makeLimb(name, side, hind) {
 }
 
 export class Gait {
-  constructor(onStep) {
+  constructor(onStep, scale = 1) {
     this.onStep = onStep;
+    this.scale = scale;
     this.limbs = [makeLimb('footL', 1, true), makeLimb('footR', -1, true), makeLimb('wingL', 1, false), makeLimb('wingR', -1, false)];
   }
 
@@ -47,7 +49,8 @@ export class Gait {
 
   update(dt, speed) {
     const limbs = this.limbs;
-    const threshold = 0.7 + Math.min(speed, 20) * 0.08;
+    const sc = this.scale;
+    const threshold = (0.7 + Math.min(speed, 20) * 0.08) * sc;
     const dur = Math.min(0.48, Math.max(0.2, 0.48 - speed * 0.022));
 
     // free contacts follow their home (re-plant there when they come back down)
@@ -81,11 +84,11 @@ export class Gait {
         const l = limbs[i];
         if (l.free || l.stepping) continue;
         const disp = Math.hypot(l.plant.x - l.home.x, l.plant.z - l.home.z);
-        if (disp < 0.15) continue;
+        if (disp < 0.15 * sc) continue;
         l.stepping = true;
         l.t = 0;
         l.dur = dur * (l.hind ? 1 : 0.9);
-        l.height = (l.hind ? 0.45 : 0.65) * Math.min(1.4, 0.8 + speed * 0.05);
+        l.height = (l.hind ? 0.45 : 0.65) * Math.min(1.4, 0.8 + speed * 0.05) * sc;
         l.from.copy(l.plant);
       }
     }
