@@ -5,6 +5,34 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-02 — Session 4b: the hero shows his details in game
+**Owner:** "everything is perfect but the main character isn't showing the details like it does in
+your preview pictures", with a screenshot (~13 rows of dense `MMBM` letters) and the reference again.
+"Do we need to make the character a little bigger?"
+
+**Measured:** the hero was ~9 visible rows at the 36 m camera (1038 px tall) and ~5 on a phone (20 m,
+390 px, 4x7 cells). The reference is ~90 rows. Tuned by the bonfire, his source was too bright (all
+dense letters); in the arena it was 40 % darker.
+
+**Done:**
+- **Bigger on screen, gameplay unchanged (ADR-017):** `HERO_SCALE` 1.2 + a camera lean (half the
+  camera pitch, feet planted), applied after the animator. `unlean()` for the sweep's hit test and
+  the dragon's aim; `leanPoint()` for the name tag; the run cycle slows by `HERO_SCALE`.
+- **Hero letter grid:** `createPixelArtAtlas` (3x5 pixel font, 4x6 px cells); the pass tests the
+  hero grid first. Browser fonts at 5–6 px filled whole cells (tried: solid blocks).
+- **Shading:** `U.uArtHeroKey` 1.15 (fixed key light), `U.uArtHeroEdge` 0.7 (darker toward the
+  silhouette, no moonlit outline on the hero), `uArtBlack.x` 0.04, `uArtLum.x` 3, `uArtMin.x` 0.14,
+  `uArtDither.x` 1.1, `uArtEdge.x` 0.004 (0.018 never fired at 36 m).
+- **Phones:** an upscaled canvas uses `image-rendering: pixelated`.
+- Result: ~25 rows at the desktop camera (front, back and running all read as the swordsman), ~15
+  on a phone; the Lab close-up keeps the reference look. `npm test` green.
+
+**Open issues / next:**
+- Real-phone check of the pixelated upscale (non-integer DPRs such as 2.625 give uneven strokes).
+- The lean follows the camera: cut-in cameras get half their pitch.
+
+---
+
 ## 2026-11-02 — Session 4: classic ASCII-art creatures
 **Owner:** "Make the character and dragon look more ASCII like. Right now it doesn't have the ASCII
 art style." They attached two reference images (a dragon and a hooded figure as coloured

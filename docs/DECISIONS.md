@@ -189,3 +189,23 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Consequences:**
   - Gameplay and tests are shared between desktop and touch (a `touch` test scenario).
   - Real-device checks are still needed for native multi-touch, iOS gestures and frame rate.
+
+## ADR-017 — The hero is drawn bigger and leaned toward the camera; gameplay keeps the upright body (2026-11-02)
+- **Context:** the owner saw the hero in game as ~9 rows of dense letters, "not showing the details"
+  of the close-ups, and asked whether he should be bigger. From the 58° camera a standing figure
+  shows mostly its top and spans about half its height; at 36 m that is ~5 % of the screen.
+- **Decision:**
+  - The hero's root draws him `HERO_SCALE` 1.2x and sheared away from the camera by half its pitch
+    (29°, feet planted), so he faces the view. The animator poses the plain body first
+    (`lean.on = false`); the drawn transform is applied after it.
+  - Gameplay stays on the upright 1.85 m body: the sword's hit test unleans its points, the
+    dragon aims at the unleaned chest, the hurt cylinder is unchanged. FX follow the drawn body.
+  - The hero gets a finer pixel-font letter grid and a key-lit, edge-darkened source.
+  - The camera distance is unchanged (wheel / pinch zoom still work).
+- **Consequences:**
+  - ~2.7x the letter rows with no change to combat balance or framing.
+  - The drawn blade (1.8 m) is about the gameplay reach (1.5 m + `REACH.tipExt` 0.4).
+  - The drawn body overlaps more of an attack's area than the hurt cylinder (generous to the player).
+  - The moon shadow is cast by the leaned, scaled body.
+  - New code that reads hero joint positions for gameplay must use `player.unlean()`.
+

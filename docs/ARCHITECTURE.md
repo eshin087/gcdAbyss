@@ -61,8 +61,16 @@ Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `
 Render helpers for creature modules:
 - **v0.4 creature ASCII art:**
   - `FLAG.ART_HERO` (0.48) selects the hero's pass settings. The pass uniforms are vec2:
-    x = hero, y = wyrm (`uArtLum`, `uArtMin`, `uArtDither`, and `uArtEdge`, the relative depth jump
-    that blacks out part boundaries). `uArtMax` is shared (0.8, so white letters don't bloom).
+    x = hero, y = wyrm (`uArtLum`, `uArtBlack` (source luma treated as black), `uArtMin`,
+    `uArtDither`, and `uArtEdge`, the relative depth jump that blacks out part boundaries).
+    `uArtMax` is shared (0.8, so white letters don't bloom).
+  - The hero has his own, finer grid: `createPixelArtAtlas(s)` in `glyphs.js` draws `ART_CHARS`
+    from a 3x5 pixel font into (4s x 6s) cells (`pixelArtCell`; s = 2 from 2160 px tall). The pass
+    tests the hero grid first (`tHeroArt`, `uHeroCell`), then the wyrm's grid for the other
+    `FLAG.ART` pixels.
+  - Shared, hero source only: `U.uArtHeroKey` (a fixed key light from the camera's upper left, so
+    he shades the same in moonlight and firelight) and `U.uArtHeroEdge` (darkening toward his
+    silhouette instead of the moonlit outline).
   - `createSurfaceGlyphMaterial` now defaults `flag` to `FLAG.ART` (0.5). With the shared
     `U.uArtSolid` = 1, the material writes a smooth shaded source (ink × `artGain`, no glyph gaps).
   - The ASCII pass (`pipeline.js`) converts every `FLAG.ART` pixel to a fine screen grid of
@@ -146,7 +154,9 @@ get alive(): boolean
 isInvulnerable(): boolean              // roll i-frames, Ghostep, get-up, dead
 takeHit({ damage, from:{x,z}, knockback=0, knockdown=false, kind='hit', burn=0,
           tell='normal', parryable, blockable, attack, attacker }): RESULT   // see COMBAT.md
-getChestPos(out: Vector3): Vector3
+getChestPos(out: Vector3, visual = false): Vector3   // upright gameplay body; visual = the drawn one (FX)
+unlean(v: Vector3): Vector3            // drawn (leaned, HERO_SCALE) world point → upright gameplay body
+leanPoint(v: Vector3): Vector3         // upright gameplay point → where it is drawn (name tag)
 respawn(x, z)                          // full restore, idle, facing north, clears burn/lock/crit
 restAtBonfire()                        // refill hp/flasks (no teleport)
 update(dt)
@@ -156,6 +166,11 @@ Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move
 light combo (sweep → backhand sweep → two-handed slam finisher), LMB hold ≥ 0.3 s then release =
 charged lunging thrust · RMB hold = block, RMB tap before impact =
 parry · Space = dodge roll · Shift = sprint · F = flask · Tab / MMB = lock-on. (E is flow's.)
+Drawn body vs gameplay body (ADR-017): the root draws the hero `HERO_SCALE` (1.2) tall and leaned
+away from the camera (`model.js` `LEAN`, `installLean`). The animator runs with `lean.on = false`
+(plain upright 1.85 m body, so IK and ground clamps work in metres); the drawn transform is applied
+after it. FX read the drawn joints; the sword sweep's hit test, `getChestPos()` (the dragon's aim)
+and the hurt cylinder use the upright body (`SwordSweep(sword, unlean)`).
 Deals damage via `game.dragon.takeHit(...)` using `game.dragon.hurtSpheres`, tested through a
 vertical reach band (`REACH` in `player/combat.js`: a sphere overlapping the blade's swept wall
 extended `up` m above / `down` m below it counts, so the giant wyrm's chest is in reach from the

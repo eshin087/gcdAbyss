@@ -19,6 +19,14 @@ playable on phones.
   compact panel scrolls inside itself on small screens. VIEW → Touch UI tests the layer on desktop.
 
 ### Changed
+- **The hero shows his details in game** (owner: "isn't showing the details like in your preview
+  pictures"). He went from ~9 to ~25 letter rows at the desktop camera (~5 → ~15 on a phone):
+  - drawn 1.2x bigger and leaned away from the camera, feet planted, so he stands up on screen
+    instead of being seen from above (visual only: hits, hurt box and the dragon's aim unchanged)
+  - his own finer letters: a 3x5 pixel font in 4x6 px cells, with the reference's 1 px gaps
+  - shading like the reference: a fixed key light, dim letters toward the silhouette, black gaps
+    between overlapping parts at the game camera too
+  - phones upscale the 1x render crisply (pixelated) instead of blurring the letters
 - The hero's ASCII art follows the owner's reference more closely: steadier, brighter letters and
   black gaps at part boundaries instead of 'random text'. White letters no longer bloom.
 - The hero and the wyrm render through a fine screen-space ASCII-art grid:
