@@ -74,7 +74,33 @@ blue   animation only (blade 'shing')        white glint x1.5 (size, brightness)
   timing cue. The attacker draws its own tell in the world (red windup glow via `uWarn`, white
   glint / red burst on the flash); audio plays the cues; the HUD adds only the red edge flash.
 
+## Player moveset (owner concept sheet "Combat key poses")
+Numbers live in `src/entities/player/combat.js` (`LIGHT`, `THRUST`, `CHARGE`, `REACH`); movement /
+defence timings in `TUNE` (`player.js`).
+
+| Move | Input | Timing (windup / active / recovery) | Damage | Posture | Notes |
+|---|---|---|---|---|---|
+| Light 1 — sweep | LMB tap | 0.14 / 0.11 / 0.22 s (0.47 s) | 30 | 5 | blade drawn back over the right shoulder, horizontal sweep right → left, cyan arc |
+| Light 2 — backhand | LMB tap in the recovery | 0.14 / 0.11 / 0.22 s | 32 | 5 | left → right |
+| Slam — combo finisher | 3rd tap | 0.40 / 0.12 / 0.48 s (1.0 s) | 58 | 16 | two-handed overhead raise → slam into the ground; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
+| Thrust — charged | hold LMB ≥ 0.3 s, release | 0.07 / 0.20 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | low crouched charge (moves at ×0.4); the hero lunges 2.2–3.6 m along the facing; long cyan streak |
+
+- Pacing: the next light starts right after the active frames; a roll / flask cancels a recovery
+  after 35 %, movement after 60 %; RMB raises the guard out of any windup (not the active frames).
+- **Reach against giant targets** (`REACH`): the wyrm's chest hangs 2–4 m above the grass, above a
+  sword swung at a 1.75 m hero's chest, so the blade hits through a **vertical band**: a hurt sphere
+  counts when it overlaps the blade's swept wall extended `up` 2.6 m above (the slam: 1.0 m) and
+  `down` 0.5 m below it; the hit segment runs 0.4 m past the steel (the edge wave). Swings **step
+  in** toward a hurt surface within 4.8 m and 0.8 rad of the facing (lunge stretched by ≤ 1.3 m).
+  Result (`npm test` → scenario REACH): light 1, light 2, the slam and the thrust all connect from
+  the front of an idle wyrm from contact out to 3.5 m from its chest surface.
+
 ## Current numbers (v0.2, "approachable RPG")
-- Player: HP 160, 5 flasks (+70 HP), roll 0.6 s with i-frames 0.04–0.4 s, light combo 30/32/46,
-  heavy (hold LMB) 70–110 by charge.
+- Player: HP 160, 5 flasks (+70 HP), roll 0.6 s with i-frames 0.04–0.4 s, light combo 30/32 + slam
+  58, charged thrust 70–110 by charge (moveset table above).
 - Cinder Wyrm: HP 1500, see `src/entities/dragon/tuning.js` for every attack's tell and timings.
+  Size ×1.875 (v0.3, `SCALE`; ~30 m nose to tail): reaches, radii, hurt spheres and AI ranges
+  scale with it, windups / tells / flash timing do not. The hero does not grow, so the 3D swings
+  were re-measured at this size: the bite needs ≥ 3.7 model units (6.9 m) from the root (closer it
+  passes over the hero), the wing-claw swipe connects 7.5–9.75 m out (wrist sphere 1.35 × SCALE,
+  the bigger thumb claw), the bite head snap is 18/s so the blow lands on the announced impact.

@@ -38,11 +38,15 @@ History matters here:
 - **v0.2** pushed everything through one screen-space character grid. The verdict was that the
   grass was **too** ASCII: noisy, distracting, and the ground seemed to swim as the camera moved,
   which is dizzying. The hero and wyrm were also blurry.
-- **v0.3 (ADR-011)** therefore uses a hybrid:
+- **v0.3 (ADR-011)** therefore uses a hybrid. Later in v0.3 the owner disliked the grid stones too
+  (flagstones were bright blue-grey slabs of `+=+=` rows that read as text and stood out from the
+  calm ground), so stones moved to **carved glyphs**, drawn like the creatures. Trunks, canopies,
+  bones and the bonfire stay on the grid (the owner loves the trees).
 
 | Thing | Technique | Where |
 |---|---|---|
-| Rocks, ruins, trunks, bones, bonfire | screen-grid `STONE` 1.0: symbol ramp `. : - = + * % # 8 & @ M W` + **outline glyphs** (`\| - / \`) on silhouettes / depth steps of raised stones | `createAsciiObjectMaterial` → `render/pipeline.js` |
+| Standing stones, boulders, flagstones | **carved glyphs**: one crisp glyph per world-fixed lattice cell (0.22 × 0.28 m on a plane facing the default camera, rows randomly offset), picked by light on flat facets (lit `% # 8 @ &`, shadow `. : ;`), mid-lit flanks hatched along their contour (`/ \| \`), world-fixed cracks, dim green moss tufts (`, ; " *`), near-black gaps. Flagstones: dimmer, irregular 5–7-sided slabs, half-sunk and tilted, a chipped moonlit chamfer, grass leaning over and growing through the rim | `createCarvedGlyphMaterial` (`render/materials.js`), looks `STONE_LOOK` / `SLAB_LOOK` in `world/forest.js` |
+| Trunks, bones, bonfire | screen-grid `STONE` 1.0: symbol ramp `. : - = + * % # 8 & @ M W` + **outline glyphs** (`\| - / \`) on silhouettes / depth steps of raised props | `createAsciiObjectMaterial` → `render/pipeline.js` |
 | Canopies | screen-grid `LEAF` 0.6: blobby ramp `. : o 0 O 8 @` | same |
 | Grass | ~260k instanced quads, each ONE glyph stroke (`\| / \ ' Y V v l i`) **anchored in the world** (no shimmer when the camera moves); gentle slow wind, trample pushers, wing gusts, burnt to ash glyphs; dim world-space soil glyphs between | `world/grass.js`, `world/ground.js` |
 | Hero, wyrm | **crisp surface glyphs**: one glyph per aGUV cell printed on the body, picked by local light, on near-black gaps, plus a moonlit silhouette line on the hero | `createSurfaceGlyphMaterial({ ascii })` |
@@ -58,12 +62,20 @@ Rules of thumb:
   characters, wind slow and small, and glyphs fixed in the world. Anything that re-picks glyphs
   per screen cell as the camera moves reads as swimming.
 - **Gaps matter.** Dark gaps between glyphs make shapes legible (grid props: slab colour ≈ cell
-  colour × 0.1–0.16; creatures: base 0.01–0.15 by material). Never fill every cell.
+  colour × 0.1–0.16; creatures: base 0.01–0.15 by material; carved stones: albedo × (light × 0.12
+  + 0.006)). Never fill every cell.
 - **Contrast drives glyph density.** Lit faces climb to dense glyphs; shadow sides drop to dots.
 - **Glyph size beats glyph count.** A surface glyph must stay ≥ ~6 screen px at the default camera
   (~35–50 px/m). Smaller cells blur into a solid grey texture: that was v0.1's "too solid" hero
   (0.06 m cells ≈ 2–3 px). `glyphZoom` (0.72) draws each glyph larger inside its cell.
 - **Avoid lowercase words.** Ramps favour symbols and blocky capitals so areas read as texture.
+- **No typeset rows.** Never fill a lit area with one or two alternating glyphs (`+=+=` reads as
+  text). Mix 4 variants per level, offset rows randomly, nudge glyphs sideways a little, and leave
+  some cells empty.
+- **Stones carry their glyphs.** The carved lattice is anchored in the world, so stones never
+  shimmer when the camera moves or zooms; it faces the default camera, so glyphs stay upright and
+  the same size on every facet. Use flat facets: each one is a carved plane with its own light
+  level, and on low-poly boulders that is what makes them read as rock, not a ball of text.
 - **Silhouette first.** Hero hair spikes, coat flare and wing outlines carry identity at ~50 px.
   The hero's moonlit outline (`outline`) keeps the black coat readable. Large bodies use no
   outline: on them it reads as plastic shading.
@@ -72,7 +84,11 @@ Rules of thumb:
 - Dark skin/base between glyphs: 0.01–0.03. Glyph ink: 0.3–0.7 (lighting multiplies it).
 - HDR emissive fire: 2–5 (blooms). Embers 1.5–3. Moonlit white sparks: 1.5–2.5.
 - Keep saturation low except fire. Steel = cold blue-grey `[0.55,0.6,0.68]`. Cloth = deep crimson
-  `[0.28,0.05,0.04]`. Dragon ink = bone/ash `[0.42,0.34,0.3]` with ember-red alt `[0.75,0.16,0.05]`.
+  `[0.28,0.05,0.04]`. Dragon ("Obsidian Drake", v0.3): obsidian gaps `[0.02,0.019,0.024]`, silver
+  ink `[0.36,0.375,0.42]` with a few ember alt scales; molten parts (chest, belly, throat, inner
+  thighs, tail underside) self-lit orange `[1,0.42,0.09]` (`inkGlow` 0.5); wing membrane deep red
+  `[0.5,0.06,0.035]` on `[0.13,0.013,0.01]` with orange vein glyphs; bones / horns / spikes
+  white-grey strokes; claws ivory; teeth + maw self-lit.
 
 ### Glyph choice rules
 - Creatures: pick the `ascii` set per part. It sets the default ramp and cell (`SURFACE_SETS` in
@@ -84,8 +100,21 @@ Rules of thumb:
 
   Override per part with `glyphs` / `cell`. Make aGUV +y run along the limb toward the tip or head,
   so chevrons point "forward" and strokes follow folds and hair.
-- Wyrm cells are 0.23–0.42 model units (×1.25 in the world) with `lumScale` 3.3–3.5, so the lit side
-  shows dense chevron rows. Hero cells are 0.045–0.12 m, the smallest that still read.
+- Wyrm cells are 0.17–0.27 model units on the body (×1.875 in the world: ~12 px at the default
+  camera, ~9 px at the boss framing's pull-back) with `lumScale` 3.0–3.5. Scales are `.vVV`: aGUV
+  +y runs toward the head on body / neck and toward the body on tail and limbs (`flip`), so each
+  `V` tip points back / down the limb like an overlapping scale (a clean `^` head-on). Bones and
+  horns use dashed strokes `.'|!` (`I` read as a letter). Hero cells are 0.10–0.20 m with `glyphZoom` 0.62, light-grey self-lit
+  ink and a steep ramp (`lumScale` 4–5) whose darkest glyph is a stroke, not a lone `.`. The hero
+  reads as a bright glyph figure, with a violet gem and cyan blade edges as accents (the owner's
+  "Shadow Swordsman" sheet).
+- Stones (`CARVED_DEFAULTS` in `materials.js`, per-look overrides in `world/forest.js`): 6 light
+  levels × 4 variants, `topGlyphs` on up-facing facets (caps, slab tops, fallen faces) and
+  `sideGlyphs` elsewhere; levels 2–3 on side facets become contour strokes (`/` left flank, `|`
+  vertical side, `\` right flank; flat contours keep the ramp so no dash rows appear). Light maps to
+  a level through a soft knee `1 − exp(−light × lumScale)` (stones 4.0, flagstones 2.3) so moonlit
+  tops and dim flanks both land on the ramp. Flagstones stay the dimmest stones (`gain` 2.1 vs
+  2.9): the ground must stay calm. Moss ink ≈ grass tips; never brighter.
 - Colour carries material; glyph carries form. Keep inks desaturated except glow/fire.
 - Red dodge-only tells drive `uWarn` on every wyrm material (a red glow on glyphs + rim). Hit flashes
   use `uFlash`.

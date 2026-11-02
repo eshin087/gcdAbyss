@@ -28,6 +28,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Crisp surface-glyph hero and wyrm; moonlit outline on the hero
 - [x] Visual-only tells: red glow + flash for dodge-only, white glint for parry timing
 - [x] Lab Showroom preset for look-dev review
+- [x] Hero after the Shadow Swordsman sheet (model, poses, slam finisher, lunge thrust, cyan FX)
+- [x] Wyrm after the Obsidian Drake sheet, 1.5× bigger; player reach band; hero-first boss camera
+- [x] Carved-glyph stones and half-sunk flagstones
 - [ ] Owner approval on the PR preview
 
 ## M2 — RPG foundations (v0.3)

@@ -7,10 +7,32 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 Look pass from the owner's v0.2 review (awaiting approval on the PR preview).
 
 ### Added
+- Hero moveset from the owner's combat sheet: the 3rd light hit is a two-handed **overhead slam**
+  (blue crystal shards). Hold-and-release LMB is a **lunging thrust** (2.2–3.6 m travel). Light
+  sweeps leave cyan arc trails.
+- Player reach band + step-in assist, so every attack connects with the much bigger wyrm from the
+  front (new REACH test scenario).
 - Lab **Showroom** button (VIEW): fight on, AI off, god mode, hero 7 m in front of the wyrm,
   camera zoomed in — for reviewing the hero, the wyrm and the grass up close. "Camera default" resets.
 
 ### Changed
+- Hero rebuilt after the owner's "Shadow Swordsman" sheet:
+  - messy violet-sheen hair and a high collar
+  - long black coat with torn purple tails
+  - spiked pauldron, gauntlets, straps and armoured boots
+  - a big sword (1.34 m) with a violet gem and icy cyan edges
+  - new idle / walk / sprint / dodge / attack poses
+  - reads as a bright glyph figure on the dark ground
+- Wyrm restyled after the owner's "Obsidian Drake" sheet:
+  - silver chevron scales on obsidian, with a molten orange throat, belly and inner legs
+  - deep-red ragged wings with lava veins
+  - swept horns, a frill, and spikes along the spine and tail
+  - an upright S-neck and glowing maw
+- Wyrm 1.5× bigger (`SCALE` 1.875). Arena bound, bite floor, swipe reach and FX are re-measured.
+  The boss camera adds at most 5 m of zoom, so the hero stays readable.
+- Stones, boulders and flagstones are drawn as crisp carved glyphs fixed to the stone
+  (`createCarvedGlyphMaterial`), with cracks and moss. Flagstones are half-sunk with grass growing
+  over their edges. Trees are unchanged.
 - Grass is the v0.1 world-anchored glyph-stroke field again (no shimmer when the camera moves),
   about 20 % darker with slower, smaller wind so the ground stays calm and the characters pop.
 - Hero and wyrm render as crisp glyphs printed on the body (sized to stay legible, drawn larger
@@ -19,6 +41,10 @@ Look pass from the owner's v0.2 review (awaiting approval on the PR preview).
 - Attack tells are visual only (see COMBAT.md): dodge-only attacks make the wyrm glow and flash red
   (plus red ground danger zones for area attacks); parryable attacks are read from the wind-up and
   marked by a brief white glint at the timing moment.
+
+### Fixed
+- The two fallen standing stones' colliders sat off their bodies (walk-through half, blocked
+  empty ground).
 
 ### Removed
 - PARRY / DODGE text marks, ◆ / ! icons, closing rings and off-screen arrows over the enemy, and the

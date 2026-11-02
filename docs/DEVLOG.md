@@ -5,6 +5,45 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-01 — Session 3b: copy the concept sheets; carved stones
+**Owner feedback:** "much better". They then shared concept art (Shadow Swordsman sheet,
+movement and combat key poses, Obsidian Drake sheet) and asked to make the hero and dragon look
+like it. They also want better ground stones.
+
+**Their choices:**
+- restyle the wyvern (don't rebuild it as four-legged)
+- make it 1.5× bigger
+- the heavy slam becomes the 3rd hit of the combo
+- carved crisp glyphs for stones
+
+**Done:** three parallel agents (hero, dragon, stones) did the work, then I integrated it.
+- **Hero:**
+  - new model, a 1.34 m sword with a violet gem and cyan edges, and poses from the sheets
+  - slam finisher and lunge thrust
+  - cyan arc trails, thrust streak and crystal shards
+  - reach band + step-in assist (REACH test)
+- **Wyrm:**
+  - obsidian / silver chevrons, lava belly, throat and inner legs, red ragged wings
+  - horns, frill and spikes (merged per joint, 109 meshes)
+  - upright S-neck
+  - `SCALE` 1.875, with an audit of bound, bite floor, swipe reach, FX and test distances
+- **Stones:** `createCarvedGlyphMaterial` (world lattice perpendicular to the camera view). Flagstones
+  are irregular half-sunk slabs with grass up to their edges. Fixed the fallen stones' colliders.
+- **Me:** capped the agent's boss framing zoom from +16 m to +5 m. At ~50 m the hero was lost
+  again; it now sits at 39–41 m and the wyrm crops at the edges.
+
+**Decisions:** ADR-012 (concept sheets + carved stones), ADR-013 (reach band, hero-first camera).
+
+**Open issues / next**
+- **Lava underside:** mostly visible when the wyrm faces the camera or rears. A normal-driven
+  underside glow mask in the material would put it on a single mesh.
+- **Cracks:** a regular grid; an irregular (Voronoi) crack pattern would read more like fissures.
+- **Hero coat:** tail strips move as panels, not individually. The dodge is a forward roll, not the
+  sheet's sideways dive.
+- **Carved marks:** some digits (`1`, `7`) can read as text on the stones; consider symbol-only ramps.
+
+---
+
 ## 2026-11-01 — Session 3: look pass from the v0.2 review
 **Owner feedback on v0.2 (live):**
 - The grass is TOO ascii: noisy, distracting, and the ground seems to move, which makes the game dizzy.

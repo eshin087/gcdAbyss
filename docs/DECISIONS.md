@@ -112,3 +112,33 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Consequences:** two glyph systems to keep visually consistent (STYLE.md rules of thumb). The
   ground is calm by construction. Glyph legibility now depends on cell size vs camera distance, so
   new creatures must check it at the default zoom (Lab → Showroom helps).
+
+## ADR-012 — Concept sheets drive the look; stones become carved world-lattice glyphs (2026-11-01)
+- **Context:** the owner supplied concept sheets (Shadow Swordsman: model, movement and combat key
+  poses; Obsidian Drake: painting + ASCII version) and asked to copy them. They also disliked the
+  screen-grid stones (`+=+=` rows read as text).
+- **Decision:**
+  - The hero and wyrm follow the sheets within the existing skeletons. The wyvern stays a wyvern
+    (owner's choice), and the wyrm grows to 1.5× its v0.2 size (`SCALE` 1.875).
+  - Rocks, standing stones and flagstones use `createCarvedGlyphMaterial`: a world-anchored glyph
+    lattice perpendicular to the fixed camera view, glyphs picked by facet light, with cracks and
+    moss. Trees, bones and the bonfire stay on the screen grid.
+- **Consequences:**
+  - The sheets are the reference for future look work.
+  - Carved glyphs shrink with zoom, unlike the grid.
+  - A bigger wyrm needs the player reach band (ADR-013) and a bounded boss camera.
+
+## ADR-013 — Player reach band, step-in assist, hero-first boss camera (2026-11-01)
+- **Context:** at 1.875× the wyrm's chest sits ~4 m up. Blade-vs-sphere hits missed from the front.
+  The automatic boss framing then zoomed out to ~50 m, shrinking the hero the owner already found
+  hard to see.
+- **Decision:**
+  - Sword hits test a vertical reach band (2.6 m up, 1.0 m for the slam; 0.5 m down; 0.4 m tip
+    extension).
+  - A short step-in assist (≤ 1.3 m) applies when the target is within 4.8 m and 0.8 rad.
+  - The boss camera may add at most 5 m of zoom. The wyrm crops at the screen edges before the hero
+    shrinks.
+- **Consequences:**
+  - All attacks land from 2–3.5 m in front (REACH scenario).
+  - Very large future bosses will crop at the screen edge. That is accepted: readability of the
+    player comes first.

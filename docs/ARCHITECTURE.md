@@ -63,6 +63,16 @@ Render helpers for creature modules:
   on all their materials for the red (dodge-only) tell — colour and ramp numbers in
   `TELL_STYLE.red.warn`, timing in COMBAT.md "Tell presentation".
 - `limbGeometry`, `ellipsoidGeometry`, `hornGeometry`, `cylindricalGUV`, `planarGUV` (`render/glyphGeometry.js`).
+- `createCarvedGlyphMaterial(U, opts)` (`render/materials.js`) — **carved glyphs for static rock**
+  (standing stones, boulders, flagstones; future ruins). Glyph cells sit on a world-fixed lattice in
+  a plane facing the default camera (`viewPitch`), so they are upright, equal-sized and never
+  re-pick as the camera moves; one glyph per cell, picked by light on flat facets, contour strokes on
+  mid-lit flanks, world-fixed cracks and moss. Renders directly (alpha `FLAG.NONE`, the grid pass
+  ignores it). Geometry must be baked in world space with `aCol` (vec3), `aAO`, `aMoss`, `aInk`,
+  `aEdge` (floats); see `carve()` in `world/forest.js`. Options and defaults: `CARVED_DEFAULTS`
+  and the doc comment (`sideGlyphs`, `topGlyphs`, `mossGlyphs`, `crackGlyphs`, `strokeGlyphs`,
+  `strokeLevels`, `cell`, `gain`, `lumScale`, `jitter`, `inkFloor`, `base`, `mossInk`,
+  `crackAmount`, `edge`, `glyphZoom`, `fadeNearPlayer`, `side`).
 - `markCaster(object)` (`render/pipeline.js`) — casts moon shadows.
 - `gi(ch)`, `gis(str)` (`render/glyphs.js`).
 - `game.pipeline.finalMat.uniforms` — `uHurt` (red edge 0..1), `uFade` (black 0..1), `uDesat` (0..1), `uWarm` (boss grade 0..1), `uExposure`, `uBloom`. **Owned by the HUD/flow module.**
@@ -76,6 +86,7 @@ object3d: THREE.Object3D;  position: THREE.Vector3 (=== object3d.position);  yaw
 name = 'Wanderer'
 hp, maxHp, flasks, maxFlasks: number   // (v0.2: NO stamina)
 state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block'|'parry'|'ghostep'|'heal'|'stagger'|'guardBreak'|'knockdown'|'dead'
+                //  ('attack' = light sweeps + the slam finisher, 'heavy' = the released charge thrust)
 blocking: boolean                      // RMB held and able to block
 critTimer: number                      // > 0 while the post-Ghostep crit window is open
 lockOn: boolean                        // toggled by Tab / middle mouse; facing tracks dragon.lockPoint
@@ -90,9 +101,14 @@ update(dt)
 debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill() }   // used by the Lab
 ```
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
-light combo, LMB hold ≥ 0.3 s then release = charged heavy · RMB hold = block, RMB tap before impact =
+light combo (sweep → backhand sweep → two-handed slam finisher), LMB hold ≥ 0.3 s then release =
+charged lunging thrust · RMB hold = block, RMB tap before impact =
 parry · Space = dodge roll · Shift = sprint · F = flask · Tab / MMB = lock-on. (E is flow's.)
-Deals damage via `game.dragon.takeHit(...)` using `game.dragon.hurtSpheres`; pushes itself out of
+Deals damage via `game.dragon.takeHit(...)` using `game.dragon.hurtSpheres`, tested through a
+vertical reach band (`REACH` in `player/combat.js`: a sphere overlapping the blade's swept wall
+extended `up` m above / `down` m below it counts, so the giant wyrm's chest is in reach from the
+front); swings step in toward a hurt surface ahead (`REACH.assist`); the slam's ground shards hit
+if the blade missed. Pushes itself out of
 `game.dragon.bodyCircles` and resolves vs `game.world.resolve(pos, radius, CONFIG.world.playerBound)`.
 On `perfectDodge` it performs Ghostep using `attacker.position`/`attacker.yaw` (teleport behind,
 `game.hitstop(slowmoTime, slowmoScale)`, opens `critTimer`). A harsher freeze already running defers the
@@ -105,6 +121,8 @@ raises the guard when recovery starts. Streams (breath) only Ghostep when the ro
 ```
 constructor(game)                      // builds wyvern, sleeping at CONFIG.world.dragonSleep
 object3d, position (Vector3, root on ground), yaw
+bound: number                           // radius around the arena centre the root stays inside:
+                                        // min(CONFIG.world.dragonBound, TUNING.bound = 24) (move, charge, leap target)
 name = 'VAELGRIM, THE CINDER WYRM';  hp, maxHp;  phase: 1|2
 posture, maxPosture: number;  broken: boolean   // posture break = staggered + broken
 state: 'sleeping'|'waking'|'combat'|'staggered'|'airborne'|'dying'|'dead'
@@ -130,6 +148,15 @@ debug: {                                // used by the Lab (generic shape every 
   currentAction?(): string|null         // optional, Lab readout
 }
 ```
+Size: the model is authored in model units and the root is scaled by `SCALE` (tuning.js, 1.875
+since v0.3, ~30 m nose to tail); every world-space number (reaches, radii, hurt spheres, body
+circles, AI ranges, FX, pushers, pose targets via `rootPt`) is multiplied by it. The hero does not
+scale, so 3D hit volumes / AI ranges are re-checked against him when `SCALE` changes (bite floor,
+swipe wrist sphere, bite snap rate in attacks.js).
+Look ("Obsidian Drake", model.js): materials in `model.mats` (scales, neck, belly, throat, lava,
+membrane, wingBone, bone, claw, teeth, maw, eye); crack glow per material from `model.glow`
+(`[phase-1 ember, × glow (phase 2 / death), × throat charge]`, applied in `_applyMaterials`).
+
 Damages the player only via `game.player.takeHit(...)` with tell data; announces tells with
 `combat:tell` / `combat:flash` and shows them on its own body (no HUD marks):
 - red (dodge-only) hits: `uWarn` on every material (`model.mats`), driven in `_updateWarn` from the
@@ -167,7 +194,11 @@ debug: { toState(name) }               // Lab: 'explore'|'boss'|'dead'|'victory'
 ```
 Owns `game.state`, title → explore → bossIntro → boss → dead/victory, pause (Esc), bonfire rest (E),
 retry after death (respawn at bonfire, `dragon.reset()`, `world.scorch.reset()`), F2 quality,
-M mute, H help, F3 fps.
+M mute, H help, F3 fps. Boss framing (`boss` state, `TUNE.bossCam`): the override focuses on the
+box of the hero + `dragon.hurtSpheres` (tall parts leaned up-screen) and adds at most 5 m of zoom
+(`maxZoom`; kept small so the hero stays readable, which is the owner's priority). The hero is
+always kept inside the view, and the far end of the wyrm crops first. It fades out when the hero is > 16–36 m from the body or has wheel-zoomed in
+(Lab Showroom).
 
 ### Audio — `src/audio/audio.js` exports `class AudioEngine`
 ```
@@ -192,8 +223,9 @@ AI on/off, hitbox overlay, teleport. Talks only to the `debug` APIs above.
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:
-- `player:attack {kind:'light'|'heavy', combo, charge}` (swing starts), `player:charge {t}` (heavy charge start; t = seconds to full charge),
-  `player:hitDragon {damage, part, point, heavy, crit}`, `player:hurt {damage, kind, hp}`,
+- `player:attack {kind:'light'|'slam'|'thrust', combo, charge}` (swing starts; slam = combo hit 3, thrust = charge release),
+  `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
+  `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust), `player:hurt {damage, kind, hp}`,
   `player:block {damage, tell}`, `player:parry {tell, attack}`, `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}`,
   `player:ghostep {x, z}`, `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
