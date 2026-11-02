@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createSurfaceGlyphMaterial } from '../../render/materials.js';
+import { createSurfaceGlyphMaterial, FLAG } from '../../render/materials.js';
 import { limbGeometry, ellipsoidGeometry, hornGeometry, planarGUV } from '../../render/glyphGeometry.js';
 
 // The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md): a slim
@@ -680,14 +680,14 @@ export function setHeroGlyphScale(mats, dist) {
 // hair tips glow. `inkGlow` (≈0.13 on cloth) keeps the shadow side a dim field of carets; outline
 // / rim stay low (the panel has no drawn outline): the black gaps between glyphs carry the form.
 /**
- * Brightness of the smooth source the creature ASCII-art pass converts (FLAG.ART): ~0.6 keeps the
- * owner's reference look (dense letters on lit faces, sparse ': ; i r' in shadow, dark gaps).
+ * Brightness of the smooth source the creature ASCII-art pass converts (FLAG.ART_HERO): 1.1 keeps the
+ * owner's reference look: mostly mid-to-dense letters, sparse ones only in real shadow.
  */
-export const ART_GAIN = 0.62;
+export const ART_GAIN = 1.1;
 
 export function createHeroMaterials(U) {
   const S = (o, { max = null, lockX = false, fixed = false, zoomNear = null } = {}) => {
-    const m = createSurfaceGlyphMaterial(U, { glyphZoom: 0.62, artGain: ART_GAIN, ...o });
+    const m = createSurfaceGlyphMaterial(U, { glyphZoom: 0.62, artGain: ART_GAIN, flag: FLAG.ART_HERO, ...o });
     if (!fixed && o.cell) {
       m.userData.cell = o.cell.slice();
       if (max) m.userData.cellMax = max;

@@ -100,10 +100,14 @@ export class Pipeline {
         tArt: { value: null },
         uArtCell: { value: this.artCell },
         uArtCount: { value: 22 },
-        uArtLum: { value: 4.5 }, // brightness -> ramp position: 1 - exp(-luma * k)
-        uArtMin: { value: 0.3 }, // glyph value at the dark end of the ramp
-        uArtMax: { value: 1.25 }, // glyph value at the bright end
-        uArtDither: { value: 1.6 }, // per-cell ramp jitter (in letters): the images' letter variety
+        // per creature kind: x = hero (FLAG.ART_HERO), y = wyrm / other (FLAG.ART)
+        uArtLum: { value: new THREE.Vector2(6.0, 4.5) }, // brightness -> ramp position: 1 - exp(-luma * k)
+        uArtMin: { value: new THREE.Vector2(0.42, 0.3) }, // glyph value at the dark end of the ramp
+        uArtMax: { value: 0.8 }, // glyph value at the bright end (tone-maps to white without bloom haloes)
+        uArtDither: { value: new THREE.Vector2(0.5, 1.6) }, // per-cell ramp jitter (letters): variety
+        // relative depth jump inside a cell that marks a part boundary (arm over coat, leg over leg):
+        // such cells go black, the reference images' dark gaps between parts (0 = off)
+        uArtEdge: { value: new THREE.Vector2(0.018, 0.0) },
       },
       vertexShader: FS_VERT,
       fragmentShader: /* glsl */ `
@@ -126,10 +130,11 @@ export class Pipeline {
         uniform sampler2D tArt;
         uniform vec2 uArtCell;
         uniform float uArtCount;
-        uniform float uArtLum;
-        uniform float uArtMin;
+        uniform vec2 uArtLum;
+        uniform vec2 uArtMin;
         uniform float uArtMax;
-        uniform float uArtDither;
+        uniform vec2 uArtDither;
+        uniform vec2 uArtEdge;
         varying vec2 vUv;
 
         float hash12(vec2 p) {
@@ -206,10 +211,10 @@ export class Pipeline {
         // Each cell averages 4 samples; a letter from the density-sorted ART_CHARS ramp is picked by
         // brightness (plus per-cell jitter for the images' letter variety) and keeps the source hue
         // (white scales, orange lava, red wings, cyan blade) on a black backing.
-        vec3 artCell(vec3 c, vec2 acell, vec2 local) {
+        vec3 artCell(vec3 c, vec2 acell, vec2 local, float hero) {
           float lum = luma(c);
-          float v = 1.0 - exp(-lum * uArtLum);
-          float jit = (hash12(acell * 1.37 + 11.0) - 0.5) * uArtDither;
+          float v = 1.0 - exp(-lum * mix(uArtLum.y, uArtLum.x, hero));
+          float jit = (hash12(acell * 1.37 + 11.0) - 0.5) * mix(uArtDither.y, uArtDither.x, hero);
           float idx = clamp(floor(v * (uArtCount - 1.0) + 0.5 + jit), 1.0, uArtCount - 1.0);
           float m = texture2D(tArt, vec2((idx + local.x) / uArtCount, local.y)).a;
           float mx = max(max(c.r, c.g), c.b);
@@ -217,7 +222,7 @@ export class Pipeline {
           // saturated emissive parts (lava, the cyan blade, eyes) stay HDR so they bloom; bright but
           // colourless parts (claws, teeth) don't, or they swell into glowing orbs
           float sat = (mx - min(min(c.r, c.g), c.b)) / max(mx, 1e-4);
-          vec3 fg = hue * mix(uArtMin, uArtMax, v) * mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat));
+          vec3 fg = hue * mix(mix(uArtMin.y, uArtMin.x, hero), uArtMax, v) * mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat));
           return fg * m;
         }
 
@@ -227,14 +232,28 @@ export class Pipeline {
           vec2 acell = floor(px / uArtCell);
           vec2 abase = acell * uArtCell;
           vec3 asum = vec3(0.0);
-          float ahits = 0.0;
+          float ahits = 0.0, aheroN = 0.0, dmin = 1e9, dmax = 0.0;
           for (int i = 0; i < 4; i++) {
             vec2 o = vec2(i == 1 || i == 3 ? 0.75 : 0.25, i >= 2 ? 0.75 : 0.25);
-            vec4 sa = texture2D(tScene, (abase + o * uArtCell) / uRes);
-            if (isArt(sa.a)) { asum += sa.rgb; ahits += 1.0; }
+            vec2 suv = (abase + o * uArtCell) / uRes;
+            vec4 sa = texture2D(tScene, suv);
+            if (isArt(sa.a)) {
+              asum += sa.rgb;
+              ahits += 1.0;
+              aheroN += step(sa.a, 0.49); // FLAG.ART_HERO = 0.48
+              float dz = linDepth(suv);
+              dmin = min(dmin, dz);
+              dmax = max(dmax, dz);
+            }
           }
           if (ahits >= 2.0) {
-            gl_FragColor = vec4(artCell(asum / ahits, acell, (px - abase) / uArtCell), 1.0);
+            float hero = step(0.5, aheroN / ahits);
+            float edge = mix(uArtEdge.y, uArtEdge.x, hero);
+            if (edge > 0.0 && (dmax - dmin) > edge * dmin) {
+              gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); // part boundary: a dark gap, like the references
+              return;
+            }
+            gl_FragColor = vec4(artCell(asum / ahits, acell, (px - abase) / uArtCell, hero), 1.0);
             return;
           }
           if (isArt(texture2D(tScene, px / uRes).a)) {

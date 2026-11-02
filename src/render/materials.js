@@ -16,10 +16,11 @@ import { gi } from './glyphs.js';
 //   0.04..0.44   CREATURE screen-grid glyphs that follow the surface flow (opt-in `grid: true`,
 //                the v0.2 look); the value packs set x 24 screen-space flow angles
 //   0.5          ART      hero / wyrm: their crisp render is the SOURCE IMAGE of a fine screen-space
-//                         ASCII-art grid (letters picked by brightness, coloured per cell)
+//                         ASCII-art grid (letters picked by brightness, coloured per cell);
+//   0.48         ART_HERO the same, with the hero's own pass settings (pipeline uArt* .x)
 //   0.6          LEAF     blobby foliage ramp
 //   1.0          STONE    letter ramp + edge outlines
-export const FLAG = { NONE: 0.0, ART: 0.5, LEAF: 0.6, STONE: 1.0 };
+export const FLAG = { NONE: 0.0, ART_HERO: 0.48, ART: 0.5, LEAF: 0.6, STONE: 1.0 };
 export const ASCII_SETS = { scales: 0, strands: 1, plates: 2, smooth: 3 };
 /**
  * Surface-glyph defaults per `ascii` set: 4-glyph ramp (dark → bright) and cell size in aGUV
