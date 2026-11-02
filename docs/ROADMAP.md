@@ -35,7 +35,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Four-legged drake rebuild (art score 2 → 6) and closer hero (2.5 → 4.5)
 - [ ] Next look round: hero hair mass, the blade read from behind at the game camera, small
       details (straps, boots)
-- [ ] Owner approval on the PR preview
+- [x] Owner approval; released as v0.3.0
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions

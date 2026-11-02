@@ -4,7 +4,9 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Look pass from the owner's v0.2 review (awaiting approval on the PR preview).
+
+## [0.3.0] - 2026-11-01
+Look pass from the owner's v0.2 review and concept sheets.
 
 ### Added
 - Lab **model viewer** (`lab.modelView`): Front / 3-4 / Side / Back / Game views on a dark
