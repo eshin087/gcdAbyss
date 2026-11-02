@@ -27,6 +27,10 @@ dense letters); in the arena it was 40 % darker.
 - Result: ~25 rows at the desktop camera (front, back and running all read as the swordsman), ~15
   on a phone; the Lab close-up keeps the reference look. `npm test` green.
 
+**Released:** owner: "push out all the changes to production including the mobile controls".
+PR #3 squash-merged as v0.4.0 (classic ASCII-art creatures, touch controls, phone camera, Lab
+toggle, hero detail).
+
 **Open issues / next:**
 - Real-phone check of the pixelated upscale (non-integer DPRs such as 2.625 give uneven strokes).
 - The lean follows the camera: cut-in cameras get half their pitch.

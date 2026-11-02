@@ -4,6 +4,8 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
+
+## [0.4.0] - 2026-11-02
 The hero and the wyrm are drawn as classic ASCII art (the owner's reference images). The game is
 playable on phones.
 

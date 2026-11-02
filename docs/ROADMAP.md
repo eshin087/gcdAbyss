@@ -36,8 +36,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] Next look round: hero hair mass, the blade read from behind at the game camera, small
       details (straps, boots)
 - [x] Owner approval; released as v0.3.0
-- [~] Classic ASCII-art creatures (screen-grid conversion, owner's references): awaiting approval
-- [~] Phone support: touch controls, phone camera, Lab toggle (needs a real-device check)
+- [x] Classic ASCII-art creatures (screen-grid conversion, owner's references); hero drawn bigger and leaned (ADR-017)
+- [~] Phone support: touch controls, phone camera, Lab toggle (released; needs a real-device check)
+- [x] Owner approval; released as v0.4.0
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
