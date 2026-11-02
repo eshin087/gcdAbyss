@@ -20,7 +20,7 @@ import { createMusic } from './music.js';
 //
 // play(name, opts) one-shots — opts.x/opts.z spatialise against the player (pan by Δx,
 // full level within 8 m, ≈ −12 dB at 35 m), opts.gain, opts.pan, opts.delay (s):
-//   player   swing{heavy,combo} hit{heavy,crit,part} hurt{damage,kind} sizzle roll
+//   player   swing{heavy,combo,thrust} slam hit{heavy,crit,part} hurt{damage,kind} sizzle roll
 //            footstep{sprint} heal noFlask lockOn{on} dodge gong
 //   combat   tellBlue tellRed tellTick flash{tell} parry{tell} block{tell} guardBreak
 //            ghostep{slow}   (+ the sustained charge hum: player:charge → release/interrupt)
@@ -593,10 +593,13 @@ export class AudioEngine {
 
     // player
     on('player:attack', (d) => {
-      // releasing a charged heavy (or any swing) ends the charge hum
-      if (this.charge?.active) this.charge.stop(d.kind === 'heavy' ? 0.05 : 0.08);
-      this.play('swing', { heavy: d.kind === 'heavy', combo: d.combo });
+      // releasing the charged thrust (or any swing) ends the charge hum; the slam and the thrust
+      // swing heavy, the thrust as a long rising hiss
+      const heavy = d.kind === 'thrust' || d.kind === 'slam' || d.kind === 'heavy';
+      if (this.charge?.active) this.charge.stop(heavy ? 0.05 : 0.08);
+      this.play('swing', { heavy, combo: d.combo, thrust: d.kind === 'thrust' });
     });
+    on('player:slam', (d) => this.play('slam', { x: d.x, z: d.z }));
     on('player:charge', (d) => this.charge?.start(d));
     on('player:hitDragon', (d) =>
       this.play('hit', { heavy: d.heavy, crit: d.crit, part: d.part, damage: d.damage, x: d.point?.x, z: d.point?.z }),

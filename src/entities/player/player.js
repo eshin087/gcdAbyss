@@ -5,12 +5,15 @@ import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
 import { buildHero } from './model.js';
 import { HeroAnimator } from './anim.js';
-import { LIGHT, HEAVY, CHARGE, heavyStats, SwordSweep } from './combat.js';
+import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
 
 // The Wanderer. Owns input → state machine → movement/collision → animation → sword hits → FX.
 // Contract: docs/ARCHITECTURE.md (Player). Combat rules: docs/COMBAT.md + src/combat/rules.js.
 // No stamina (v0.2): pacing comes from attack recovery, roll recovery and the enemy's patterns.
+// Moveset (combat.js): light sweep → backhand sweep → two-handed slam (combo finisher, ground
+// shards); hold LMB = crouched charge, release = lunging thrust. Swings hit giant targets through
+// a vertical reach band and step in toward a hurt surface ahead (REACH).
 
 export const TUNE = {
   runSpeed: 4.6,
@@ -56,6 +59,8 @@ export const TUNE = {
   ghostepMaxRange: 12, // attacker farther than this: slow-mo + crit without the teleport
   ghostepAssist: 1.2, // s of aim assist toward the attacker after a Ghostep (no lock-on)
   ghostepFade: 3.2, // 1/s fade of the reappear dissolve / cold tint
+  rollCoatKick: 0.7, // the coat tails fly out as the dodge starts
+  gemGlintEvery: 1.8, // s between idle glints of the violet gem (± 40 %)
 };
 
 const CONTROL = new Set(['explore', 'bossIntro', 'boss']);
@@ -91,10 +96,11 @@ export class Player {
     this.want = { x: 0, z: 0 }; // desired movement this frame
     this.kb = { x: 0, z: 0 }; // knockback slide
     this.groundVel = { x: 0, z: 0 }; // actual displacement / dt (drives the gait)
-    this.atk = null; // { def, t, hit, prevT, pending, damage, poise, charge, gust }
+    this.atk = null; // { def, t, hit, prevT, pending, damage, poise, charge, gust, lunge, travel, impact }
+    this.gemT = 0.6; // s to the next idle gem glint
     this.chargeK = 0; // 0..1 while charging (anim + glow)
     this.chargeFull = false;
-    this.releaseK = 0; // charge of the heavy in flight (blade glow)
+    this.releaseK = 0; // charge of the thrust in flight (blade glow, thrust pose)
     this.recoil = 0; // block impact 0..1 (anim)
     this.blockStunT = 0;
     this.blockEvt = { t: -Infinity, attack: null, stream: false, acc: 0 };
@@ -121,6 +127,9 @@ export class Player {
     this._v2 = new THREE.Vector3();
     this._lock = new THREE.Vector3();
     this._hit = { sphere: null, x: 0, y: 0, z: 0 };
+    this._tip = new THREE.Vector3();
+    this._tipPrev = new THREE.Vector3();
+    this._gem = new THREE.Vector3();
     this._ghostSegs = new Float32Array(16 * 6);
 
     // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, heal(), teleport(x, z) })
@@ -901,6 +910,7 @@ export class Player {
     this.atk = null;
     this.chargeK = 0;
     this._enter('roll', back ? 'backstep' : 'roll', 0.05);
+    if (!back) this.anim.kickCoat(TUNE.rollCoatKick);
     this._emit('player:roll', { backstep: back });
     this.fx.dust(this.position.x, this.position.z, back ? 5 : 9, back ? 0.7 : 1);
     return true;
@@ -929,7 +939,7 @@ export class Player {
     if (!def) return false;
     const light = def.kind === 'light';
     this.atk = {
-      def, t: 0, hit: false, prevT: 0, gust: false,
+      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, lunge: null, travel: 0,
       pending: light && this.lmb.held, // still held: may become a charge (the swing waits at the coil)
       damage: fin(def.damage, 30), poise: fin(def.poise, 12), charge: 0,
     };
@@ -937,14 +947,22 @@ export class Player {
     this.yaw = this._aimYaw(this.yaw); // commit the swing direction
     // the cross-fade IS the windup: the body eases into the coil pose
     this._enter('attack', 'attack', def.windup * 0.85, true);
-    if (!this.atk.pending) this._emit('player:attack', { kind: def.kind, combo: def.combo, charge: 0 });
+    if (!this.atk.pending) this._swingStarted(def, 0);
     return true;
+  }
+
+  /** A swing really starts (a held light only once it is released): announce it, glint the gem. */
+  _swingStarted(def, charge) {
+    this._emit('player:attack', { kind: def.kind, combo: def.combo, charge });
+    if (def.kind !== 'light') this.anim.kickCoat(def.kind === 'thrust' ? 0.5 + 0.5 * charge : 0.45);
+    this.rig.gem.getWorldPosition(this._gem);
+    this.fx.gemGlint(this._gem.x, this._gem.y, this._gem.z, def.kind === 'light' ? 0.6 : 1, this.groundVel.x, this.groundVel.z);
   }
 
   _startCharge() {
     this.atk = null;
     if (this.buf.action === 'light') this.buf.action = null;
-    this.chargeK = heavyStats(this.lmb.t).k;
+    this.chargeK = thrustStats(this.lmb.t).k;
     this.chargeFull = false;
     this._enter('charge', 'charge', 0.16);
     this._emit('player:charge', { t: Math.max(0.25, CHARGE.full - this.lmb.t) });
@@ -957,7 +975,7 @@ export class Player {
       this._toLoco(0.14); // pause / cutscene mid-charge: drop it rather than fire it
       return;
     }
-    const st = heavyStats(L.t);
+    const st = thrustStats(L.t);
     this.chargeK = st.k;
     if (st.k >= 1 && !this.chargeFull) {
       this.chargeFull = true;
@@ -965,7 +983,7 @@ export class Player {
       this.fx.chargeReady(this._v.x, this._v.y, this._v.z);
     }
     if (!L.held) {
-      this._releaseHeavy(L.t);
+      this._releaseThrust(L.t);
       return;
     }
     if (this.buf.action === 'roll') {
@@ -981,17 +999,46 @@ export class Player {
     this.yaw = dampAngle(this.yaw, this._aimYaw(moveYaw), TUNE.turnRate, dt);
   }
 
-  _releaseHeavy(holdT) {
-    const st = heavyStats(holdT);
+  /** Release the charge: a lunging thrust whose travel, damage and posture grow with the charge. */
+  _releaseThrust(holdT) {
+    const st = thrustStats(holdT);
     this.atk = {
-      def: HEAVY, t: 0, hit: false, prevT: 0, gust: false, pending: false,
-      damage: st.damage, poise: st.poise, charge: st.k,
+      def: THRUST, t: 0, hit: false, prevT: 0, gust: false, impact: false, pending: false,
+      lunge: 0, travel: st.travel, damage: st.damage, poise: st.poise, charge: st.k,
     };
     this.releaseK = st.k;
     this.chargeK = 0;
     this.yaw = this._aimYaw(this.yaw);
-    this._enter('heavy', 'attack', HEAVY.windup * 0.9, true);
-    this._emit('player:attack', { kind: 'heavy', combo: HEAVY.combo, charge: st.k });
+    this._enter('heavy', 'attack', THRUST.windup * 0.9, true);
+    this._swingStarted(THRUST, st.k);
+  }
+
+  /**
+   * Step-in assist (REACH.assist): the lunge that carries a swing of `def.reach` into the nearest
+   * hurt surface ahead — within `range` m and `arc` rad of the facing, at heights the reach band can
+   * touch — never shorter than def.lunge nor longer than def.lunge + max.
+   */
+  _lungeFor(def) {
+    const base = Math.max(0, fin(def.lunge, 0));
+    const dr = this.game.dragon, A = REACH.assist;
+    if (!this._dragonTargetable(dr) || !Array.isArray(dr.hurtSpheres)) return base;
+    const p = this.position, fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    const top = 1.3 + REACH.up; // a swing at hero height plus the band
+    let gap = Infinity;
+    for (const h of dr.hurtSpheres) {
+      if (!h || !(h.r > 0) || !Number.isFinite(h.x + h.y + h.z)) continue;
+      const dy = h.y > top ? h.y - top : 0;
+      if (dy >= h.r) continue;
+      const rr = Math.sqrt(h.r * h.r - dy * dy); // horizontal radius at the band's top
+      const dx = h.x - p.x, dz = h.z - p.z;
+      const dist = Math.hypot(dx, dz);
+      if (!(dist > 1e-3)) continue;
+      const off = Math.acos(clamp((dx * fx + dz * fz) / dist, -1, 1)) - Math.asin(clamp(rr / dist, 0, 1));
+      if (off > A.arc) continue;
+      gap = Math.min(gap, dist - rr);
+    }
+    if (!(gap < A.range)) return base;
+    return clamp(gap - fin(def.reach, 2) + 0.4, base, base + A.max);
   }
 
   _tickAttack(dt) {
@@ -1005,7 +1052,7 @@ export class Player {
     if (a.pending) {
       if (!this.lmb.held) {
         a.pending = false; // tap: the swing goes ahead
-        this._emit('player:attack', { kind: d.kind, combo: d.combo, charge: 0 });
+        this._swingStarted(d, 0);
       } else if (this.lmb.t >= CHARGE.hold) {
         this._startCharge();
         return;
@@ -1014,9 +1061,18 @@ export class Player {
     a.t = a.pending ? Math.min(W, a.t + dt) : a.t + dt; // a held light waits at the coil
     const t = a.t;
     if (t < W) this.yaw = turnToward(this.yaw, this._aimYaw(this.yaw), TUNE.windupSteer * dt);
-    // lunge forward through the strike
-    const l0 = W - 0.08, l1 = W + A;
-    const lv = !a.pending && t >= l0 && t <= l1 ? d.lunge / (l1 - l0) : 0;
+    // lunge forward through the strike (stretched by the step-in assist); the thrust's root travel
+    // is front-loaded through its active frames
+    let lv = 0;
+    if (d.kind === 'thrust') {
+      if (t >= W && t <= W + A) lv = (a.travel / A) * (1.5 - (t - W) / A);
+    } else {
+      const l0 = W - 0.08, l1 = W + A;
+      if (!a.pending && t >= l0 && t <= l1) {
+        if (a.lunge === null) a.lunge = this._lungeFor(d);
+        lv = a.lunge / (l1 - l0);
+      }
+    }
     this.want.x = Math.sin(this.yaw) * lv;
     this.want.z = Math.cos(this.yaw) * lv;
 
@@ -1294,20 +1350,52 @@ export class Player {
       const W = d.windup, end = W + d.active;
       const prevT = a.prevT;
       a.prevT = t;
-      const heavy = d.kind === 'heavy';
+      const crit = this.critTimer > 0;
       // any overlap of this frame with the active window counts (robust to long frames)
       if (t >= W && prevT <= end + 0.04) {
-        this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, heavy, this.critTimer > 0);
+        this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, d.kind, crit);
         if (!a.hit && prevT <= end) this._tryHit(a);
       }
-      if (heavy && !a.gust && t >= W) {
-        a.gust = true; // the rising sweep throws a gust through the grass
-        const p = this.position;
-        this.game.world?.gust?.(p.x + Math.sin(this.yaw) * 1.2, p.z + Math.cos(this.yaw) * 1.2, 0.4 + 0.6 * a.charge, 4 + 2 * a.charge);
-        this.fx.release(p.x, p.z, a.charge);
+      if (d.kind === 'thrust') {
+        if (!a.gust && t >= W) {
+          a.gust = true; // the lunge throws a gust through the grass and a ring of dust
+          const p = this.position;
+          this.game.world?.gust?.(p.x + Math.sin(this.yaw) * 1.5, p.z + Math.cos(this.yaw) * 1.5, 0.4 + 0.6 * a.charge, 4 + 2 * a.charge);
+          this.fx.release(p.x, p.z, a.charge);
+          sw.point(1, this._tipPrev);
+        }
+        // the long cyan streak behind the driving point
+        if (t >= W && prevT <= end + 0.02) {
+          sw.point(1, this._tip);
+          this.fx.thrustStreak(this._tipPrev, this._tip, a.charge, crit);
+          this._tipPrev.copy(this._tip);
+        }
+      } else if (d.kind === 'slam' && !a.impact && t >= end - 0.02) {
+        a.impact = true;
+        this._slamImpact(a);
       }
     }
     sw.commit();
+  }
+
+  /** The slam meets the ground: crystal shards burst at the blade's point (and hit, if the blade
+   *  itself missed: d.shards = { radius, height }), a gust, a heavy shake. */
+  _slamImpact(a) {
+    const d = a.def, g = this.game;
+    this.sweep.point(1, this._tip);
+    const x = this._tip.x, z = this._tip.z;
+    if (!Number.isFinite(x + z)) return;
+    this.fx.slamShards(x, z, this.critTimer > 0);
+    g.world?.gust?.(x, z, 1.1, 4.5);
+    g.shake?.(d.shake * 0.6);
+    this._emit('player:slam', { x, z });
+    const S = d.shards;
+    if (a.hit || !S) return;
+    const dr = g.dragon;
+    if (!dr || typeof dr.takeHit !== 'function' || dr.state === 'dead' || dr.state === 'dying') return;
+    const spheres = dr.hurtSpheres;
+    if (!Array.isArray(spheres) || !spheres.length) return;
+    if (bandHit(spheres, x, 0, z, x, 0, z, fin(S.radius, 1.5), fin(S.height, 3), 0, this._hit) > 0) this._applyHit(a, this._hit);
   }
 
   _tryHit(a) {
@@ -1317,10 +1405,16 @@ export class Player {
     const spheres = dr.hurtSpheres;
     if (!Array.isArray(spheres) || !spheres.length) return;
     const h = this._hit;
-    if (!this.sweep.test(spheres, h)) return;
+    if (!this.sweep.test(spheres, h, fin(a.def.up, REACH.up))) return;
+    this._applyHit(a, h);
+  }
+
+  /** Deal one swing's damage at contact h {sphere, x, y, z}. */
+  _applyHit(a, h) {
+    const dr = this.game.dragon;
     a.hit = true; // one hit per swing
 
-    const d = a.def, heavy = d.kind === 'heavy';
+    const d = a.def, heavy = !!d.heavy;
     const part = typeof h.sphere.part === 'string' ? h.sphere.part : 'body';
     const crit = this.critTimer > 0;
     const damage = a.damage * (crit ? DEFENSE.ghostep.critMult : 1); // raw: the dragon applies part multipliers
@@ -1333,7 +1427,7 @@ export class Player {
     } catch (err) {
       console.error('[player] dragon.takeHit failed', err);
     }
-    this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit });
+    this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit, kind: d.kind });
     this._hitstop(d.hitstop * (crit ? 1.4 : 1));
     this.game.shake?.(d.shake * (crit ? 1.3 : 1));
     this.fx.sparks(h.x, h.y, h.z, dir.x, dir.z, heavy, crit);
@@ -1363,6 +1457,18 @@ export class Player {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);
     }
+    // the violet gem: a steady glow point, idle glints, a fast flicker while charging
+    if (this.state !== 'dead' && this.object3d.visible !== false) {
+      this.rig.gem.getWorldPosition(this._gem);
+      const charging = this.state === 'charge';
+      const vx = this.groundVel.x, vz = this.groundVel.z;
+      this.fx.gemTick(dt, this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + this.chargeK : 0.35, vx, vz);
+      this.gemT -= dt;
+      if (this.gemT <= 0) {
+        this.gemT = charging ? 0.22 : TUNE.gemGlintEvery * (0.6 + 0.8 * Math.random());
+        this.fx.gemGlint(this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + 0.5 * this.chargeK : 0.45, vx, vz);
+      }
+    }
   }
 
   _updateMaterials(dt) {
@@ -1380,32 +1486,45 @@ export class Player {
       u.uFlash.value = this.flash * 0.85;
       u.uDissolve.value = dissolve;
       u.uTint.value.setRGB(tr, tg, tb);
-      if (m !== M.blade && m !== M.flask) u.uGlow.value = this.burnGlow;
+      if (m !== M.blade && m !== M.flask && m !== M.gem) u.uGlow.value = this.burnGlow;
     }
-    // blade: brightens through the strike, glows cold while charging (rises with the charge) and
-    // pulses while the crit window is open
-    let ink = 0.3, glow = 0;
+    // blade: icy edges always lit (a slow shimmer), flaring through every strike, rising with the
+    // charge (the thrust stays hot through its follow-through) and pulsing in the crit window
+    let ink = 0.85 + 0.12 * Math.sin(this.time * 2.6), glow = 0.4 + 0.08 * Math.sin(this.time * 3.7);
     const a = this.atk, st = this.state;
     if (st === 'charge') {
       const k = this.chargeK;
-      ink = 0.45 + 1.4 * k + (this.chargeFull ? 0.25 * Math.sin(this.time * 18) : 0);
-      glow = 0.25 + 0.75 * k;
+      ink = 1.0 + 1.6 * k + (this.chargeFull ? 0.3 * Math.sin(this.time * 18) : 0);
+      glow = 0.55 + 0.85 * k;
     } else if (a && (st === 'attack' || st === 'heavy') && !a.pending) {
       const d = a.def, t = a.t;
-      if (t >= d.windup - 0.05 && t <= d.windup + d.active + 0.1) ink = 1.1;
-      if (d.kind === 'heavy') {
-        const fade = 1 - smoothstep(d.windup + d.active, d.windup + d.active + 0.25, t);
-        ink = Math.max(ink, (0.6 + 1.2 * this.releaseK) * fade);
-        glow = (0.3 + 0.6 * this.releaseK) * fade;
+      if (t >= d.windup - 0.06 && t <= d.windup + d.active + 0.12) {
+        ink = d.heavy ? 2.2 : 1.6;
+        glow = d.heavy ? 1.1 : 0.75;
+      }
+      if (d.kind === 'thrust') {
+        const fade = 1 - smoothstep(d.windup + d.active, d.windup + d.active + 0.3, t);
+        ink = Math.max(ink, (1.2 + 1.4 * this.releaseK) * fade);
+        glow = Math.max(glow, (0.6 + 0.6 * this.releaseK) * fade);
       }
     }
     if (this.critTimer > 0) {
-      ink = Math.max(ink, 0.9 + 0.3 * Math.sin(this.time * 14));
-      glow = Math.max(glow, 0.45);
+      ink = Math.max(ink, 1.3 + 0.4 * Math.sin(this.time * 14));
+      glow = Math.max(glow, 0.7);
+    }
+    if (!this.alive) {
+      ink *= 0.5;
+      glow *= 0.4;
     }
     const bu = M.blade.uniforms;
     bu.uInkGlow.value = dt > 0 ? damp(bu.uInkGlow.value, ink, 18, dt) : ink;
     bu.uGlow.value = dt > 0 ? damp(bu.uGlow.value, glow, 14, dt) : glow;
+    // the violet gem breathes; burns brighter while charging and through heavy swings
+    const heavyNow = st === 'charge' || (!!a && !!a.def?.heavy && (st === 'attack' || st === 'heavy'));
+    const gemTarget = (heavyNow ? 1.6 : 0.8) + 0.25 * Math.sin(this.time * 2.1) + (st === 'charge' ? 0.8 * this.chargeK : 0);
+    const gu = M.gem.uniforms;
+    gu.uGlow.value = dt > 0 ? damp(gu.uGlow.value, gemTarget, 10, dt) : gemTarget;
+    gu.uInkGlow.value = 1.4 + gu.uGlow.value;
   }
 
   // ------------------------------------------------------------------ debug (Lab)

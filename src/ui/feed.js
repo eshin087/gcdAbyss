@@ -84,7 +84,7 @@ export class CombatFeed {
     const now = () => num(this.game.realTime);
 
     // player
-    on('player:hitDragon', (d) => this.hits.push({ damage: d.damage, part: d.part, crit: !!d.crit, heavy: !!d.heavy }));
+    on('player:hitDragon', (d) => this.hits.push({ damage: d.damage, part: d.part, crit: !!d.crit, heavy: !!d.heavy, kind: d.kind }));
     on('player:hurt', (d) => {
       const dmg = Math.round(num(d.damage));
       if (dmg <= 0) return;
@@ -168,7 +168,8 @@ export class CombatFeed {
     const dmg = Math.round(num(h.damage));
     if (dmg <= 0) return null;
     const part = h.part ? ` (${h.part})` : '';
-    return `${h.crit ? 'Critical hit' : h.heavy ? 'Heavy hit' : 'Hit'} for ${dmg}${part}`;
+    const what = h.kind === 'slam' ? 'Slam' : h.kind === 'thrust' ? 'Thrust' : h.heavy ? 'Heavy hit' : 'Hit';
+    return `${h.crit ? `Critical ${what === 'Hit' ? 'hit' : what.toLowerCase()}` : what} for ${dmg}${part}`;
   }
 
   /** Called once per frame from hud.update. */
