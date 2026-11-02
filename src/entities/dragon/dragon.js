@@ -105,6 +105,11 @@ export class Dragon {
   get turnRate() {
     return TUNING.turnSpeed[this.phase === 2 ? 1 : 0];
   }
+  /** Radius (m, around the arena centre) the root stays inside: see TUNING.bound. */
+  get bound() {
+    const B = Number(this.game.CONFIG?.world?.dragonBound ?? CONFIG.world.dragonBound);
+    return Math.min(Number.isFinite(B) ? B : 26, TUNING.bound ?? Infinity);
+  }
   /** Phase-2 speed-up of windups + recoveries (TUNING.phase2TimeScale). */
   get tScale() {
     return this.phase === 2 ? TUNING.phase2TimeScale : 1;
@@ -330,7 +335,7 @@ export class Dragon {
   }
 
   _collide() {
-    const R = TUNING.radius, B = CONFIG.world.dragonBound;
+    const R = TUNING.radius, B = this.bound;
     if (this.state === 'airborne') {
       const d = Math.hypot(this.position.x, this.position.z);
       if (d > B) this.position.multiplyScalar(B / d);
@@ -652,26 +657,37 @@ export class Dragon {
     W.setPusher(9, last.x, last.y - 0.4 * S, last.z, 0.6 * S);
   }
 
+  /**
+   * Crack glow per material (model.glow: [phase-1 ember baseline, x glow, x throat charge]): the
+   * lava parts smoulder from the start, phase 2 (glow 0.5) and death (0.85) brighten everything,
+   * the throat / maw flare while the breath or roar charges. Then hit flash, dissolve, red tell.
+   */
   _applyMaterials(dt) {
-    const m = this.model.mats;
+    const m = this.model.mats, G = this.model.glow ?? {};
     this.glow = damp(this.glow, this.glowTarget, 1.2, dt);
     this.throatGlow = damp(this.throatGlow, this.throat, 4, dt);
-    const body = this.glow * (0.85 + 0.15 * Math.sin(this.time * 2.3));
+    const t = this.time;
+    const ember = 0.82 + 0.18 * Math.sin(t * 1.7) * Math.sin(t * 0.63 + 1.1); // slow smoulder
+    const body = this.glow * (0.85 + 0.15 * Math.sin(t * 2.3));
+    const throat = this.throatGlow;
     const flash = this.flash * 0.55;
     const eyes = this.rig.s.eyes;
-    m.scales.uniforms.uGlow.value = body;
-    m.belly.uniforms.uGlow.value = body * 0.8;
-    m.membrane.uniforms.uGlow.value = body;
-    m.neck.uniforms.uGlow.value = Math.max(body, this.throatGlow * 1.1);
-    m.eye.uniforms.uGlow.value = eyes;
-    m.eye.uniforms.uInkGlow.value = eyes * 2.5;
     const warn = this._updateWarn();
     for (const k in m) {
       const u = m[k].uniforms;
+      const g = G[k];
+      if (g) {
+        const v = g[0] * ember + g[1] * body + g[2] * throat;
+        u.uGlow.value = Number.isFinite(v) ? v : 0;
+      }
       u.uFlash.value = flash;
       u.uDissolve.value = this.dissolve;
       const w = u.uWarn?.value;
       if (w?.isVector4) w.set(WARN_RGB[0], WARN_RGB[1], WARN_RGB[2], warn);
+    }
+    if (m.eye) {
+      m.eye.uniforms.uGlow.value = eyes;
+      m.eye.uniforms.uInkGlow.value = eyes * 2.5;
     }
   }
 

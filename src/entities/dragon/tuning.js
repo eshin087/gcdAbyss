@@ -6,19 +6,23 @@ import { TELL } from '../../combat/rules.js';
 const DEG = Math.PI / 180;
 
 /**
- * Uniform size of the wyrm (v0.2: 25 % bigger than v0.1).
+ * Uniform size of the wyrm (v0.2: 25 % bigger than v0.1; v0.3: 1.5x v0.2 = 1.875x v0.1).
  * The model (model.js) and ANATOMY are authored in MODEL units (= the v0.1 metres); the root
  * Object3D is scaled by SCALE. Everything that works in WORLD space — IK bone lengths, neck/tail
  * chain lengths, gait strides, hurt spheres, body circles, attack reaches / radii, grass pushers,
  * FX sizes, pose targets (`dragon.rootPt`) — multiplies by SCALE. Change it here only.
  */
-export const SCALE = 1.25;
+export const SCALE = 1.875;
 const S = SCALE;
 
 export const TUNING = {
   maxHp: 1500,
   phase2At: 0.5, // hp fraction
   radius: 2.0 * S, // collision radius vs stones / arena bound
+  // the root stays inside min(CONFIG.world.dragonBound, bound) (m). CONFIG's 26 was sized for the
+  // v0.2 wyrm; at x1.875 the chest / neck-base body circles (~5.8 m ahead of the root) would cross
+  // the 30 m clearing and pin the hero against its edge. 24 keeps them inside.
+  bound: 24,
   turnSpeed: [70 * DEG, 110 * DEG], // P1, P2 (rad/s)
   walkSpeed: [3.0, 4.1],
   // phase 2 speeds the fight up: windups + recoveries x0.85 (the swings themselves keep their speed)

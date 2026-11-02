@@ -7,11 +7,18 @@ import { ANATOMY as A } from './tuning.js';
 //   panel 2: wrist -> finger2 tip | shoulder -> hip         (inner membrane, bounded by the arm)
 // aGUV is computed ONCE from a flat rest layout so glyphs stretch/fold with the skin.
 // Glyph +y runs from the wrist out along the fingers.
+// v0.3: a ragged trailing edge (torn notches between the fingers, Obsidian Drake concept art).
 
 const NU = 9; // samples along the fingers
-const NV = 6; // samples across a panel
+const NV = 11; // samples across a panel (enough for the torn teeth of the trailing edge)
 const PANELS = 3;
-const SAG = 0.22; // trailing-edge scallop (fraction pulled toward the wrist/elbow)
+const SAG = 0.24; // trailing-edge scallop (fraction pulled toward the wrist/elbow)
+// extra pull toward the wrist/elbow per trailing-edge sample: tears between jagged points
+const RAG = [
+  [0, 0.05, 0.16, 0.03, 0.2, 0.06, 0.24, 0.02, 0.14, 0.04, 0],
+  [0, 0.12, 0.02, 0.18, 0.05, 0.26, 0.08, 0.2, 0.03, 0.1, 0],
+  [0, 0.06, 0.2, 0.04, 0.16, 0.02, 0.22, 0.07, 0.18, 0.05, 0],
+];
 
 // scratch point slots: 0 wrist, 1 elbow, 2 shoulder, 3 hip, 4..6 finger tips
 const P = Array.from({ length: 7 }, () => [0, 0, 0]);
@@ -33,6 +40,12 @@ function quad3(out, a, c, b, t) {
 
 const C0 = [0, 0, 0], C1 = [0, 0, 0], D0 = [0, 0, 0], D1 = [0, 0, 0], CTRL = [0, 0, 0], MID = [0, 0, 0];
 
+/** Trailing-edge tear at v (0..1) for panel k: RAG sampled at the grid columns, linear between. */
+function rag(k, v) {
+  const r = RAG[k], f = v * (r.length - 1), i = Math.min(r.length - 2, Math.floor(f)), t = f - i;
+  return r[i] + (r[i + 1] - r[i]) * t;
+}
+
 /** Evaluate panel k at (u, v) into out[3] using the point slots P. */
 function evalPanel(out, k, u, v) {
   const wrist = P[0];
@@ -45,6 +58,7 @@ function evalPanel(out, k, u, v) {
     lerp3(MID, ta, tb, 0.5);
     lerp3(CTRL, MID, wrist, SAG);
     quad3(D1, ta, CTRL, tb, v);
+    lerp3(D1, D1, wrist, rag(k, v));
     p00 = wrist; p10 = ta; p01 = wrist; p11 = tb;
   } else {
     const tip = P[6], elbow = P[1], shoulder = P[2], hip = P[3];
@@ -55,6 +69,7 @@ function evalPanel(out, k, u, v) {
     lerp3(MID, tip, hip, 0.5);
     lerp3(CTRL, MID, elbow, SAG * 0.8);
     quad3(D1, tip, CTRL, hip, v);
+    lerp3(D1, D1, elbow, rag(k, v) * 0.8);
     p00 = wrist; p10 = tip; p01 = shoulder; p11 = hip;
   }
   const a = (1 - u) * (1 - v), b = u * (1 - v), c = (1 - u) * v, d = u * v;

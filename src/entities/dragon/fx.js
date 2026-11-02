@@ -206,9 +206,9 @@ export class DragonFx {
     while (this.emberAcc >= 1) {
       this.emberAcc -= 1;
       this._spawn(this.add, {
-        x: mouth.x + rand(-0.15, 0.15), y: mouth.y + rand(-0.1, 0.1), z: mouth.z + rand(-0.15, 0.15),
-        vx: (fwd?.x ?? 0) * 1.5 + rand(-0.6, 0.6), vy: rand(0.4, 1.6), vz: (fwd?.z ?? 0) * 1.5 + rand(-0.6, 0.6),
-        life: rand(0.4, 0.8), size: rand(0.18, 0.3), sizeEnd: 0.06, glyph: EMBER,
+        x: mouth.x + rand(-0.15, 0.15) * S, y: mouth.y + rand(-0.1, 0.1) * S, z: mouth.z + rand(-0.15, 0.15) * S,
+        vx: (fwd?.x ?? 0) * 1.5 * S + rand(-0.6, 0.6), vy: rand(0.4, 1.6), vz: (fwd?.z ?? 0) * 1.5 * S + rand(-0.6, 0.6),
+        life: rand(0.4, 0.8), size: rand(0.18, 0.3) * S, sizeEnd: 0.06 * S, glyph: EMBER,
         color: [3.2, 1.2, 0.2], colorEnd: [0.6, 0.06, 0.01], alpha: 1, alphaEnd: 0, drag: 1.2, gravity: 1.2, flicker: 0.5,
       });
     }
@@ -346,15 +346,15 @@ export class DragonFx {
       for (let i = 0; i < Math.round(5 * strength); i++) {
         this._spawn(this.add, {
           x: p.x, y: p.y, z: p.z,
-          vx: (fwd?.x ?? 0) * 1.2 * strength + rand(-0.4, 0.4), vy: rand(0.3, 1.2), vz: (fwd?.z ?? 0) * 1.2 * strength + rand(-0.4, 0.4),
-          life: rand(0.6, 1.2), size: rand(0.16, 0.26), sizeEnd: 0.05, glyph: EMBER,
+          vx: (fwd?.x ?? 0) * 1.2 * strength * S + rand(-0.4, 0.4), vy: rand(0.3, 1.2), vz: (fwd?.z ?? 0) * 1.2 * strength * S + rand(-0.4, 0.4),
+          life: rand(0.6, 1.2), size: rand(0.16, 0.26) * S, sizeEnd: 0.05 * S, glyph: EMBER,
           color: [2.4, 0.75, 0.12], colorEnd: [0.5, 0.05, 0.01], alpha: 1, alphaEnd: 0, drag: 1.4, gravity: 0.8, flicker: 0.6,
         });
       }
       this._spawn(this.alpha, {
         x: p.x, y: p.y, z: p.z,
         vx: (fwd?.x ?? 0) * 0.8, vy: 0.6, vz: (fwd?.z ?? 0) * 0.8,
-        life: 1.2, size: 0.3, sizeEnd: 1.0, glyph: '~',
+        life: 1.2, size: 0.3 * S, sizeEnd: 1.0 * S, glyph: '~',
         color: [0.06, 0.055, 0.05], alpha: 0.5 * strength, alphaEnd: 0, drag: 1, spin: rand(-1, 1),
       });
     }
@@ -394,7 +394,7 @@ export class DragonFx {
       this._spawn(this.add, {
         x: s.x + rand(-r, r), y: s.y + rand(-r, r) * 0.7, z: s.z + rand(-r, r),
         vx: rand(-0.4, 0.4), vy: big ? rand(1.5, 4) : rand(0.6, 1.8), vz: rand(-0.4, 0.4),
-        life: big ? rand(0.9, 1.8) : rand(0.6, 1.2), size: big ? rand(0.25, 0.5) : rand(0.14, 0.24), sizeEnd: 0.05,
+        life: big ? rand(0.9, 1.8) : rand(0.6, 1.2), size: (big ? rand(0.25, 0.5) : rand(0.14, 0.24)) * S, sizeEnd: 0.05 * S,
         glyph: big ? ".'`*^" : EMBER,
         color: big ? [3.4, 1.2, 0.25] : [2.4, 0.7, 0.12], colorEnd: [0.55, 0.05, 0.01],
         alpha: 1, alphaEnd: 0, drag: 0.6, gravity: big ? 1.5 : 0.6, flicker: 0.5, spin: rand(-2, 2),

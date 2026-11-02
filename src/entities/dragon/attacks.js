@@ -170,7 +170,8 @@ function biteActive(d, a, dt, speed) {
   const pose = d.pose;
   pose.head = pose.headTarget.copy(a.goal);
   pose.look.copy(a.target);
-  pose.headRate = 22;
+  // snap speed: 18 (was 22 at x1.25) so the x1.875 head meets the hero on the announced impact
+  pose.headRate = 18;
   pose.jaw = a.k < 0.62 ? 1 : 0;
   pose.jawRate = 30;
   pose.pitch = 0.14;
@@ -209,8 +210,10 @@ const bite = {
   cooldown: T.bite.cooldown,
   phases: (d) => [['windup', wind(d, T.bite.windup)], ['active', T.bite.active], ['recovery', wind(d, T.bite.recovery)]],
   beats: (d, a) => [beat('bite', 0, a.list[0][1] + T.bite.impact, T.bite, 'snout')],
-  // AI ranges below follow the sim-measured hit coverage (the attack must be able to land)
-  weight: (d, s) => (s.dist >= 3 * S && s.dist <= 8.4 * S && s.absAng <= 0.65 ? T.bite.weight + (s.dist < 7 * S ? 1 : 0) : 0),
+  // AI ranges below follow the sim-measured hit coverage (the attack must be able to land). The
+  // hero doesn't grow with the wyrm: at x1.875 a bite closer than ~3.6 model units passes over him
+  // (it reached down to 3.0 at x1.25), hence the 3.7 floor.
+  weight: (d, s) => (s.dist >= 3.7 * S && s.dist <= 8.4 * S && s.absAng <= 0.65 ? T.bite.weight + (s.dist < 7 * S ? 1 : 0) : 0),
   start(d, a) {
     biteStart(a);
   },
@@ -230,8 +233,8 @@ const bite = {
 // ------------------------------------------------------------------ shared wing-claw swipe
 // root-frame control points (model units, x mirrored by side): raised -> out wide -> across the front
 const SWIPE_P0 = [3.4, 3.9, 0.6];
-const SWIPE_P1 = [4.8, 1.4, 4.4];
-const SWIPE_P2 = [0.8, 0.6, 5.8];
+const SWIPE_P1 = [4.8, 1.0, 4.4];
+const SWIPE_P2 = [0.8, 0.35, 5.8];
 
 function swipeCurve(side) {
   return {
@@ -280,9 +283,10 @@ function swipeRecover(d, w, k) {
 function swipeHit(d, a, w, spec) {
   if (a.hitDone) return;
   const wp = d.rig.pt.wings[w.wi];
+  // wrist sphere covers the hooked thumb claw (0.95 model units, v0.3) around the knuckle
   if (
-    sweepHit(d, a, 'wrist', wp.wrist, 1.2 * S) ||
-    sweepHit(d, a, 'mid0', wp.mids[0], 0.9 * S) ||
+    sweepHit(d, a, 'wrist', wp.wrist, 1.35 * S) ||
+    sweepHit(d, a, 'mid0', wp.mids[0], 0.95 * S) ||
     sweepHit(d, a, 'tip0', wp.tips[0], 0.8 * S) ||
     sweepHit(d, a, 'mid1', wp.mids[1], 0.8 * S) ||
     sweepHit(d, a, 'elbow', wp.elbow, 0.8 * S)
@@ -784,8 +788,7 @@ const charge = {
       const moved = d.moveForward(a.v, dt);
       if (k > 0.2 && want > 0.05 && moved < want * 0.4) {
         // slammed into a stone or the arena edge: stop; only a stone staggers
-        const B = d.game.CONFIG?.world?.dragonBound ?? 26;
-        a.bonk = Math.hypot(d.position.x, d.position.z) < B - 0.5;
+        a.bonk = Math.hypot(d.position.x, d.position.z) < d.bound - 0.5;
         a.stopped = true;
         a.t = a.dur;
       }
@@ -848,8 +851,8 @@ const leap = {
     const k = 1 - Math.exp(-5 * dt);
     a.target.x += (_a.x - a.target.x) * k;
     a.target.z += (_a.z - a.target.z) * k;
-    const R = TUNING.radius, B = g.CONFIG?.world?.dragonBound ?? 26;
-    g.world?.resolve?.(a.target, R, B + R);
+    const R = TUNING.radius;
+    g.world?.resolve?.(a.target, R, d.bound + R);
     a.target.y = 0;
   },
   enter(d, a, phase) {

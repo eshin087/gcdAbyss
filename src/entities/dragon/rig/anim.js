@@ -95,9 +95,11 @@ export function resetPose(p) {
 }
 
 // neck / tail rest-shape presets (angles in the chest / tail-base frame); blended per frame
-const NECK_STAGGER = { pitch0: -0.12, pitchStep: -0.07, yaw0: 0, yawStep: 0 };
-const NECK_SLEEP = { pitch0: -0.28, pitchStep: 0.045, yaw0: -0.4, yawStep: -0.42 }; // curls to the right
-const NECK_DEAD = { pitch0: -0.42, pitchStep: 0.065, yaw0: -0.3, yawStep: -0.14 };
+// awake: an upright S (rises steeply from the chest, then curls forward to carry the head high)
+const NECK_UP = { pitch0: 0.42, pitchStep: 0.33, pitchCurve: -0.075 };
+const NECK_STAGGER = { pitch0: -0.12, pitchStep: -0.07, pitchCurve: 0, yaw0: 0, yawStep: 0 };
+const NECK_SLEEP = { pitch0: -0.28, pitchStep: 0.045, pitchCurve: 0, yaw0: -0.4, yawStep: -0.42 }; // curls to the right
+const NECK_DEAD = { pitch0: -0.42, pitchStep: 0.065, pitchCurve: 0, yaw0: -0.3, yawStep: -0.14 };
 const TAIL_DEAD = { pitch0: -0.62, pitchStep: 0.06, yaw0: 0.1, yawStep: 0.09, waveAmp: 0, wavePhase: 0 };
 
 const mixParams = (a, b, t, out) => {
@@ -289,8 +291,9 @@ export class Rig {
     const lookYaw = clamp(Math.atan2(toLook.x, toLook.z), -1.3, 1.3) * awakeW * (1 - s.stagger * 0.7);
     const n = neck.n;
     const base = this._nb;
-    base.pitch0 = 0.95;
-    base.pitchStep = -0.21;
+    base.pitch0 = NECK_UP.pitch0;
+    base.pitchStep = NECK_UP.pitchStep;
+    base.pitchCurve = NECK_UP.pitchCurve;
     base.yaw0 = lookYaw * 0.15;
     base.yawStep = (lookYaw * 0.8) / n;
     const p = mixParams(base, NECK_STAGGER, s.stagger, this._np);
