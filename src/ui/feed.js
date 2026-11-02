@@ -4,7 +4,8 @@ import { num } from './dom.js';
 // (flushed from hud.update) so a hit that raises both 'player:hitDragon' and 'dragon:hurt' is
 // logged once; hurts / dodges / blocks are also resolved at flush time so one blow logs one line
 // (a blocked hit's chip damage is not logged twice; a perfect dodge is not also "You dodged").
-// Flow-level messages (rest, retry, quality, ...) are logged by GameFlow itself.
+// Flow-level messages (rest, retry, quality, ...) are logged by GameFlow itself. Attack tells are
+// never logged: they are read from the attacker in the world (docs/COMBAT.md).
 
 const HURT_TEXT = [
   ['bite', 'Bitten'],
@@ -50,10 +51,6 @@ const STREAMS = [
   ['fire', 'Engulfed in flame for'],
 ];
 const BLOCK_WINDOW = 0.8; // s: blocks inside this window are summed into one line
-const TIPS = {
-  blue: '◆ Blue flash: tap RMB just before impact to parry.',
-  red: '! Red flash: cannot be blocked or parried. Dodge (Space) right before impact.',
-};
 
 function pick(list, kind, fallback) {
   const k = String(kind ?? '').toLowerCase();
@@ -81,14 +78,13 @@ export class CombatFeed {
     this.blockDmg = []; // chip damage of the blocks seen this frame
     this.block = { n: 0, chip: 0, t: 0 };
     this.perfectAt = -10;
-    this.tipped = new Set();
     this.streams = STREAMS.map(([kind, label]) => ({ kind, label, sum: 0, t: 0 }));
     const on = (name, fn) => game.events?.on(name, (d) => fn(d && typeof d === 'object' ? d : {}));
     const log = (text, ch, key, gap) => this._log(text, ch, key, gap);
     const now = () => num(this.game.realTime);
 
     // player
-    on('player:hitDragon', (d) => this.hits.push({ damage: d.damage, part: d.part, crit: !!d.crit, heavy: !!d.heavy }));
+    on('player:hitDragon', (d) => this.hits.push({ damage: d.damage, part: d.part, crit: !!d.crit, heavy: !!d.heavy, kind: d.kind }));
     on('player:hurt', (d) => {
       const dmg = Math.round(num(d.damage));
       if (dmg <= 0) return;
@@ -135,14 +131,6 @@ export class CombatFeed {
     on('player:noFlask', () => log('Your flask is empty.', 'warn', 'noFlask', 1.5));
     on('player:died', () => log('You died.', 'warn'));
 
-    // tells: a one-time tip the first time each coloured tell appears this session
-    on('combat:tell', (d) => {
-      const tip = TIPS[d.tell];
-      if (!tip || this.tipped.has(d.tell)) return;
-      this.tipped.add(d.tell);
-      log(tip, 'warn');
-    });
-
     // dragon
     on('dragon:hurt', (d) => this.hurts.push({ damage: d.damage, part: d.part, crit: !!d.crit, heavy: false }));
     on('dragon:wake', () => log('The wyrm stirs…', 'warn', 'wake', 5));
@@ -180,7 +168,8 @@ export class CombatFeed {
     const dmg = Math.round(num(h.damage));
     if (dmg <= 0) return null;
     const part = h.part ? ` (${h.part})` : '';
-    return `${h.crit ? 'Critical hit' : h.heavy ? 'Heavy hit' : 'Hit'} for ${dmg}${part}`;
+    const what = h.kind === 'slam' ? 'Slam' : h.kind === 'thrust' ? 'Thrust' : h.heavy ? 'Heavy hit' : 'Hit';
+    return `${h.crit ? `Critical ${what === 'Hit' ? 'hit' : what.toLowerCase()}` : what} for ${dmg}${part}`;
   }
 
   /** Called once per frame from hud.update. */

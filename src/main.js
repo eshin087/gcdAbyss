@@ -83,6 +83,7 @@ async function boot() {
 
   const applyQuality = () => {
     const q = CONFIG.quality[game.settings.quality];
+    game.world.setGrassQuality?.(q.grass);
     pipeline.setSize(innerWidth, innerHeight, Math.min(q.dpr, devicePixelRatio || 1, CONFIG.render.maxPixelRatio));
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
@@ -134,10 +135,30 @@ async function boot() {
     game.cameraRig.update(dt, focus);
   };
 
-  const updateSharedUniforms = () => {
+  // View override (Lab model viewer; ARCHITECTURE.md → Lab → Model viewer):
+  //   game.viewOverride = { pos, target, focus? } | null   (Vector3-likes, world metres)
+  // applied AFTER the rig update: the camera sits at `pos` looking at `target`, and the fog centre,
+  // light selection and shadow box follow `focus` (default `target`) instead of the player. The rig
+  // keeps running underneath, so clearing the override snaps back to the game camera. A missing,
+  // non-finite or degenerate override is ignored for that frame: it can never throw or feed NaN.
+  const viewFocus = new THREE.Vector3();
+  const applyViewOverride = () => {
+    const o = game.viewOverride;
+    if (!o) return null;
+    const p = o.pos, t = o.target, f = o.focus ?? t;
+    if (!p || !t || !f) return null;
+    const dx = p.x - t.x, dy = p.y - t.y, dz = p.z - t.z;
+    if (!Number.isFinite(dx + dy + dz + f.x + f.z) || dx * dx + dy * dy + dz * dz < 1e-6) return null;
+    camera.position.set(p.x, p.y, p.z);
+    camera.lookAt(t.x, t.y, t.z);
+    camera.updateMatrixWorld();
+    return viewFocus.set(f.x, Number.isFinite(f.y) ? f.y : 0, f.z);
+  };
+
+  const updateSharedUniforms = (focusOverride) => {
     U.uTime.value = game.time;
     U.uCamPos.value.copy(camera.position);
-    U.uFocus.value.copy(game.player.position);
+    U.uFocus.value.copy(focusOverride ?? game.player.position);
     const m = camera.matrixWorld.elements;
     U.uCamRight.value.set(m[0], m[1], m[2]).normalize();
     U.uCamUp.value.set(m[4], m[5], m[6]).normalize();
@@ -203,15 +224,17 @@ async function boot() {
     safe('dragon', () => game.dragon.update(dt));
     safe('lab', () => game.lab.postUpdate?.()); // hitbox overlay matches this frame
     safe('camera', () => updateCameraFocus(realDt));
-    updateSharedUniforms();
+    let viewAt = null;
+    safe('view', () => (viewAt = applyViewOverride()));
+    updateSharedUniforms(viewAt);
     safe('world', () => game.world.update(dt));
-    game.lights.update(dt, game.player.position);
+    game.lights.update(dt, viewAt ?? game.player.position);
     game.fx.alpha.update(dt, game.time);
     game.fx.add.update(dt, game.time);
     safe('hud', () => game.hud.update(realDt));
     safe('audio', () => game.audio.update(realDt));
 
-    pipeline.updateShadowCamera(game.cameraRig.focus);
+    pipeline.updateShadowCamera(viewAt ?? game.cameraRig.focus);
     pipeline.render();
     if (inspect.rect) inspect.draw();
     game.input.endFrame();

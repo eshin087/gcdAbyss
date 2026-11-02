@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { FLAG, createAsciiObjectMaterial } from '../render/materials.js';
+import { FLAG, createAsciiObjectMaterial, createCarvedGlyphMaterial } from '../render/materials.js';
 import { markCaster } from '../render/pipeline.js';
 import { mulberry32, range, hash2, fbm2 } from '../core/rng.js';
 import { CONFIG } from '../core/config.js';
@@ -9,7 +9,9 @@ import { TAU } from '../core/math.js';
 // Procedural forest ring around a moonlit clearing: blob oaks and pines (leaf-ramp ASCII),
 // a broken standing-stone circle, boulders, flagstones, the bones of past challengers near
 // the wyrm's nest, and the bonfire at the southern entrance. Everything is merged into a few
-// meshes using the AsciiObject material so the post pass renders it as character grids.
+// meshes. Trees, bones and the bonfire use the AsciiObject material (the post pass renders them
+// as character grids); standing stones, boulders and flagstones use the CarvedGlyph material
+// (crisp world-fixed glyphs on the stone itself, see STYLE.md).
 
 // ---------- small helpers ----------
 function noise3(x, y, z) {
@@ -74,8 +76,84 @@ function paint(geo, { col, flag, sway = 0, ao = 1 }) {
   return geo;
 }
 
+/**
+ * Bake CarvedGlyph attributes: aCol (albedo), aAO, aMoss (moss tendency 0..1), aInk (glyph
+ * brightness/density) and aEdge (moonlit chamfer band). Each may be a constant or
+ * fn(x, y, z, nx, ny, nz). Normals stay flat per facet: every facet reads as a carved plane.
+ */
+function carve(geo, { col, ao = 1, moss = 0, ink = 1, edge = 0 }) {
+  geo.computeVertexNormals();
+  const p = geo.attributes.position;
+  const nrm = geo.attributes.normal;
+  const n = p.count;
+  const attrs = {
+    aCol: new Float32Array(n * 3),
+    aAO: new Float32Array(n),
+    aMoss: new Float32Array(n),
+    aInk: new Float32Array(n),
+    aEdge: new Float32Array(n),
+  };
+  const val = (v, args) => (typeof v === 'function' ? v(...args) : v);
+  for (let i = 0; i < n; i++) {
+    const args = [p.getX(i), p.getY(i), p.getZ(i), nrm.getX(i), nrm.getY(i), nrm.getZ(i)];
+    const c = val(col, args);
+    attrs.aCol.set(c, i * 3);
+    attrs.aAO[i] = val(ao, args);
+    attrs.aMoss[i] = val(moss, args);
+    attrs.aInk[i] = val(ink, args);
+    attrs.aEdge[i] = val(edge, args);
+  }
+  geo.setAttribute('aCol', new THREE.BufferAttribute(attrs.aCol, 3));
+  for (const k of ['aAO', 'aMoss', 'aInk', 'aEdge']) geo.setAttribute(k, new THREE.BufferAttribute(attrs[k], 1));
+  return geo;
+}
+
+/**
+ * Irregular polygon slab with a chamfered top edge: flat top fan, a bevel ring that catches the
+ * moon (the slab's crisp edge), short walls running down into the soil. pts: [[x, z], ...] around
+ * the centre (star-shaped). Non-indexed, so normals come out flat per facet.
+ */
+function slabGeometry(pts, { top = 0.04, inset = 0.07, drop = 0.045, bottom = -0.2 } = {}) {
+  const n = pts.length;
+  let cx = 0, cz = 0;
+  for (const [x, z] of pts) {
+    cx += x / n;
+    cz += z / n;
+  }
+  const inner = pts.map(([x, z]) => {
+    const dx = x - cx, dz = z - cz, l = Math.hypot(dx, dz) || 1;
+    const k = Math.max(0.3, (l - inset) / l);
+    return [cx + dx * k, cz + dz * k];
+  });
+  const pos = [];
+  const e1 = new THREE.Vector3(), e2 = new THREE.Vector3();
+  // push a triangle wound so its normal points along the hint (hx, hy, hz)
+  const face = (a, b, c, hx, hy, hz) => {
+    e1.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    e2.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+    e1.cross(e2);
+    if (e1.x * hx + e1.y * hy + e1.z * hz < 0) pos.push(...a, ...c, ...b);
+    else pos.push(...a, ...b, ...c);
+  };
+  const C = [cx, top, cz];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const A = [inner[i][0], top, inner[i][1]], B = [inner[j][0], top, inner[j][1]];
+    const P = [pts[i][0], top - drop, pts[i][1]], Q = [pts[j][0], top - drop, pts[j][1]];
+    const E = [pts[i][0], bottom, pts[i][1]], F = [pts[j][0], bottom, pts[j][1]];
+    const ox = (pts[i][0] + pts[j][0]) / 2 - cx, oz = (pts[i][1] + pts[j][1]) / 2 - cz;
+    face(C, A, B, 0, 1, 0);
+    face(A, B, Q, ox, 1, oz);
+    face(A, Q, P, ox, 1, oz);
+    face(P, Q, F, ox, 0, oz);
+    face(P, F, E, ox, 0, oz);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  return g;
+}
+
 const mul = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
-const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 // ---------- palette (linear) ----------
 // leaf albedos carry little blue: the moonlight already tints everything teal
@@ -93,8 +171,26 @@ const PINE = [
 ];
 const BARK = [0.12, 0.09, 0.075];
 const STONE = [0.15, 0.165, 0.205];
-const MOSS = [0.08, 0.13, 0.085];
 const BONE = [0.27, 0.255, 0.22];
+
+// carved-glyph looks (createCarvedGlyphMaterial options; see STYLE.md "stones")
+const STONE_LOOK = {
+  // standing stones, boulders: lit faces climb to dense blocks, the shadow side drops to dots
+  gain: 2.9,
+  lumScale: 4.0,
+  jitter: 0.42,
+  // caps and fallen faces: blocky symbols, few dashes (rows of '=' read as text)
+  topGlyphs: ['.  .', '. ,:', ':;.:', ';%:=', '%#;&', '#%8&'],
+};
+const SLAB_LOOK = {
+  // flagstones: the ground must stay calm, so dimmer ink, a lower ramp and a chipped moonlit rim
+  gain: 2.1,
+  lumScale: 2.3,
+  jitter: 0.5,
+  inkFloor: 0.06,
+  edge: 0.5,
+  topGlyphs: ['.  :', '.:;,', ':;=-', '=;%:', '%=#;', '#%&='],
+};
 
 // ---------- builders ----------
 function buildOak(rng, x, z, s) {
@@ -225,13 +321,10 @@ function buildStandingStone(rng, x, z, { h, w, d, yaw, fallen = false, broken = 
     g.translate(0, d / 2 - 0.1, 0);
   }
   g.rotateY(yaw);
-  paint(g, {
-    col: (px, py, pz, nx, ny) => {
-      const n = 0.7 + 0.55 * fbm2(px * 1.7 + x, pz * 1.7 + py, 2);
-      const moss = ny > 0.55 || (py < 0.6 && hash2(px * 13, pz * 13) > 0.6) ? 0.65 : 0;
-      return mix3(mul(STONE, n), mul(MOSS, n), moss);
-    },
-    flag: FLAG.STONE,
+  carve(g, {
+    col: (px, py, pz) => mul(STONE, 0.75 + 0.5 * fbm2(px * 1.7 + x, pz * 1.7 + py, 2)),
+    // moss on the caps and creeping up from the grass line
+    moss: (px, py, pz, nx, ny) => (ny > 0.55 ? 0.8 : py < 0.5 ? 0.6 : 0.1),
     ao: (px, py) => 0.55 + 0.45 * Math.min(1, py / 1.2),
   });
   g.translate(x, 0, z);
@@ -239,29 +332,52 @@ function buildStandingStone(rng, x, z, { h, w, d, yaw, fallen = false, broken = 
 }
 
 function buildBoulder(rng, x, z, r) {
-  const g = prep(new THREE.IcosahedronGeometry(r, 1));
-  lumpy(g, r * 0.5, 1.4 / r, rng() * 99);
+  // low-poly on purpose: few big facets, each one a carved plane with its own glyph family
+  const g = prep(new THREE.IcosahedronGeometry(r, 0));
+  lumpy(g, r * 0.45, 1.4 / r, rng() * 99);
   g.scale(1, range(rng, 0.5, 0.75), 1);
   g.rotateY(rng() * TAU);
   g.translate(x, r * 0.2, z);
-  paint(g, {
-    col: (px, py, pz, nx, ny) => {
-      const n = 0.65 + 0.6 * fbm2(px * 1.4, pz * 1.4 + py, 2);
-      return ny > 0.6 ? mix3(mul(STONE, n), mul(MOSS, n), 0.5) : mul(STONE, n * 0.95);
-    },
-    flag: FLAG.STONE,
+  carve(g, {
+    col: (px, py, pz) => mul(STONE, 0.7 + 0.55 * fbm2(px * 1.4, pz * 1.4 + py, 2)),
+    moss: (px, py, pz, nx, ny) => (ny > 0.6 ? 0.6 : py < 0.3 ? 0.35 : 0.06),
+    ink: 0.9,
     ao: (px, py) => 0.5 + 0.5 * Math.min(1, py / (r * 0.8)),
   });
   return g;
 }
 
+/**
+ * Half-sunk, partly overgrown flagstone: an irregular 5-7 sided slab with a moonlit chamfer,
+ * tilted so one side dips into the soil. Returns the geometry and its world-space outline (the
+ * grass grows up to and through it, see meadowDensity).
+ */
 function buildFlagstone(rng, x, z, w, d, yaw) {
-  const g = prep(new THREE.BoxGeometry(w, 0.12, d, 2, 1, 2));
-  lumpy(g, 0.05, 2.5, rng() * 50);
+  const r2 = mulberry32(Math.floor(rng() * 4294967296)); // one draw keeps the main layout sequence
+  const sides = 5 + Math.floor(r2() * 3);
+  const a0 = r2() * TAU;
+  const pts = [];
+  for (let i = 0; i < sides; i++) {
+    const a = a0 + ((i + (r2() - 0.5) * 0.55) / sides) * TAU;
+    const rr = 0.86 + r2() * 0.28;
+    pts.push([Math.cos(a) * rr * w * 0.5, Math.sin(a) * rr * d * 0.5]);
+  }
+  const g = slabGeometry(pts, { top: range(r2, 0.035, 0.06), inset: 0.075, drop: 0.05 });
+  const tiltAxis = new THREE.Vector3(Math.cos(a0 * 1.7), 0, Math.sin(a0 * 1.7));
+  g.applyMatrix4(new THREE.Matrix4().makeRotationAxis(tiltAxis, range(r2, 0.02, 0.07)));
   g.rotateY(yaw);
-  g.translate(x, 0.0, z);
-  paint(g, { col: (px, py, pz) => mul(STONE, 0.6 + 0.4 * fbm2(px * 2, pz * 2, 2)), flag: FLAG.STONE, ao: 0.85 });
-  return g;
+  g.translate(x, 0, z);
+  const rad = Math.max(w, d) * 0.5;
+  carve(g, {
+    col: (px, py, pz) => mul(STONE, 0.6 + 0.4 * fbm2(px * 2, pz * 2, 2)),
+    ao: 0.85,
+    // moss creeps in from the rim
+    moss: (px, py, pz) => 0.12 + 0.38 * Math.min(1, Math.hypot(px - x, pz - z) / rad),
+    edge: (px, py, pz, nx, ny) => (ny > 0.5 && ny < 0.95 ? 1 : 0),
+  });
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const outline = pts.map(([px, pz]) => [x + c * px + s * pz, z - s * px + c * pz]);
+  return { geo: g, outline };
 }
 
 function buildBones(rng, cx, cz) {
@@ -384,9 +500,12 @@ export function createForest(U, colliders) {
   const group = new THREE.Group();
   group.name = 'forest';
   const treeGeos = [];
-  const stoneGeos = [];
+  const stoneGeos = []; // carved glyphs: standing stones, boulders
+  const slabGeos = []; // carved glyphs, calmer look: flagstones
+  const propGeos = []; // screen grid: bones, bonfire
   const treeSpots = [];
   const bare = [];
+  const slabs = [];
 
   // trees in a ring around the clearing, leaving a path open to the south
   const trees = [];
@@ -437,11 +556,13 @@ export function createForest(U, colliders) {
     const yaw = -a + Math.PI / 2 + range(rng, -0.2, 0.2);
     stoneGeos.push(buildStandingStone(rng, x, z, { h, w, d, yaw, fallen, broken }));
     if (fallen) {
-      const fx = Math.cos(yaw) * 0, fz = 0;
-      colliders.add(x + fx, z + fz, 0.95, 'stone');
+      // the toppled stone lies from its base (x, z) out to h along (sin yaw, cos yaw): centre the
+      // colliders (and so the bare-earth stamp) on its body, not on its base
+      const cx = x + Math.sin(yaw) * h * 0.5, cz = z + Math.cos(yaw) * h * 0.5;
+      colliders.add(cx, cz, 0.95, 'stone');
       const ax = Math.sin(yaw) * (h * 0.33), az = Math.cos(yaw) * (h * 0.33);
-      colliders.add(x + ax, z + az, 0.8, 'stone');
-      colliders.add(x - ax, z - az, 0.8, 'stone');
+      colliders.add(cx + ax, cz + az, 0.8, 'stone');
+      colliders.add(cx - ax, cz - az, 0.8, 'stone');
     } else {
       colliders.add(x, z, Math.max(w, d) * 0.62, 'stone');
     }
@@ -464,28 +585,39 @@ export function createForest(U, colliders) {
     const a = rng() * TAU, r = Math.sqrt(rng()) * 9;
     const x = Math.cos(a) * r, z = Math.sin(a) * r + 1;
     const w = range(rng, 0.8, 1.6), d = range(rng, 0.6, 1.3);
-    stoneGeos.push(buildFlagstone(rng, x, z, w, d, rng() * TAU));
-    bare.push({ x, z, r: Math.max(w, d) * 0.6 });
+    const slab = buildFlagstone(rng, x, z, w, d, rng() * TAU);
+    slabGeos.push(slab.geo);
+    slabs.push({ x, z, r: Math.max(w, d) * 0.65, outline: slab.outline });
   }
 
   // the nest: bones to the north
   const nest = { x: -3, z: -15.5 };
-  stoneGeos.push(...buildBones(rng, nest.x, nest.z));
+  propGeos.push(...buildBones(rng, nest.x, nest.z));
   bare.push({ x: nest.x, z: nest.z, r: 3.2 });
 
   // bonfire at the southern entrance
   const bf = W.bonfire;
-  stoneGeos.push(...buildBonfire(rng, bf.x, bf.z));
+  propGeos.push(...buildBonfire(rng, bf.x, bf.z));
   colliders.add(bf.x, bf.z, 0.75, 'bonfire');
   bare.push({ x: bf.x, z: bf.z, r: 1.6 });
 
   const mat = createAsciiObjectMaterial(U, { fadeNearPlayer: true, side: THREE.DoubleSide });
   const treeMesh = new THREE.Mesh(mergeGeometries(treeGeos), mat);
   treeMesh.name = 'trees';
-  const stoneMesh = new THREE.Mesh(mergeGeometries(stoneGeos), mat);
+  const propMesh = new THREE.Mesh(mergeGeometries(propGeos), mat);
+  propMesh.name = 'props';
+  const pitch = CONFIG.camera.pitch;
+  const stoneMat = createCarvedGlyphMaterial(U, { ...STONE_LOOK, fadeNearPlayer: true, viewPitch: pitch });
+  const stoneMesh = new THREE.Mesh(mergeGeometries(stoneGeos), stoneMat);
   stoneMesh.name = 'stones';
-  group.add(treeMesh, stoneMesh);
+  const slabMat = createCarvedGlyphMaterial(U, { ...SLAB_LOOK, viewPitch: pitch });
+  const slabMesh = new THREE.Mesh(mergeGeometries(slabGeos), slabMat);
+  slabMesh.name = 'flagstones';
+  group.add(treeMesh, propMesh, stoneMesh, slabMesh);
   markCaster(group);
 
-  return { group, treeSpots, bare, nest, bonfire: { x: bf.x, z: bf.z }, material: mat };
+  return {
+    group, treeSpots, bare, slabs, nest, bonfire: { x: bf.x, z: bf.z },
+    material: mat, stoneMaterial: stoneMat, slabMaterial: slabMat,
+  };
 }

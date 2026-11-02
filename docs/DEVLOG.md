@@ -5,6 +5,115 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-01 — Session 3c: match the concept sheets (four-legged drake)
+**Owner:** "The character hair and outfit doesn't look like the images. The dragon as well. Try to
+get it accurately as close as possible." They chose to rebuild the dragon as four-legged.
+
+**How (ultracode workflows):**
+1. **Prep workflow:**
+   - a Lab model viewer (side views, dark backdrop)
+   - specs measured from the sheets (`docs/art/hero.md`, `docs/art/dragon.md`)
+   - baseline art-director review: hero 2.5/10, dragon 2/10
+2. **Build workflow:**
+   - a material upgrade (`levels`, `glowAxis`/`inkAxis`, voronoi cracks, `seamAxis`)
+   - parallel hero and dragon chains: the dragon in two stages (anatomy/gait, then the
+     four-legged moveset), each followed by independent critic → fix rounds
+   - the owner asked to finish sooner, so the loop was capped at one fix round plus a final review
+   - integration verify, then side-by-side review boards
+   - two usage-limit interruptions were resumed from the workflow journal with no work lost
+
+**Results:**
+- **Dragon: 6/10.** Silhouette 7, proportions 7, game read 6; no P0 left.
+- **Hero: 4.5/10.** Glyph rendering 6, poses 6.5. Remaining P0s: the hair mass, and the blade
+  hidden from behind at the game camera.
+- **Verify fixed:**
+  - the tail sweep landing 0.2 s early from straight behind (fairness)
+  - membrane per-frame garbage
+  - hero glyph zoom at the game camera
+- **Verify flagged:**
+  - clawCombo hits 2/3 tell→impact is 0.65 s, below the 0.7 s rule (pre-existing)
+  - the AI rarely picks swipe/fireball/charge against a stationary hero
+
+**Boards:** `scratchpad/art/final/*.png` (sent to the owner).
+
+**Next:** the owner reviews the boards. A focused hero round (hair, blade read, details) is the
+obvious follow-up.
+
+---
+
+## 2026-11-01 — Session 3b: copy the concept sheets; carved stones
+**Owner feedback:** "much better". They then shared concept art (Shadow Swordsman sheet,
+movement and combat key poses, Obsidian Drake sheet) and asked to make the hero and dragon look
+like it. They also want better ground stones.
+
+**Their choices:**
+- restyle the wyvern (don't rebuild it as four-legged)
+- make it 1.5× bigger
+- the heavy slam becomes the 3rd hit of the combo
+- carved crisp glyphs for stones
+
+**Done:** three parallel agents (hero, dragon, stones) did the work, then I integrated it.
+- **Hero:**
+  - new model, a 1.34 m sword with a violet gem and cyan edges, and poses from the sheets
+  - slam finisher and lunge thrust
+  - cyan arc trails, thrust streak and crystal shards
+  - reach band + step-in assist (REACH test)
+- **Wyrm:**
+  - obsidian / silver chevrons, lava belly, throat and inner legs, red ragged wings
+  - horns, frill and spikes (merged per joint, 109 meshes)
+  - upright S-neck
+  - `SCALE` 1.875, with an audit of bound, bite floor, swipe reach, FX and test distances
+- **Stones:** `createCarvedGlyphMaterial` (world lattice perpendicular to the camera view). Flagstones
+  are irregular half-sunk slabs with grass up to their edges. Fixed the fallen stones' colliders.
+- **Me:** capped the agent's boss framing zoom from +16 m to +5 m. At ~50 m the hero was lost
+  again; it now sits at 39–41 m and the wyrm crops at the edges.
+
+**Decisions:** ADR-012 (concept sheets + carved stones), ADR-013 (reach band, hero-first camera).
+
+**Open issues / next**
+- **Lava underside:** mostly visible when the wyrm faces the camera or rears. A normal-driven
+  underside glow mask in the material would put it on a single mesh.
+- **Cracks:** a regular grid; an irregular (Voronoi) crack pattern would read more like fissures.
+- **Hero coat:** tail strips move as panels, not individually. The dodge is a forward roll, not the
+  sheet's sideways dive.
+- **Carved marks:** some digits (`1`, `7`) can read as text on the stones; consider symbol-only ramps.
+
+---
+
+## 2026-11-01 — Session 3: look pass from the v0.2 review
+**Owner feedback on v0.2 (live):**
+- The grass is TOO ascii: noisy, distracting, and the ground seems to move, which makes the game dizzy.
+- The main character is barely visible, and the hero and dragon are blurry.
+- No PARRY / DODGE text notices: dodge-only attacks should be a red warning flash from the boss,
+  and parryable attacks should be read from animation.
+
+They want previews to approve. Their answers to my questions: v0.1 grass but calmer; crisp surface
+glyphs for the creatures; a brighter outline to find the hero; red flash + white glint tells.
+
+**Done**
+- Grass: restored v0.1 `world/grass.js` / `ground.js` / world wiring / quality presets; tips ~20 %
+  darker; wind amplitude 0.07 → 0.04 and slower. Removed the grass path from the ASCII pass.
+- Creatures: `createSurfaceGlyphMaterial` is surface-glyph by default again. It uses `SURFACE_SETS`
+  defaults per `ascii` set, `glyphZoom` 0.72, sharpened coverage, darker gaps and an `outline` term
+  (pow 6 falloff; a wide falloff shaded the coat flare like plastic).
+  - Wyrm: cells = v0.1 × 1.3, `lumScale` 3.3–3.5, lit gaps, no outline.
+  - Hero: cells 0.045–0.12 m, coat ink brighter, outline 0.8–1.7.
+
+  Tuned live against v0.1 (scratch worktree at `v0.1.0`) and v0.2 (production).
+- Tells (sub-agent): text/icon marks and log tips removed. The wyrm drives `uWarn`: red glow through
+  a red attack's windup and a hard red flash at the timing cue. Parryable attacks get a white glint
+  (bigger for blue). See ADR-010 and COMBAT.md.
+- Lab: Showroom + Camera default buttons.
+
+**Decisions:** ADR-010 (tells on the attacker), ADR-011 (hybrid rendering).
+
+**Open issues / next**
+- Owner approval of the previews; then merge and release v0.3.0.
+- The hero is still small at the default zoom (the owner chose outline only, not a closer camera).
+- Not yet done: wind-up animations exaggerated for parry reads, if the glint alone isn't enough.
+
+---
+
 ## 2026-11-01 — Session 2: combat & presentation pass (v0.2.0)
 **Goal:** the owner's v0.2 feedback (see Session 1) plus a long-term repo/deploy setup.
 

@@ -78,3 +78,82 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   the transition starts. The Lab (AI off) bypasses the gate.
 - **Consequences:** every player sees phase 2. Hits at the threshold still show damage numbers but
   don't move the bar; revisit if it reads as unfair in playtests.
+
+## ADR-010 — Tells live on the attacker, not in the HUD (2026-11-01)
+- **Context:** v0.2 showed tells as HUD marks over the enemy (◆ PARRY / ! DODGE labels, closing
+  rings, off-screen arrows, red edge pulse through the windup) plus log tips. The owner rejected
+  text indicators: dodge-only attacks should read as a red warning flash from the enemy itself, and
+  parryable attacks should be read from the animation.
+- **Decision:** the attacker renders its own tell. Red (dodge-only): the creature glows red
+  through the windup via a material uniform (`uWarn`, ramping toward the timing cue), spikes on
+  `combat:flash` with a red glyph burst, and AoEs keep their red ground ring. Normal / blue
+  (parryable): no colour during the windup; a white glint at the striking part on `combat:flash`,
+  larger and brighter for blue (still white). The HUD keeps only a ~0.25 s red screen-edge flash on
+  a red cue; no text, icons, rings or arrows in the world. `TELL` semantics and the
+  `combat:tell` / `combat:flash` contract are unchanged; the presentation numbers live in
+  `TELL_STYLE` (`rules.js`). Supersedes the HUD-marks part of ADR-008's "HUD renders any
+  attacker's tells".
+- **Consequences:** every new enemy must expose `uWarn` on its materials (free with
+  `createSurfaceGlyphMaterial`), drive it from its tell beats, and have windups readable from the
+  animation alone — parryable hits get no colour hint before the glint. Readability now depends on
+  animation quality; the Lab's coloured chips remain as a dev aid.
+
+## ADR-011 — Hybrid rendering: calm world-anchored grass, crisp surface-glyph creatures (2026-11-01)
+- **Context:** ADR-007 put everything through one screen-space character grid. In review the owner
+  found the grass "TOO ascii" (noisy, distracting), the ground seemed to move as the camera panned
+  (dizzying: glyphs were re-picked per screen cell every frame), the hero was hard to find and the
+  hero and wyrm were blurry (one glyph per 8x12 px cell is too coarse for a 50 px hero).
+- **Decision:** supersede ADR-007 for grass and creatures. Grass returns to v0.1's instanced glyph
+  strokes fixed in the world, darker and with gentler wind. Creatures print glyphs on their surface
+  again (v0.1 technique), but sized to stay >= ~6 screen px, drawn larger inside their cells with
+  sharpened edges, over near-black gaps; the hero gets a thin moonlit silhouette line. Stones,
+  ruins, trunks and canopies stay on the screen grid (the owner's favourite part). The creature
+  grid path remains available behind `grid: true` but is unused.
+- **Consequences:** two glyph systems to keep visually consistent (STYLE.md rules of thumb). The
+  ground is calm by construction. Glyph legibility now depends on cell size vs camera distance, so
+  new creatures must check it at the default zoom (Lab → Showroom helps).
+
+## ADR-012 — Concept sheets drive the look; stones become carved world-lattice glyphs (2026-11-01)
+- **Context:** the owner supplied concept sheets (Shadow Swordsman: model, movement and combat key
+  poses; Obsidian Drake: painting + ASCII version) and asked to copy them. They also disliked the
+  screen-grid stones (`+=+=` rows read as text).
+- **Decision:**
+  - The hero and wyrm follow the sheets within the existing skeletons. The wyvern stays a wyvern
+    (owner's choice), and the wyrm grows to 1.5× its v0.2 size (`SCALE` 1.875).
+  - Rocks, standing stones and flagstones use `createCarvedGlyphMaterial`: a world-anchored glyph
+    lattice perpendicular to the fixed camera view, glyphs picked by facet light, with cracks and
+    moss. Trees, bones and the bonfire stay on the screen grid.
+- **Consequences:**
+  - The sheets are the reference for future look work.
+  - Carved glyphs shrink with zoom, unlike the grid.
+  - A bigger wyrm needs the player reach band (ADR-013) and a bounded boss camera.
+
+## ADR-013 — Player reach band, step-in assist, hero-first boss camera (2026-11-01)
+- **Context:** at 1.875× the wyrm's chest sits ~4 m up. Blade-vs-sphere hits missed from the front.
+  The automatic boss framing then zoomed out to ~50 m, shrinking the hero the owner already found
+  hard to see.
+- **Decision:**
+  - Sword hits test a vertical reach band (2.6 m up, 1.0 m for the slam; 0.5 m down; 0.4 m tip
+    extension).
+  - A short step-in assist (≤ 1.3 m) applies when the target is within 4.8 m and 0.8 rad.
+  - The boss camera may add at most 5 m of zoom. The wyrm crops at the screen edges before the hero
+    shrinks.
+- **Consequences:**
+  - All attacks land from 2–3.5 m in front (REACH scenario).
+  - Very large future bosses will crop at the screen edge. That is accepted: readability of the
+    player comes first.
+
+## ADR-014 — Four-legged drake; look work is reviewed against the sheets by an independent critic (2026-11-01)
+- **Context:** the restyled wyvern still didn't look like the owner's Obsidian Drake. A wyvern's
+  wings are its front legs, and the art is a quadruped with separate sail-like wings. The owner
+  asked for "as close as possible" and chose the rebuild.
+- **Decision:**
+  - The boss is a quadruped (`buildDrake`), with a new rig/gait and wings that rest half-raised.
+    Every ability keeps its name, tell, windup, flash timing and damage.
+  - Look work follows `docs/art/*.md`. It is checked in the Lab model viewer from the sheets'
+    angles, by an independent reviewer who scores silhouette, proportions, details, colours,
+    glyph rendering, poses and the game-camera read.
+- **Consequences:**
+  - Attack anchors moved to the real striking parts (forefeet, claws, snout, tail).
+  - Hit-timing spreads are measured per ability in COMBAT.md.
+  - Future look passes start from the critic's gap list rather than impressions.

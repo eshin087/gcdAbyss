@@ -3,7 +3,7 @@
 // src/main.js (construction order, frame order, debugTimeScale in dt). World is a light mock built on
 // the real Colliders. A bot drives the input: it moves, attacks, blocks, parries and dodges.
 // usage: node integ.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI, ABYSS_TRACE=1 logs combat events)
-//   scenario: gate | breath | win | die | parry | block | red | lab | all (default all)
+//   scenario: gate | breath | win | die | parry | block | reach | red | lab | all (default all)
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ui, fireWin, AUDIO, resetWindow } from './shim.mjs';
@@ -20,10 +20,13 @@ const { createSharedUniforms } = await imp('src/render/shaderLib.js');
 const { LightPool } = await imp('src/render/lights.js');
 const { GlyphParticles } = await imp('src/render/particles.js');
 const { Colliders } = await imp('src/world/colliders.js');
-const { TELL, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
+const { TELL, TELL_STYLE, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
 const { Player } = await imp('src/entities/player/player.js');
+const { DIM: HERO_DIM, setHeroGlyphScale } = await imp('src/entities/player/model.js');
 const { Dragon } = await imp('src/entities/dragon/dragon.js');
-const { TUNING } = await imp('src/entities/dragon/tuning.js');
+const { TUNING, SCALE } = await imp('src/entities/dragon/tuning.js');
+// scripted placements (place()) were authored for the x1.25 wyrm: they scale with its size
+const SIZE = SCALE / 1.25;
 const { Hud } = await imp('src/ui/hud.js');
 const { AudioEngine } = await imp('src/audio/audio.js');
 const { GameFlow } = await imp('src/game/flow.js');
@@ -57,7 +60,8 @@ const PAYLOAD = {
   'combat:flash': { source: 's', attack: 's', tell: 't', x: 'n', y: 'n', z: 'n' },
   'player:attack': { kind: 's', combo: 'n', charge: 'n' },
   'player:charge': { t: 'n' },
-  'player:hitDragon': { damage: 'n', part: 's', point: 'p', heavy: 'b', crit: 'b' },
+  'player:hitDragon': { damage: 'n', part: 's', point: 'p', heavy: 'b', crit: 'b', kind: 's' },
+  'player:slam': { x: 'n', z: 'n' },
   'player:hurt': { damage: 'n', kind: 's', hp: 'n' },
   'player:block': { damage: 'n', tell: 't' },
   'player:parry': { tell: 't', attack: 's' },
@@ -130,12 +134,12 @@ function build() {
   const pushers = new Map();
   const finalU = { uHurt: { value: 0 }, uFade: { value: 0 }, uDesat: { value: 0 }, uWarm: { value: 0 }, uExposure: { value: 1 }, uBloom: { value: 1 } };
   const counters = { scorchReset: 0, burn: 0, spawns: 0 };
-  // world mock: the v0.2 world API (grass is drawn by the ASCII pass: no grass mesh, no setGrassQuality)
+  // world mock: the world API (grass = instanced glyph strokes; no-op quality hook)
   const world = {
     colliders,
     bonfire: { ...CONFIG.world.bonfire }, nest: { x: -3, z: -15.5 },
     forest: { treeSpots: [], bonfire: { ...CONFIG.world.bonfire } },
-    meadow: { density: () => 1 },
+    setGrassQuality() {},
     resolve: (pos, r, b) => colliders.resolve(pos, r, b),
     setPusher(slot, x, y, z, r) { if (![x, y, z, r].every(Number.isFinite)) throw new Error(`NaN pusher ${slot}`); pushers.set(slot, [x, y, z, r]); },
     clearPushers(a = 0, b = 10) { for (let i = a; i < b; i++) pushers.delete(i); },
@@ -383,6 +387,7 @@ function place(G, dist, ang = 0) {
   const { game } = G;
   const d = game.dragon, p = game.player;
   const a = d.yaw + ang;
+  dist *= SIZE;
   p.debug.teleport(d.position.x + Math.sin(a) * dist, d.position.z + Math.cos(a) * dist);
   p.yaw = Math.atan2(d.position.x - p.position.x, d.position.z - p.position.z);
   p.debug.heal();
@@ -443,6 +448,36 @@ function forceAttack(G, name, plan = {}) {
   return rec;
 }
 const evn = (rec, n) => rec.ev[n] || 0;
+
+/**
+ * Force `name` (player left where it is) and sample, every frame: dragon.warn, whether every
+ * material's uWarn.w matches it, and the HUD's red edge opacity. tellI / flashI = first sample
+ * after the attack's combat:tell / combat:flash. `stop(tr)` ends the trace early.
+ */
+function warnTrace(G, name, seconds, stop = null) {
+  const { game } = G;
+  const d = game.dragon, mats = Object.values(d.model.mats);
+  const tr = { trigger: false, tellI: -1, flashI: -1, w: [], edge: [], uniformOk: true, finite: true };
+  let told = false, flashed = false;
+  G.watch = (n, dd) => {
+    if (dd?.attack !== name) return;
+    if (n === 'combat:tell') told = true;
+    if (n === 'combat:flash') flashed = true;
+  };
+  tr.trigger = game.lab.trigger(name);
+  for (let i = 0; i < Math.round(seconds / DT); i++) {
+    G.tick(DT);
+    if (told && tr.tellI < 0) tr.tellI = i;
+    if (flashed && tr.flashI < 0) tr.flashI = i;
+    tr.w.push(d.warn);
+    tr.edge.push(Number(cls('ab-edge')?.style.opacity ?? 0) || 0);
+    if (!Number.isFinite(d.warn)) tr.finite = false;
+    if (!mats.every((m) => m.uniforms.uWarn?.value?.w === d.warn)) tr.uniformOk = false;
+    if (stop?.(tr)) break;
+  }
+  G.watch = null;
+  return tr;
+}
 
 // ================================================================== scenario: win (god-mode bot that defends)
 async function scenarioWin() {
@@ -724,7 +759,7 @@ async function scenarioParry() {
 
 // ================================================================== scenario: block (hold RMB)
 async function scenarioBlock() {
-  out('\n== scenario BLOCK (hold RMB: normal swipe, blue bite; charged heavy; RMB cancels a charge) ==');
+  out('\n== scenario BLOCK (hold RMB: normal swipe, blue bite; charged thrust; RMB cancels a charge) ==');
   const G = build();
   const { game } = G;
   fightSetup(G);
@@ -746,7 +781,7 @@ async function scenarioBlock() {
   out(`   bite: result ${b.res} hp ${b.hp0} → ${b.hpAtHit} (expected -${wantB.toFixed(2)})`);
   assert(b.res === RESULT.BLOCKED && near(b.hp0 - b.hpAtHit, wantB, 0.01), `blocked blue bite chips by DEFENSE.blockReduction.blue (${(b.hp0 - b.hpAtHit).toFixed(2)})`);
   assert(p.blocking === true || p.state === 'block', 'guard still up after a blocked blue hit');
-  // charged heavy: hold LMB past the charge threshold, release (no stamina cost). From the flank:
+  // charged thrust: hold LMB past the charge threshold, release (no stamina cost). From the flank:
   // the 25 % bigger wyrm's chest sits above sword height, so straight ahead only the head (when low) is in reach
   settle(G);
   place(G, 3, Math.PI / 2);
@@ -760,8 +795,8 @@ async function scenarioBlock() {
   const ch = seen.filter((e) => e[0] === 'player:charge'), atk = seen.filter((e) => e[0] === 'player:attack'), hit = seen.find((e) => e[0] === 'player:hitDragon');
   out(`   heavy: charging ${charging} k ${k?.toFixed(2)} · charge events ${ch.length} (t ${ch[0]?.[1]?.t}) · attacks ${JSON.stringify(atk.map((e) => e[1]))} · hit ${hit ? `${hit[1].damage} heavy ${hit[1].heavy}` : 'none'}`);
   assert(charging && k >= 0.99 && ch.length === 1 && ch[0][1].t > 0, 'LMB hold → charge state, one player:charge {t}');
-  assert(atk.length === 1 && atk[0][1].kind === 'heavy' && atk[0][1].charge >= 0.99, 'release → one player:attack {kind:heavy, charge 1} (no light swing first)');
-  assert(hit?.[1]?.heavy === true, 'charged heavy connects (player:hitDragon heavy)');
+  assert(atk.length === 1 && atk[0][1].kind === 'thrust' && atk[0][1].charge >= 0.99, 'release → one player:attack {kind:thrust, charge 1} (no light swing first)');
+  assert(hit?.[1]?.heavy === true && hit?.[1]?.kind === 'thrust', 'charged thrust connects (player:hitDragon heavy, kind thrust)');
   // RMB cancels a charge into the guard; releasing LMB afterwards does not fire the heavy
   settle(G);
   seen.length = 0;
@@ -780,6 +815,78 @@ async function scenarioBlock() {
   return G;
 }
 
+// ================================================================== scenario: reach (every hero attack, from the front)
+async function scenarioReach() {
+  out('\n== scenario REACH (idle wyrm, hero straight in front: light 1, light 2, slam, thrust at 2-3.5 m) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const d = game.dragon, p = game.player;
+  settle(G);
+  const fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
+  // the wyrm's front hurt surface at sword reach: the most forward body sphere (its chest, 2-4 m up)
+  const chest = () => d.hurtSpheres.filter((h) => h.part === 'body').reduce((a, h) => ((h.x - d.position.x) * fx + (h.z - d.position.z) * fz > (a.x - d.position.x) * fx + (a.z - d.position.z) * fz ? h : a));
+  const surf = () => { const c = chest(); return Math.hypot(p.position.x - c.x, p.position.z - c.z) - c.r; };
+  const c0 = chest();
+  out(`   chest sphere: ${((c0.x - d.position.x) * fx + (c0.z - d.position.z) * fz).toFixed(2)} m ahead of the root, y ${c0.y.toFixed(2)} (r ${c0.r.toFixed(2)}): above sword height`);
+  /** Hero `gap` m (horizontal) from the chest surface, straight in front, facing it; fresh wyrm. */
+  const stand = (gap) => {
+    const c = chest();
+    p.debug.teleport(c.x + fx * (c.r + gap), c.z + fz * (c.r + gap));
+    p.yaw = Math.atan2(c.x - p.position.x, c.z - p.position.z);
+    p.debug.heal();
+    aimAt(G);
+  };
+  const fresh = () => { d.hp = d.maxHp; d.posture = 0; run(G, 1.0, { passive: true }); settle(G); };
+  const KINDS = { L1: 'light', L2: 'light', slam: 'slam', thrust: 'thrust' };
+  const CHARGE_HOLD = 1.3; // s: a full charge
+  /** One measured attack at `gap`; earlier combo hits swing in open air far from the wyrm. */
+  const trial = (name, gap) => {
+    fresh();
+    let hit = null, at = NaN, slamEv = 0;
+    const kinds = [];
+    if (name === 'thrust') {
+      stand(gap);
+      at = surf();
+      G.watch = (n, dd) => { if (n === 'player:hitDragon' && !hit) hit = dd; if (n === 'player:attack') kinds.push(dd.kind); };
+      input.press(0);
+      run(G, CHARGE_HOLD, { passive: true });
+      aimAt(G);
+      input.up(0);
+      run(G, 1.0, { passive: true });
+    } else {
+      const n = name === 'L1' ? 1 : name === 'L2' ? 2 : 3;
+      if (n > 1) { p.debug.teleport(d.position.x + fx * 40, d.position.z + fz * 40); aimAt(G); }
+      for (let k = 0; k < n; k++) {
+        if (k === n - 1) {
+          stand(gap);
+          at = surf();
+          G.watch = (nn, dd) => { if (nn === 'player:hitDragon' && !hit) hit = dd; if (nn === 'player:attack') kinds.push(dd.kind); if (nn === 'player:slam') slamEv++; };
+        }
+        aimAt(G);
+        input.click(0);
+        run(G, k < n - 1 ? 0.3 : 1.3, { passive: true });
+      }
+    }
+    G.watch = null;
+    return { name, gap, at, hit, kinds, slamEv };
+  };
+  // (CHARGE_HOLD hoisted above)
+  const rows = [];
+  for (const gap of [0, 2, 2.5, 3, 3.5]) {
+    const r = ['L1', 'L2', 'slam', 'thrust'].map((nm) => trial(nm, gap));
+    rows.push(r);
+    out(`   ${gap ? `${gap.toFixed(1)} m` : 'contact'}`.padEnd(12) + r.map((t) => `${t.name} ${t.hit ? `${t.hit.kind}/${t.hit.part} ${Math.round(t.hit.damage)}` : 'MISS'} @${t.at.toFixed(2)}`.padEnd(30)).join(''));
+  }
+  for (const r of rows) for (const t of r) {
+    const where = t.gap ? `${t.gap} m` : 'contact';
+    assert(!!t.hit && t.hit.kind === KINDS[t.name] && t.kinds[0] === KINDS[t.name], `${t.name} connects from the front at ${where} (${t.hit ? `${t.hit.kind} on ${t.hit.part}` : 'miss'}, hero ${t.at.toFixed(2)} m from the chest surface)`);
+  }
+  assert(rows.every((r) => r[2].slamEv === 1), 'the slam meets the ground once per swing (player:slam)');
+  assert(rows.every((r) => r[2].hit?.heavy === true && r[3].hit?.heavy === true && r[0].hit?.heavy === false), 'slam and thrust hit heavy, light sweeps do not');
+  return G;
+}
+
 // ================================================================== scenario: red tells (tail, stomp)
 async function scenarioRed() {
   out('\n== scenario RED (tail / stomp: block fails, perfect dodge → Ghostep → crit) ==');
@@ -787,6 +894,41 @@ async function scenarioRed() {
   const { game, input } = G;
   fightSetup(G);
   const d = game.dragon, p = game.player;
+  // the wyrm itself warns (no HUD marks): uWarn ramps through the red windup, spikes on the timing
+  // flash and decays; the HUD only flashes the screen edges on the cue; parryable windups never glow
+  {
+    const W = TELL_STYLE.red.warn;
+    const mats = Object.values(d.model.mats);
+    assert(mats.length > 0 && mats.every((m) => m.uniforms.uWarn?.value?.isVector4), 'every dragon material has a uWarn vec4');
+    assert(!cls('ab-tell') && !cls('ab-tells'), 'no HUD tell marks exist');
+    settle(G);
+    place(G, 16); // out of reach: only watch the tell
+    const tr = warnTrace(G, 'tail', 5);
+    const { tellI: ti, flashI: fi } = tr;
+    const wind = tr.w.slice(ti, fi);
+    const after = fi + Math.ceil(W.decay / DT) + 1;
+    out(`   tail warn: tell@${ti} flash@${fi} · windup ${wind[0]?.toFixed(3)} → ${wind[wind.length - 1]?.toFixed(3)} · flash ${tr.w[fi]?.toFixed(3)} · +${W.decay}s ${tr.w[after]?.toFixed(3)} · edge at flash ${tr.edge[fi]}`);
+    assert(tr.trigger && ti >= 0 && fi > ti, `tail tell + flash seen (tell@${ti} flash@${fi})`);
+    assert(tr.w.slice(0, ti).every((v) => v === 0), 'no red glow before the red tell');
+    assert(wind.length > 10 && near(wind[0], W.from, 0.03) && wind[wind.length - 1] > W.to - 0.1 && wind.every((v, i) => v >= W.from - 1e-9 && v <= W.to + 1e-9 && (i === 0 || v >= wind[i - 1] - 1e-9)), 'red windup glow ramps from→to between tell and flash');
+    assert(near(tr.w[fi], W.spike, 1e-6), `red glow spikes on the timing flash (${tr.w[fi]})`);
+    assert(tr.w.slice(fi, after).every((v, i, a) => i === 0 || v <= a[i - 1] + 1e-9) && tr.w[after] === 0, 'spike decays to 0 within the decay time');
+    assert(tr.uniformOk && tr.finite, 'every material uWarn.w follows dragon.warn (finite)');
+    assert(tr.edge.slice(0, fi).every((v) => v === 0) && tr.edge[fi] > 0.2, `HUD red edge only flashes on the cue (${tr.edge[fi]})`);
+    assert(tr.edge[tr.edge.length - 1] === 0, 'HUD red edge flash fades out');
+    // parryable: no glow, no edge flash (the white glint is a particle burst)
+    settle(G);
+    place(G, 16);
+    const bt = warnTrace(G, 'bite', 3);
+    assert(bt.flashI >= 0 && Math.max(...bt.w) === 0 && Math.max(...bt.edge) === 0, `blue bite: no red glow / edge (flash@${bt.flashI} max ${Math.max(...bt.w)})`);
+    // a stagger mid-windup clears the glow at once
+    settle(G);
+    place(G, 16);
+    const st = warnTrace(G, 'tail', 5, (t) => t.w[t.w.length - 1] > 0.3);
+    assert(st.w[st.w.length - 1] > 0.3 && d.debug.stagger() === true, 'stagger mid red windup');
+    G.tick(DT);
+    assert(d.warn === 0 && mats.every((m) => m.uniforms.uWarn.value.w === 0), `stagger clears the red glow (${d.warn})`);
+  }
   // holding block against red: guard break, full damage
   settle(G);
   place(G, 6);
@@ -984,7 +1126,62 @@ async function scenarioLab() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie };
+// ================================================================== scenario: the hero's rig
+async function scenarioHero() {
+  out('\n== scenario HERO (Shadow Swordsman rig: coat strips, streamers, hair stay finite and above the grass) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const p = game.player, r = p.rig, d = game.dragon;
+  p.debug.god = true;
+  const strips = r.coat.reduce((n, c) => n + c.strips.length, 0);
+  assert(r.coat.length === 7 && strips === 22, `coat skirt: 6 panels + the front flap, ${strips} torn strips`);
+  assert(r.streamers?.length === 2 && Object.keys(r.hair).length === 5, 'two sleeve streamers, five hair clusters');
+  // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
+  p.debug.teleport(d.position.x + 14, d.position.z + 14);
+  const v = new THREE.Vector3();
+  let bad = 0, low = Infinity, tipLow = Infinity, frames = 0;
+  const probe = () => {
+    frames++;
+    p.object3d.traverse((o) => { const e = o.matrixWorld.elements; for (let i = 0; i < 16; i++) if (!Number.isFinite(e[i])) { bad++; break; } });
+    for (const C of r.coat) for (const S of C.strips) { v.set(0, -S.len, 0).applyMatrix4(S.joint.matrixWorld); low = Math.min(low, v.y); }
+    v.set(0, 0, HERO_DIM.steelTip).applyMatrix4(r.sword.matrixWorld);
+    tipLow = Math.min(tipLow, v.y);
+  };
+  const go = (s) => { for (let i = 0, n = Math.round(s / DT); i < n; i++) { G.tick(DT); probe(); } };
+  input.axis = { x: 0, y: 1 };
+  go(1.0);
+  input.hold('ShiftLeft');
+  go(1.0);
+  input.release('ShiftLeft');
+  input.axis = { x: 0, y: 0 };
+  go(0.4);
+  input.tap('Space');
+  go(0.9);
+  for (let k = 0; k < 3; k++) { input.click(0); go(0.45); }
+  go(0.8);
+  input.press(0);
+  go(1.4);
+  input.up(0);
+  go(1.0);
+  assert(!bad, `rig matrices stay finite through every move (${frames} frames)`);
+  assert(low > -0.02, `torn strip tips stay above the grass (lowest ${low.toFixed(3)} m)`);
+  assert(tipLow > -0.06, `the steel point never sinks into the ground (lowest ${tipLow.toFixed(3)} m)`);
+  // glyph cells follow the view distance: the in-game size at the 36 m camera, finer in close-ups
+  // (small parts capped, the blade's two columns fixed); a bad distance never yields NaN
+  const coatU = r.materials.coat.uniforms.uCell.value;
+  const kFar = setHeroGlyphScale(r.mats, 36);
+  const farY = coatU.y;
+  const kNear = setHeroGlyphScale(r.mats, 3);
+  const nearY = coatU.y;
+  assert(kFar === 1 && kNear < 0.5 && nearY < farY * 0.5 && r.materials.hair.uniforms.uCell.value.x <= 0.045 + 1e-9 && r.materials.blade.uniforms.uCell.value.x === 0.045,
+    `glyph cells scale with the view distance (coat row ${farY.toFixed(3)} m at 36 m → ${nearY.toFixed(3)} m at 3 m)`);
+  setHeroGlyphScale(r.mats, NaN);
+  assert(r.mats.every((m) => Number.isFinite(m.uniforms.uCell.value.x + m.uniforms.uCell.value.y + m.uniforms.uGlyphZoom.value)), 'a bad view distance leaves every glyph cell finite');
+  return G;
+}
+
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie };
 const runs = [];
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }

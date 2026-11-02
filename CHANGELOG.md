@@ -5,6 +5,82 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-01
+Look pass from the owner's v0.2 review and concept sheets.
+
+### Added
+- Lab **model viewer** (`lab.modelView`): Front / 3-4 / Side / Back / Game views on a dark
+  backdrop, for comparing the hero and wyrm against the concept sheets.
+- `docs/art/hero.md` and `docs/art/dragon.md`: builder specs measured from the owner's sheets.
+- Surface-glyph material options:
+  - `levels`: per-cell glyph variants per light level
+  - `levelInk`
+  - `glowAxis` / `inkAxis`: object-space underside glow and alt ink
+  - `crack: 'voronoi'` fissures
+  - `seamAxis`
+- Hero moveset from the owner's combat sheet: the 3rd light hit is a two-handed **overhead slam**
+  (blue crystal shards). Hold-and-release LMB is a **lunging thrust** (2.2–3.6 m travel). Light
+  sweeps leave cyan arc trails.
+- Player reach band + step-in assist, so every attack connects with the much bigger wyrm from the
+  front (new REACH test scenario).
+- Lab **Showroom** button (VIEW): fight on, AI off, god mode, hero 7 m in front of the wyrm,
+  camera zoomed in — for reviewing the hero, the wyrm and the grass up close. "Camera default" resets.
+
+### Changed
+- **The wyrm is a four-legged drake** (owner's choice), rebuilt from the Obsidian Drake spec:
+  - columnar forelegs and digitigrade hind legs on a deep barrel chest
+  - separate wings resting half-raised like sails
+  - a short thick S-neck
+  - a hide of mixed blocky glyphs with a molten underside
+  - round red membrane glyphs with white bone lines
+
+  A new quadruped gait. Every ability is re-authored for four legs with the same names, tells,
+  windups, timings and damage. Art-director score vs the sheet: 2 → 6 / 10.
+- Hero matched more closely to the Shadow Swordsman sheet:
+  - one tapered torso with a small head and a fringed mop
+  - a tall stand collar
+  - an open A-line coat with ~22 tatters
+  - belts, the stepped right pauldron, armoured boots
+  - a bright 'A'-glyph field like the sheet's ASCII panel, with no neon outline
+
+  Glyphs shrink in close-ups and grow at the game camera. Score: 2.5 → 4.5 / 10.
+- Hero rebuilt after the owner's "Shadow Swordsman" sheet:
+  - messy violet-sheen hair and a high collar
+  - long black coat with torn purple tails
+  - spiked pauldron, gauntlets, straps and armoured boots
+  - a big sword (1.34 m) with a violet gem and icy cyan edges
+  - new idle / walk / sprint / dodge / attack poses
+  - reads as a bright glyph figure on the dark ground
+- Wyrm restyled after the owner's "Obsidian Drake" sheet:
+  - silver chevron scales on obsidian, with a molten orange throat, belly and inner legs
+  - deep-red ragged wings with lava veins
+  - swept horns, a frill, and spikes along the spine and tail
+  - an upright S-neck and glowing maw
+- Wyrm 1.5× bigger (`SCALE` 1.875). Arena bound, bite floor, swipe reach and FX are re-measured.
+  The boss camera adds at most 5 m of zoom, so the hero stays readable.
+- Stones, boulders and flagstones are drawn as crisp carved glyphs fixed to the stone
+  (`createCarvedGlyphMaterial`), with cracks and moss. Flagstones are half-sunk with grass growing
+  over their edges. Trees are unchanged.
+- Grass is the v0.1 world-anchored glyph-stroke field again (no shimmer when the camera moves),
+  about 20 % darker with slower, smaller wind so the ground stays calm and the characters pop.
+- Hero and wyrm render as crisp glyphs printed on the body (sized to stay legible, drawn larger
+  inside each cell, sharp edges) over near-black gaps, instead of the blurry v0.2 screen grid.
+- The hero's black coat gets a thin moonlit outline and brighter silver / blade accents.
+- Attack tells are visual only (see COMBAT.md): dodge-only attacks make the wyrm glow and flash red
+  (plus red ground danger zones for area attacks); parryable attacks are read from the wind-up and
+  marked by a brief white glint at the timing moment.
+
+### Fixed
+- The tail sweep could land up to 0.2 s before its timing flash for a hero right behind the wyrm.
+- The wing membrane allocated ~100 KB per frame (`Math.hypot` boxing).
+- The two fallen standing stones' colliders sat off their bodies (walk-through half, blocked
+  empty ground).
+
+### Removed
+- PARRY / DODGE text marks, ◆ / ! icons, closing rings and off-screen arrows over the enemy, and the
+  tell tips in the log.
+- The ASCII-pass grass path (`GRASS` class, meadow texture).
+
 ## [0.2.0] - 2026-11-01
 Combat & presentation pass.
 

@@ -1,78 +1,266 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createSurfaceGlyphMaterial } from '../../render/materials.js';
 import { limbGeometry, ellipsoidGeometry, hornGeometry } from '../../render/glyphGeometry.js';
 import { ANATOMY as A, SCALE } from './tuning.js';
 import { WingMembrane } from './membrane.js';
+import { WING_KEYS } from './rig/anim.js';
 
-// Procedural wyvern: a hierarchy of Object3D joints carrying rigid glyph-skinned meshes.
-// Every bone joint points its local +Z down the bone; the next joint sits at (0, 0, length).
+// Procedural four-legged drake ("Obsidian Drake", owner concept sheet; build spec docs/art/dragon.md):
+// a hierarchy of Object3D joints carrying rigid glyph-skinned meshes. Every bone joint points its
+// local +Z down the bone; the next joint sits at (0, 0, length).
 // Root = ground point under the torso, facing +Z, model-left = +X (side sign s = +1).
 // All numbers here are MODEL units; the root is scaled by SCALE (tuning.js) into world metres.
+//
+// Body plan (v0.4): deep barrel chest on columnar forelegs (elbow back), massive digitigrade hind
+// legs (knee forward, hock high), a short thick upright S-neck, a long tail lying in a sideways hook,
+// and a SEPARATE pair of bat wings rooted on top of the back behind the neck base (4 two-joint
+// fingers each, held half-raised like tall sails at rest). The v0.3 wyvern walked on its wings.
 
-/** Set true to make tail chevrons point back toward the body instead of toward the tip. */
-export const TAIL_FLIP = false;
+/**
+ * Tail aGUV +y runs toward the body (flipped), like the limbs below, so directional glyphs point
+ * down the tail toward its tip. Set false to flip them back.
+ */
+export const TAIL_FLIP = true;
 
-// v0.2: every part renders through the screen character grid (`ascii` sets, see ARCHITECTURE.md
-// "Render helpers"): the material writes the lit ink colour + the screen direction of aGUV +y and
-// the post pass draws glyphs that follow it. aGUV +y runs toward the head on the body / neck and
-// toward the tips on the tail, limbs, fingers, horns and claws, so chevrons point "forward".
-// Cell colour = lit ink (bone/ash) with ember-red inkAlt cells; uGlow lights hot cells (phase 2).
-const SCALE_INK = {
-  ink: [0.42, 0.34, 0.3],
-  inkAlt: [0.75, 0.16, 0.05],
-  altChance: 0.25,
-  gain: 2.5,
-  rim: 0.35,
-  emissive: [1.0, 0.28, 0.04],
+// ---- materials (docs/art/dragon.md §3.2) ------------------------------------------------------
+// Per-cell glyph variants (`levels`, dark → bright, a space = empty cell): the hide reads as dense
+// mixed blocky glyphs instead of one chevron. Every glyph must be in the world atlas (npm test).
+// Five hide levels: even the darkest prints small glyphs (the panel fills ~95 % of the silhouette;
+// shadowed flanks print grey letters, not black), lit tops climb to the blocky white '8B0A' set.
+const HIDE_LEVELS = ['vco:ce.o', ':vco;(ce', 'AVSDC5?K', 'AVSD8B0K', '8B0A69&Y'];
+const NECK_LEVELS = ['vco:ce.o', ':vco;(ce', 'AVSDC5?K', 'AVSD8B0O', '8B0O69&A'];
+const LAVA_LEVELS = [' .:.', 'vcuo', 'VAUO', '8A0#'];
+// sternum / belly: no chevron-heavy rows (they stacked into a radiator grille on the keel)
+const BELLY_LEVELS = [' .:.', 'vcuo', 'VAU', '8A0'];
+// the membrane is mostly glyph-filled even on its shadowed / backlit side (the panel: ~85 %)
+const MEMBRANE_LEVELS = ['.:co', 'oc:e', 'oeCs', 'O068'];
+const WINGBONE_LEVELS = ['.:..', ':|!:', '|!l|', '|!A8'];
+const SPINE_LEVELS = [".:.'", '^!|:', '^A^!', 'AA^8'];
+// horns / spikes: dark obsidian; lit glyphs only on the brightest level (thin silver edges)
+const BONE_LEVELS = ['.:..', '.::.', ':..:', 'A|!A'];
+const CLAW_LEVELS = ['.:|!', '|!Y|', 'V|Y!', 'YV|A'];
+
+// obsidian hide: warm-white lit tops, grey flanks, near-black gaps, ~8 % ember scales. The inks are
+// pre-warmed against the blue moon (a neutral ink read lavender: bright-glyph B - R ~ +24 sRGB);
+// inkGlow is the shading floor (shadowed flanks still print grey glyphs, as the panel does).
+// The phase-1 crack glow runs in sparse irregular voronoi fissures (a glowing cell lattice read as
+// tiles, a dense fissure net as a giraffe pattern).
+const OBSIDIAN = {
+  levels: HIDE_LEVELS,
+  levelInk: [
+    [0.26, 0.23, 0.2],
+    [0.32, 0.28, 0.24],
+    [0.42, 0.36, 0.29],
+    [0.5, 0.43, 0.34],
+    [0.64, 0.52, 0.38],
+  ],
+  base: [0.016, 0.012, 0.013],
+  cell: [0.2, 0.24],
+  rowShift: 0.5,
+  lumScale: 2.0,
+  glyphZoom: 0.74, // glyphs fill most of the cell (the panel's dense field), a thin black gap remains
+  ink: [0.5, 0.43, 0.34],
+  inkAlt: [0.85, 0.3, 0.07], // ember scales
+  altChance: 0.08,
+  gain: 2.4,
+  rim: 0.4,
+  outline: 0,
+  inkGlow: 0.25, // shading floor
+  emissive: [1.0, 0.36, 0.06],
+  crack: 'voronoi',
+  crackScale: 3.5,
+  crackWidth: 0.7,
+};
+// molten parts: orange glyphs that glow on their own (visible on the shadowed underside)
+const LAVA = {
+  levels: LAVA_LEVELS,
+  base: [0.16, 0.03, 0.008],
+  cell: [0.19, 0.22],
+  rowShift: 0.5,
+  lumScale: 3.0,
+  ink: [1.0, 0.42, 0.1],
+  inkAlt: [1.0, 0.7, 0.32],
+  altChance: 0.2,
+  gain: 1.6,
+  rim: 0.15,
+  outline: 0,
+  inkGlow: 0.55,
+  emissive: [1.0, 0.34, 0.05],
+  glowMask: 1,
+  crack: 'voronoi',
+};
+
+/**
+ * Crack-glow (uGlow) per material, applied by Dragon._applyMaterials every frame:
+ * [phase-1 ember baseline, x this.glow (phase 2 0.5, dying 0.85), x throat charge (breath / roar)].
+ * The eye material is driven separately (eye glow follows rig.s.eyes). docs/art/dragon.md §2.9.
+ */
+export const GLOW = {
+  scales: [0.015, 0.45, 0], // barely-there embers in the fissures; phase 2: the cracks wake up
+  limbs: [0.015, 0.45, 0], // legs, tail, wing arm: as scales (fissures run along the limb)
+  neck: [0.015, 0.45, 0.12], // the throat strip carries the molten S and its charge
+  belly: [0.45, 1.0, 0.3],
+  throat: [0.65, 0.9, 1.2],
+  lava: [0.45, 1.0, 0],
+  membrane: [0.04, 0.8, 0.3], // faint seams (brighter ones striped the backlit side orange)
+  wingBone: [0, 0.35, 0],
+  spine: [0.3, 0.8, 0],
+  bone: [0.04, 0.5, 0],
+  claw: [0, 0, 0],
+  teeth: [0, 0, 0.5],
+  maw: [0.55, 0.6, 1.3],
 };
 
 export function createDragonMaterials(U) {
   const mats = {
-    // back / flanks / tail / limbs: chevron scales along the body flow
-    scales: createSurfaceGlyphMaterial(U, { ascii: 'scales', ...SCALE_INK, seed: 11.3 }),
-    // neck + head get their own instance so the throat can charge (uGlow) independently
-    neck: createSurfaceGlyphMaterial(U, { ascii: 'scales', ...SCALE_INK, seed: 23.7 }),
-    // belly: '= #' plate bands across the flow
-    belly: createSurfaceGlyphMaterial(U, {
-      ascii: 'plates',
-      ink: [0.5, 0.31, 0.12],
-      inkAlt: [0.62, 0.36, 0.12],
-      altChance: 0.15,
-      gain: 2.2,
-      rim: 0.2,
-      emissive: [1.0, 0.32, 0.05],
-      glowMask: 0.7,
-      seed: 5.1,
+    // back / flanks / shoulders / haunches: mixed blocky glyphs over obsidian
+    scales: createSurfaceGlyphMaterial(U, { ...OBSIDIAN, seed: 11.3 }),
+    // legs, tail and the wing arm: the same hide, its fissures stretched along the limb
+    limbs: createSurfaceGlyphMaterial(U, { ...OBSIDIAN, seamAxis: 'y', seed: 47.3 }),
+    // neck + head + neck shingles get their own instance (finer cells, the 'O' in the lit set)
+    neck: createSurfaceGlyphMaterial(U, {
+      ...OBSIDIAN,
+      levels: NECK_LEVELS,
+      cell: [0.17, 0.21],
+      altChance: 0.1,
+      seamAxis: 'y',
+      seed: 23.7,
     }),
-    // wing membranes: vein strokes running out along the finger bones
+    // sternum plate + belly strip: molten plates, fissures running down the keel
+    belly: createSurfaceGlyphMaterial(U, { ...LAVA, levels: BELLY_LEVELS, cell: [0.24, 0.22], seamAxis: 'y', gain: 1.1, inkGlow: 0.6, seed: 5.1 }),
+    // throat strip under the neck: lava that charges before the breath / roar
+    throat: createSurfaceGlyphMaterial(U, { ...LAVA, cell: [0.16, 0.2], seed: 17.9 }),
+    // inner thighs, armpits, leg back-edge strips, tail underside
+    lava: createSurfaceGlyphMaterial(U, { ...LAVA, altChance: 0.15, inkGlow: 0.5, seed: 29.4 }),
+    // wing membranes: a straight grid of round red glyphs, seams running out along the fingers
     membrane: createSurfaceGlyphMaterial(U, {
-      ascii: 'strands',
-      ink: [0.36, 0.11, 0.06],
-      inkAlt: [0.55, 0.15, 0.06],
-      altChance: 0.15,
-      gain: 2.2,
-      rim: 0.25,
-      emissive: [1.0, 0.25, 0.04],
-      glowMask: 0.35,
+      levels: MEMBRANE_LEVELS,
+      cell: [0.22, 0.26],
+      rowShift: 0,
+      seamAxis: 'y',
+      glyphZoom: 0.8, // each round glyph keeps a black gap (the panel's dotted membrane)
+      base: [0.1, 0.014, 0.011],
+      lumScale: 3.0,
+      ink: [0.45, 0.08, 0.05],
+      inkAlt: [1.0, 0.38, 0.08],
+      altChance: 0.12,
+      gain: 2.0,
+      rim: 0.2,
+      outline: 0,
+      inkGlow: 0.32, // the sail reads red from both sides (a bat wing is translucent; the backlit side was empty)
+      emissive: [1.0, 0.3, 0.05],
+      glowMask: 0.7,
       side: THREE.DoubleSide,
       seed: 41.9,
     }),
-    // horns, claws, spikes, fangs: strokes toward the tip
+    // wing forearm + finger bones: single bright white glyph lines
+    wingBone: createSurfaceGlyphMaterial(U, {
+      levels: WINGBONE_LEVELS,
+      cell: [0.13, 0.2],
+      base: [0.045, 0.043, 0.048],
+      lumScale: 2.6,
+      ink: [0.58, 0.56, 0.54],
+      gain: 1.7,
+      rim: 0.2,
+      outline: 0,
+      inkGlow: 0.05, // below the bloom threshold: thin white lines, not neon tubes
+      emissive: [1.0, 0.34, 0.05],
+      glowMask: 0.3,
+      seed: 37.1,
+    }),
+    // dorsal blade row nape -> tail tip, tail blades, wrist spikes: the orange "spine line"
+    spine: createSurfaceGlyphMaterial(U, {
+      levels: SPINE_LEVELS,
+      cell: [0.1, 0.15],
+      base: [0.05, 0.02, 0.012],
+      lumScale: 3.2,
+      ink: [0.95, 0.45, 0.12],
+      inkAlt: [1.0, 0.7, 0.3],
+      altChance: 0.2,
+      gain: 2.0,
+      rim: 0.35,
+      outline: 0,
+      inkGlow: 0.35,
+      emissive: [1.0, 0.38, 0.06],
+      glowMask: 1,
+      seed: 31.3,
+    }),
+    // horns, head spikes, limb / shoulder shards, neck shingles: dark obsidian, silver edges
     bone: createSurfaceGlyphMaterial(U, {
-      ascii: 'strands',
-      ink: [0.78, 0.72, 0.62],
-      gain: 2.4,
-      rim: 0.4,
-      glowMask: 0,
+      levels: BONE_LEVELS,
+      cell: [0.1, 0.16],
+      base: [0.07, 0.068, 0.075],
+      lumScale: 2.8,
+      ink: [0.48, 0.46, 0.45],
+      inkAlt: [0.85, 0.3, 0.07],
+      altChance: 0.1,
+      gain: 1.9,
+      rim: 0.25,
+      outline: 0,
+      inkGlow: 0.02, // dark obsidian: the eye and the maw are the head's bright points
+      emissive: [1.0, 0.34, 0.05],
+      glowMask: 0.5,
       seed: 7.7,
     }),
-    // eyes: density ramp, self-lit through uInkGlow / uGlow while awake
-    eye: createSurfaceGlyphMaterial(U, {
+    // claws, thumb hooks, finger-tip claws: heavy ivory
+    claw: createSurfaceGlyphMaterial(U, {
+      levels: CLAW_LEVELS,
+      cell: [0.09, 0.15],
+      base: [0.14, 0.12, 0.1],
+      lumScale: 3.5,
+      ink: [0.9, 0.84, 0.72],
+      gain: 2.4,
+      rim: 0.4,
+      outline: 0,
+      inkGlow: 0.12, // ivory, legible in shadow, without a bloom halo
+      glowMask: 0,
+      seed: 13.9,
+    }),
+    // teeth: bright white even inside the dark mouth
+    teeth: createSurfaceGlyphMaterial(U, {
+      ascii: 'strands',
+      glyphs: ".'|!",
+      cell: [0.06, 0.09],
+      base: [0.3, 0.27, 0.23],
+      lumScale: 3.0,
+      outline: 0,
+      ink: [1.0, 0.96, 0.88],
+      gain: 2.0,
+      rim: 0.3,
+      inkGlow: 0.08, // separate needles against the fire, not one glowing grille
+      emissive: [1.0, 0.45, 0.1],
+      glowMask: 0.6,
+      seed: 19.3,
+    }),
+    // the maw: fire inside the mouth (the jaw rests a little open, so it glows at idle)
+    maw: createSurfaceGlyphMaterial(U, {
       ascii: 'smooth',
-      ink: [1.0, 0.36, 0.06],
+      glyphs: '.*%#',
+      cell: [0.08, 0.1],
+      base: [0.3, 0.05, 0.01], // deep: the fangs silhouette against it
+      lumScale: 2.0,
+      outline: 0,
+      ink: [1.0, 0.4, 0.07], // deep orange fire (a yellow-white maw swallowed the ivory teeth)
       gain: 1.0,
       rim: 0,
-      emissive: [3.0, 0.75, 0.12],
+      inkGlow: 1.15,
+      emissive: [1.0, 0.4, 0.06],
+      glowMask: 1,
+      seed: 2.7,
+    }),
+    // eyes: small almond slits, self-lit through uInkGlow / uGlow while awake
+    eye: createSurfaceGlyphMaterial(U, {
+      ascii: 'smooth',
+      glyphs: '%@#@',
+      cell: [0.1, 0.1],
+      base: [0.09, 0.02, 0.005],
+      lumScale: 2.2,
+      outline: 0,
+      ink: [1.0, 0.42, 0.06],
+      gain: 1.0,
+      rim: 0,
+      emissive: [2.2, 0.8, 0.1], // a small amber slit, not a glowing patch
       glowMask: 1,
       inkGlow: 0,
       seed: 3.3,
@@ -81,6 +269,7 @@ export function createDragonMaterials(U) {
   return mats;
 }
 
+// ---- small builders --------------------------------------------------------------------------
 function joint(parent, x = 0, y = 0, z = 0, name = '') {
   const j = new THREE.Object3D();
   j.name = name;
@@ -96,168 +285,475 @@ function mesh(parent, geo, mat, x = 0, y = 0, z = 0) {
   return m;
 }
 
-/** Spike/horn pointing up and tilted along local -Z (back) by `tilt` radians (negative tilts forward). */
-function spike(parent, mat, len, r, x, y, z, tilt = 0.5) {
-  const h = mesh(parent, hornGeometry(len, r, { radial: 5 }), mat, x, y, z);
-  h.rotation.x = -(Math.PI / 2 + tilt);
-  return h;
+// static detail (spikes, horns, teeth, claws) is baked into one merged mesh per joint + material
+const _m4 = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _e = new THREE.Euler();
+const _p = new THREE.Vector3();
+const _d = new THREE.Vector3();
+const _one = new THREE.Vector3(1, 1, 1);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+/** Transform `geo` in place: rotation (Euler rx, ry, rz in `order`) then translation. */
+function place(geo, x, y, z, rx = 0, ry = 0, rz = 0, order = 'XYZ') {
+  _e.set(rx, ry, rz, order);
+  _m4.compose(_p.set(x, y, z), _q.setFromEuler(_e), _one);
+  return geo.applyMatrix4(_m4);
 }
 
-export function buildWyvern(U) {
+/** Cone along +Z, optionally flattened across (`flat` < 1 scales local x: a blade, not a needle). */
+function cone(len, r, curve = 0, radial = 5, flat = 1) {
+  const g = hornGeometry(len, r, { radial, curve });
+  if (flat !== 1) g.scale(flat, 1, 1);
+  return g;
+}
+
+/**
+ * Spike (a horn along +Z) standing up from a surface: points up (+Y), leaning back toward -Z by
+ * `tilt` rad (negative leans toward +Z), then rolled sideways by `roll` (+ leans toward -X).
+ * A positive `curve` sweeps the tip further back; `flat` < 1 makes it a thin blade.
+ */
+function spike(len, r, x, y, z, tilt = 0.5, roll = 0, curve = 0, radial = 5, flat = 1) {
+  return place(cone(len, r, curve, radial, flat), x, y, z, -(Math.PI / 2 + tilt), 0, roll, 'ZYX');
+}
+
+/** Horn / claw along +Z, aimed by pitch (+ = toward -Y) and yaw (Euler YXZ, like Object3D rotations). */
+function horn(len, r, x, y, z, pitch, yaw, curve = 0, radial = 5, flat = 1) {
+  return place(cone(len, r, curve, radial, flat), x, y, z, pitch, yaw, 0, 'YXZ');
+}
+
+/** Merge `geos` into one mesh under `parent` (one draw call). */
+function batch(parent, mat, geos) {
+  if (!geos.length) return null;
+  const geo = geos.length === 1 ? geos[0] : mergeGeometries(geos, false);
+  if (geos.length > 1) for (const g of geos) g.dispose();
+  return mesh(parent, geo, mat);
+}
+
+/** Tapered capsule from point a to point b (parent frame): pivot at a, local +Z toward b. */
+function capsule(parent, mat, a, b, opts) {
+  _d.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  const len = _d.length();
+  const m = mesh(parent, limbGeometry({ radial: 12, rings: 5, ...opts, length: len }), mat, a[0], a[1], a[2]);
+  m.quaternion.setFromUnitVectors(Z_AXIS, _d.normalize());
+  return m;
+}
+
+/** Linear interpolation over a sorted table of [x, y] pairs (clamped at the ends). */
+function table(rows, x) {
+  if (x <= rows[0][0]) return rows[0][1];
+  for (let i = 1; i < rows.length; i++) {
+    if (x <= rows[i][0]) {
+      const [x0, y0] = rows[i - 1], [x1, y1] = rows[i];
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return rows[rows.length - 1][1];
+}
+
+// standing frames (root frame, model units): body joints and the dorsal profile (spec §2.3)
+const HIP = [0, A.hipY, A.hipZ];
+const CH = [0, A.hipY + A.chest[1], A.hipZ + A.chest[2]]; // (0, 2.85, 1.25)
+const inHips = (x, y, z) => [x, y - HIP[1], z - HIP[2]];
+const inChest = (x, y, z) => [x, y - CH[1], z - CH[2]];
+// top of the back (no spikes) by root z: withers 4.1 over the shoulders sloping ~16° to the rump
+const BACK = [
+  [-2.6, 2.6],
+  [-1.65, 2.95],
+  [-0.9, 3.15],
+  [-0.2, 3.38],
+  [0.5, 3.85],
+  [1.1, 4.08],
+  [1.6, 4.02],
+];
+const backY = (z) => table(BACK, z);
+
+/** Skull half-height profile along the head (head frame z): limb r0 0.44 -> r1 0.15, sy 0.7. */
+const SKULL = { len: A.headLen, r0: 0.44, r1: 0.15, sy: 0.7, bulge: 0.03, z0: -0.12, y0: 0.04 };
+function skullR(z) {
+  const t = Math.min(1, Math.max(0, (z - SKULL.z0) / SKULL.len));
+  return SKULL.r0 + (SKULL.r1 - SKULL.r0) * t + Math.sin(Math.PI * t) * SKULL.bulge;
+}
+const JAW = { len: 1.15, r0: 0.3, r1: 0.11, sx: 0.92, sy: 0.42, y0: -0.05 };
+function jawR(z) {
+  const t = Math.min(1, Math.max(0, z / JAW.len));
+  return JAW.r0 + (JAW.r1 - JAW.r0) * t;
+}
+/** Deterministic jitter in [-1, 1] (teeth lengths). */
+const jit = (i) => {
+  const s = Math.sin(i * 12.9898 + 4.1) * 43758.5453;
+  return (s - Math.floor(s)) * 2 - 1;
+};
+
+/**
+ * Shingle plate on a tube of radius r (local +Z = along the tube): a flattened cone pointing back
+ * down the tube (-Z), lifted `lift` rad off the skin, at `ang` rad around the tube from the top
+ * (+Y) toward +X. `flat` = thickness across the skin normal (a blade lying on the surface).
+ */
+function shingle(len, w, r, ang, z, lift = 0.26, sy = 1, flat = 0.35) {
+  const g = cone(len, w, 0, 4);
+  g.scale(1, flat, 1); // thin across the skin normal: a plate lying on the surface
+  g.rotateX(-lift);
+  g.rotateY(Math.PI);
+  g.rotateZ(-ang);
+  g.translate(Math.sin(ang) * r, Math.cos(ang) * r * sy, z);
+  return g;
+}
+
+export function buildDrake(U) {
   const mats = createDragonMaterials(U);
   const root = new THREE.Group();
   root.name = 'dragon';
   root.scale.setScalar(SCALE); // model units -> world metres (see tuning.js SCALE)
 
-  // --- hips / torso
-  const hips = joint(root, 0, A.hipY, A.hipZ, 'hips');
+  // ============================================================ torso (spec §2.3)
+  const hips = joint(root, HIP[0], HIP[1], HIP[2], 'hips');
   hips.rotation.order = 'YXZ';
-  const torso = mesh(hips, ellipsoidGeometry(1.2, 0.92, 2.15, { widthSegs: 18, heightSegs: 12 }), mats.scales, 0, 0.15, 1.05);
-  mesh(hips, ellipsoidGeometry(1.0, 0.7, 1.95), mats.belly, 0, -0.28, 1.1);
-  // dorsal ridge along the back
-  for (let i = 0; i < 6; i++) {
-    const z = -0.55 + i * 0.62;
-    const t = (z - 1.05) / 2.15;
-    const y = 0.15 + 0.92 * Math.sqrt(Math.max(0, 1 - t * t)) - 0.06;
-    spike(hips, mats.bone, 0.42 + Math.sin((i / 5) * Math.PI) * 0.2, 0.1, 0, y, z, 0.55);
+  // waist (loins): poles buried in the ribcage and the rump
+  const torso = mesh(hips, ellipsoidGeometry(0.95, 0.8, 1.45, { widthSegs: 20, heightSegs: 12 }), mats.scales, ...inHips(0, 2.55, -0.2));
+  // molten belly strip under the loins
+  mesh(hips, ellipsoidGeometry(0.8, 0.45, 1.4, { widthSegs: 16, heightSegs: 8 }), mats.belly, ...inHips(0, 2.05, -0.1));
+  // rump / pelvis (back pole inside the tail root)
+  mesh(hips, ellipsoidGeometry(0.95, 0.62, 1.05, { widthSegs: 18, heightSegs: 10 }), mats.scales, ...inHips(0, 2.35, -1.65));
+  // haunches: lateral-axis ellipsoids, poles buried in the rump and the thigh's hip cap
+  for (const s of [1, -1]) {
+    const h = mesh(hips, ellipsoidGeometry(0.85, 0.72, 0.5, { widthSegs: 14, heightSegs: 8 }), mats.scales, ...inHips(s * 0.82, 2.42, -1.35));
+    h.rotation.y = (s * Math.PI) / 2;
   }
 
   const chest = joint(hips, ...A.chest, 'chest');
   chest.rotation.order = 'YXZ';
-  const chestMesh = mesh(chest, ellipsoidGeometry(1.12, 0.98, 1.15, { widthSegs: 16, heightSegs: 10 }), mats.scales, 0, 0.05, 0.25);
-  mesh(chest, ellipsoidGeometry(0.9, 0.6, 0.95), mats.belly, 0, -0.42, 0.3);
+  // ribcage: deeper than wide, tilted chest-up so its front pole runs into the neck base
+  const chestMesh = mesh(chest, ellipsoidGeometry(1.05, 1.25, 1.5, { widthSegs: 22, heightSegs: 14 }), mats.scales, 0, 0, 0);
+  chestMesh.rotation.x = -0.28;
+  // molten sternum / keel plate: a capsule along the throat-to-belly line (no pole faces a camera);
+  // its lowest point is the 1.4 keel
+  capsule(chest, mats.belly, inChest(0, 2.02, 0.85), inChest(0, 2.95, 2.1), { r0: 0.62, r1: 0.7, bulge: 0.16, sx: 1.08 });
+  // the molten seam down the sternum (continues the throat's S onto the keel): a narrow hot strip
+  capsule(chest, mats.throat, inChest(0, 1.86, 1.05), inChest(0, 3.3, 2.32), { r0: 0.72, r1: 0.78, bulge: 0.2, sx: 0.25, radial: 10, rings: 6 });
+  // shoulder masses (scapulae): slabs sloping down-forward to the shoulder joints
+  for (const s of [1, -1]) {
+    capsule(chest, mats.scales, inChest(s * 0.88, 3.62, 1.08), inChest(s * 1.0, 2.72, 1.82), { r0: 0.4, r1: 0.47, bulge: 0.06, sx: 0.78 });
+  }
 
-  // --- neck chain
+  // dorsal blade row (orange spine line): over the withers + between the wing roots 0.6-0.75,
+  // mid-back 0.5, rump 0.45, spacing 0.42; chest-mounted ahead of z 0.3, hips-mounted behind
+  const spineChest = [], spineHips = [], flankChest = [], flankHips = [];
+  const DORSAL = [0.72, 0.75, 0.66, 0.55, 0.5, 0.5, 0.47, 0.45, 0.42];
+  DORSAL.forEach((len, i) => {
+    const z = 1.15 - i * 0.42;
+    const y = backY(z) - 0.06;
+    const onChest = z > 0.3;
+    const at = onChest ? inChest(0, y, z) : inHips(0, y, z);
+    (onChest ? spineChest : spineHips).push(spike(len, 0.2, at[0], at[1], at[2], 0.87, 0, 0.12, 5, 0.35));
+  });
+  // small flank rows over the shoulders and the rump
+  for (const z of [1.5, 1.05, -1.25, -1.7, -2.15]) {
+    const onChest = z > 0.3;
+    for (const s of [1, -1]) {
+      const y = backY(z) - 0.3;
+      const at = onChest ? inChest(s * 0.62, y, z) : inHips(s * 0.58, y, z);
+      (onChest ? flankChest : flankHips).push(spike(0.3, 0.08, at[0], at[1], at[2], 0.8, -s * 1.1, 0, 5, 0.45));
+    }
+  }
+  // shoulder "pauldrons": 3 silver shards per scapula, back and up
+  for (const s of [1, -1]) {
+    [
+      [1.02, 3.62, 1.2, 0.35],
+      [1.14, 3.38, 1.48, 0.32],
+      [1.22, 3.1, 1.76, 0.28],
+    ].forEach(([x, y, z, len]) => {
+      const at = inChest(s * x, y, z);
+      flankChest.push(spike(len, 0.09, at[0], at[1], at[2], 0.95, -s * 0.75, 0.08, 5, 0.5));
+    });
+  }
+  batch(chest, mats.spine, spineChest);
+  batch(hips, mats.spine, spineHips);
+  batch(chest, mats.bone, flankChest);
+  batch(hips, mats.bone, flankHips);
+
+  // ============================================================ neck (spec §2.2)
+  // short, massive upright S; dorsal crest in spine orange, two lateral rows of shingle plates
+  // (the head study's serrated ruff), a lava throat strip that shows only underneath
   const neckBase = joint(chest, ...A.neckBase, 'neckBase');
-  neckBase.rotation.x = -0.6; // points forward-up (keeps chain aiming away from -Z)
+  neckBase.rotation.x = -1.25; // points up-forward (the chain's minimal rotations keep +Y dorsal)
   const neck = [];
   let parent = neckBase;
   for (let i = 0; i < A.neckSegs; i++) {
     const j = joint(parent, 0, 0, i === 0 ? 0 : A.neckLen, `neck${i}`);
     const t = i / (A.neckSegs - 1);
-    const r0 = THREE.MathUtils.lerp(0.64, 0.4, t);
-    mesh(j, limbGeometry({ length: A.neckLen + 0.1, r0, r1: r0 - 0.035, sy: 0.92, radial: 12, rings: 4 }), mats.neck, 0, 0, -0.05);
-    spike(j, mats.bone, 0.32 - t * 0.12, 0.08, 0, r0 * 0.86, A.neckLen * 0.5, 0.6);
+    const r0 = THREE.MathUtils.lerp(0.62, 0.4, t);
+    const r1 = r0 - 0.035;
+    mesh(j, limbGeometry({ length: A.neckLen + 0.12, r0, r1, sy: 0.92, radial: 14, rings: 4 }), mats.neck, 0, 0, -0.06);
+    // lava throat: under the neck only (narrower, set low; overlapping segments make it continuous)
+    mesh(j, limbGeometry({ length: A.neckLen + 0.14, r0: r0 * 0.78, r1: r1 * 0.78, sx: 0.7, sy: 0.7, radial: 12, rings: 3 }), mats.throat, 0, -r0 * 0.45, -0.07);
+    batch(j, mats.spine, [spike(THREE.MathUtils.lerp(0.55, 0.4, t), 0.15, 0, r0 * 0.86, A.neckLen * 0.5, 0.87, 0, 0.1, 5, 0.35)]);
+    // the head study's mane: 3 rows of long pointed blade scales per side (±40°, ±70°, ±100° around
+    // the neck), 2 per row per segment, rows offset half a plate, all pointing down and back toward
+    // the body, tips lifted ~15° so the profile serrates
+    const sh = [];
+    for (const s of [1, -1]) {
+      [0.7, 1.22, 1.75].forEach((ang, row) => {
+        for (let q = 0; q < 2; q++) {
+          const z = 0.12 + q * 0.23 + (row % 2) * 0.115;
+          sh.push(shingle(0.5 - row * 0.06, 0.14 - row * 0.015, r0 * 0.93, s * ang, z, 0.26, 0.92, 0.3));
+        }
+      });
+    }
+    batch(j, mats.neck, sh);
     neck.push(j);
     parent = j;
   }
 
-  // --- head (child of the last neck joint, at the end of that segment)
+  // ============================================================ head (spec §2.1)
   const head = joint(parent, 0, 0, A.neckLen, 'head');
-  mesh(head, limbGeometry({ length: A.headLen, r0: 0.44, r1: 0.17, sx: 1.05, sy: 0.7, bulge: 0.05, radial: 12, rings: 6 }), mats.neck, 0, 0.04, -0.15);
-  // brow ridges
+  // long wedge skull: flat-topped snout, broad occiput
+  mesh(head, limbGeometry({ length: SKULL.len, r0: SKULL.r0, r1: SKULL.r1, sx: 1.0, sy: SKULL.sy, bulge: SKULL.bulge, radial: 16, rings: 7 }), mats.neck, 0, SKULL.y0, SKULL.z0);
+  const skullTop = (z) => SKULL.y0 + skullR(z) * SKULL.sy;
+  const skullBot = (z) => SKULL.y0 - skullR(z) * SKULL.sy;
+  const browG = [], hornsG = [], teethG = [];
   for (const s of [1, -1]) {
-    const brow = mesh(head, ellipsoidGeometry(0.13, 0.1, 0.4, { widthSegs: 8, heightSegs: 6 }), mats.neck, s * 0.27, 0.25, 0.42);
-    brow.rotation.y = s * 0.22;
+    // heavy brow shelves overhanging the eyes
+    browG.push(place(ellipsoidGeometry(0.16, 0.1, 0.42, { widthSegs: 8, heightSegs: 6 }), s * 0.25, 0.25, 0.45, 0, s * 0.2, 0, 'YXZ'));
+    // main horns: sabres back along the skull line, tips curving up (~26° above it overall; a
+    // steeper root made two vertical posts from the front)
+    hornsG.push(horn(1.5, 0.15, s * 0.2, 0.3, -0.02, -0.22, Math.PI - s * 0.3, 0.3, 7)); // a V from the front, not two posts
+    // secondary horns
+    hornsG.push(horn(0.85, 0.1, s * 0.3, 0.12, 0.0, -0.1, Math.PI - s * 0.45, 0.15, 6));
+    // cheek (jugal) horns: straight back, behind and below the eye
+    hornsG.push(horn(0.65, 0.09, s * 0.38, -0.02, 0.3, 0.08, Math.PI - s * 0.5, 0, 6));
+    // nape ruff: 4 blades per side
+    for (let k = 0; k < 4; k++) {
+      hornsG.push(horn(0.55 - k * 0.07, 0.07, s * (0.22 + 0.07 * k), 0.05 - 0.1 * k, -0.1, -0.15 + 0.25 * k, Math.PI - s * (0.35 + 0.22 * k), 0.12, 5, 0.6));
+    }
+    // upper teeth: 9 per side, long separate needles, irregular, hooked slightly back (fang in front;
+    // x1.4 the sheet's lengths so each fang reads against the lit maw)
+    const UP = [0.22, 0.14, 0.11, 0.13, 0.1, 0.11, 0.085, 0.1, 0.085];
+    UP.forEach((len, k) => {
+      const z = 1.15 - k * 0.1;
+      const r = skullR(z);
+      const L = len * (1 + 0.25 * jit(k * 2 + (s > 0 ? 0 : 1)));
+      teethG.push(horn(L, k === 0 ? 0.05 : 0.035, s * r * 0.78, skullBot(z) + 0.03, z, Math.PI / 2 + 0.14, 0, 0, 4));
+    });
   }
-  // swept-back horns (two pairs)
-  for (const s of [1, -1]) {
-    const h1 = mesh(head, hornGeometry(1.3, 0.15, { radial: 6, curve: 0.35 }), mats.bone, s * 0.25, 0.22, 0.02);
-    h1.rotation.order = 'YXZ';
-    h1.rotation.set(-0.32, Math.PI - s * 0.3, 0);
-    const h2 = mesh(head, hornGeometry(0.72, 0.1, { radial: 5, curve: 0.2 }), mats.bone, s * 0.38, -0.02, 0.05);
-    h2.rotation.order = 'YXZ';
-    h2.rotation.set(-0.08, Math.PI - s * 0.75, 0);
-  }
-  // upper fangs
-  for (const s of [1, -1]) {
-    const f = mesh(head, hornGeometry(0.24, 0.05, { radial: 4 }), mats.bone, s * 0.13, -0.12, 1.02);
-    f.rotation.x = Math.PI / 2;
-  }
-  // eyes (glow driven by uGlow / uInkGlow on the eye material)
+  // crown: 5 midline spikes snout -> occiput, plus a nose horn
+  [
+    [0.1, 0.04, 0.95],
+    [0.16, 0.05, 0.75],
+    [0.24, 0.06, 0.55],
+    [0.33, 0.08, 0.35],
+    [0.42, 0.09, 0.12],
+  ].forEach(([len, r, z]) => hornsG.push(spike(len, r, 0, skullTop(z) - 0.02, z, 0.95, 0, 0.1, 5, 0.55)));
+  hornsG.push(spike(0.18, 0.06, 0, 0.14, 1.18, 0.5, 0, 0.1));
+  batch(head, mats.neck, browG);
+  batch(head, mats.bone, hornsG);
+  batch(head, mats.teeth, teethG);
+  // the maw: glowing roof of the mouth (shows through the teeth: the jaw rests a little open)
+  batch(head, mats.maw, [place(ellipsoidGeometry(0.24, 0.06, 0.6, { widthSegs: 10, heightSegs: 6 }), 0, -0.12, 0.62)]);
+  // eyes: small amber slits tucked under the brow shelf, outer corner tilted ~20° up
   const eyes = [];
   for (const s of [1, -1]) {
-    const e = mesh(head, ellipsoidGeometry(0.11, 0.08, 0.16, { widthSegs: 8, heightSegs: 6 }), mats.eye, s * 0.3, 0.14, 0.52);
-    e.rotation.y = s * 0.3;
+    const e = mesh(head, ellipsoidGeometry(0.07, 0.045, 0.11, { widthSegs: 8, heightSegs: 6 }), mats.eye, s * 0.27, 0.12, 0.55);
+    e.rotation.set(0.35, s * 0.3, 0, 'YXZ');
     eyes.push(e);
   }
-  const nostrils = [joint(head, 0.12, 0.12, 1.42, 'nostrilL'), joint(head, -0.12, 0.12, 1.42, 'nostrilR')];
-  const mouth = joint(head, 0, -0.1, 1.5, 'mouth');
-  // hinged lower jaw
-  const jaw = joint(head, 0, -0.16, 0.0, 'jaw');
-  mesh(jaw, limbGeometry({ length: 1.32, r0: 0.3, r1: 0.11, sx: 0.92, sy: 0.42, radial: 10, rings: 5 }), mats.neck, 0, -0.05, 0);
+  const nostrils = [joint(head, 0.1, 0.1, 1.2, 'nostrilL'), joint(head, -0.1, 0.1, 1.2, 'nostrilR')];
+  const mouth = joint(head, 0, -0.12, 1.3, 'mouth');
+  // hinged lower jaw: lower teeth, jaw-line spikes, chin spike, the glowing floor of the mouth
+  const jaw = joint(head, 0, -0.15, 0.05, 'jaw');
+  mesh(jaw, limbGeometry({ length: JAW.len, r0: JAW.r0, r1: JAW.r1, sx: JAW.sx, sy: JAW.sy, radial: 12, rings: 5 }), mats.neck, 0, JAW.y0, 0);
+  const lowTeeth = [], jawSpikes = [];
   for (const s of [1, -1]) {
-    const f = mesh(jaw, hornGeometry(0.18, 0.045, { radial: 4 }), mats.bone, s * 0.11, 0.0, 0.95);
-    f.rotation.x = -Math.PI / 2;
+    const LOW = [0.18, 0.13, 0.11, 0.1, 0.1, 0.085, 0.085, 0.07];
+    LOW.forEach((len, k) => {
+      const z = 1.02 - k * 0.095;
+      const L = len * (1 + 0.25 * jit(k * 3 + (s > 0 ? 7 : 11)));
+      lowTeeth.push(horn(L, k === 0 ? 0.045 : 0.032, s * jawR(z) * JAW.sx * 0.78, JAW.y0 + jawR(z) * JAW.sy - 0.02, z, -(Math.PI / 2 + 0.1), 0, 0, 4));
+    });
+    // jaw-line spikes: down and back, growing toward the hinge
+    [
+      [0.16, 0.7],
+      [0.23, 0.5],
+      [0.3, 0.3],
+      [0.37, 0.1],
+    ].forEach(([len, z]) => jawSpikes.push(horn(len, 0.05, s * jawR(z) * JAW.sx * 0.9, JAW.y0 - jawR(z) * JAW.sy * 0.6, z, 0.9, Math.PI - s * 0.25, 0, 5, 0.6)));
   }
+  jawSpikes.push(horn(0.2, 0.05, 0, JAW.y0 - 0.08, 1.0, 1.3, 0, 0, 5));
+  batch(jaw, mats.teeth, lowTeeth);
+  batch(jaw, mats.bone, jawSpikes);
+  batch(jaw, mats.maw, [place(ellipsoidGeometry(0.19, 0.05, 0.52, { widthSegs: 10, heightSegs: 6 }), 0, 0.02, 0.55)]);
 
-  // --- tail chain (tailBase points backward)
+  // ============================================================ tail (spec §2.7)
+  // 16 x 0.52, tapering to a point (no mace); flat orange saw-blades on top, small silver blades
+  // on the sides, lava underside on the first 70 %
   const tailBase = joint(hips, ...A.tailBase, 'tailBase');
   tailBase.rotation.y = Math.PI;
   const tail = [];
   const tailRadii = [];
   parent = tailBase;
+  const tailR = (t) => 0.05 + 0.52 * Math.pow(Math.max(0, 1 - t), 1.15);
   for (let i = 0; i < A.tailSegs; i++) {
     const j = joint(parent, 0, 0, i === 0 ? 0 : A.tailLen, `tail${i}`);
     const t = i / A.tailSegs;
-    const r0 = 0.08 + 0.66 * Math.pow(1 - t, 0.95);
-    const r1 = 0.08 + 0.66 * Math.pow(1 - (i + 1) / A.tailSegs, 0.95);
+    const r0 = tailR(t), r1 = tailR((i + 1) / A.tailSegs);
     tailRadii.push(r0);
-    // aGUV +y toward the tip (no flip); glyph direction can be inverted with TAIL_FLIP
-    mesh(j, limbGeometry({ length: A.tailLen + 0.08, r0, r1, sy: 0.9, radial: 10, rings: 3, flip: TAIL_FLIP }), mats.scales, 0, 0, -0.04);
-    if (i < 10) spike(j, mats.bone, 0.3 - t * 0.16, 0.07, 0, r0 * 0.85, A.tailLen * 0.5, -0.5);
+    mesh(j, limbGeometry({ length: A.tailLen + 0.08, r0, r1, sy: 0.9, radial: 12, rings: 3, flip: TAIL_FLIP }), mats.limbs, 0, 0, -0.04);
+    if (i < 11) mesh(j, limbGeometry({ length: A.tailLen + 0.04, r0: r0 * 0.94, r1: r1 * 0.94, sx: 0.8, sy: 0.74, radial: 10, rings: 2, flip: TAIL_FLIP }), mats.lava, 0, -r0 * 0.34, -0.02);
+    batch(j, mats.spine, [spike(0.55 - t * 0.45, 0.2 - t * 0.12, 0, r0 * 0.84, A.tailLen * 0.5, -0.87, 0, -0.1, 5, 0.35)]);
+    if (i < 13) {
+      const side = [];
+      for (const s of [1, -1]) side.push(spike(0.3 - t * 0.24, 0.07 - t * 0.03, s * r0 * 0.8, r0 * 0.22, A.tailLen * 0.45, -0.75, -s * 1.3, 0, 5, 0.45));
+      batch(j, mats.bone, side);
+    }
     tail.push(j);
     parent = j;
   }
   const tailTip = joint(parent, 0, 0, A.tailLen, 'tailTip');
-  for (const [yaw, pitch, len] of [[0, -0.1, 0.8], [0.6, -0.35, 0.55], [-0.6, -0.35, 0.55], [0.0, -0.9, 0.5]]) {
-    const sp = mesh(tailTip, hornGeometry(len, 0.11, { radial: 5 }), mats.bone, 0, 0, -0.1);
-    sp.rotation.order = 'YXZ';
-    sp.rotation.set(pitch, yaw, 0);
-  }
+  batch(tailTip, mats.spine, [
+    horn(0.6, 0.11, 0, 0, -0.08, 0, 0, 0, 5, 0.4),
+    horn(0.2, 0.06, 0, 0, -0.2, 0, 0.6, 0, 5, 0.5),
+    horn(0.2, 0.06, 0, 0, -0.2, 0, -0.6, 0, 5, 0.5),
+  ]);
 
-  // --- hind legs
+  // ============================================================ hind legs (spec §2.5)
   const legs = [];
   for (const s of [1, -1]) {
-    mesh(hips, ellipsoidGeometry(0.55, 0.78, 0.9), mats.scales, s * A.hipJoint[0], A.hipJoint[1] + 0.2, A.hipJoint[2] + 0.05);
     const hip = joint(hips, s * A.hipJoint[0], A.hipJoint[1], A.hipJoint[2], s > 0 ? 'hipL' : 'hipR');
-    hip.rotation.x = Math.PI / 2; // +Z points down
+    hip.rotation.x = Math.PI / 2; // +Z points down, +Y forward
     const thigh = joint(hip, 0, 0, 0, 'thigh');
-    mesh(thigh, limbGeometry({ length: A.thigh + 0.1, r0: 0.58, r1: 0.34, bulge: 0.12, radial: 12, rings: 5 }), mats.scales, 0, 0, -0.05);
-    const shin = joint(thigh, 0, 0, A.thigh, 'shin');
-    mesh(shin, limbGeometry({ length: A.shin + 0.06, r0: 0.33, r1: 0.2, radial: 10, rings: 4 }), mats.scales);
-    const meta = joint(shin, 0, 0, A.shin, 'meta');
-    mesh(meta, limbGeometry({ length: A.meta + 0.05, r0: 0.21, r1: 0.16, radial: 8, rings: 3 }), mats.scales);
-    const toe = joint(meta, 0, 0, A.meta, 'toe');
-    mesh(toe, ellipsoidGeometry(0.26, 0.14, 0.3, { widthSegs: 8, heightSegs: 6 }), mats.scales, 0, 0.02, 0.1);
-    for (const yaw of [-0.45, 0, 0.45]) {
-      const c = mesh(toe, hornGeometry(0.55, 0.085, { radial: 5, curve: -0.12 }), mats.bone, Math.sin(yaw) * 0.12, 0.02, 0.15);
-      c.rotation.order = 'YXZ';
-      c.rotation.set(0.22, yaw, 0);
+    mesh(thigh, limbGeometry({ length: A.thigh + 0.1, r0: 0.72, r1: 0.42, bulge: 0.15, radial: 14, rings: 5, flip: true }), mats.limbs, 0, 0, -0.05);
+    // lava on the inner thigh
+    mesh(thigh, limbGeometry({ length: A.thigh - 0.1, r0: 0.55, r1: 0.32, bulge: 0.1, sx: 0.8, radial: 10, rings: 4, flip: true }), mats.lava, -s * 0.36, 0, 0.08);
+    // 5 blades along the top / outer contour of the thigh (below the haunch), leaning back toward
+    // the hip (they continue the rump row)
+    const tb = [];
+    for (let k = 0; k < 5; k++) {
+      const z = 0.3 + k * 0.2;
+      const r = 0.72 + (0.42 - 0.72) * ((z + 0.05) / (A.thigh + 0.1)) + 0.15 * Math.sin((Math.PI * (z + 0.05)) / (A.thigh + 0.1));
+      tb.push(spike(0.55 - k * 0.07, 0.12, s * r * 0.6, r * 0.72, z, 0.7, -s * 0.85, 0.1, 5, 0.4));
     }
-    const dew = mesh(toe, hornGeometry(0.3, 0.06, { radial: 4 }), mats.bone, 0, 0.1, -0.1);
-    dew.rotation.y = Math.PI;
+    batch(thigh, mats.bone, tb);
+    const shin = joint(thigh, 0, 0, A.thigh, 'shin');
+    mesh(shin, limbGeometry({ length: A.shin + 0.06, r0: 0.46, r1: 0.29, radial: 12, rings: 4, flip: true }), mats.limbs);
+    const meta = joint(shin, 0, 0, A.shin, 'meta');
+    mesh(meta, limbGeometry({ length: A.meta + 0.05, r0: 0.29, r1: 0.23, radial: 10, rings: 3, flip: true }), mats.limbs);
+    // two spikes back off the hock (meta frame: -Y = back, -Z = up)
+    batch(meta, mats.bone, [horn(0.35, 0.08, 0, -0.18, 0.05, 2.15, 0, 0.05, 5, 0.5), horn(0.25, 0.06, 0, -0.17, 0.25, 2.0, 0, 0, 5, 0.5)]);
+    const toe = joint(meta, 0, 0, A.meta, 'toe');
+    // foot pad sits ON the ground (the toe joint is at ground level, nose ~8° down)
+    mesh(toe, ellipsoidGeometry(0.46, 0.16, 0.5, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, 0.13, 0.12);
+    // heavy ivory talons rooted at the toe tips, splayed wide, arcing out and hooking down so the
+    // tips touch the ground in front of the toes
+    const claws = [];
+    [
+      [-0.45, 0.6],
+      [0, 0.7],
+      [0.45, 0.6],
+    ].forEach(([yaw, len]) => claws.push(horn(len, 0.13, Math.sin(yaw) * 0.36, 0.14, 0.34 + Math.cos(yaw) * 0.16, -0.14, yaw, -0.32, 6)));
+    claws.push(horn(0.45, 0.1, -s * 0.4, 0.14, 0.05, -0.05, -s * 1.1, -0.28, 5)); // inner claw
+    claws.push(horn(0.4, 0.09, 0, 0.16, -0.3, -0.25, Math.PI, -0.1, 5)); // heel spur
+    batch(toe, mats.claw, claws);
     legs.push({ side: s, hip, thigh, shin, meta, toe });
   }
 
-  // --- wings (forelimbs): humerus -> forearm -> wrist -> fingers, plus thumb claw
-  const wings = [];
+  // ============================================================ front legs (spec §2.4)
+  const arms = [];
   for (const s of [1, -1]) {
     const shoulder = joint(chest, s * A.shoulder[0], A.shoulder[1], A.shoulder[2], s > 0 ? 'shoulderL' : 'shoulderR');
-    shoulder.rotation.y = (s * Math.PI) / 2; // +Z points outward
-    mesh(chest, ellipsoidGeometry(0.5, 0.55, 0.7), mats.scales, s * (A.shoulder[0] - 0.1), A.shoulder[1] + 0.1, A.shoulder[2]);
+    shoulder.rotation.x = Math.PI / 2; // +Z points down, +Y forward
     const humerus = joint(shoulder, 0, 0, 0, 'humerus');
-    mesh(humerus, limbGeometry({ length: A.humerus + 0.08, r0: 0.34, r1: 0.2, bulge: 0.06, radial: 10, rings: 4 }), mats.scales);
+    mesh(humerus, limbGeometry({ length: A.humerus + 0.08, r0: 0.52, r1: 0.37, bulge: 0.1, radial: 12, rings: 4, flip: true }), mats.limbs);
+    // armpit lava patch on the inner side
+    mesh(humerus, limbGeometry({ length: 0.6, r0: 0.34, r1: 0.26, sx: 0.7, radial: 10, rings: 2, flip: true }), mats.lava, -s * 0.22, 0, 0.05);
     const forearm = joint(humerus, 0, 0, A.humerus, 'forearm');
-    mesh(forearm, limbGeometry({ length: A.forearm + 0.06, r0: 0.22, r1: 0.15, radial: 8, rings: 4 }), mats.scales);
-    const wrist = joint(forearm, 0, 0, A.forearm, 'wrist');
-    mesh(wrist, ellipsoidGeometry(0.22, 0.2, 0.26, { widthSegs: 8, heightSegs: 6 }), mats.scales);
-    const fingers = A.fingers.map((len, k) => {
+    mesh(forearm, ellipsoidGeometry(0.3, 0.3, 0.32, { widthSegs: 10, heightSegs: 6 }), mats.scales, 0, -0.04, 0);
+    mesh(forearm, limbGeometry({ length: A.forearm + 0.06, r0: 0.4, r1: 0.29, bulge: 0.04, radial: 12, rings: 4, flip: true }), mats.limbs);
+    // posterior lava rim down the back of the forearm (the ASCII panel's orange back edge)
+    mesh(forearm, limbGeometry({ length: A.forearm - 0.2, r0: 0.2, r1: 0.14, sx: 0.55, radial: 8, rings: 3, flip: true }), mats.lava, 0, -0.2, 0.15);
+    // elbow: 3 big blades back and up (~40° above horizontal); 4 small spikes down the back edge
+    const fs = [];
+    [
+      [0.7, 0.0, 2.27, 0.0],
+      [0.55, 0.14, 2.1, s * 0.14],
+      [0.4, 0.28, 1.95, -s * 0.12],
+    ].forEach(([len, z, p, x]) => fs.push(horn(len, 0.13, x, -0.3, z, p, 0, -0.08, 5, 0.42)));
+    for (let k = 0; k < 4; k++) fs.push(horn(0.27 - k * 0.04, 0.06, 0, -0.33 + k * 0.02, 0.45 + k * 0.2, 1.25, 0, 0, 5, 0.5));
+    batch(forearm, mats.bone, fs);
+    const hand = joint(forearm, 0, 0, A.forearm, 'hand');
+    mesh(hand, limbGeometry({ length: A.hand + 0.04, r0: 0.27, r1: 0.22, radial: 10, rings: 2, flip: true }), mats.limbs);
+    const paw = joint(hand, 0, 0, A.hand, 'paw');
+    // paw: wider than the leg (the painting's feet), its pad on the ground (paw joint = ground level)
+    mesh(paw, ellipsoidGeometry(0.48, 0.16, 0.44, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, 0.12, 0.1);
+    // four massive ivory claws rooted at the toe tips, splayed ±0.5 rad, arcing out and hooking down
+    // so the tips touch the ground in front of the toes (they used to sink ~0.3 under it);
+    // inner dewclaw at the wrist, back and down
+    const cl = [];
+    [
+      [0.5, 0.5],
+      [0.17, 0.6],
+      [-0.17, 0.6],
+      [-0.5, 0.5],
+    ].forEach(([yaw, len]) => cl.push(horn(len, 0.13, Math.sin(s * yaw) * 0.44, 0.14, 0.3 + Math.cos(yaw) * 0.16, -0.1, s * yaw, -0.32, 6)));
+    batch(paw, mats.claw, cl);
+    batch(hand, mats.claw, [horn(0.28, 0.06, -s * 0.2, -0.12, 0.08, 2.4, -s * 0.35, 0, 5)]);
+    arms.push({ side: s, shoulder, humerus, forearm, hand, paw });
+  }
+
+  // ============================================================ wings (spec §2.6)
+  // separate limbs rooted on top of the back: humerus (hide) -> forearm (bone line) -> wrist with a
+  // hooked ivory thumb and two orange wrist spikes -> 4 two-joint fingers spanned by the membrane
+  const wings = [];
+  for (const s of [1, -1]) {
+    const wroot = joint(chest, s * A.wingRoot[0], A.wingRoot[1], A.wingRoot[2], s > 0 ? 'wingRootL' : 'wingRootR');
+    // a boss of hide where the wing grows out of the withers
+    mesh(chest, ellipsoidGeometry(0.42, 0.34, 0.5, { widthSegs: 10, heightSegs: 6 }), mats.scales, s * (A.wingRoot[0] + 0.05), A.wingRoot[1] - 0.25, A.wingRoot[2] + 0.05);
+    // the wing arm is a thick dark scaled column with a spiked trailing edge (the painting), not a
+    // glowing bone tube: hide on both segments, tapering 0.30 -> 0.22; only the fingers are bone lines
+    const humerus = joint(wroot, 0, 0, 0, 'wingHumerus');
+    mesh(humerus, limbGeometry({ length: A.wingHumerus + 0.08, r0: 0.3, r1: 0.27, bulge: 0.03, radial: 10, rings: 4 }), mats.limbs);
+    const hs = [];
+    for (let k = 0; k < 5; k++) hs.push(horn(0.25, 0.06, 0, 0.24, 0.25 + k * 0.27, -1.3, 0, 0, 5, 0.5));
+    batch(humerus, mats.bone, hs);
+    const forearm = joint(humerus, 0, 0, A.wingHumerus, 'wingForearm');
+    mesh(forearm, limbGeometry({ length: A.wingForearm + 0.06, r0: 0.27, r1: 0.22, radial: 10, rings: 5 }), mats.limbs);
+    const ser = [];
+    for (let k = 0; k < 5; k++) ser.push(horn(0.24 - k * 0.02, 0.06, 0, 0.22, 0.3 + k * 0.5, -1.3, 0, 0, 5, 0.5)); // trailing spikes
+    for (let k = 0; k < 5; k++) ser.push(horn(0.12, 0.04, 0, -0.2, 0.3 + k * 0.5, 1.4, 0, 0, 4)); // leading serrations
+    batch(forearm, mats.bone, ser);
+    const wrist = joint(forearm, 0, 0, A.wingForearm, 'wrist');
+    mesh(wrist, ellipsoidGeometry(0.24, 0.22, 0.28, { widthSegs: 8, heightSegs: 6 }), mats.scales);
+    batch(wrist, mats.spine, [horn(0.45, 0.09, 0, 0.12, 0.05, -2.2, 0, 0.1, 5, 0.5), horn(0.3, 0.07, s * 0.15, 0.05, 0.1, -0.6, s * 1.2, 0, 5, 0.5)]);
+    const fingers = [], distal = [];
+    A.fingers.forEach((len, k) => {
+      const kn = A.knuckle[k];
+      const l0 = len * kn, l1 = len - l0;
       const f = joint(wrist, 0, 0, 0, `finger${k}`);
-      mesh(f, limbGeometry({ length: len, r0: 0.12, r1: 0.04, radial: 6, rings: 4, capSegs: 2 }), mats.scales);
-      return f;
+      const rMid = 0.07;
+      batch(f, mats.wingBone, [limbGeometry({ length: l0, r0: 0.1, r1: rMid, radial: 6, rings: 4, capSegs: 2 })]);
+      const fd = joint(f, 0, 0, l0, `finger${k}d`);
+      const tip = k === 0 ? horn(0.4, 0.06, 0, 0, l1 - 0.04, 0, 0, 0, 5) : null;
+      batch(fd, mats.wingBone, tip ? [limbGeometry({ length: l1, r0: rMid, r1: 0.045, radial: 6, rings: 4, capSegs: 2 }), tip] : [limbGeometry({ length: l1, r0: rMid, r1: 0.045, radial: 6, rings: 4, capSegs: 2 })]);
+      // knuckle bump + a small spike
+      batch(fd, mats.bone, [place(ellipsoidGeometry(0.09, 0.09, 0.11, { widthSegs: 6, heightSegs: 4 }), 0, 0, 0), horn(0.15, 0.04, 0, 0.06, 0, -1.2, 0, 0, 4)]);
+      if (k > 0) batch(fd, mats.claw, [horn(k === 3 ? 0.25 : 0.28, 0.05, 0, 0, l1 - 0.03, 0.25, 0, -0.25, 5)]);
+      fingers.push(f);
+      distal.push(fd);
     });
     const thumb = joint(wrist, 0, 0, 0, 'thumb');
-    mesh(thumb, hornGeometry(0.55, 0.1, { radial: 5, curve: -0.18 }), mats.bone);
-    const shoulderAttach = joint(chest, s * 0.95, 0.35, 0.1, 'shoulderAttach');
-    const hipAttach = joint(hips, s * 0.9, 0.25, -0.25, 'hipAttach');
-    const membrane = new WingMembrane(mats.membrane, s);
+    // the big ivory sickle on the wrist: rises up-forward, the tip hooking down in front (the rig
+    // rolls the joint so the -Y curve points down)
+    mesh(thumb, hornGeometry(1.1, 0.17, { radial: 6, curve: -0.55 }), mats.claw);
+    const hipAttach = joint(hips, s * A.hipAttach[0], A.hipAttach[1], A.hipAttach[2], 'hipAttach');
+    const membrane = new WingMembrane(mats.membrane, s, WING_KEYS.HALF);
     root.add(membrane.mesh);
-    wings.push({ side: s, shoulder, humerus, forearm, wrist, fingers, thumb, shoulderAttach, hipAttach, membrane });
+    wings.push({ side: s, root: wroot, humerus, forearm, wrist, fingers, distal, thumb, hipAttach, membrane });
   }
 
   return {
-    root, mats, hips, torso, chest, chestMesh, neckBase, neck, head, jaw, eyes, nostrils, mouth,
-    tailBase, tail, tailRadii, tailTip, legs, wings,
+    root, mats, glow: GLOW, hips, torso, chest, chestMesh, neckBase, neck, head, jaw, eyes, nostrils, mouth,
+    tailBase, tail, tailRadii, tailTip, legs, arms, wings,
   };
 }
+
+/** @deprecated v0.3 name (the wyvern); the drake is built by buildDrake. */
+export const buildWyvern = buildDrake;

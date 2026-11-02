@@ -43,10 +43,8 @@ export class TitleScreen {
     el('div', 'ab-press', 'PRESS ANY KEY', inner);
     const ctrl = el('div', 'ab-title-ctrl', null, inner);
     for (const item of TITLE_KEYS) fillKeyText(el('span', 'item', null, ctrl), item);
-    const legend = tellLegend(inner);
-    legend.classList.add('title');
-    el('span', 'it hint', 'perfect dodge = Ghostep', legend);
-    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.2", this.root);
+    tellLegend(inner).classList.add('title');
+    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.3", this.root);
 
     // shimmer: a sweeping column of '▓' plus a few random '▒' over the solid blocks
     this.chars = [...LOGO.join('\n')];
@@ -123,7 +121,7 @@ export class PauseMenu {
     this.muteVal = el('span', 'v', '', this.btnMute);
     el('div', 'ab-sep', null, panel);
     controlsGrid(panel);
-    tellLegend(panel, { normal: true });
+    tellLegend(panel);
     this.on = false;
     this._q = null;
     this._m = null;
@@ -159,7 +157,7 @@ export class HelpPanel {
     fillKeyText(el('span', '', null, head), '[H] close');
     controlsGrid(this.root);
     el('div', 'ab-help-sub', 'ATTACK TELLS', this.root);
-    tellLegend(this.root, { normal: true });
+    tellLegend(this.root);
     this.on = false;
   }
 

@@ -32,6 +32,14 @@ const TUNE = {
   title: { toward: 0.88, weight: 0.8, zoom: 8, drift: 1.6, minTime: 0.5 },
   intro: { weight: 0.55, zoom: 6, lambda: 2.2, fallback: 14 },
   victoryCam: { weight: 0.35, zoom: 3 },
+  // boss fight: pull the camera back / over so the hero + the whole (x1.875, ~30 m) wyrm stay in
+  // view. Box = hero + dragon hurt spheres (tall parts lean up the screen by y * lean). Visible
+  // ground per metre of camera distance (fov 32, pitch 58, 16:9, HUD bars): `north` / `south` of
+  // the focus, `side` either way. When even maxZoom can't fit the box (spread wings + tail), the
+  // focus is clamped so the hero stays `margin` m inside the view and the far end of the wyrm crops.
+  // Fades back to the plain hero camera when the hero is farther than `far` m from the body.
+  // maxZoom stays small on purpose: the hero must stay readable (owner feedback), the wyrm may crop
+  bossCam: { weight: 1, lean: 0.6, margin: 3, north: 0.39, south: 0.22, side: 0.44, maxZoom: 5, near: 16, far: 36 },
   deathBannerDelay: 0.7,
   deathHold: 4.5,
   deathSlowmo: 0.35,
@@ -488,6 +496,7 @@ export class GameFlow {
       this._enterDead();
       return;
     }
+    this._bossFrame(rdt);
     // Lab 'victory': the dragon never reported its death
     if (this.debugVictoryT > 0) {
       this.debugVictoryT -= rdt;
@@ -508,6 +517,48 @@ export class GameFlow {
       this.deadPollT += rdt;
       if (this.deadPollT > 1.2) this._enterVictory();
     } else this.deadPollT = 0;
+  }
+
+  /** Boss framing (TUNE.bossCam): hero + the wyrm's hurt spheres in view at the default camera. */
+  _bossFrame(rdt) {
+    const g = this.game, T = TUNE.bossCam, H = g.dragon?.hurtSpheres, p = g.player?.position;
+    this._ovLambda = 1.5;
+    if (!Array.isArray(H) || !H.length || !p || !Number.isFinite(p.x + p.z)) {
+      this._ovW = 0;
+      this._ovZ = 0;
+      return;
+    }
+    let x0 = p.x, x1 = p.x, z0 = p.z, z1 = p.z, cx = 0, cz = 0, n = 0;
+    for (const h of H) {
+      if (!h || !Number.isFinite(h.x + h.y + h.z + h.r)) continue;
+      const z = h.z - Math.max(0, h.y) * T.lean;
+      x0 = Math.min(x0, h.x - h.r);
+      x1 = Math.max(x1, h.x + h.r);
+      z0 = Math.min(z0, z - h.r);
+      z1 = Math.max(z1, z + h.r);
+      cx += h.x;
+      cz += h.z;
+      n++;
+    }
+    if (!n) return;
+    const m = T.margin;
+    const need = Math.max((x1 - x0 + 2 * m) / (2 * T.side), (z1 - z0 + 2 * m) / (T.north + T.south));
+    const C = CONFIG.camera;
+    const base = finite(g.cameraRig?.targetDistance, C.distance);
+    // wheel-zoomed in (Lab showroom too): the player asked for a close-up, frame less
+    const user = clamp((base - C.minDistance) / Math.max(1, C.distance - C.minDistance), 0, 1);
+    const dist = Math.hypot(p.x - cx / n, p.z - cz / n);
+    this._ovW = T.weight * user * clamp((T.far - dist) / (T.far - T.near), 0, 1);
+    this._ovZ = this._ovW > 0 ? clamp(need - base, 0, T.maxZoom) * user : 0;
+    // centre the box in the (asymmetric) view, then keep the hero inside it
+    const D = base + this._ovZ;
+    const tx = clamp((x0 + x1) / 2, p.x - T.side * D + m, p.x + T.side * D - m);
+    const tz = clamp((z0 + z1) / 2 + ((T.north - T.south) / 2) * D, p.z - T.south * D + m, p.z + T.north * D - m);
+    const f = this._ov.focus;
+    const k = this._ov.weight > 0.05 ? 1 - Math.exp(-4 * rdt) : 1; // override idle: start on target
+    f.x += (tx - f.x) * k;
+    f.z += (tz - f.z) * k;
+    f.y = 0;
   }
 
   _enterDead() {

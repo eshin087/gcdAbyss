@@ -183,7 +183,7 @@ export const SFX = {
     prio: 2, rev: 0.08, gap: 0.04,
     play(v, t, o) {
       const heavy = !!o.heavy;
-      const D = heavy ? 0.42 : 0.24;
+      const D = o.thrust ? 0.5 : heavy ? 0.42 : 0.24;
       const c = 1 + ((num(o.combo, 0) | 0) % 3) * 0.07;
       const lo = heavy ? 300 : 650;
       const hi = (heavy ? 1500 : 2900) * c * rnd(0.92, 1.08);
@@ -195,6 +195,19 @@ export const SFX = {
         const sg = v.gain(0);
         env(sg.gain, t, [[0, 0], [D * 0.45, 0.3], [D, 0]]);
         s.connect(sg).connect(v.out);
+      }
+    },
+  },
+
+  /** The combo-finisher slam meets the ground: a deep crunch + glassy crystal tings. */
+  slam: {
+    prio: 4, rev: 0.25, gap: 0.2,
+    play(v, t) {
+      thump(v, t, 90, 30, 0.3, 1.0, 0.5);
+      burst(v, t, 'brown', 'lowpass', 700, 0.8, 0.8, 0.22);
+      burst(v, t + 0.005, 'white', 'highpass', 4200, 0.7, 0.3, 0.1, 0.001);
+      for (const [f, a, d, dl] of [[2637, 0.1, 0.4, 0.01], [3520, 0.08, 0.3, 0.04], [4186, 0.06, 0.25, 0.07], [3136, 0.05, 0.35, 0.1]]) {
+        ping(v, t + dl, 'sine', f * rnd(0.98, 1.02), a, d);
       }
     },
   },

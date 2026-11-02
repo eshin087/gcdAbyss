@@ -3,11 +3,15 @@
 // (the player today) resolves them with these windows. Numbers here are the single source of truth.
 // Design + rationale: docs/COMBAT.md.
 
-/** How an attack must be answered. Shown to the player as a coloured tell before impact. */
+/**
+ * How an attack must be answered. Read from the attacker itself (no HUD text or icons): parryable
+ * hits are read from the windup animation and glint white on the timing cue; dodge-only hits make
+ * the attacker glow red through the windup and flash red on the cue. See docs/COMBAT.md.
+ */
 export const TELL = Object.freeze({
   NORMAL: 'normal', // white glint: block, parry or dodge — any defence works
-  BLUE: 'blue', // blue flash: a heavy blow you should PARRY (block works but chips hard)
-  RED: 'red', // red flash: cannot be blocked or parried — PERFECT DODGE it (Ghostep)
+  BLUE: 'blue', // big white glint: a heavy blow you should PARRY (block works but chips hard)
+  RED: 'red', // red warning glow + flash: cannot be blocked or parried — PERFECT DODGE it (Ghostep)
 });
 
 /** Resolution of a hit from the defender's point of view (returned by takeHit). */
@@ -20,11 +24,23 @@ export const RESULT = Object.freeze({
   IGNORED: 'ignored',
 });
 
-/** Presentation for each tell (HUD, FX and audio all read this). Colours are linear HDR. */
+/**
+ * Presentation for each tell. World side (linear HDR): `color` = the in-world timing flash —
+ * white for the parryable tells (blue is the same white, only `glint`x larger and brighter), red
+ * for dodge-only; `red.warn` = the attacker's red windup glow (creature material uniform uWarn:
+ * strength ramps `from` → `to` between combat:tell and combat:flash, spikes to `spike` on the
+ * flash, decays to 0 in `decay` s). `css` = the dev / UI colour (Lab chips, HUD red edge flash,
+ * success call-outs); the HUD shows no per-tell colour coding during a windup.
+ */
 export const TELL_STYLE = Object.freeze({
-  normal: { color: [1.6, 1.5, 1.3], css: '#f2ead8', glyph: '+', label: '' },
-  blue: { color: [0.45, 1.1, 3.2], css: '#5fb4ff', glyph: '◆', label: 'PARRY' },
-  red: { color: [3.4, 0.35, 0.2], css: '#ff4a3a', glyph: '!', label: 'DODGE' },
+  normal: { color: [3.2, 3.05, 2.8], glint: 1, css: '#f2ead8' },
+  blue: { color: [3.2, 3.05, 2.8], glint: 1.5, css: '#5fb4ff' },
+  red: {
+    color: [3.4, 0.35, 0.2],
+    glint: 1,
+    css: '#ff4a3a',
+    warn: { color: [1.0, 0.12, 0.05], from: 0.1, to: 0.38, spike: 1.6, decay: 0.25 },
+  },
 });
 
 export const DEFENSE = Object.freeze({

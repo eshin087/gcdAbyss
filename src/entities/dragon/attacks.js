@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { TUNING, SCALE } from './tuning.js';
 import { TELL } from '../../combat/rules.js';
-import { clamp, smoothstep, easeInOutSine, easeOutCubic, easeInCubic, turnToward, angleDiff } from '../../core/math.js';
+import { clamp, lerp, smoothstep, easeInOutSine, easeOutCubic, easeInCubic, turnToward, angleDiff } from '../../core/math.js';
+
+/** Wing spread the actions return to (the mantled HALF sails, TUNING.rest). */
+const REST_SPREAD = TUNING.rest.spread;
 
 // Attack definitions. Each is driven by the action runner in ai.js:
 //   phases(d)          -> [[name, seconds], ...]   ('windup*' / 'active*' / 'recovery' are announced)
@@ -110,7 +113,7 @@ export function roarFx(d, strength) {
   d.fx.roarWave(pt.mouth.x, pt.mouth.y, pt.mouth.z, strength);
 }
 
-/** Roar pose: head thrown up, jaw wide, shuddering wings. */
+/** Roar pose: stands tall on straight forelegs, chest out, head thrown up, jaw wide, shuddering wings. */
 export function roarPose(d, a, spread) {
   const pose = d.pose;
   pose.head = d.rootPt(pose.headTarget, 0, 5.9, 3.4);
@@ -119,6 +122,8 @@ export function roarPose(d, a, spread) {
   pose.jawRate = 14;
   pose.pitch = -0.12;
   pose.lower = -0.15;
+  pose.swell = 1;
+  d.rootPt(pose.look, 0, 9, 14); // throat up to the sky: the lit maw and the molten S face forward
   pose.spread[0] = pose.spread[1] = spread;
   pose.spreadRate = 5;
   pose.flap = spread > 0.5 ? 0.12 : 0;
@@ -156,25 +161,42 @@ function biteAim(d, a, reach) {
   a.goal.y = Math.max(0.75 * S, a.goal.y);
 }
 
+/**
+ * Bite windup (four-legged, docs/art/dragon.md §5): the forelegs plant a little wider, the shoulders
+ * sink, the neck coils back into a tight S (head cocked up and back over the neck base), the throat
+ * glows faintly and the wings flare briefly (threat display).
+ */
 function biteWindup(d, a, dt) {
-  const pose = d.pose;
+  const pose = d.pose, k = a.k, nb = d.rig.pt.neckBase, f = d.fwd;
   d.turnToward(d.sense.yawTo, d.turnRate * 1.3, dt);
-  pose.head = d.rootPt(pose.headTarget, 0, 5.3, 2.9);
+  pose.head = pose.headTarget.set(nb.x + f.x * 0.9 * S, nb.y + 1.95 * S, nb.z + f.z * 0.9 * S);
   pose.headRate = 7;
   pose.jaw = 0.3;
-  pose.lower = 0.15;
-  pose.pitch = -0.06;
+  pose.lower = 0.15 + 0.2 * k;
+  pose.pitch = 0.1 * k;
+  pose.stanceF = 0.25;
+  pose.restep = 1;
+  pose.spread[0] = pose.spread[1] = k < 0.75 ? 0.6 : REST_SPREAD;
+  pose.spreadRate = 6;
+  d.throat = 0.3 * k;
 }
 
+/** The neck uncoils and the shoulders drive forward off the planted hind feet; the jaw snaps at k 0.62. */
 function biteActive(d, a, dt, speed) {
   const pose = d.pose;
   pose.head = pose.headTarget.copy(a.goal);
   pose.look.copy(a.target);
-  pose.headRate = 22;
+  pose.lookDown = 1.2; // the snout aims down at the hero
+  // snap speed: 18 (was 22 at x1.25) so the x1.875 head meets the hero on the announced impact
+  pose.headRate = 18;
   pose.jaw = a.k < 0.62 ? 1 : 0;
   pose.jawRate = 30;
   pose.pitch = 0.14;
   pose.lower = 0.3;
+  pose.bodyRate = 9;
+  pose.stanceF = 0.25;
+  pose.hindLock = true; // the hind feet push; the forelegs take a fast half-step
+  d.throat = 0;
   if (speed > 0) d.moveForward(speed, dt);
   if (a.k >= 0.62 && !a.snapped) {
     a.snapped = true;
@@ -182,8 +204,10 @@ function biteActive(d, a, dt, speed) {
   }
 }
 
+/** Head lifts, the body rocks back onto the hind legs, the forelegs re-plant. */
 function biteRecover(d, a) {
   const pose = d.pose;
+  pose.lookDown = 1.2;
   if (a.k < 0.5) {
     pose.head = pose.headTarget.copy(a.goal);
     pose.head.y += 0.4 * S;
@@ -191,8 +215,11 @@ function biteRecover(d, a) {
   } else pose.headRate = 3;
   pose.look.copy(a.target);
   pose.jaw = 0.1;
-  pose.pitch = 0.1 * (1 - a.k);
-  pose.lower = 0.2 * (1 - a.k);
+  pose.pitch = 0.14 * (1 - a.k) - 0.12 * Math.sin(Math.PI * Math.min(1, a.k * 1.6));
+  pose.lower = 0.3 * (1 - a.k);
+  pose.bodyRate = 4;
+  pose.restep = 1;
+  d.throat = 0;
 }
 
 function biteHit(d, a, spec) {
@@ -209,8 +236,10 @@ const bite = {
   cooldown: T.bite.cooldown,
   phases: (d) => [['windup', wind(d, T.bite.windup)], ['active', T.bite.active], ['recovery', wind(d, T.bite.recovery)]],
   beats: (d, a) => [beat('bite', 0, a.list[0][1] + T.bite.impact, T.bite, 'snout')],
-  // AI ranges below follow the sim-measured hit coverage (the attack must be able to land)
-  weight: (d, s) => (s.dist >= 3 * S && s.dist <= 8.4 * S && s.absAng <= 0.65 ? T.bite.weight + (s.dist < 7 * S ? 1 : 0) : 0),
+  // AI ranges below follow the sim-measured hit coverage (the attack must be able to land). v0.4
+  // four-legged drake: the short S-neck (3.2 chain from a neck base 1.7 ahead of the root) lands
+  // the bite 3-6.5 model units out (the v0.3 wyvern's long neck reached 8.4).
+  weight: (d, s) => (s.dist >= 3.0 * S && s.dist <= 6.5 * S && s.absAng <= 0.65 ? T.bite.weight + (s.dist < 5.5 * S ? 1 : 0) : 0),
   start(d, a) {
     biteStart(a);
   },
@@ -225,84 +254,122 @@ const bite = {
   hit(d, a) {
     if (a.phase === 'active') biteHit(d, a, T.bite);
   },
+  end(d) {
+    d.throat = 0;
+  },
 };
 
-// ------------------------------------------------------------------ shared wing-claw swipe
-// root-frame control points (model units, x mirrored by side): raised -> out wide -> across the front
-const SWIPE_P0 = [3.4, 3.9, 0.6];
-const SWIPE_P1 = [4.8, 1.4, 4.4];
-const SWIPE_P2 = [0.8, 0.6, 5.8];
+// ------------------------------------------------------------------ shared foreleg rake (swipe)
+// v0.4 four-legged drake: the swipe is a FORELEG rake (the v0.3 wyvern swung a wing wrist).
+// Root-frame control points for the PAW (model units, x mirrored by side): cocked high and out ->
+// out wide and forward -> across the front, claws raking the ground (docs/art/dragon.md §5).
+const SWIPE_P0 = [2.3, 3.3, 2.0];
+const SWIPE_P1 = [3.3, 1.1, 3.9];
+const SWIPE_P2 = [-0.4, 0.3, 4.6];
+const SWIPE_LUNGE = 0.5; // root travel through the active phase (model units): the 2.9 leg reaches P1
 
 function swipeCurve(side) {
   return {
     side,
-    wi: wingIndex(side),
+    wi: wingIndex(side), // paw / arm index (0 = left +X, 1 = right)
     p0: [side * SWIPE_P0[0], SWIPE_P0[1], SWIPE_P0[2]],
     p1: [side * SWIPE_P1[0], SWIPE_P1[1], SWIPE_P1[2]],
     p2: [side * SWIPE_P2[0], SWIPE_P2[1], SWIPE_P2[2]],
   };
 }
 
-/** Raise the claw (k = windup progress); the body turns so the player sits on the swing side. */
+/**
+ * Cock the paw high and out (k = windup progress): the weight shifts onto the other three legs (body
+ * rolls away, the far foreleg braces wide), the chest twists toward the swing, the elbow flares out;
+ * the body turns so the player sits on the swing side.
+ */
 function swipeWindup(d, w, k, dt, turn = 0.5) {
-  const pose = d.pose, ov = pose.wingOv[w.wi];
+  const pose = d.pose, ov = pose.pawOv[w.wi];
   d.turnToward(d.sense.yawTo - w.side * 0.5, d.turnRate * turn, dt);
   ov.w = 1;
-  d.rootPt(ov.pos, w.p0[0], w.p0[1] + Math.sin(k * Math.PI) * 0.3, w.p0[2]);
-  pose.wingOvRate = 7;
-  pose.spread[w.wi] = 0.45;
-  pose.roll = w.side * 0.1;
+  // lift: up and out first, then the last 30 cm of cock (a readable hitch before the strike)
+  const e = smoothstep(0, 0.55, k);
+  d.rootPt(ov.pos, w.side * lerp(1.4, w.p0[0] * w.side, e), lerp(0.4, w.p0[1], e) + Math.sin(k * Math.PI) * 0.3, lerp(2.3, w.p0[2], e));
+  pose.pawOvRate = 7;
+  pose.spread[w.wi] = 0.45; // the swing-side wing flares (balance + silhouette tell)
+  pose.spreadRate = 5;
+  pose.roll = w.side * 0.1; // weight onto the other three legs
   pose.twist = w.side * 0.15;
+  pose.lower = 0.2;
+  pose.stanceF = 0.15;
   pose.jaw = 0.25;
 }
 
 function swipeActive(d, w, k, dt, dur) {
-  const pose = d.pose, ov = pose.wingOv[w.wi];
+  const pose = d.pose, ov = pose.pawOv[w.wi];
   ov.w = 1;
   rootBezier(d, ov.pos, w.p0, w.p1, w.p2, easeInOutSine(k));
-  pose.wingOvRate = 30;
-  pose.spread[w.wi] = 0.3;
+  pose.pawOvRate = 30;
+  pose.spread[w.wi] = 0.4;
   pose.twist = w.side * 0.35;
   pose.roll = -w.side * 0.08;
+  pose.lower = 0.3;
+  pose.pitch = 0.1;
   pose.bodyRate = 9;
   d.yaw += (w.side * 0.6 * dt) / Math.max(0.05, dur);
+  d.moveForward((SWIPE_LUNGE * S) / Math.max(0.05, dur), dt);
   pose.jaw = 0.5;
 }
 
+/**
+ * The raking paw slaps down where the arc ended (as far as the leg reaches: claws in the ground,
+ * dust) and plants there as a ground contact; the gait later steps it home.
+ */
 function swipeRecover(d, w, k) {
-  const pose = d.pose, ov = pose.wingOv[w.wi];
-  ov.w = k < 0.3 ? 1 : 0;
-  d.rootPt(ov.pos, w.p2[0], w.p2[1], w.p2[2]);
-  pose.wingOvRate = 5;
+  const pose = d.pose, ov = pose.pawOv[w.wi];
+  if (!w.plant) {
+    w.plant = d.rig.clampPaw(w.wi, d.rootPt(V(), w.p2[0], 0, w.p2[2]));
+    w.from = V().copy(d.rig.pt.arms[w.wi].toe);
+  }
+  if (!w.planted) {
+    ov.w = 1;
+    pose.pawOvRate = 30;
+    if (k < 0.2) ov.pos.lerpVectors(w.from, w.plant, smoothstep(0, 0.2, k));
+    else {
+      w.planted = true;
+      ov.pos.copy(w.plant);
+      pose.pawPlant[w.wi] = true;
+      d.fx.dustRing(w.plant.x, w.plant.z, 0.35 * S, 12, 0.45);
+      d.emit('dragon:step', { x: w.plant.x, z: w.plant.z, heavy: false });
+    }
+  }
   pose.twist = w.side * 0.2 * (1 - k);
+  pose.lower = 0.25 * (1 - k);
+  if (w.planted) pose.restep = 1; // the planted paw steps home within the recovery
 }
 
 function swipeHit(d, a, w, spec) {
   if (a.hitDone) return;
-  const wp = d.rig.pt.wings[w.wi];
+  const ap = d.rig.pt.arms[w.wi];
+  _b.lerpVectors(ap.elbow, ap.wrist, 0.5);
+  // the paw sphere covers the four claws around the toe; plus the wrist and the forearm
   if (
-    sweepHit(d, a, 'wrist', wp.wrist, 1.2 * S) ||
-    sweepHit(d, a, 'mid0', wp.mids[0], 0.9 * S) ||
-    sweepHit(d, a, 'tip0', wp.tips[0], 0.8 * S) ||
-    sweepHit(d, a, 'mid1', wp.mids[1], 0.8 * S) ||
-    sweepHit(d, a, 'elbow', wp.elbow, 0.8 * S)
+    sweepHit(d, a, 'paw', ap.toe, 1.1 * S) ||
+    sweepHit(d, a, 'wrist', ap.wrist, 0.8 * S) ||
+    sweepHit(d, a, 'forearm', _b, 0.75 * S)
   ) {
-    d.strike(a, { damage: spec.damage, knockback: spec.knockback, kind: 'swipe', from: wp.shoulder, point: wp.wrist });
+    d.strike(a, { damage: spec.damage, knockback: spec.knockback, kind: 'swipe', from: ap.shoulder, point: ap.toe });
   }
 }
 
-// ------------------------------------------------------------------ wing claw swipe
+// ------------------------------------------------------------------ foreleg rake (swipe)
 const swipe = {
   name: 'swipe',
   cooldown: T.swipe.cooldown,
   phases: (d) => [['windup', wind(d, T.swipe.windup)], ['active', T.swipe.active], ['recovery', wind(d, T.swipe.recovery)]],
   beats: (d, a) => [beat('swipe', 0, a.list[0][1] + T.swipe.impact, T.swipe, 'claw', { wi: a.w.wi })],
-  // the claw lands 5-7 m out across the front; closer / farther only at the flank (beyond the
-  // arm's reach or inside its arc it whiffs, so the AI doesn't pick it there)
+  // the foreleg rake (sim-measured, v0.4) lands 2-5.5 model units out up to ~75° off the nose;
+  // farther round the flank the paw can't reach (the tail / stomp cover it), so the AI doesn't pick it.
+  // Beyond ~66° a hero closer than 2.75 stands beside the shoulder, under the arc (2.5 missed at 1.35
+  // rad, 2.0 at 1.2 in the fine probe)
   weight: (d, s) => {
-    if (s.absAng < 0.4 || s.absAng > 1.85) return 0;
-    if (s.dist >= 4 * S && s.dist <= 5.8 * S) return T.swipe.weight;
-    if (s.dist <= 6.2 * S && s.absAng >= 1.15) return T.swipe.weight * 0.6;
+    if (s.absAng < 0.4 || s.absAng > 1.35) return 0;
+    if (s.dist >= (s.absAng > 1.15 ? 2.75 : 2.0) * S && s.dist <= 5.5 * S) return T.swipe.weight;
     return 0;
   },
   start(d, a) {
@@ -340,8 +407,8 @@ const clawCombo = {
       const lunge = h.kind === 'lunge';
       return beat('clawCombo', phaseAt(a.list, wn), phaseDur(a.list, wn) + h.impact, h, lunge ? 'snout' : 'claw', { hit: i, wi: lunge ? 0 : a.w[i].wi });
     }),
-  // closer than ~4.5 m (hugging the chest) every hit of the string passes over the player
-  weight: (d, s) => (s.dist >= 3.6 * S && s.dist <= 7 * S && s.absAng <= 0.9 ? CC.weight * (d.phase === 2 ? 1.2 : 1) : 0),
+  // all three hits land 3-5 model units out (sim-measured, v0.4); beyond ~5.5 the claws fall short
+  weight: (d, s) => (s.dist >= 3.0 * S && s.dist <= 5.4 * S && s.absAng <= 0.9 ? CC.weight * (d.phase === 2 ? 1.2 : 1) : 0),
   start(d, a) {
     // the first claw comes from the side the player stands on, the second from the other
     const s0 = d.sense.ang >= 0 ? 1 : -1;
@@ -374,7 +441,8 @@ const clawCombo = {
         swipeActive(d, w1, a.k, dt, a.dur);
         break;
       case 'windup3': {
-        // rear back, head drawn up: the blue finisher
+        // sits back onto its haunches, both forefeet planted, head drawn up and back, both wings
+        // pulse: the blue finisher
         swipeRecover(d, w1, Math.min(1, a.k * 2));
         const pose = d.pose;
         d.turnToward(d.sense.yawTo, d.turnRate * 1.4, dt);
@@ -382,7 +450,12 @@ const clawCombo = {
         pose.headRate = 6;
         pose.jaw = 0.35 + 0.3 * a.k;
         pose.pitch = -0.1;
-        pose.lower = -0.05;
+        pose.lower = 0.05;
+        pose.strideH = 0.35; // hind feet under the haunches: the spring of the lunge
+        pose.restep = 1;
+        pose.spread[0] = pose.spread[1] = REST_SPREAD + 0.12 * Math.sin(Math.PI * a.k);
+        pose.spreadRate = 8;
+        d.throat = 0.25 * a.k;
         break;
       }
       case 'active3':
@@ -396,6 +469,9 @@ const clawCombo = {
     if (a.phase === 'active') swipeHit(d, a, a.w[0], CC.hits[0]);
     else if (a.phase === 'active2') swipeHit(d, a, a.w[1], CC.hits[1]);
     else if (a.phase === 'active3') biteHit(d, a, CC.hits[2]);
+  },
+  end(d) {
+    d.throat = 0;
   },
 };
 
@@ -428,20 +504,32 @@ const tail = {
   },
   update(d, a, dt) {
     const pose = d.pose;
+    // wings folded tight through the whole sweep so the membranes stay clear of the tail
+    pose.spread[0] = pose.spread[1] = a.phase === 'recovery' && a.k > 0.4 ? REST_SPREAD : 0;
+    pose.spreadRate = 5;
     if (a.phase === 'windup') {
+      // looks over its shoulder at the player (pose.look = the player's chest), crouches, the hind
+      // feet brace wide, the tail coils to the opposite side (away from the player, with the body's
+      // backswing: curling its tip back over a hero standing straight behind landed the sweep on the
+      // first active frame, ~0.2 s before its combat:flash + flashLead)
       d.yaw = turnToward(d.yaw, a.yawW, 2.2 * dt);
       pose.lower = 0.25;
       pose.pitch = 0.08;
-      pose.tailCurl = a.dir * 0.06;
-      d.rootPt(pose.look, a.dir * 7, 1, 3);
+      pose.tailCurl = -a.dir * 0.06;
+      pose.lookRate = 5;
+      pose.stanceH = 0.35;
+      pose.restep = 1;
       pose.speed = 3;
     } else if (a.phase === 'active') {
+      // spins about the root, feet shuffling (gait at speed), tail stiff and whipping through, head
+      // leading the turn
       const e = easeInOutSine(a.k);
       d.yaw = a.yawW + a.dir * (T.tail.spin + 0.35) * e;
       pose.tailCurl = -a.dir * 0.05;
       pose.tailStiff = 2.6;
       pose.lower = 0.3;
       pose.bodyRate = 8;
+      pose.stanceH = 0.35;
       pose.speed = 6;
       pose.tailWave = 0;
       d.rootPt(pose.look, a.dir * 7, 1, 3);
@@ -484,14 +572,17 @@ const tail = {
 };
 
 // ------------------------------------------------------------------ stomp (rear up + slam)
-const STOMP_Z = 2.9; // slam centre ahead of the root (model units; between the planted wing knuckles)
+// The forefeet slam down together at (+-STOMP_X, 0, STOMP_Z) in the root frame (model units, just
+// ahead of the front-paw homes): the ring is centred on their midpoint, the flash / dust sit on them.
+const STOMP_Z = 2.9;
+const STOMP_X = 1.2;
 const stomp = {
   name: 'stomp',
   cooldown: T.stomp.cooldown,
   phases: (d) => [['windup', wind(d, T.stomp.windup)], ['active', T.stomp.active], ['recovery', wind(d, T.stomp.recovery)]],
-  beats: (d, a) => [beat('stomp', 0, a.list[0][1] + a.list[1][1], T.stomp, 'wrists')],
+  beats: (d, a) => [beat('stomp', 0, a.list[0][1] + a.list[1][1], T.stomp, 'forefeet')],
   zone(d, a, out) {
-    d.rootPt(out, 0, 0, STOMP_Z);
+    d.rootPt(out, 0, 0, STOMP_Z); // the midpoint of the two striking forefeet's landing spots
     return T.stomp.radius;
   },
   // only when the player stands inside the slam zone (under the chest / beside the forelimbs);
@@ -509,7 +600,12 @@ const stomp = {
     g.world?.gust?.(c.x, c.z, 1.4, 13 * S);
     d.fx.dustRing(c.x, c.z, 1.5 * S, 40, 1.1);
     d.markHitbox?.(c.x, 0, c.z, T.stomp.radius);
-    for (const l of d.rig.gait.limbs) if (!l.hind) d.emit('dragon:step', { x: l.pos.x, z: l.pos.z, heavy: true });
+    // the striking forefeet: a dust burst + a heavy step where each one landed
+    for (let k = 0; k < 2; k++) {
+      const f = d.rootPt(_b, (k === 0 ? 1 : -1) * STOMP_X, 0, STOMP_Z);
+      d.fx.dustRing(f.x, f.z, 0.5 * S, 16, 0.8);
+      d.emit('dragon:step', { x: f.x, z: f.z, heavy: true });
+    }
     const p = g.player?.position;
     if (p && Math.hypot(p.x - c.x, p.z - c.z) <= T.stomp.radius + playerR(g)) {
       d.strike(a, { damage: T.stomp.damage, knockback: T.stomp.knockback, kind: 'stomp', from: c, point: c });
@@ -518,32 +614,66 @@ const stomp = {
   update(d, a, dt) {
     const pose = d.pose, s = d.sense;
     if (a.phase === 'windup') {
+      // rears up on the hind legs (hips as the pivot): both forefeet leave the ground and rise to
+      // chest height, claws spread; the tail presses flat (the third leg of the tripod), head high,
+      // wings flare; the hind feet brace wider
       d.turnToward(s.yawTo, d.turnRate * 0.6, dt);
       pose.pitch = -0.62;
+      pose.rear = 1;
       pose.bodyRate = 3.5;
       pose.lower = -0.2;
-      pose.spread[0] = pose.spread[1] = 0.4;
+      pose.spread[0] = pose.spread[1] = 0.6;
       pose.spreadRate = 5;
       pose.head = d.rootPt(pose.headTarget, 0, 6.0, 3.5);
       pose.headRate = 4;
       pose.jaw = 0.45;
+      pose.stanceH = 0.25;
+      pose.restep = 1;
+      pose.swell = a.k;
+      pose.tailWave = 0;
     } else if (a.phase === 'active') {
+      // both forefeet slam down together on their landing spots; the body pitches forward; the
+      // wings snap down (a gust)
       pose.pitch = 0.16;
-      pose.bodyRate = 22;
+      pose.bodyRate = 22; // also snaps `rear` back to 0
       pose.lower = 0.15;
+      for (let k = 0; k < 2; k++) {
+        const ov = pose.pawOv[k];
+        ov.w = 1;
+        d.rootPt(ov.pos, (k === 0 ? 1 : -1) * STOMP_X, 0, STOMP_Z);
+      }
+      pose.pawOvRate = 40;
+      pose.stanceH = 0.25;
+      pose.spread[0] = pose.spread[1] = REST_SPREAD;
       pose.spreadRate = 18;
       pose.headRate = 10;
       pose.jaw = 0.8;
     } else {
+      // settle: the forefeet stay pressed into the slam spots for a beat (held by the override, so
+      // the gait can't lift them), then plant there as contacts and step back home
+      const hold = a.k < 0.3;
+      if (hold || !a.planted) {
+        for (let k = 0; k < 2; k++) {
+          const ov = pose.pawOv[k];
+          d.rootPt(ov.pos, (k === 0 ? 1 : -1) * STOMP_X, 0, STOMP_Z);
+          ov.w = 1;
+          if (!hold) pose.pawPlant[k] = true;
+        }
+        pose.pawOvRate = 40;
+        if (!hold) a.planted = true;
+      }
       pose.pitch = 0.08 * (1 - a.k);
       pose.bodyRate = 3;
       pose.lower = 0.15 * (1 - a.k);
+      pose.restep = hold ? 0 : 1;
       pose.jaw = 0.1;
     }
   },
 };
 
 // ------------------------------------------------------------------ fire breath
+const BREATH_PITCH = 0.2; // front crouch (rad, nose down about the hips): the chest drops ~0.55 model
+const BREATH_FALL = 0.17; // the stream's downward angle (rad) from the low mouth
 const breath = {
   name: 'breath',
   cooldown: T.breath.cooldown,
@@ -576,6 +706,8 @@ const breath = {
   update(d, a, dt) {
     const pose = d.pose, s = d.sense, pt = d.rig.pt;
     if (a.phase === 'windup') {
+      // plants all four feet wide, the chest swells, the throat-to-chest lava charges, the neck draws
+      // back and up, embers leak from the mouth; the wings start to open late in the windup
       d.turnToward(s.yawTo, d.turnRate * 0.9, dt);
       pose.head = d.rootPt(pose.headTarget, 0, 5.6, 2.6);
       pose.headRate = 4;
@@ -584,6 +716,13 @@ const breath = {
       pose.look.y += 3 * S;
       pose.pitch = -0.08;
       pose.lower = -0.1;
+      pose.stanceF = 0.3;
+      pose.stanceH = 0.2;
+      pose.restep = 1;
+      pose.swell = a.k;
+      pose.spread[0] = pose.spread[1] = a.k > 0.55 ? 1 : REST_SPREAD;
+      pose.mantle = a.k > 0.55 ? 1 : 0;
+      pose.spreadRate = 3;
       d.throat = a.k;
       d.fx.mouthEmbers(dt, pt.mouth, 30, pt.headFwd);
     } else if (a.phase === 'active') {
@@ -591,17 +730,35 @@ const breath = {
       else a.aim = turnToward(a.aim, s.yawTo, 32 * DEG * dt);
       d.turnToward(a.aim, 1.2, dt);
       const sa = Math.sin(a.aim), ca = Math.cos(a.aim);
-      pose.head = pose.headTarget.set(pt.neckBase.x + sa * 2.7 * S, pt.neckBase.y + 0.7 * S, pt.neckBase.z + ca * 2.7 * S);
+      // the ASCII panel's pose: front crouched low (chest toward the ground, hips higher), forelegs
+      // braced wide, neck stretched forward and DOWN (the stream angles at the ground; the head
+      // tracks / sweeps with the neck alone), wings fully spread and high, the tail lashing slowly
+      pose.head = pose.headTarget.set(pt.neckBase.x + sa * 2.7 * S, pt.neckBase.y - 0.4 * S, pt.neckBase.z + ca * 2.7 * S);
       pose.headRate = 5;
+      pose.lookDown = 1.0;
+      pose.spread[0] = pose.spread[1] = 1;
+      pose.spreadRate = 3;
+      pose.mantle = 1;
       pose.look.set(pt.mouth.x + sa * 8 * S, 0, pt.mouth.z + ca * 8 * S);
       pose.lookRate = 12;
       pose.jaw = 0.95;
-      pose.pitch = 0.06;
-      pose.lower = 0.1;
+      pose.pitch = BREATH_PITCH;
+      pose.lower = 0.15;
+      pose.bodyRate = 4;
+      pose.stanceF = 0.3;
+      pose.stanceH = 0.2;
+      pose.restep = 1; // a foot still short of the wide stance re-plants (and the slow aim turn shuffles)
+      pose.elbowsOut = 0.45;
+      pose.swell = 1;
+      pose.tailWave = 0.13;
       d.throat = 1;
-      d.fx.breathEmit(dt, pt.mouth, a.aim, 0.17);
+      d.fx.breathEmit(dt, pt.mouth, a.aim, BREATH_FALL);
     } else {
       pose.jaw = 0.2;
+      pose.pitch = BREATH_PITCH * (1 - a.k);
+      pose.lower = 0.15 * (1 - a.k);
+      pose.spread[0] = pose.spread[1] = a.k < 0.3 ? 1 : REST_SPREAD;
+      pose.spreadRate = 2.5;
       d.throat = 0;
       if (a.k < 0.6) d.fx.mouthEmbers(dt, pt.mouth, 18, pt.headFwd);
     }
@@ -637,7 +794,8 @@ const breath = {
 
 // ------------------------------------------------------------------ fireball volley
 /** Shell flight time for a throw of `dist` metres (matches DragonFx.launchFireball). */
-const MOUTH_Z = 5.8; // mouth ahead of the root while spitting (model units)
+const MOUTH_Z = 4.3; // mouth ahead of the root while spitting (model units; measured v0.4: the short neck)
+const FIREBALL_JERK = 1.1; // P2 volley: the head jerks this far (model units) toward each flank shell
 const flightTime = (dist) => Math.min(1.3, Math.max(0.7, dist / 18));
 const fireball = {
   name: 'fireball',
@@ -659,29 +817,38 @@ const fireball = {
     a.shots = 0;
     a.count = d.phase === 2 ? 3 : 1;
     a.recoil = 0;
+    a.headX = 0; // root-frame x of the spitting head: follows each P2 flank shell
     a.volley = { hitDone: false }; // the shells outlive the action: they share this hit lock
   },
   update(d, a, dt) {
     const pose = d.pose, s = d.sense, pt = d.rig.pt;
     a.recoil = Math.max(0, a.recoil - dt * 4);
+    pose.stanceF = 0.15; // forefeet planted a little wider: they absorb each spit
+    pose.restep = 1;
     if (a.phase === 'windup') {
+      // rears the head back high, chest puffs, throat charges
       d.turnToward(s.yawTo, d.turnRate, dt);
       pose.head = d.rootPt(pose.headTarget, 0, 5.8, 3.0);
       pose.headRate = 4;
       pose.jaw = 0.3;
       pose.look.copy(s.chest);
       pose.look.y += 4 * S;
+      pose.pitch = -0.06 * a.k;
+      pose.swell = a.k;
       d.throat = a.k * 0.8;
       d.fx.mouthEmbers(dt, pt.mouth, 22, pt.headFwd);
     } else if (a.phase === 'active') {
+      // the head snaps forward and up with each spit (P2: centre, then toward each flank shell);
+      // the front bounces up as the forelegs absorb the recoil, the wings jolt
       d.turnToward(s.yawTo, d.turnRate * 0.6, dt);
       while (a.shots < a.count && a.t >= a.shots * 0.3) this.launch(d, a, a.shots++);
-      pose.head = d.rootPt(pose.headTarget, 0, 5.2, 4.2);
+      pose.head = d.rootPt(pose.headTarget, a.headX, 5.2, 4.2);
       pose.headRate = 6;
       pose.look.copy(s.chest);
       pose.look.y += 2.5 * S;
       pose.jaw = a.recoil > 0.3 ? 1 : 0.4;
       pose.jawRate = 25;
+      pose.swell = 0.5;
       d.throat = 0.8;
     } else {
       pose.jaw = 0.1;
@@ -692,6 +859,11 @@ const fireball = {
       pose.headOffset.x -= f.x * a.recoil * 0.9 * S;
       pose.headOffset.z -= f.z * a.recoil * 0.9 * S;
       pose.headOffset.y += a.recoil * 0.5 * S;
+      pose.pitch -= 0.07 * a.recoil;
+      pose.lower -= 0.1 * a.recoil;
+      pose.bodyRate = 10;
+      pose.spread[0] = pose.spread[1] = REST_SPREAD + 0.14 * a.recoil;
+      pose.spreadRate = 12;
     }
   },
   launch(d, a, i) {
@@ -711,6 +883,7 @@ const fireball = {
     t.y = 0;
     const real = d.fx.launchFireball(from, t, a.volley);
     a.recoil = 1;
+    a.headX = i === 0 ? 0 : i === 1 ? -FIREBALL_JERK : FIREBALL_JERK; // shell 1 flies to the model-right flank
     // the windup only guessed the flight from the start distance: re-time the timing flash to the
     // first shell's real landing (always before the flash: flights are >= 0.7 s)
     const b = a.cur;
@@ -722,7 +895,8 @@ const fireball = {
 };
 
 // ------------------------------------------------------------------ charge
-const CHARGE_REACH = 7.15; // snout tip + its hit sphere ahead of the root, head lowered (model units)
+const CHARGE_REACH = 6.8; // snout tip (5.65 during the run, measured v0.4) + its 1.15 hit sphere ahead of the root (model units)
+const CHARGE_HEAD_RATE = 14; // head smoothing during the run (its goal leads by vel / rate: no trailing)
 const ETA_STEP = 1 / 120;
 /** Run speed `k` (0..1) through the active phase: 0.2 ramp-up, full, 0.2 slow-down. */
 const chargeSpeed = (k) => (T.charge.distance / (T.charge.active * 0.8)) * Math.min(1, k / 0.2) * (k > 0.8 ? Math.max(0, (1 - k) / 0.2) : 1);
@@ -761,21 +935,54 @@ const charge = {
     a.v = 0;
     a.bonk = false;
     a.stopped = false;
+    a.scrapes = 0;
+    a.pawSide = d.sense.ang >= 0 ? 0 : 1; // the forefoot nearer the player paws the ground
   },
   enter(d, a, phase) {
     // rammed a standing stone head-first: a short stagger (a reward for baiting it)
     if (phase === 'recovery' && a.bonk) d.brain?.stagger?.();
+    if (phase === 'recovery' && !a.bonk) {
+      // the forefeet plant and skid: dust off both front paws
+      const A2 = d.rig.pt.arms;
+      for (let k = 0; k < 2; k++) d.fx.dustRing(A2[k].toe.x, A2[k].toe.z, 0.6 * S, 18, 0.9);
+    }
   },
   update(d, a, dt) {
     const pose = d.pose, s = d.sense;
+    // horns first like a bull: the head held low, nose tipped down toward the ground ahead
+    d.rootPt(pose.look, 0, 0, 9);
+    pose.lookDown = 0.6;
     if (a.phase === 'windup') {
       d.turnToward(s.yawTo, d.turnRate * 1.6, dt);
       pose.lower = 0.55;
       pose.pitch = 0.18;
-      pose.head = d.rootPt(pose.headTarget, 0, 2.4, 5.6);
+      pose.head = d.rootPt(pose.headTarget, 0, 2.4, 5.0); // (5.6 is beyond the short neck)
       pose.headRate = 6;
       pose.jaw = 0.45;
       pose.tailWave = 0.15;
+      pose.stanceH = 0.15;
+      pose.restep = 1;
+      // one forefoot paws the ground twice (an extra tell): lift, reach forward, rake back through
+      // the dirt; it plants again for the run
+      const ov = pose.pawOv[a.pawSide], side = a.pawSide === 0 ? 1 : -1;
+      const u = clamp((a.k - 0.12) / 0.7, 0, 1);
+      if (u > 0 && u < 1) {
+        const ph = u * 2; // two scrapes
+        const c = ph % 1;
+        ov.w = 1;
+        d.rootPt(ov.pos, side * 1.3, c < 0.45 ? 0.55 * Math.sin((c / 0.45) * Math.PI) : 0.04, c < 0.45 ? 2.15 + 0.7 * (c / 0.45) : 2.85 - 1.0 * ((c - 0.45) / 0.55));
+        pose.pawOvRate = 18;
+        if (c >= 0.45 && a.scrapes < Math.floor(ph) + 1) {
+          a.scrapes = Math.floor(ph) + 1;
+          d.fx.dustRing(ov.pos.x, ov.pos.z, 0.3 * S, 10, 0.4);
+          d.emit('dragon:step', { x: ov.pos.x, z: ov.pos.z, heavy: false });
+        }
+      } else if (u >= 1 && !a.pawDone) {
+        a.pawDone = true;
+        d.rootPt(ov.pos, side * 1.3, 0, 1.85);
+        ov.w = 1;
+        pose.pawPlant[a.pawSide] = true;
+      }
     } else if (a.phase === 'active') {
       const k = a.k;
       a.v = chargeSpeed(k);
@@ -784,23 +991,28 @@ const charge = {
       const moved = d.moveForward(a.v, dt);
       if (k > 0.2 && want > 0.05 && moved < want * 0.4) {
         // slammed into a stone or the arena edge: stop; only a stone staggers
-        const B = d.game.CONFIG?.world?.dragonBound ?? 26;
-        a.bonk = Math.hypot(d.position.x, d.position.z) < B - 0.5;
+        a.bonk = Math.hypot(d.position.x, d.position.z) < d.bound - 0.5;
         a.stopped = true;
         a.t = a.dur;
       }
+      // the bound: the body pitches with each stride (~2.4 Hz), head low and level, wings tucked;
+      // the head goal leads by the run speed so the smoothing doesn't trail it behind the chest
       pose.lower = 0.4;
-      pose.pitch = 0.15;
-      pose.head = d.rootPt(pose.headTarget, 0, 2.2, 6.0);
-      pose.headRate = 10;
+      pose.pitch = 0.15 + 0.06 * Math.sin(a.t * 15);
+      pose.bodyRate = 12;
+      pose.head = d.rootPt(pose.headTarget, 0, 2.3, 5.2).addScaledVector(pose.vel, 1 / CHARGE_HEAD_RATE);
+      pose.headRate = CHARGE_HEAD_RATE;
       pose.jaw = 0.6;
       pose.spread[0] = pose.spread[1] = 0.22;
       pose.tailWave = 0.02;
     } else {
+      // the forefeet skid to a stop, the hind legs bunch under the body
       a.v *= Math.exp(-5 * dt);
       if (a.v > 0.2) d.moveForward(a.v, dt);
       pose.lower = 0.3 * (1 - a.k);
-      pose.pitch = 0.1 * (1 - a.k);
+      pose.pitch = 0.1 * (1 - a.k) - 0.08 * Math.sin(Math.PI * Math.min(1, a.k * 2));
+      pose.strideH = 0.45 * (1 - a.k);
+      pose.restep = 1;
       pose.jaw = 0.15;
     }
     // refine the impact estimate (from this frame's positions) until the timing flash has fired;
@@ -848,8 +1060,8 @@ const leap = {
     const k = 1 - Math.exp(-5 * dt);
     a.target.x += (_a.x - a.target.x) * k;
     a.target.z += (_a.z - a.target.z) * k;
-    const R = TUNING.radius, B = g.CONFIG?.world?.dragonBound ?? 26;
-    g.world?.resolve?.(a.target, R, B + R);
+    const R = TUNING.radius;
+    g.world?.resolve?.(a.target, R, d.bound + R);
     a.target.y = 0;
   },
   enter(d, a, phase) {
@@ -886,14 +1098,20 @@ const leap = {
     const pose = d.pose, s = d.sense, g = d.game;
     const H = T.leap.height;
     if (a.phase === 'windup') {
+      // deep crouch, all four legs bunched (hind feet forward under the belly, forefeet back),
+      // wings spread for the first downstroke, head toward the landing spot
       d.turnToward(s.yawTo, d.turnRate, dt);
       this.track(d, a, dt, 0);
       pose.lower = 0.75;
       pose.bodyRate = 6;
       pose.pitch = 0.05;
+      pose.strideH = 0.55;
+      pose.strideF = -0.45;
+      pose.restep = 1;
       pose.spread[0] = pose.spread[1] = 1;
       pose.spreadRate = 5;
       pose.head = d.rootPt(pose.headTarget, 0, 3.2, 4.5);
+      pose.look.copy(a.target);
     } else if (a.phase === 'air') {
       const t = a.t;
       let h;
@@ -918,11 +1136,14 @@ const leap = {
       pose.flapHz = t < 0.6 ? 2.4 : 1.8;
       pose.pitch = diving ? 0.25 : -0.1;
       pose.bodyRate = 4;
+      pose.airReach = diving ? 1 : 0; // the dive: all four legs reach down and forward, claws spread
       pose.look.copy(a.target);
       pose.tailWave = 0.04;
     } else {
+      // landed (forefeet first: the body is pitched nose-down): the wings snap fully open to brake
       pose.lower = 0.6 * (1 - a.k);
-      pose.spreadRate = 3;
+      pose.spread[0] = pose.spread[1] = a.k < 0.25 ? 1 : REST_SPREAD;
+      pose.spreadRate = a.k < 0.25 ? 14 : 3;
       pose.pitch = 0.1 * (1 - a.k);
       pose.jaw = a.k < 0.4 ? 0.6 : 0.1;
     }
@@ -970,6 +1191,11 @@ function makeRoar(name, phase2) {
       const c = d.rig.pt.chest, p = g.player?.position;
       d.fx.shockRing(c.x, c.z, R.radius);
       d.markHitbox?.(c.x, 0, c.z, R.radius);
+      // the forefeet stamp down with the ring
+      for (const arm of d.rig.pt.arms) {
+        d.fx.dustRing(arm.toe.x, arm.toe.z, 0.45 * S, 14, 0.8);
+        d.emit('dragon:step', { x: arm.toe.x, z: arm.toe.z, heavy: true });
+      }
       if (p && Math.hypot(p.x - c.x, p.z - c.z) <= R.radius + playerR(g)) {
         d.strike(a, { damage: R.damage, knockback: R.knockback, kind: 'roar', from: c, point: c });
       }
@@ -977,6 +1203,8 @@ function makeRoar(name, phase2) {
     update(d, a, dt) {
       const pose = d.pose, s = d.sense;
       if (a.phase === 'windup') {
+        // rises tall on straight forelegs, chest out and swelling, the neck lifts into a big S, the
+        // throat-to-chest lava charges, wings fully spread; the forefeet lift for the stamp at the ring
         d.turnToward(s.yawTo, d.turnRate, dt);
         pose.head = d.rootPt(pose.headTarget, 0, 6.2, 2.2);
         pose.headRate = 5;
@@ -985,9 +1213,13 @@ function makeRoar(name, phase2) {
         pose.jaw = 0.3;
         pose.pitch = -0.12;
         pose.lower = -0.15;
+        pose.swell = a.k;
+        pose.rear = a.k > 0.7 ? 0.3 : 0;
+        pose.bodyRate = a.k > 0.7 ? 6 : 5;
         d.throat = a.k;
       } else if (a.phase === 'roar') {
         roarPose(d, a, 1);
+        if (a.t < 0.25) pose.bodyRate = 16; // the lifted forefeet stamp down with the ring
         d.throat = 1;
       } else {
         pose.spreadRate = 3;

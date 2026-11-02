@@ -1,15 +1,19 @@
 import * as THREE from 'three';
+import { DIM } from './model.js';
 
-// Glyph-particle effects owned by the Wanderer: sword trail, impact sparks, dust, heal glow, burn
-// flames, hurt spray, and the v0.2 defence set — parry burst, block sparks, guard-break shards,
-// Ghostep afterimage + streak, charge gather / ready glint, crit-window motes. Every glyph used
-// here is in the world atlas.
+// Glyph-particle effects owned by the Wanderer: cyan slash arcs (light sweeps, the slam), the
+// thrust's long streak, the slam's crystal-shard burst, the violet gem's glow + glints, impact
+// sparks, dust, heal glow, burn flames, hurt spray, and the defence set — parry burst, block
+// sparks, guard-break shards, Ghostep afterimage + streak, charge gather / ready glint, crit-window
+// motes. Every glyph used here is in the world atlas.
 
 const R = (a, b) => a + Math.random() * (b - a);
 
 const COL = {
-  trail: [1.4, 1.75, 2.5], trailEnd: [0.1, 0.18, 0.45],
-  trailHeavy: [1.9, 2.1, 2.9],
+  trail: [0.4, 1.25, 2.3], trailEnd: [0.02, 0.14, 0.45], // icy cyan arcs
+  trailHeavy: [0.55, 1.6, 2.9], trailCore: [1.1, 2.1, 3.1],
+  shard: [0.9, 1.9, 4.2], shardEnd: [0.1, 0.25, 1.0], // blue crystal burst
+  gem: [1.7, 0.5, 3.4], gemEnd: [0.45, 0.08, 0.9], gemCore: [3.4, 2.2, 4.6], // violet
   spark: [3.4, 2.7, 1.6], sparkEnd: [1.4, 0.45, 0.1],
   crit: [2.2, 2.8, 4.2], critEnd: [0.3, 0.55, 1.4],
   flash: [4.2, 3.6, 2.6],
@@ -21,16 +25,25 @@ const COL = {
   parry: [4.0, 3.4, 2.2], parryEnd: [1.6, 0.9, 0.25],
   parryBlue: [1.6, 2.6, 4.6], parryBlueEnd: [0.25, 0.6, 1.8],
   block: [2.3, 2.0, 1.5], blockEnd: [0.7, 0.35, 0.1],
-  shard: [1.5, 1.5, 1.6], shardEnd: [0.3, 0.3, 0.38],
+  break: [1.5, 1.5, 1.6], breakEnd: [0.3, 0.3, 0.38],
   ghost: [1.3, 1.75, 2.6], ghostEnd: [0.12, 0.25, 0.75],
   ghostCore: [2.6, 3.0, 3.8],
-  charge: [1.0, 1.5, 2.6], chargeEnd: [0.3, 0.6, 1.6],
+  charge: [0.7, 1.7, 3.0], chargeEnd: [0.2, 0.5, 1.6],
+  halo: [0.2, 0.6, 1.0], haloEnd: [0.02, 0.1, 0.25], // the blade's dot halo
+  tipStreak: [0.4, 1.1, 1.9], // the edge-wave past the point
+  gemGlow: [0.6, 0.15, 1.4], // the gem's always-on glow point
 };
 
-const TRAIL_ALONG = [0.6, 0.8, 1.0];
-const TRAIL_ALONG_HEAVY = [0.45, 0.62, 0.8, 1.0];
+// points along the hit segment (0 = hilt … 1 = the edge-wave tip past the steel) that leave a trail
+const TRAIL_ALONG = [0.66, 0.84, 1.0];
+const TRAIL_ALONG_HEAVY = [0.5, 0.68, 0.84, 1.0];
+const TRAIL_NONE = [];
+// the halftone dot fields sit on a world lattice so their dots line up like the panel's grid
+const LATTICE = 0.12;
 // screen axes of the fixed camera (pitch 58°): right = +X, up ≈ (0, cos 58°, −sin 58°)
 const UP_Y = 0.53, UP_Z = -0.85;
+/** Screen-space rotation that lays a '|' glyph along world direction (dx, dy, dz). */
+const alongRot = (dx, dy, dz) => Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
 
 export class PlayerFx {
   constructor(game, rig) {
@@ -41,6 +54,10 @@ export class PlayerFx {
     this.healAcc = 0;
     this.chargeAcc = 0;
     this.critAcc = 0;
+    this.gemAcc = 0;
+    this.haloAcc = 0;
+    this.gemGlowAcc = 0;
+    this.tipAcc = 0;
   }
 
   get add() {
@@ -71,27 +88,191 @@ export class PlayerFx {
     }
   }
 
-  /** Cold streaks along the outer blade, filling the gap between last and current blade. */
-  trail(pa, pb, a, b, heavy, crit = false) {
+  /**
+   * Icy cyan slash arc in the panel's language (hero.md §4.9): a 1-cell bright leading edge of
+   * 'A' / '8' at the outer blade, a body of ')' / '|' strokes laid ALONG the motion of each point
+   * (so a sweep reads as one continuous crescent), and a halftone tail of '+' then '·' snapped to a
+   * regular 0.12 m lattice behind it, fading over ~0.3 s. Fills the gap between last frame's blade
+   * (pa→pb) and this one's (a→b). kind: 'light' | 'slam' (bigger, denser, longer-lived) |
+   * 'thrust' (the streak is drawn by thrustStreak; only a thin edge trail here).
+   */
+  trail(pa, pb, a, b, kind = 'light', crit = false) {
     const fx = this.add;
     if (!fx) return;
-    const along = heavy ? TRAIL_ALONG_HEAVY : TRAIL_ALONG;
+    const heavy = kind === 'slam';
+    const thrust = kind === 'thrust';
+    const along = heavy ? TRAIL_ALONG_HEAVY : thrust ? TRAIL_NONE : TRAIL_ALONG;
     const col = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
     for (let s = 1; s <= 3; s++) {
-      const t = s / 3;
-      const ax = pa.x + (a.x - pa.x) * t, ay = pa.y + (a.y - pa.y) * t, az = pa.z + (a.z - pa.z) * t;
-      const bx = pb.x + (b.x - pb.x) * t, by = pb.y + (b.y - pb.y) * t, bz = pb.z + (b.z - pb.z) * t;
+      const t = s / 3, t0 = (s - 1) / 3;
       for (let k = 0; k < along.length; k++) {
         const f = along[k];
-        const size = (heavy ? 0.3 : 0.22) * (0.7 + 0.3 * f);
+        // this point now, and a sub-step earlier: the stroke lies along its path
+        const ax = pa.x + (a.x - pa.x) * t, ay = pa.y + (a.y - pa.y) * t, az = pa.z + (a.z - pa.z) * t;
+        const bx = pb.x + (b.x - pb.x) * t, by = pb.y + (b.y - pb.y) * t, bz = pb.z + (b.z - pb.z) * t;
+        const x = ax + (bx - ax) * f, y = ay + (by - ay) * f, z = az + (bz - az) * f;
+        const ax0 = pa.x + (a.x - pa.x) * t0, ay0 = pa.y + (a.y - pa.y) * t0, az0 = pa.z + (a.z - pa.z) * t0;
+        const bx0 = pb.x + (b.x - pb.x) * t0, by0 = pb.y + (b.y - pb.y) * t0, bz0 = pb.z + (b.z - pb.z) * t0;
+        const dx = x - (ax0 + (bx0 - ax0) * f), dy = y - (ay0 + (by0 - ay0) * f), dz = z - (az0 + (bz0 - az0) * f);
+        const step = Math.hypot(dx, dy, dz);
+        const moving = step > 0.02;
+        const outer = f > 0.95;
+        const size = (heavy ? 0.26 : 0.2) * (0.65 + 0.35 * f);
         fx.spawn({
-          x: ax + (bx - ax) * f, y: ay + (by - ay) * f, z: az + (bz - az) * f,
-          vx: R(-0.2, 0.2), vy: R(0, 0.3), vz: R(-0.2, 0.2),
-          life: R(0.12, 0.2) * (heavy ? 1.3 : 1), size, sizeEnd: size * 0.35,
-          glyph: '-~=/\\', color: col, colorEnd: COL.trailEnd,
-          alpha: 0.85, alphaEnd: 0, drag: 2, rot: R(-0.4, 0.4),
+          x, y, z,
+          vx: R(-0.1, 0.1), vy: R(0, 0.15), vz: R(-0.1, 0.1),
+          life: (outer ? R(0.1, 0.14) : R(0.14, 0.22)) * (heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
+          glyph: outer ? 'A8' : moving ? ')|' : '-~', rot: moving ? alongRot(dx, dy, dz) : R(-0.4, 0.4),
+          stretch: moving && !outer ? Math.min(1.2, (step / size) * 1.1) : 0,
+          color: outer && !crit ? COL.trailCore : col, colorEnd: COL.trailEnd,
+          alpha: outer ? 1 : 0.8, alphaEnd: 0, drag: 2.5,
         });
       }
+    }
+    // the halftone tail: a regular dot field where the outer blade just was ('+' near the edge,
+    // '·' further in), on a world lattice so the dots line up like the panel's
+    const n = thrust ? 0 : heavy ? 7 : 5;
+    for (let i = 0; i < n; i++) {
+      const f = R(0.45, 1), t = Math.random();
+      const x = pa.x + (pb.x - pa.x) * f + (a.x - pa.x + (b.x - pb.x - a.x + pa.x) * f) * t;
+      const y = pa.y + (pb.y - pa.y) * f + (a.y - pa.y + (b.y - pb.y - a.y + pa.y) * f) * t;
+      const z = pa.z + (pb.z - pa.z) * f + (a.z - pa.z + (b.z - pb.z - a.z + pa.z) * f) * t;
+      const L = LATTICE;
+      fx.spawn({
+        x: Math.round(x / L) * L, y: Math.round(y / L) * L, z: Math.round(z / L) * L,
+        life: R(0.25, 0.35) * (heavy ? 1.2 : 1), size: f > 0.8 ? 0.12 : 0.1, sizeEnd: 0.05,
+        glyph: f > 0.8 ? '+' : '·', color: col, colorEnd: COL.trailEnd, alpha: 0.85, alphaEnd: 0,
+      });
+    }
+  }
+
+  /** The charged thrust's long cyan beam along the point's path (from → to, world): a thin
+   *  white-cyan core of '-' / '=' laid along the line with a '·' halo, lingering as one line behind
+   *  the lunge; k = charge 0..1. */
+  thrustStreak(from, to, k = 0, crit = false) {
+    const fx = this.add;
+    if (!fx) return;
+    const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+    const len = Math.hypot(dx, dy, dz);
+    if (!(len > 1e-3) || !Number.isFinite(len) || len > 8) return;
+    const rot = alongRot(dx, dy, dz) + Math.PI / 2; // '-' laid along the line
+    const col = crit ? COL.crit : COL.trailCore;
+    const n = Math.min(24, Math.max(1, Math.ceil(len / 0.1)));
+    for (let i = 0; i < n; i++) {
+      const f = (i + Math.random()) / n;
+      const size = R(0.16, 0.2) * (1 + 0.2 * k);
+      const x = from.x + dx * f, y = from.y + dy * f, z = from.z + dz * f;
+      fx.spawn({
+        x, y, z,
+        vx: (dx / len) * R(0.1, 0.5), vy: 0, vz: (dz / len) * R(0.1, 0.5),
+        life: R(0.3, 0.42) * (1 + 0.3 * k), size, sizeEnd: size * 0.6, stretch: 1.6,
+        glyph: '-=', rot, color: col, colorEnd: COL.trailEnd, alpha: 0.95, alphaEnd: 0, drag: 2,
+      });
+      if (Math.random() < 0.5) {
+        const L = LATTICE * 0.75;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        fx.spawn({
+          x: Math.round(x / L) * L, y: Math.round((y + side * R(0.05, 0.1)) / L) * L, z: Math.round(z / L) * L,
+          life: R(0.3, 0.45), size: 0.09, sizeEnd: 0.04,
+          glyph: '·', color: COL.trail, colorEnd: COL.trailEnd, alpha: 0.8, alphaEnd: 0,
+        });
+      }
+    }
+  }
+
+  /** The slam's ground impact: 10–14 kite crystal shards fanned up and out across ~160° (mostly in
+   *  the plane facing the camera), a few big crystals standing for a moment, dark rock debris, a
+   *  cyan ground ring ~1.2 m across, a cold flash + light. */
+  slamShards(x, z, crit = false) {
+    const fx = this.add;
+    if (fx) {
+      const c0 = crit ? COL.crit : COL.shard, c1 = crit ? COL.critEnd : COL.shardEnd;
+      // the fan of kite shards
+      const nS = 12;
+      for (let i = 0; i < nS; i++) {
+        const ph = ((i + 0.5) / nS - 0.5) * 2.8 + R(-0.1, 0.1); // −80° … +80° from vertical
+        const sp = R(2.4, 4.6);
+        const vx = Math.sin(ph) * sp, vy = Math.cos(ph) * sp * 1.15;
+        fx.spawn({
+          x: x + Math.sin(ph) * 0.15, y: R(0.05, 0.2), z: z + R(-0.15, 0.15),
+          vx, vy, vz: R(-0.6, 0.6),
+          life: R(0.4, 0.6), size: R(0.14, 0.34), sizeEnd: 0.06, stretch: 0.6,
+          glyph: 'A^V', rot: -Math.atan2(vx, vy * UP_Y), spin: R(-2, 2),
+          color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -11, drag: 1.2,
+        });
+      }
+      // crystals jutting from the ground, leaning outward
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + R(-0.25, 0.25);
+        const r = R(0.3, 0.9);
+        const size = R(0.38, 0.62) * (1.2 - r * 0.3);
+        fx.spawn({
+          x: x + Math.cos(a) * r, y: size * 0.45, z: z + Math.sin(a) * r,
+          vy: R(0.2, 0.5), life: R(0.4, 0.6), size, sizeEnd: size * 0.6,
+          glyph: 'A^', rot: -Math.cos(a) * 0.45, stretch: 0.5,
+          color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, drag: 3,
+        });
+      }
+      // ground ring ~1.2 m across
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2;
+        fx.spawn({
+          x: x + Math.cos(a) * 0.25, y: 0.08, z: z + Math.sin(a) * 0.25,
+          vx: Math.cos(a) * 3.2, vz: Math.sin(a) * 3.2,
+          life: 0.3, size: 0.2, sizeEnd: 0.08,
+          glyph: '-~', rot: -a, color: c0, colorEnd: c1, alpha: 0.9, alphaEnd: 0, drag: 5,
+        });
+      }
+      fx.spawn({ x, y: 0.3, z, life: 0.14, size: 1.6, sizeEnd: 0.5, glyph: '*', color: COL.trailCore, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
+      fx.spawn({ x, y: 0.2, z, life: 0.2, size: 1.0, sizeEnd: 2.2, glyph: '°', color: c0, colorEnd: c1, alpha: 0.7, alphaEnd: 0 });
+    }
+    // dark rock debris thrown 0.3–0.8 m
+    const fa = this.alpha;
+    if (fa) {
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2, sp = R(0.8, 2.2);
+        fa.spawn({
+          x: x + Math.cos(a) * 0.15, y: 0.08, z: z + Math.sin(a) * 0.15,
+          vx: Math.cos(a) * sp, vy: R(1.5, 3.2), vz: Math.sin(a) * sp,
+          life: R(0.4, 0.6), size: R(0.08, 0.14), sizeEnd: 0.06,
+          glyph: '#%&', color: COL.dust, colorEnd: COL.dustEnd, alpha: 1, alphaEnd: 0, gravity: -12, drag: 1, spin: R(-5, 5),
+        });
+      }
+    }
+    this.dust(x, z, 10, 1.3);
+    this._light({ x, y: 0.6, z, color: [0.35, 0.75, 1.5], intensity: 4.5, radius: 7, life: 0.35, fade: 0.3 });
+  }
+
+  /** A small violet four-point glint ON the gem (s 0..1 = size / brightness): a white-hot core
+   *  star, short-lived (≤ 0.16 s) and moving with the gem's own velocity (vx, vy, vz), so it never
+   *  floats off the hilt. */
+  gemGlint(x, y, z, s = 0.5, vx = 0, vz = 0, vy = 0) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z + vx + vy + vz)) return;
+    const k = Math.max(0.2, Math.min(1.2, s));
+    fx.spawn({ x, y, z, vx, vy, vz, life: 0.16, size: 0.22 * k + 0.08, sizeEnd: 0.05, glyph: '+', color: COL.gemCore, colorEnd: COL.gem, alpha: 1, alphaEnd: 0, rot: 0.785, spin: 3 });
+    fx.spawn({ x, y, z, vx, vy, vz, life: 0.1, size: 0.12 * k + 0.06, sizeEnd: 0.18 * k + 0.08, glyph: '°', color: COL.gem, colorEnd: COL.gemEnd, alpha: 0.5, alphaEnd: 0 });
+  }
+
+  /** The gem's steady glow: an always-on violet glow point (~0.24 m: a 3–4 px violet dot at the
+   *  game camera) plus a few motes, kept alive at the hilt (k 0..1.5 = strength). */
+  gemTick(dt, x, y, z, k, vx = 0, vz = 0, vy = 0) {
+    const fx = this.add;
+    if (!fx || !(k > 0) || !Number.isFinite(x + y + z + vx + vy + vz)) return;
+    this.gemGlowAcc += dt;
+    if (this.gemGlowAcc >= 0.03) {
+      this.gemGlowAcc = 0;
+      const s = 0.22 + 0.04 * Math.min(1, k);
+      fx.spawn({ x, y, z, vx, vy, vz, life: 0.06, size: s, sizeEnd: s, glyph: '•', color: COL.gemGlow, colorEnd: COL.gemGlow, alpha: 0.5, alphaEnd: 0.35 });
+    }
+    this.gemAcc += dt * (8 + 30 * k);
+    while (this.gemAcc >= 1) {
+      this.gemAcc -= 1;
+      fx.spawn({
+        x: x + R(-0.015, 0.015), y: y + R(-0.015, 0.015), z: z + R(-0.015, 0.015),
+        vx, vy: vy + R(0, 0.15), vz, life: R(0.06, 0.1), size: R(0.06, 0.1) * (0.8 + 0.4 * k), sizeEnd: 0.04,
+        glyph: '•', color: COL.gem, colorEnd: COL.gemEnd, alpha: 0.5, alphaEnd: 0.15,
+      });
     }
   }
 
@@ -193,7 +374,7 @@ export class PlayerFx {
           x, y, z,
           vx: nx * sp + R(-2.5, 2.5), vy: R(1, 4.5), vz: nz * sp + R(-2.5, 2.5),
           life: R(0.3, 0.6), size: R(0.18, 0.28), sizeEnd: 0.06,
-          glyph: '/\\#|', color: COL.shard, colorEnd: COL.shardEnd, alpha: 1, alphaEnd: 0, gravity: -10, drag: 1.4, spin: R(-9, 9),
+          glyph: '/\\#|', color: COL.break, colorEnd: COL.breakEnd, alpha: 1, alphaEnd: 0, gravity: -10, drag: 1.4, spin: R(-9, 9),
         });
       }
       fx.spawn({ x, y, z, life: 0.12, size: 1.4, sizeEnd: 0.4, glyph: 'X', color: [3.6, 1.2, 0.5], colorEnd: [1.2, 0.2, 0.05], alpha: 1, alphaEnd: 0 });
@@ -263,7 +444,9 @@ export class PlayerFx {
     this._light({ x: nx, y: 1.1, z: nz, color: [0.55, 0.75, 1.3], intensity: 3.2, radius: 6, life: 0.5, fade: 0.45, fadeIn: 0.02 });
   }
 
-  /** Charging: cold motes drawn in toward the blade (rate and brightness scale with k 0..1). */
+  /** Charging: cold motes drawn in toward the blade, and past half charge jagged cyan lightning
+   *  strokes ('/' '\' '^', 0.1–0.3 m) crawling along the blade and round the hands (rate and
+   *  brightness scale with k 0..1). */
   chargeTick(dt, a, b, k) {
     const fx = this.add;
     if (!fx || !(k >= 0)) return;
@@ -272,26 +455,93 @@ export class PlayerFx {
       this.chargeAcc -= 1;
       const f = R(0.3, 1);
       const px = a.x + (b.x - a.x) * f, py = a.y + (b.y - a.y) * f, pz = a.z + (b.z - a.z) * f;
+      if (k > 0.45 && Math.random() < 0.35 + 0.4 * k) {
+        // a lightning stroke hugging the blade
+        const g = R(0, 0.85);
+        fx.spawn({
+          x: a.x + (b.x - a.x) * g + R(-0.08, 0.08), y: a.y + (b.y - a.y) * g + R(-0.06, 0.1), z: a.z + (b.z - a.z) * g + R(-0.08, 0.08),
+          life: R(0.08, 0.18), size: R(0.12, 0.24) * (0.8 + 0.4 * k), sizeEnd: 0.06, rot: R(-0.6, 0.6),
+          glyph: "/\\^'", color: COL.trailCore, colorEnd: COL.charge, alpha: 1, alphaEnd: 0, flicker: 0.5,
+        });
+        continue;
+      }
       const ang = Math.random() * Math.PI * 2, r = R(0.35, 0.8);
       const ox = Math.cos(ang) * r, oz = Math.sin(ang) * r, oy = R(-0.2, 0.5);
       const life = R(0.22, 0.34);
       fx.spawn({
         x: px + ox, y: py + oy, z: pz + oz,
         vx: -ox / life, vy: -oy / life, vz: -oz / life,
-        life, size: R(0.1, 0.16) * (0.8 + 0.5 * k), sizeEnd: 0.03,
+        life, size: R(0.08, 0.13) * (0.8 + 0.5 * k), sizeEnd: 0.03,
         glyph: "·'.+", color: COL.charge, colorEnd: COL.chargeEnd, alpha: 0.5 + 0.5 * k, alphaEnd: 0.1,
       });
     }
   }
 
-  /** Full charge reached: a glint on the blade. */
-  chargeReady(x, y, z) {
+  /** Full charge reached: a glint on the blade + a dust ring at the feet (x, z). */
+  chargeReady(x, y, z, fx0, fz0) {
     const fx = this.add;
     if (fx) {
-      fx.spawn({ x, y, z, life: 0.22, size: 1.0, sizeEnd: 0.2, glyph: '+', color: COL.ghostCore, colorEnd: COL.charge, alpha: 1, alphaEnd: 0, spin: 4 });
-      fx.spawn({ x, y, z, life: 0.16, size: 0.5, sizeEnd: 1.3, glyph: '°', color: COL.charge, colorEnd: COL.chargeEnd, alpha: 0.9, alphaEnd: 0 });
+      fx.spawn({ x, y, z, life: 0.18, size: 0.75, sizeEnd: 0.15, glyph: '+', color: COL.ghostCore, colorEnd: COL.charge, alpha: 1, alphaEnd: 0, spin: 4 });
+      fx.spawn({ x, y, z, life: 0.12, size: 0.35, sizeEnd: 0.8, glyph: '°', color: COL.charge, colorEnd: COL.chargeEnd, alpha: 0.8, alphaEnd: 0 });
+    }
+    const fa = this.alpha;
+    if (fa && Number.isFinite(fx0 + fz0)) {
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        fa.spawn({
+          x: fx0 + Math.cos(a) * 0.3, y: 0.06, z: fz0 + Math.sin(a) * 0.3,
+          vx: Math.cos(a) * 1.6, vy: R(0.1, 0.4), vz: Math.sin(a) * 1.6,
+          life: R(0.4, 0.6), size: R(0.14, 0.2), sizeEnd: 0.3,
+          glyph: '.,:', color: COL.dust, colorEnd: COL.dustEnd, alpha: 0.8, alphaEnd: 0, drag: 3,
+        });
+      }
     }
     this._light({ x, y, z, color: [0.5, 0.75, 1.4], intensity: 2.2, radius: 4, life: 0.25, fade: 0.2 });
+  }
+
+  /**
+   * The blade's halo (hero.md §3.2): a sparse field of cold '·' dots on a 0.06 m lattice beside
+   * both edges, and a short dot streak 0.2–0.3 m past the steel point (the visible reach of the
+   * edge wave). k = strength 0..2 (dim at idle, brighter through strikes and the charge); far
+   * 0..1 = close-up … game camera (the dots grow so they still print at 36 m). The blade plane
+   * comes from the sword's own matrix.
+   */
+  bladeHalo(dt, k, far = 1) {
+    const fx = this.add;
+    const sw = this.rig?.sword;
+    if (!fx || !sw || !(k > 0)) return;
+    const e = sw.matrixWorld.elements;
+    // the edge-wave: a short bright streak laid along the blade 0.06–0.26 m past the steel point
+    this.tipAcc += dt * 14;
+    while (this.tipAcc >= 1) {
+      this.tipAcc -= 1;
+      const zz = DIM.steelTip + R(0.06, 0.2);
+      const x = e[8] * zz + e[12], y = e[9] * zz + e[13], z = e[10] * zz + e[14];
+      const dl = Math.hypot(e[8], e[9], e[10]) || 1;
+      if (!Number.isFinite(x + y + z) || y < 0.02) continue;
+      fx.spawn({
+        x, y, z, life: 0.12, size: 0.1 * (1 + far), sizeEnd: 0.06, glyph: '|', stretch: 1.4,
+        rot: alongRot(e[8] / dl, e[9] / dl, e[10] / dl),
+        color: COL.tipStreak, colorEnd: COL.halo, alpha: Math.min(1, 0.55 + 0.25 * k), alphaEnd: 0,
+      });
+    }
+    this.haloAcc += dt * (9 + 10 * k);
+    if (this.haloAcc < 1) return;
+    const L = 0.06;
+    while (this.haloAcc >= 1) {
+      this.haloAcc -= 1;
+      const past = Math.random() < 0.3;
+      const zz = past ? DIM.steelTip + R(0.02, 0.3) : R(DIM.forte, DIM.steelTip);
+      const xx = past ? R(-0.02, 0.02) : (Math.random() < 0.5 ? -1 : 1) * R(0.06, 0.12);
+      // sword space (xx, 0, zz) → world
+      const x = e[0] * xx + e[8] * zz + e[12], y = e[1] * xx + e[9] * zz + e[13], z = e[2] * xx + e[10] * zz + e[14];
+      if (!Number.isFinite(x + y + z) || y < 0.02) continue;
+      fx.spawn({
+        x: Math.round(x / L) * L, y: Math.round(y / L) * L, z: Math.round(z / L) * L,
+        life: 0.4, size: (past ? 0.09 : 0.08) * (1 + 1.2 * far), sizeEnd: 0.04, glyph: '·',
+        color: COL.halo, colorEnd: COL.haloEnd, alpha: Math.min(1, 0.6 + 0.2 * k), alphaEnd: 0,
+      });
+    }
   }
 
   /** Crit window open: faint cold motes peeling off the blade. */
@@ -394,5 +644,9 @@ export class PlayerFx {
     this.healAcc = 0;
     this.chargeAcc = 0;
     this.critAcc = 0;
+    this.gemAcc = 0;
+    this.haloAcc = 0;
+    this.gemGlowAcc = 0;
+    this.tipAcc = 0;
   }
 }

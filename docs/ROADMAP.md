@@ -23,6 +23,20 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Anime-style (SAO-inspired) black-coat swordsman protagonist
 - [x] ASCII-ify creatures and grass; more detailed stone ASCII; bigger dragon (×1.25)
 
+## M1.5 — Look pass from the v0.2 review
+- [x] Calm, world-anchored v0.1-style grass (no swimming ground)
+- [x] Crisp surface-glyph hero and wyrm; moonlit outline on the hero
+- [x] Visual-only tells: red glow + flash for dodge-only, white glint for parry timing
+- [x] Lab Showroom preset for look-dev review
+- [x] Hero after the Shadow Swordsman sheet (model, poses, slam finisher, lunge thrust, cyan FX)
+- [x] Wyrm after the Obsidian Drake sheet, 1.5× bigger; player reach band; hero-first boss camera
+- [x] Carved-glyph stones and half-sunk flagstones
+- [x] Lab model viewer + builder specs from the sheets (docs/art)
+- [x] Four-legged drake rebuild (art score 2 → 6) and closer hero (2.5 → 4.5)
+- [ ] Next look round: hero hair mass, the blade read from behind at the game camera, small
+      details (straps, boots)
+- [x] Owner approval; released as v0.3.0
+
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
 - [ ] Regular mobs (2–3 types) using the shared combat system and tell rules
