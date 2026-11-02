@@ -31,6 +31,117 @@ export const SURFACE_SETS = {
   smooth: { glyphs: '.:o0', cell: [0.1, 0.1], rowShift: 0 },
 };
 export const CREATURE_FLAG = { min: 0.04, span: 0.4, codes: 96, angles: 24 };
+/** Surface-glyph `levels` table size: up to 6 light levels × 8 per-cell variants. */
+export const SURFACE_LEVELS = { max: 6, variants: 8 };
+/** Defaults of the optional surface-glyph features (see createSurfaceGlyphMaterial). */
+export const SURFACE_FEATURE_DEFAULTS = {
+  glowBias: 1,
+  glowRange: [0, 0.75],
+  inkAxisChance: 0.6,
+  inkRange: [0, 0.75],
+  crackScale: 2.5,
+  crackWidth: 1,
+};
+
+// `levels` → packed glyph indices (vec4 × 2 per level, -1 = empty cell) + variant counts.
+// Every glyph goes through gi(), so a glyph missing from the world atlas throws at construction.
+function surfaceLevels(levels) {
+  const { max, variants } = SURFACE_LEVELS;
+  if (!Array.isArray(levels) || levels.length < 1 || levels.length > max) {
+    throw new Error(`surface glyph levels: expected 1..${max} strings (dark → bright), got ${JSON.stringify(levels)}`);
+  }
+  const ids = new Array(max * variants).fill(-1);
+  const counts = new Array(max).fill(1);
+  levels.forEach((s, l) => {
+    if (typeof s !== 'string') throw new Error(`surface glyph levels[${l}] is not a string: ${JSON.stringify(s)}`);
+    const chars = [...s];
+    if (chars.length > variants) {
+      throw new Error(`surface glyph levels[${l}] "${s}" has ${chars.length} variants (max ${variants})`);
+    }
+    chars.forEach((ch, v) => {
+      try {
+        ids[l * variants + v] = ch === ' ' ? -1 : gi(ch);
+      } catch (e) {
+        throw new Error(`surface glyph levels[${l}] "${s}": ${e.message}`);
+      }
+    });
+    counts[l] = Math.max(chars.length, 1); // '' = one empty variant
+  });
+  const packed = [];
+  for (let i = 0; i < ids.length; i += 4) packed.push(new THREE.Vector4(ids[i], ids[i + 1], ids[i + 2], ids[i + 3]));
+  return { packed, counts, n: levels.length };
+}
+function unitAxis(a, name) {
+  const v = Array.isArray(a) && a.length === 3 ? new THREE.Vector3(+a[0], +a[1], +a[2]) : null;
+  const len = v ? v.length() : NaN;
+  if (!(Number.isFinite(len) && len > 1e-6)) {
+    throw new Error(`surface glyph ${name}: expected a non-zero object-space [x, y, z], got ${JSON.stringify(a)}`);
+  }
+  return v.divideScalar(len);
+}
+function range2(r, name) {
+  if (!(Array.isArray(r) && r.length === 2 && r.every(Number.isFinite) && r[1] > r[0])) {
+    throw new Error(`surface glyph ${name}: expected [lo, hi] with lo < hi, got ${JSON.stringify(r)}`);
+  }
+  return new THREE.Vector2(r[0], r[1]);
+}
+// Optional features compile in through `defines` only when their option is present, so a
+// material without them runs exactly the pre-existing shader (same program, same pixels).
+function surfaceFeatures(o, cell) {
+  const D = SURFACE_FEATURE_DEFAULTS;
+  const defines = {};
+  const uniforms = {};
+  if (o.levels != null) {
+    const t = surfaceLevels(o.levels);
+    defines.SG_LEVELS = '';
+    uniforms.uLvGlyph = { value: t.packed };
+    uniforms.uLvCount = { value: t.counts };
+    uniforms.uLvN = { value: t.n };
+  }
+  if (o.levelInk != null) {
+    const li = o.levelInk;
+    if (!Array.isArray(li) || li.length < 1 || li.length > SURFACE_LEVELS.max || !li.every((c) => Array.isArray(c) && c.length === 3 && c.every(Number.isFinite))) {
+      throw new Error(`surface glyph levelInk: expected 1..${SURFACE_LEVELS.max} [r, g, b] colours, got ${JSON.stringify(li)}`);
+    }
+    defines.SG_LEVEL_INK = '';
+    uniforms.uLevelInk = {
+      value: Array.from({ length: SURFACE_LEVELS.max }, (_, i) => new THREE.Vector3(...li[Math.min(i, li.length - 1)])),
+    };
+  }
+  if (o.glowAxis != null) {
+    defines.SG_GLOW_AXIS = '';
+    uniforms.uGlowAxis = { value: unitAxis(o.glowAxis, 'glowAxis') };
+    uniforms.uGlowBias = { value: o.glowBias ?? D.glowBias };
+    uniforms.uGlowRange = { value: range2(o.glowRange ?? D.glowRange, 'glowRange') };
+  }
+  const inkAxis = o.inkAxis ?? o.inkAltAxis;
+  if (inkAxis != null) {
+    defines.SG_INK_AXIS = '';
+    uniforms.uInkAxis = { value: unitAxis(inkAxis, 'inkAxis') };
+    uniforms.uInkAxisChance = { value: o.inkAxisChance ?? D.inkAxisChance };
+    uniforms.uInkRange = { value: range2(o.inkRange ?? D.inkRange, 'inkRange') };
+  }
+  if (defines.SG_GLOW_AXIS != null || defines.SG_INK_AXIS != null) defines.SG_AXIS = '';
+  const seamAxis = o.seamAxis ?? 'both';
+  if (!['both', 'x', 'y'].includes(seamAxis)) throw new Error(`surface glyph seamAxis: 'both' | 'x' | 'y', got ${JSON.stringify(seamAxis)}`);
+  const crack = o.crack ?? 'grid';
+  if (crack === 'voronoi') {
+    defines.SG_VORONOI = '';
+    const k = o.crackScale ?? D.crackScale;
+    const w = o.crackWidth ?? D.crackWidth;
+    if (!(k > 0 && w > 0)) throw new Error(`surface glyph crackScale / crackWidth must be > 0 (got ${k}, ${w})`);
+    // seamAxis stretches the fissure cells so most fissures run along that aGUV direction
+    const sx = seamAxis === 'x' ? 3 : 1;
+    const sy = seamAxis === 'y' ? 3 : 1;
+    uniforms.uCrackCell = { value: new THREE.Vector2(cell[0] * k * sx, cell[1] * k * sy) };
+    // fissure distance (F2 - F1 ≈ 2 × distance, in crack-cell x units) → glyph-cell units, / width
+    uniforms.uCrackK = { value: (0.5 * k * sx) / w };
+  } else if (crack !== 'grid') {
+    throw new Error(`surface glyph crack: 'grid' | 'voronoi', got ${JSON.stringify(crack)}`);
+  } else if (seamAxis === 'y') defines.SG_SEAM_Y = '';
+  else if (seamAxis === 'x') defines.SG_SEAM_X = '';
+  return { defines, uniforms };
+}
 
 function pickShared(U, names) {
   const out = {};
@@ -138,15 +249,46 @@ export function createAsciiObjectMaterial(U, { fadeNearPlayer = false, side = TH
  * ascii: 'scales'|'strands'|'plates'|'smooth' — picks glyph ramp + cell defaults (SURFACE_SETS);
  *   `glyphs` / `cell` / `rowShift` still override. grid: true renders the part through the v0.2
  *   screen character grid instead (lit ink + encoded flow direction, decoded by the ASCII pass).
+ *
+ * Optional features (each compiles in only when its option is given; without them the shader and
+ * the pixels are exactly the pre-existing ones). They apply to the crisp path, not `grid: true`.
+ *   levels: ['', ".'", ':;', 'AV', 'A8BD', '80B@'] — 1..6 strings, dark → bright, each listing up to
+ *          8 glyph VARIANTS for that light level; one variant is picked per cell by hash. A space
+ *          (or '') is an empty cell. Overrides `glyphs`. Level = floor(clamp(light × lumScale +
+ *          jitter) × count), the same mapping as the 4-glyph ramp, but the light is taken at the
+ *          CELL CENTRE, so every glyph is drawn whole (the 4-glyph ramp picks per pixel and can cut
+ *          a glyph in two at a light step; `levels: ['.', 'v', '^', 'A']` is that ramp, whole).
+ *          Every glyph is checked with gi() (throws on a glyph missing from the world atlas).
+ *   levelInk: [[r,g,b], ...] — ink colour per light level (dark → bright; the last repeats), e.g. a
+ *          dim grey for the darkest level and near white for the brightest. Replaces `ink`
+ *          (inkAlt still mixes in by chance). Works with `levels` or the 4-glyph ramp.
+ *   glowAxis: [x,y,z] — OBJECT-space direction (glued to the part as it animates): uGlow (seams,
+ *          warm tint) and uInkGlow concentrate on the side whose normal faces it, e.g. [0,-1,0]
+ *          for a molten underside on one mesh. glowBias 0..1 (default 1) = how strictly (0 = even),
+ *          glowRange [lo, hi] = band of cos(normal, axis) over which it fades in (default [0, 0.75]:
+ *          nothing on surfaces at 90° or more, full from ~41° off the axis).
+ *   inkAxis: [x,y,z] (alias inkAltAxis) — OBJECT-space direction: cells facing it pick `inkAlt`
+ *          with chance inkAxisChance (default 0.6), fading to `altChance` elsewhere over inkRange
+ *          (default [0, 0.75]), e.g. more orange alt glyphs on the lower flanks. Decided per cell
+ *          (cell-centre normal), so a glyph is never half alt.
+ *   crack: 'grid' (default: seams on the glyph cell borders) | 'voronoi' (irregular fissures from
+ *          a 2D cellular noise on aGUV, width jittered per plate). crackScale = fissure plate size
+ *          in glyph cells (default 2.5), crackWidth = width multiplier (default 1).
+ *   seamAxis: 'both' (default) | 'y' | 'x' — 'y': seams run along aGUV y only (between columns:
+ *          radiating veins without cross-hatching; use rowShift 0 so they stay continuous);
+ *          'x': along aGUV x only (between rows). With crack 'voronoi' it stretches the plates 3×
+ *          along that axis so most fissures follow it.
  */
 export function createSurfaceGlyphMaterial(U, o = {}) {
   const set = o.ascii != null ? SURFACE_SETS[o.ascii] ?? SURFACE_SETS.scales : null;
   const g = [...(o.glyphs ?? set?.glyphs ?? '.v^A')].map(gi);
   while (g.length < 4) g.push(g[g.length - 1]);
   const asciiSet = o.grid && o.ascii != null ? ASCII_SETS[o.ascii] ?? 0 : -1;
+  const feat = surfaceFeatures(o, o.cell ?? set?.cell ?? [0.22, 0.26]);
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       ...pickShared(U, SHARED),
+      ...feat.uniforms,
       uAsciiSet: { value: asciiSet },
       uBase: { value: new THREE.Color(...(o.base ?? [0.016, 0.014, 0.016])) },
       uInk: { value: new THREE.Color(...(o.ink ?? [0.55, 0.5, 0.46])) },
@@ -176,11 +318,17 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       varying vec3 vW;
       varying vec3 vN;
       varying vec2 vG;
+#ifdef SG_AXIS
+      varying vec3 vNO;
+#endif
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vW = wp.xyz;
         vN = normalize(mat3(modelMatrix) * normal);
         vG = aGUV;
+#ifdef SG_AXIS
+        vNO = normal; // object space: glowAxis / inkAxis stay glued to the part
+#endif
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
     `,
@@ -212,6 +360,75 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       varying vec3 vW;
       varying vec3 vN;
       varying vec2 vG;
+#ifdef SG_LEVELS
+      uniform vec4 uLvGlyph[12]; // 6 levels x 8 variants (2 vec4 per level), -1 = empty cell
+      uniform float uLvCount[6];
+      uniform float uLvN;
+#endif
+#ifdef SG_AXIS
+      varying vec3 vNO;
+      // 0..1: how squarely the visible side of object-space normal no faces axis, over cosine band r
+      float sgAxisW(vec3 no, vec3 axis, vec2 r) {
+        no = (gl_FrontFacing ? no : -no) * inversesqrt(max(dot(no, no), 1e-12));
+        return smoothstep(r.x, r.y, dot(no, axis));
+      }
+#endif
+#ifdef SG_GLOW_AXIS
+      uniform vec3 uGlowAxis;
+      uniform float uGlowBias;
+      uniform vec2 uGlowRange;
+#endif
+#ifdef SG_INK_AXIS
+      uniform vec3 uInkAxis;
+      uniform float uInkAxisChance;
+      uniform vec2 uInkRange;
+#endif
+#if defined(SG_LEVEL_INK) || defined(SG_INK_AXIS)
+  #ifdef SG_LEVEL_INK
+      uniform vec3 uLevelInk[6];
+      vec3 sgInk(float li) { return uLevelInk[int(clamp(li, 0.0, 5.0))]; }
+  #else
+      vec3 sgInk(float li) { return uInk; }
+  #endif
+#endif
+#if defined(SG_LEVELS) || defined(SG_INK_AXIS)
+      // Screen-pixel offset from this fragment to the centre of its glyph cell. Per-cell choices
+      // (level, alt ink) use values extrapolated there with screen derivatives, so one cell never
+      // draws half of one glyph and half of another. Derivatives come from the unshifted aGUV
+      // (continuous across rows); the clamp keeps grazing silhouettes sane.
+      vec2 sgToCentre(vec2 g, vec2 cell) {
+        vec2 gu = vG / uCell;
+        vec2 gx = dFdx(gu), gy = dFdy(gu);
+        vec2 dc = cell + 0.5 - g;
+        float det = gx.x * gy.y - gx.y * gy.x;
+        vec2 sp = abs(det) > 1e-12 ? vec2(dc.x * gy.y - dc.y * gy.x, gx.x * dc.y - gx.y * dc.x) / det : vec2(0.0);
+        return clamp(sp, -64.0, 64.0);
+      }
+#endif
+#ifdef SG_VORONOI
+      uniform vec2 uCrackCell;
+      uniform float uCrackK;
+      vec2 sgHash22(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.xx + p3.yz) * p3.zy);
+      }
+      // cheap 2D cellular noise: x = F2 - F1 (0 on a fissure), y = hash of the nearest plate
+      vec2 sgCells(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        float d1 = 8.0, d2 = 8.0;
+        vec2 id = i;
+        for (int y = -1; y <= 1; y++) {
+          for (int x = -1; x <= 1; x++) {
+            vec2 o = vec2(float(x), float(y));
+            vec2 r = o + 0.12 + 0.76 * sgHash22(i + o + uSeed) - f;
+            float d = dot(r, r);
+            if (d < d1) { d2 = d1; d1 = d; id = i + o; } else if (d < d2) { d2 = d; }
+          }
+        }
+        return vec2(sqrt(d2) - sqrt(d1), hash12(id + uSeed * 1.7));
+      }
+#endif
 
       // Grid mode: lit colour + (set, screen flow angle) packed into alpha for the ASCII pass.
       void asciiMain() {
@@ -255,16 +472,55 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * uRim;
 
         float lum = luma(L) * uLumScale + (h - 0.5) * 0.4;
+#if defined(SG_LEVELS) || defined(SG_INK_AXIS)
+        vec2 sp = sgToCentre(g, cell);
+#endif
+#ifdef SG_LEVELS
+        // per-cell variants: the level follows the light at the cell centre (whole glyphs), the
+        // variant is picked by the cell hash
+        vec3 wC = vW + dFdx(vW) * sp.x + dFdy(vW) * sp.y;
+        vec3 nC = vN + dFdx(vN) * sp.x + dFdy(vN) * sp.y;
+        nC = (gl_FrontFacing ? nC : -nC) * inversesqrt(max(dot(nC, nC), 1e-12));
+        float lumC = luma(lightAt(wC, nC, 0.25, shadowAt(wC + nC * 0.1))) * uLumScale + (h - 0.5) * 0.4;
+        float li = clamp(floor(clamp(lumC, 0.0, 0.999) * uLvN), 0.0, 5.0);
+        int lv = int(li);
+        float nv = uLvCount[lv];
+        int vi = lv * 8 + int(min(floor(fract(h * 13.37 + 0.31) * nv), nv - 1.0));
+        float idx = uLvGlyph[vi / 4][vi % 4];
+        vec2 fz = (f - 0.5) * uGlyphZoom + 0.5;
+        vec2 gdx = dFdx(g) * uGlyphZoom;
+        vec2 gdy = dFdy(g) * uGlyphZoom;
+        float m = 0.0; // empty cell (index -1): only the dark base shows
+        if (idx >= 0.0) m = smoothstep(0.2, 0.7, glyphGrad(idx, fz, gdx, gdy));
+#else
         float li = floor(clamp(lum, 0.0, 0.999) * 4.0);
         float idx = li < 0.5 ? uGlyphs.x : li < 1.5 ? uGlyphs.y : li < 2.5 ? uGlyphs.z : uGlyphs.w;
         // glyph scaled up inside its cell + sharpened coverage: crisp symbols, not soft grey fill
         vec2 fz = (f - 0.5) * uGlyphZoom + 0.5;
         float m = smoothstep(0.2, 0.7, glyphGrad(idx, fz, dFdx(g) * uGlyphZoom, dFdy(g) * uGlyphZoom));
+#endif
 
+#if defined(SG_LEVEL_INK) || defined(SG_INK_AXIS)
+  #ifdef SG_INK_AXIS
+        // alt ink more likely where the cell-centre object-space normal faces uInkAxis
+        vec3 nOC = vNO + dFdx(vNO) * sp.x + dFdy(vNO) * sp.y;
+        float altP = mix(uAltChance, uInkAxisChance, sgAxisW(nOC, uInkAxis, uInkRange));
+  #else
+        float altP = uAltChance;
+  #endif
+        vec3 inkC = mix(sgInk(li), uInkAlt, step(1.0 - altP, fract(h * 7.31))) * uTint;
+#else
         vec3 inkC = mix(uInk, uInkAlt, step(1.0 - uAltChance, fract(h * 7.31))) * uTint;
+#endif
         // near-black gaps between glyphs: the body reads as arranged symbols, not a solid mesh
         vec3 base = uBase * (L * 0.7 + 0.01);
+#ifdef SG_GLOW_AXIS
+        // glow concentrated on the side facing uGlowAxis (object space), e.g. a molten underside
+        float glowW = mix(1.0, sgAxisW(vNO, uGlowAxis, uGlowRange), uGlowBias);
+        vec3 ink = inkC * (L * uGain + rim * uMoonColor * 2.0) + inkC * uInkGlow * glowW;
+#else
         vec3 ink = inkC * (L * uGain + rim * uMoonColor * 2.0) + inkC * uInkGlow;
+#endif
         vec3 col = mix(base, ink, m);
         // moonlit silhouette line (not scaled by ink): a thin cool edge around the whole shape
         // (steep falloff: a wide one shades whole cones/flares grey and reads as a plastic mesh)
@@ -272,10 +528,28 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         col += uMoonColor * edgeL * uOutline * (0.35 + 0.65 * sh);
 
         // molten seams: thin hot cracks between scale rows/columns, the glyphs stay readable
+#ifdef SG_VORONOI
+        // irregular fissures between cellular plates; width jittered per plate, pulse per plate
+        vec2 vc = sgCells(vG / uCrackCell);
+        float edge = vc.x * uCrackK / mix(0.45, 1.6, vc.y);
+        float seam = 1.0 - smoothstep(0.012, 0.075, edge);
+        float pulse = 0.6 + 0.4 * sin(uTime * 3.3 + vc.y * 6.283);
+#else
+  #if defined(SG_SEAM_Y)
+        float edge = min(f.x, 1.0 - f.x); // seams run along aGUV y (between columns) only
+  #elif defined(SG_SEAM_X)
+        float edge = min(f.y, 1.0 - f.y); // seams run along aGUV x (between rows) only
+  #else
         float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+  #endif
         float seam = 1.0 - smoothstep(0.012, 0.075, edge);
         float pulse = 0.6 + 0.4 * sin(uTime * 3.3 + h * 6.283);
+#endif
+#ifdef SG_GLOW_AXIS
+        float hot = uGlow * uGlowMask * glowW;
+#else
         float hot = uGlow * uGlowMask;
+#endif
         col += uEmissive * hot * (seam * (1.0 - m) * 0.95 + (1.0 - m) * 0.03) * pulse;
         col = mix(col, col * vec3(1.2, 0.92, 0.8) + uEmissive * 0.06 * m, hot * 0.45);
 
@@ -288,6 +562,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
     side: o.side ?? THREE.FrontSide,
     blending: THREE.NoBlending,
   });
+  if (Object.keys(feat.defines).length) mat.defines = feat.defines;
   return mat;
 }
 

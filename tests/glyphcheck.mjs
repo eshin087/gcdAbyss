@@ -25,6 +25,55 @@ for (const d of dirs) walk(path.join(root, d), files);
 const rel = (f) => path.relative(root, f).split(path.sep).join('/');
 const litRe = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g;
 let bad = 0, checked = 0, exempt = 0;
+// Surface-glyph `levels` tables (createSurfaceGlyphMaterial): arrays of glyph-variant strings,
+// often spread over several lines. Checked where written: a `levels: [` key, or a constant whose
+// name ends in LEVELS / GLYPHS / RAMP(S) assigned an array. `levels: SOME_CONST` is checked at the
+// constant; gi() also throws at runtime when the integration sims build the models.
+const LEVELS_KEY = /\blevels\s*:\s*\[/;
+const LEVELS_CONST = /^(?:export\s+)?const\s+[A-Z0-9_]*(?:LEVELS|GLYPHS|RAMPS?)\s*=\s*\[/;
+// From the `[` that `re` ends on, collect the bracketed array text (comments dropped, brackets
+// inside strings ignored) across lines; returns its string literals as [literal, line index].
+function arrayLiterals(lines, i, re) {
+  const m = re.exec(lines[i]);
+  let text = '', depth = 0, quote = null;
+  const starts = []; // text offset where each source line begins
+  const done = () => [...text.matchAll(litRe)].map((x) => [x[0], i + starts.filter((s) => s <= x.index).length - 1]);
+  for (let l = i, col = m.index + m[0].length - 1; l < lines.length; l++, col = 0) {
+    const ln = lines[l];
+    starts.push(text.length);
+    for (let c = col; c < ln.length; c++) {
+      const ch = ln[c];
+      if (quote) {
+        text += ch;
+        if (ch === '\\') text += ln[++c] ?? '';
+        else if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === '/' && ln[c + 1] === '/') break; // line comment
+      if (ch === "'" || ch === '"' || ch === '`') quote = ch;
+      else if (ch === '[') depth++;
+      else if (ch === ']' && --depth === 0) return done();
+      text += ch;
+    }
+    text += '\n';
+  }
+  return done();
+}
+const checkLit = (lit, f, i, ln) => {
+  let s;
+  try {
+    s = Function('return ' + lit)();
+  } catch {
+    return;
+  }
+  checked++;
+  for (const ch of s) {
+    if (!OK.has(ch)) {
+      bad++;
+      console.log(`BAD glyph ${JSON.stringify(ch)} in ${rel(f)}:${i + 1}: ${ln.trim()}`);
+    }
+  }
+};
 for (const f of files) {
   const lines = fs.readFileSync(f, 'utf8').split('\n');
   const block = HTML_ONLY.find((b) => b[0] === rel(f));
@@ -36,25 +85,14 @@ for (const f of files) {
       if (block[2].test(ln)) inBlock = false;
       return;
     }
+    for (const re of [LEVELS_KEY, LEVELS_CONST]) {
+      if (re.test(ln)) for (const [lit, at] of arrayLiterals(lines, i, re)) checkLit(lit, f, at, lines[at]);
+    }
     const m = ln.match(/\bglyphs?\s*:\s*(.*)$/) || ln.match(/\bgis?\((.*)$/) || ln.match(/^const ([A-Z_]+)\s*=\s*(['"`].*)$/);
     if (!m) return;
     const expr = m[m.length - 1];
     const cut = expr.split(/,\s*[a-zA-Z]+\s*:/)[0];
-    for (const lit of cut.match(litRe) || []) {
-      let s;
-      try {
-        s = Function('return ' + lit)();
-      } catch {
-        continue;
-      }
-      checked++;
-      for (const ch of s) {
-        if (!OK.has(ch)) {
-          bad++;
-          console.log(`BAD glyph ${JSON.stringify(ch)} in ${rel(f)}:${i + 1}: ${ln.trim()}`);
-        }
-      }
-    }
+    for (const lit of cut.match(litRe) || []) checkLit(lit, f, i, ln);
   });
 }
 // HTML-only glyphs must stay out of world rendering
