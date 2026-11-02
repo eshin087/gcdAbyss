@@ -4,6 +4,7 @@ import { el, setText, setClass, button, slider, section } from './labDom.js';
 import { injectLabStyle } from './labStyle.js';
 import { HitboxOverlay } from './hitboxOverlay.js';
 import { TimingTrainer, tellName } from './timingTrainer.js';
+import { ModelViewer, VIEW_ANGLES } from './modelView.js';
 
 // The Lab — a debug panel to test the boss without playing the fight (contract: docs/ARCHITECTURE.md
 // → Lab; usage: src/dev/README.md). It talks only to the actors' `debug` APIs (dragon.debug,
@@ -30,6 +31,8 @@ const BADGE_POLL = 0.5; // closed-state badge check (real s)
 const STORE_KEY = 'abyss.lab.v1';
 const BAR_CELLS = 30;
 const BAR_SPAN = 0.9; // s before impact covered by the timing bar
+
+const DEG = Math.PI / 180;
 
 const finite = (v, f = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : f);
 const show = (v) => (v === undefined || v === null || (typeof v === 'number' && !Number.isFinite(v)) ? 'n/a' : String(v));
@@ -75,6 +78,8 @@ export class Lab {
     this.selected = null; // ability name used by Loop
     this.loop = { on: false, every: Math.min(8, Math.max(2, finite(this.prefs.loopEvery, 4))), t: 0, count: 0, prevAI: null };
     this.trainer = new TimingTrainer(game);
+    this.viewer = new ModelViewer(game, this);
+    this.mvPick = { target: 'hero', angle: 'front', dark: false }; // model-view buttons' selection
 
     this._abilities = [];
     this._abButtons = [];
@@ -127,6 +132,7 @@ export class Lab {
       this._trainerVer = -1;
       this._syncAbilities();
       this._refresh();
+      this._mvSync();
     }
     this._syncBadge();
   }
@@ -222,6 +228,11 @@ export class Lab {
    * overlay matches the current frame instead of lagging one frame behind.
    */
   postUpdate() {
+    try {
+      this.viewer.frame(); // model viewer follows the actors' this-frame pose (before the camera)
+    } catch (err) {
+      this._fail('model view', err);
+    }
     if (!this.open || !this.hitboxes) return;
     this._postUpdated = true;
     try {
@@ -235,6 +246,7 @@ export class Lab {
   dispose() {
     try {
       this.setLoop(false);
+      this.viewer.exit();
       if (finite(this.game.debugTimeScale, 1) !== 1) this.game.debugTimeScale = 1;
       if (typeof removeEventListener === 'function') removeEventListener('keydown', this._onKey, true);
       this.trainer.dispose();
@@ -256,6 +268,7 @@ export class Lab {
     const late = this._postUpdated; // postUpdate() ran last frame: it owns the overlay refresh
     this._postUpdated = false;
     try {
+      this.viewer.pinAim(); // before the player reads game.mouseGround
       this.trainer.trackInput();
       if (this.loop.on) this._tickLoop();
     } catch (err) {
@@ -426,6 +439,76 @@ export class Lab {
     this._status('showroom: AI off, god mode, camera close (wheel / "Camera default" to reset)', 'ok');
     this._refresh();
     this._syncBadge();
+  }
+
+  /**
+   * Model viewer (ARCHITECTURE.md → Lab → Model viewer): frame the hero or the dragon from `yaw`
+   * degrees around ITS facing (0 front, 90 its left, 180 back, 270 its right) at `pitch` degrees
+   * (8 ≈ character-sheet eye level, 58 = the game camera), `dist` m (omit = auto-fit), looking at
+   * `height` m above its root (omit = auto); `dark` hides the world. Extras: `forward` (m along its
+   * facing for the look point, omit = bounding-box centre), `lockYaw` (sample its facing once instead
+   * of following it), `game` (yaw is world-fixed like the gameplay camera). AI off + god mode + HUD
+   * hidden while viewing. modelView(null) restores the game camera. Returns the framing or null.
+   */
+  modelView(opts) {
+    let r = null;
+    try {
+      r = this.viewer.set(opts);
+    } catch (err) {
+      console.error('[lab] model view failed', err);
+      this._status(`error: model view: ${err?.message ?? err}`, 'err');
+      try {
+        this.viewer.exit();
+      } catch {
+        /* keep going: the viewer state is reset either way */
+      }
+      this._mvSync();
+      return null;
+    }
+    if (r && typeof r === 'object') {
+      this.mvPick.target = r.target;
+      this.mvPick.dark = r.dark;
+      const hit = VIEW_ANGLES.find(([, , p]) => (p.game ? r.game : !r.game && p.yaw === r.yaw && p.pitch === r.pitch));
+      this.mvPick.angle = hit ? hit[0] : null;
+      this._status(`view ${r.target}${this.mvPick.angle ? ` ${this.mvPick.angle}` : ''} · yaw ${r.yaw} · pitch ${r.pitch} · d ${r.dist} m · h ${r.height} m${r.dark ? ' · dark' : ''}`, 'ok');
+    } else if (r === 'off') {
+      this._status('view off: game camera', 'ok');
+    } else {
+      this._status(`n/a: model view target ${opts?.target ?? ''}`.trim(), 'warn');
+    }
+    this._mvSync();
+    this._refresh();
+    this._syncBadge();
+    return r;
+  }
+
+  /** Lab buttons: change the target / angle / dark pick; target + angle buttons (re)enter the view. */
+  _mvPick(change, enter) {
+    Object.assign(this.mvPick, change);
+    if (!enter && !this.viewer.active) {
+      this._mvSync();
+      return;
+    }
+    const k = this.mvPick;
+    const preset = VIEW_ANGLES.find(([key]) => key === k.angle)?.[2] ?? VIEW_ANGLES[0][2];
+    const opts = { target: k.target, dark: k.dark, ...preset };
+    if (preset.game) {
+      // the gameplay camera: world-fixed yaw, 58° pitch, the rig's current distance, root on the ground
+      Object.assign(opts, { yaw: 0, pitch: (this.game.CONFIG ?? CONFIG).camera.pitch / DEG, dist: finite(this.game.cameraRig?.targetDistance, CONFIG.camera.distance), height: 0, forward: 0 });
+    }
+    this.modelView(opts);
+  }
+
+  _mvSync() {
+    const u = this.ui;
+    if (!u.mvTargets) return;
+    const on = this.viewer.active, k = this.mvPick;
+    for (const t of u.mvTargets) setClass(t.el, 'on', k.target === t.key);
+    for (const a of u.mvAngles) setClass(a.el, 'on', on && k.angle === a.key);
+    setClass(u.mvDark, 'on', !!k.dark);
+    setClass(u.mvExit, 'na', !on);
+    const d = this.viewer.describe();
+    setText(u.mvInfo, d ? `${d.target} · d ${d.dist} m${d.auto.dist ? ' (fit)' : ''} · h ${d.height} m · AI off, god, HUD hidden` : 'off · console: __game.lab.modelView({ target, yaw, pitch, dist, height, dark })');
   }
 
   _cameraDistance(d) {
@@ -671,6 +754,27 @@ export class Lab {
     el('span', 'c', 'o hurt', lg);
     el('span', 'r', 'o attack', lg);
     el('span', 'w', 'o player (blue block, gold crit, violet i-frames)', lg);
+
+    // model viewer: side-view framing for comparing the models with concept sheets
+    el('div', 'lab-sub', 'MODEL VIEW', body);
+    const mv = el('div', 'lab-grid c4', null, body);
+    this.ui.mvTargets = [
+      ['hero', 'Hero'],
+      ['dragon', 'Dragon'],
+    ].map(([key, label]) => ({ key, el: button(mv, label, () => this._mvPick({ target: key }, true)) }));
+    this.ui.mvDark = button(mv, 'Dark', () => this._mvPick({ dark: !this.mvPick.dark }, false));
+    this.ui.mvDark.title = 'hide the world (grass, ground, forest, stones, mist) for clean sheet-like renders';
+    this.ui.mvExit = button(mv, 'Exit', () => this.modelView(null));
+    this.ui.mvExit.title = 'back to the game camera (restores HUD, AI, god mode, world)';
+    const ag = el('div', 'lab-grid c5', null, body);
+    ag.style.marginTop = '3px';
+    this.ui.mvAngles = VIEW_ANGLES.map(([key, label, p]) => {
+      const b = button(ag, label, () => this._mvPick({ angle: key }, true));
+      b.title = p.game ? 'gameplay camera: 58° pitch, world-fixed yaw, current rig distance' : `yaw ${p.yaw}° around its facing, pitch ${p.pitch}°`;
+      return { key, el: b };
+    });
+    this.ui.mvInfo = el('div', 'lab-note', '', body);
+    this._mvSync();
   }
 
   _buildReadout(root) {
@@ -839,6 +943,7 @@ export class Lab {
     }
     const c = this.overlay?.count;
     setText(u.hitInfo, this.hitboxes ? (c ? `${c.hurt} hurt · ${c.attack} attack · ${c.source}` : '') : 'off');
+    this._mvSync();
 
     this._refreshTrainer();
   }

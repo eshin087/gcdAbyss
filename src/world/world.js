@@ -12,6 +12,7 @@ import { Atmosphere } from './atmosphere.js';
 //   world.setPusher(slot, x, y, z, radius)  grass trample (slot 0 = player, 1..9 = dragon)
 //   world.gust(x, z, strength, radius)      radial wind impulse (wing beats, landings)
 //   world.scorch.burnCircle(x, z, r, burn, heat)
+//   world.debug.setVisible(bool)            Lab only: hide / restore the environment (see below)
 export const PUSHER_SLOTS = MAX_PUSH;
 
 export class World {
@@ -33,6 +34,35 @@ export class World {
     this.bonfire = this.forest.bonfire;
     this.nest = this.forest.nest;
     this._gust = { x: 0, z: 0, strength: 0, radius: 1 };
+    this._hidden = null; // saved `visible` flags while world.debug.setVisible(false) holds
+
+    // Lab hooks (ARCHITECTURE.md → game context → `world`): the model viewer's "dark" mode renders actors alone.
+    //   setVisible(false) hides ground, grass and the forest group (trees, stones, flagstones, nest
+    //   bones, bonfire) and stops the atmosphere (bonfire flames, fireflies, mist, leaves). Particles
+    //   already in flight in the shared pools are dropped (mist lives ~10 s; actors re-emit theirs).
+    //   setVisible(true) restores the exact previous `visible` flags. Lights, scorch and colliders
+    //   are untouched.
+    const world = this;
+    this.debug = {
+      setVisible: (on) => this._setVisible(on),
+      get visible() {
+        return world._hidden === null;
+      },
+    };
+  }
+
+  _setVisible(on) {
+    const parts = [this.ground, this.grass?.mesh, this.forest?.group].filter(Boolean);
+    if (!on && this._hidden === null) {
+      this._hidden = parts.map((o) => [o, o.visible]);
+      for (const o of parts) o.visible = false;
+      this.game.fx?.alpha?.clear?.();
+      this.game.fx?.add?.clear?.();
+    } else if (on && this._hidden !== null) {
+      for (const [o, v] of this._hidden) o.visible = v;
+      this._hidden = null;
+    }
+    return this._hidden === null;
   }
 
   resolve(pos, radius, bound = Infinity) {
@@ -63,6 +93,6 @@ export class World {
     if (g.strength < 0.01) g.strength = 0;
     this.game.U.uGust.value.set(g.x, g.z, g.strength, g.radius);
     this.scorch.update(dt);
-    this.atmosphere.update(dt);
+    if (this._hidden === null) this.atmosphere.update(dt);
   }
 }

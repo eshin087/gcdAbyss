@@ -16,10 +16,18 @@ This file is the **source of truth for cross-module APIs and event names** (cont
 
 ## Frame order (src/main.js)
 ```
-lab.update(realDt) → flow.update(dt, realDt) → player.update(dt) → dragon.update(dt) → camera
-→ shared uniforms → world.update(dt) → lights.update → fx.update → hud.update(realDt)
-→ audio.update(realDt) → render
+lab.update(realDt) → flow.update(dt, realDt) → player.update(dt) → dragon.update(dt)
+→ lab.postUpdate() → camera (rig) → view override → shared uniforms → world.update(dt)
+→ lights.update → fx.update → hud.update(realDt) → audio.update(realDt) → render
 ```
+**View override** (`game.viewOverride`, Lab model viewer only): when it is
+`{ pos, target, focus? }` (Vector3-likes, world metres), main.js places the camera at `pos` looking
+at `target` right after the rig update, and the fog centre (`U.uFocus`), the light-pool selection
+and the shadow box follow `focus` (default `target`) instead of the player / rig focus.
+`uCamPos`, `uCamRight/Up`, `uPlayerScreen` and the ASCII pass are all derived from the overridden
+camera, so lighting, rim / outline, particles and the glyph grid work from any angle. The rig keeps
+updating underneath; `null` snaps back to the game camera. A missing, non-finite or degenerate
+override is skipped for that frame (never throws, never feeds NaN).
 `dt = realDt × game.timeScale × game.debugTimeScale × hit-stop`. `realDt` is unscaled. Input edges
 (`pressed`) are valid for exactly one frame. Construction order: world, audio, player, dragon, hud,
 flow, lab — constructors must not dereference modules built later.
@@ -36,9 +44,10 @@ flow, lab — constructors must not dereference modules built later.
 | `shake(a)` | camera trauma (0.15 light hit … 0.7 huge slam) |
 | `hitstop(sec, scale=0.04)` | brief time-scale dip measured in real seconds (also used for Ghostep slow-mo: `hitstop(0.6, 0.3)`) |
 | `debugTimeScale` | Lab multiplier on game time (1 = normal). Only the Lab writes it. |
+| `viewOverride` | `null` or `{ pos, target, focus? }` — camera override applied by main.js after the rig (see Frame order). Only the Lab model viewer writes it. |
 | `lights` | `add({x,y,z,color:[r,g,b],intensity,radius,life,fade,fadeIn,flicker})` → light (mutable `x,y,z`, `.set()`, `.kill()`) |
 | `fx.add` / `fx.alpha` | glyph particles, additive-HDR / alpha-blended. `spawn({x,y,z,vx,vy,vz,life,size,sizeEnd,glyph,color,colorEnd,alpha,alphaEnd,gravity,drag,spin,rot,flicker,stretch})`. `glyph`: char, string of chars (random pick) or atlas index. |
-| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)` |
+| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
@@ -216,10 +225,41 @@ constructor(game)          // hidden unless URL has ?lab or the user presses F1 
 update(realDt)             // panel refresh + hitbox overlay (runs before flow)
 postUpdate()               // main.js calls it after the actors update so the overlay matches this frame
 open: boolean
+showroom()                 // look-dev preset: fight on, AI off, god mode, hero 7 m in front, camera close
+modelView(opts | null)     // model viewer (below)
 ```
 Debug panel to test the fight without playing it: trigger any `dragon.debug.abilities()`, phase /
 stagger / posture break / kill / reset, jump flow states, god mode, infinite flasks, time scale,
-AI on/off, hitbox overlay, teleport. Talks only to the `debug` APIs above.
+AI on/off, hitbox overlay, teleport. Talks only to the `debug` APIs above, plus the
+`game.viewOverride` and `world.debug.setVisible` hooks for the model viewer.
+
+**Model viewer** (`src/dev/modelView.js`, Lab → VIEW → MODEL VIEW) renders an actor from the angles
+of a character sheet (the game camera is a fixed 58° top-down view):
+```
+__game.lab.modelView({
+  target: 'hero' | 'dragon',   // default: the current one, else 'hero'
+  yaw,      // deg around ITS facing: 0 = its front faces the camera, 90 = its left side, 180 = back, 270 = right
+  pitch,    // deg elevation: 8 ≈ character-sheet eye level (default), 58 = the game camera; clamped −30..89
+  dist,     // m from the look point; omit = auto-fit (whole actor incl. wings / tail / sword, ~10 % margin)
+  height,   // m above its root for the look point; omit = auto (centre of its projected silhouette)
+  dark,     // true: hide the world (world.debug.setVisible(false)); lights, shadows-on-self and glow stay
+  // extras
+  solo,     // hide the other actor in the render (default = dark)
+  forward,  // m along its facing for the look point (omit = auto); with `height`, aims e.g. at a head
+  lockYaw,  // true: sample its facing once at the call; default: the camera follows its facing every frame
+  game,     // true: `yaw` is world-fixed like the gameplay camera (0 = from the south) — the Game button
+})          // → { target, yaw, pitch, dist, height, forward, dark, solo, game, lockYaw, auto: {dist, height} }
+__game.lab.modelView(null)   // → 'off': game camera, HUD, world, AI and god mode restored
+```
+While viewing: dragon AI off and player god mode on (each restored on exit only if the viewer
+changed it), every HUD layer in `#ui` is faded out (class `lab-mv`; the Lab panel stays), the hero's
+mouse aim is pinned along its facing (it never chases the cursor through a side camera), and the
+camera follows the actor each frame (`lab.postUpdate`, before main.js applies the override). The
+auto-fit is measured at the call (and again on resize / Lab panel open-close) from the per-mesh
+bounding boxes of the current pose; with the panel open the actor is centred in the free area to its
+right. `solo` hides the other actor only between `lab.postUpdate` and the next `lab.update` (the
+actors never see their `visible` flag change). Poses are driven as usual — `dragon.debug.trigger(name)`,
+player inputs / methods — and stepped with `__tick(dt, frames)`.
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:

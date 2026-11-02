@@ -90,7 +90,11 @@ const CSS = `
 
 .lab-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; }
 .lab-grid.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.lab-grid.c5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .lab-grid.c6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+/* model viewer: every HUD layer fades out (opacity, so HUD rules that force visibility on
+   descendants cannot leak through); the Lab panel stays */
+#ui.lab-mv > :not(.lab-root) { opacity: 0 !important; pointer-events: none !important; }
 .lab-btn {
   appearance: none;
   margin: 0;
