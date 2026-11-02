@@ -3,10 +3,10 @@
 // src/main.js (construction order, frame order, debugTimeScale in dt). World is a light mock built on
 // the real Colliders. A bot drives the input: it moves, attacks, blocks, parries and dodges.
 // usage: node integ.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI, ABYSS_TRACE=1 logs combat events)
-//   scenario: gate | breath | win | die | parry | block | reach | red | lab | all (default all)
+//   scenario: gate | breath | win | die | parry | block | reach | red | lab | touch | all (default all)
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { ui, fireWin, AUDIO, resetWindow } from './shim.mjs';
+import { ui, fireWin, AUDIO, resetWindow, El } from './shim.mjs';
 
 const ROOT = process.argv[2];
 const SCEN = process.argv[3] || 'all';
@@ -28,6 +28,8 @@ const { TUNING, SCALE } = await imp('src/entities/dragon/tuning.js');
 // scripted placements (place()) were authored for the x1.25 wyrm: they scale with its size
 const SIZE = SCALE / 1.25;
 const { Hud } = await imp('src/ui/hud.js');
+const { TouchControls } = await imp('src/ui/touch.js');
+const { Input } = await imp('src/core/input.js');
 const { AudioEngine } = await imp('src/audio/audio.js');
 const { GameFlow } = await imp('src/game/flow.js');
 const { Lab } = await imp('src/dev/lab.js');
@@ -90,7 +92,7 @@ const TELLS = new Set(Object.values(TELL));
 const typeOk = (t, v) => (t === 'n' ? Number.isFinite(v) : t === 's' ? typeof v === 'string' : t === 'b' ? typeof v === 'boolean' : t === 't' ? TELLS.has(v) : t === 'p' ? !!v && [v.x, v.y, v.z].every(Number.isFinite) : true);
 const payloadErrors = new Set();
 
-function build() {
+function build(opts = {}) {
   resetWindow();
   Math.random = mulberry32(SEED);
   ui.children.forEach((c) => (c.parentNode = null));
@@ -158,17 +160,25 @@ function build() {
     };
     return p;
   };
+  // opts.realInput: the real core/input.js on a mock canvas (#game) — the touch scenario drives it
+  // through the touch controls' pointer events instead of the mock above
+  let canvasEl = null;
+  if (opts.realInput) {
+    canvasEl = new El('canvas');
+    canvasEl.id = 'game';
+    ui.parentNode.appendChild(canvasEl);
+  }
   const game = {
-    THREE, CONFIG, renderer: null, scene, fxScene: new THREE.Scene(), camera,
+    THREE, CONFIG, renderer: canvasEl ? { domElement: canvasEl } : null, scene, fxScene: new THREE.Scene(), camera,
     pipeline: { finalMat: { uniforms: finalU } }, U,
-    events: new Events(), input, cameraRig: new CameraRig(camera), lights: new LightPool(U),
+    events: new Events(), input: opts.realInput ? new Input(canvasEl) : input, cameraRig: new CameraRig(camera), lights: new LightPool(U),
     fx: { alpha: mkParticles({ max: 3000, additive: false }), add: mkParticles({ max: 7000, additive: true }) },
     time: 0, realTime: 0, timeScale: 1, debugTimeScale: 1, hitstopTimer: 0, hitstopScale: 1,
     mouseGround: new THREE.Vector3(), state: 'title', settings: { quality: CONFIG.defaultQuality, showFps: false },
     hitstop(seconds, scale = 0.04) { this.hitstopTimer = Math.max(this.hitstopTimer, seconds); this.hitstopScale = Math.min(this.hitstopScale, scale); },
     shake(a) { if (!Number.isFinite(a)) throw new Error('NaN shake'); this.cameraRig.addTrauma(a); },
   };
-  const G = { game, input, evLog: [], counts: {}, counters, finalU, logTimes: [], hits: [], watch: null, defend: null };
+  const G = { game, input: game.input, canvas: canvasEl, evLog: [], counts: {}, counters, finalU, logTimes: [], hits: [], watch: null, defend: null };
   // event log + payload contract check (a wrapper, not a subscriber: it must not count as a consumer)
   const emit = game.events.emit.bind(game.events);
   game.events.emit = (n, d) => {
@@ -183,12 +193,13 @@ function build() {
     G.defend?.onEvent(n, d);
     emit(n, d);
   };
-  // construction order = main.js: world, audio, player, dragon, hud, flow, lab
+  // construction order = main.js: world, audio, player, dragon, hud, touch, flow, lab
   game.world = world;
   game.audio = new AudioEngine(game);
   game.player = new Player(game);
   game.dragon = new Dragon(game);
   game.hud = new Hud(game);
+  game.touch = new TouchControls(game); // inert until a touch (no coarse pointer headless)
   game.flow = new GameFlow(game);
   game.lab = new Lab(game);
   game.applyQuality = () => {};
@@ -244,6 +255,7 @@ function build() {
     game.dt = dt;
     game.realDt = realDt;
     if (AUDIO.ctx) AUDIO.ctx.currentTime += realDt;
+    safe('touch', () => game.touch.update(realDt));
     safe('lab', () => game.lab.update(realDt));
     safe('flow', () => game.flow.update(dt, realDt));
     safe('player', () => game.player.update(dt));
@@ -1181,7 +1193,194 @@ async function scenarioHero() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie };
+// ================================================================== scenario: touch controls
+// The REAL core/input.js fed by the touch controls (src/ui/touch.js) through pointer events on
+// their DOM, exactly like a phone: tap / hold ATTACK, a timed BLOCK tap parries, DODGE rolls,
+// the stick moves (rim = sprint), LOCK / FLASK / || pause, the prompt tap, auto-aim, the phone
+// camera + pinch, the title tap, synthetic mouse after a touch ignored, portrait overlay + pause.
+async function scenarioTouch() {
+  out('\n== scenario TOUCH (virtual stick + buttons → real Input: tap / hold attack, parry, dodge, move) ==');
+  const W0 = globalThis.innerWidth, H0 = globalThis.innerHeight;
+  globalThis.innerWidth = 844; // a phone in landscape
+  globalThis.innerHeight = 390;
+  const G = build({ realInput: true });
+  const { game, counts } = G;
+  const input = game.input, t = game.touch, p = game.player, d = game.dragon, rig = game.cameraRig;
+  const c = (n) => counts[n] || 0;
+  const touch = (type, target, id, x = 0, y = 0) => target.dispatch(type, { pointerType: 'touch', pointerId: id, clientX: x, clientY: y });
+  const frames = (s, each) => { for (let i = 0, n = Math.round(s / DT); i < n; i++) { each?.(i); G.tick(DT); } };
+  const rotateOn = () => !!document.body.find((e) => e.classList?.contains('tc-rotate'))?.classList.contains('on'); // overlay lives on <body>
+  // desktop: nothing changes until a touch arrives
+  assert(t.active === false && !cls('tc-root') && !rig.mobile && rig.targetDistance === CONFIG.camera.distance, 'inert without a touch: no touch DOM, desktop camera');
+  assert(typeof input.setVirtual === 'function' && typeof input.setVirtualAxis === 'function', 'real Input exposes the virtual-source API');
+  run(G, 1.0, { passive: true });
+  // the first touch on the title turns the touch UI on and dismisses "press any key"
+  fireWin('pointerdown', { pointerType: 'touch', pointerId: 1, target: G.canvas, clientX: 420, clientY: 200 });
+  G.tick(DT);
+  fireWin('pointerup', { pointerType: 'touch', pointerId: 1, target: G.canvas });
+  assert(t.active && !!cls('tc-root') && cls('ab-root')?.classList.contains('ab-touch'), 'first touch → touch UI on (HUD in touch layout)');
+  assert(game.state === 'explore', `title tap → explore (got ${game.state})`);
+  assert(game.settings.quality === CONFIG.defaultQualityTouch, `touch → quality ${CONFIG.quality[game.settings.quality]?.name}`);
+  assert(rig.mobile && rig.targetDistance === CONFIG.camera.mobileDistance && rig.maxExtraZoom === CONFIG.camera.mobileMaxExtraZoom, `phone camera: ${rig.targetDistance} m, extra zoom ≤ ${rig.maxExtraZoom} m`);
+  fireWin('mousedown', { button: 0, target: G.canvas });
+  assert(!input.mousePressed(0), 'the compatibility mousedown after a touch is ignored');
+  input.endFrame();
+
+  fightSetup(G);
+  const B = (id) => cls(`tc-${id}`);
+  const atk = B('attack'), blk = B('block'), dge = B('dodge'), flask = B('flask'), lock = B('lock'), pause = B('pause'), zone = cls('tc-zone');
+  assert(atk && blk && dge && flask && lock && pause && zone, 'stick zone + ATTACK / BLOCK / DODGE / FLASK / LOCK / || built');
+  run(G, 0.2, { passive: true });
+  assert(!cls('tc-root').classList.contains('off'), 'controls shown in the fight');
+  // auto-aim: game.mouseGround sits on the dragon's lock point
+  const lp = new THREE.Vector3();
+  settle(G);
+  place(G, 7);
+  G.tick(DT);
+  d.lockPoint(lp);
+  assert(t.autoAim && Math.hypot(game.mouseGround.x - lp.x, game.mouseGround.z - lp.z) < 0.3, 'fight: auto-aim puts mouseGround on the dragon');
+  const kinds = [];
+  G.watch = (n, e) => { if (n === 'player:attack') kinds.push(e.kind); };
+  // tap ATTACK → light swing
+  settle(G); place(G, 6);
+  touch('pointerdown', atk, 11);
+  frames(0.1);
+  touch('pointerup', atk, 11);
+  frames(0.6);
+  assert(kinds[0] === 'light', `ATTACK tap → light swing (${kinds.join(',')})`);
+  // hold ATTACK → charge, release → thrust
+  settle(G); place(G, 6);
+  kinds.length = 0;
+  touch('pointerdown', atk, 12);
+  let charged = false;
+  frames(0.9, () => { if (p.state === 'charge') charged = true; });
+  G.tick(DT);
+  const meter = atk.find((e) => e.classList?.contains('t'))?.textContent ?? '';
+  touch('pointerup', atk, 12);
+  frames(0.8);
+  assert(charged && kinds.includes('thrust'), `ATTACK hold 0.9 s → charge → thrust on release (${kinds.join(',')})`);
+  assert(/^\[#+\.*\]$/.test(meter), `ATTACK shows the ASCII charge meter while held ("${meter}")`);
+  G.watch = null;
+  // DODGE → roll
+  settle(G); place(G, 8);
+  const r0 = c('player:roll');
+  touch('pointerdown', dge, 13);
+  frames(0.05);
+  const rolled = p.state === 'roll';
+  touch('pointerup', dge, 13);
+  frames(0.8);
+  assert(rolled && c('player:roll') === r0 + 1, `DODGE → roll (state ${p.state})`);
+  // BLOCK tapped just before the bite lands → parry (timed from the attack's own tell / flash)
+  settle(G); place(G, 6);
+  let impactT = null;
+  G.watch = (n, e) => {
+    if (e?.attack !== 'bite') return;
+    if (n === 'combat:tell' && impactT === null) impactT = game.time + e.impactIn;
+    if (n === 'combat:flash') impactT = game.time + TUNING.flashLead;
+  };
+  const pr0 = c('player:parry');
+  assert(game.lab.trigger('bite') === true, 'lab.trigger(bite)');
+  let pressedAt = null, liftAt = -1;
+  for (let i = 0; i < Math.round(5 / DT); i++) {
+    if (impactT !== null && pressedAt === null && impactT - game.time - DT <= 0.12) { pressedAt = impactT - game.time; touch('pointerdown', blk, 14); liftAt = i + 4; }
+    if (i === liftAt) touch('pointerup', blk, 14);
+    G.tick(DT);
+    if (c('player:parry') > pr0 && i > liftAt) break;
+  }
+  G.watch = null;
+  assert(c('player:parry') === pr0 + 1, `BLOCK tap ${(pressedAt ?? NaN).toFixed(2)} s before the bite → parry`);
+  // BLOCK held → guard up
+  settle(G);
+  touch('pointerdown', blk, 15);
+  frames(0.3);
+  const guarded = p.state === 'block' && p.blocking;
+  touch('pointerup', blk, 15);
+  frames(0.3);
+  assert(guarded && p.state !== 'block', `BLOCK hold → block, release → guard down (${p.state})`);
+  // stick: up = north, the rim = sprint; release stops
+  settle(G); place(G, 14);
+  const z0 = p.position.z;
+  touch('pointerdown', zone, 16, 150, 300);
+  touch('pointermove', zone, 16, 150, 262); // 38 px of 52: past runAt, full run speed
+  frames(0.6);
+  const ran = p.state === 'run' && p.position.z < z0 - 1.5;
+  const ax = input.moveAxis();
+  touch('pointermove', zone, 16, 150, 230); // past the rim
+  frames(0.3);
+  const sprinted = p.state === 'sprint' && input.down('ShiftLeft');
+  touch('pointerup', zone, 16);
+  frames(0.5);
+  assert(ran && Math.abs(ax.x) < 1e-6 && ax.y > 0.99, `stick up → hero runs north (Δz ${(p.position.z - z0).toFixed(2)} m, axis ${ax.x.toFixed(2)},${ax.y.toFixed(2)})`);
+  assert(sprinted, 'stick at the rim → sprint (ShiftLeft held)');
+  const ax2 = input.moveAxis();
+  assert((p.state === 'idle' || p.state === 'run') && !input.down('ShiftLeft') && ax2.x === 0 && ax2.y === 0, `stick release → stops, sprint off (${p.state})`);
+  // LOCK toggles lock-on; FLASK drinks
+  const tapBtn = (b, id) => { touch('pointerdown', b, id); frames(0.05); touch('pointerup', b, id); frames(0.1); };
+  settle(G); place(G, 8);
+  tapBtn(lock, 17);
+  const locked = p.lockOn;
+  tapBtn(lock, 18);
+  assert(locked && !p.lockOn, 'LOCK toggles lock-on (Tab)');
+  settle(G);
+  p.hp = 50;
+  const h0 = c('player:heal');
+  tapBtn(flask, 19);
+  frames(1.0);
+  assert(c('player:heal') === h0 + 1, 'FLASK → drink (KeyF)');
+  // || → pause; controls hide and every virtual input is released
+  touch('pointerdown', atk, 20);
+  tapBtn(pause, 21);
+  assert(game.state === 'paused' && cls('tc-root').classList.contains('off') && !input.mouseDown(0), `|| → paused, controls hidden + released (${game.state})`);
+  touch('pointerup', atk, 20);
+  game.flow.resume();
+  frames(0.2);
+  // pinch: two bare-screen fingers zoom the camera within the phone range
+  const z1 = rig.targetDistance;
+  fireWin('pointerdown', { pointerType: 'touch', pointerId: 31, target: G.canvas, clientX: 400, clientY: 150 });
+  fireWin('pointerdown', { pointerType: 'touch', pointerId: 32, target: G.canvas, clientX: 500, clientY: 150 });
+  fireWin('pointermove', { pointerType: 'touch', pointerId: 32, clientX: 500, clientY: 150 });
+  fireWin('pointermove', { pointerType: 'touch', pointerId: 32, clientX: 600, clientY: 150 });
+  fireWin('pointerup', { pointerType: 'touch', pointerId: 31 });
+  fireWin('pointerup', { pointerType: 'touch', pointerId: 32 });
+  assert(rig.targetDistance < z1 - 3 && rig.targetDistance >= CONFIG.camera.mobileMinDistance, `pinch apart → closer (${z1} → ${rig.targetDistance.toFixed(1)} m)`);
+  // explore at the bonfire: the "[E] Rest" prompt is a tap target
+  assert(game.flow.debug.toState('explore') === true, 'toState(explore)');
+  frames(0.3);
+  const rest0 = c('bonfire:rest');
+  assert(/\[E\]/.test(game.hud.promptText ?? ''), `prompt up at the bonfire ("${game.hud.promptText}")`);
+  touch('pointerdown', game.hud.promptEl, 22);
+  frames(0.05);
+  touch('pointerup', game.hud.promptEl, 22);
+  frames(0.2);
+  assert(c('bonfire:rest') === rest0 + 1, 'prompt tap → rest at the bonfire (KeyE)');
+  // auto-aim off (dragon asleep): aim follows the stick
+  touch('pointerdown', zone, 23, 150, 300);
+  touch('pointermove', zone, 23, 190, 300); // right = east
+  frames(0.1);
+  touch('pointerup', zone, 23);
+  frames(0.05);
+  assert(!t.autoAim && game.mouseGround.x > p.position.x + 3 && Math.abs(game.mouseGround.z - p.position.z) < 0.5, 'no target: aim follows the stick (east)');
+  // portrait: rotate overlay, the game pauses, controls off
+  globalThis.innerWidth = 390;
+  globalThis.innerHeight = 844;
+  frames(0.1);
+  assert(t.portrait && rotateOn() && game.state === 'paused', `portrait → rotate overlay + paused (${game.state})`);
+  globalThis.innerWidth = 844;
+  globalThis.innerHeight = 390;
+  frames(0.1);
+  assert(!t.portrait && !rotateOn(), 'landscape again → overlay gone (pause menu waits)');
+  game.flow.resume();
+  frames(0.1);
+  // the Lab switch turns it all off again: desktop camera, quality and HUD back
+  t.setActive(false);
+  frames(0.05);
+  assert(!t.active && !rig.mobile && rig.targetDistance === CONFIG.camera.distance && game.settings.quality === CONFIG.defaultQuality && !cls('ab-root')?.classList.contains('ab-touch'), 'setActive(false) → desktop camera, quality and HUD back');
+  globalThis.innerWidth = W0;
+  globalThis.innerHeight = H0;
+  return G;
+}
+
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie, touch: scenarioTouch };
 const runs = [];
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
