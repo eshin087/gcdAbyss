@@ -36,6 +36,9 @@ export function createSharedUniforms() {
     uPlayerScreen: { value: new THREE.Vector4(0.5, 0.5, 1e9, 0) }, // uv x, uv y, view depth, unused
     uResolution: { value: new THREE.Vector2(1, 1) },
     uCullDist: { value: 60 },
+    // creature ASCII art: 1 = materials feed the pass a smooth shaded source (no surface-glyph gaps),
+    // 0 = the patterned surface render (look-dev A/B; see FLAG.ART in materials.js)
+    uArtSolid: { value: 1 },
   };
 }
 

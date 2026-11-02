@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
 import { FS_VERT } from './shaderLib.js';
-import { createGridAtlas, GRID_COLS, GRID_ROW } from './glyphs.js';
+import { createGridAtlas, createArtAtlas, GRID_COLS, GRID_ROW } from './glyphs.js';
 
 // Frame pipeline:
 //   1. moon shadow map  (casters = objects on LAYER_CASTER)
@@ -76,6 +76,9 @@ export class Pipeline {
     // --- ASCII grid pass (see FLAG in materials.js and GRID_ROW in glyphs.js)
     this.cell = new THREE.Vector2(7, 12);
     this.grid = null;
+    // finer character grid for the hero / wyrm ASCII art (FLAG.ART), owner's choice: ~5x8 px letters
+    this.artCell = new THREE.Vector2(4, 7);
+    this.art = null;
     this.asciiMat = new THREE.ShaderMaterial({
       uniforms: {
         tScene: { value: this.sceneRT.texture },
@@ -94,6 +97,13 @@ export class Pipeline {
         uInvViewProj: { value: new THREE.Matrix4() },
         uNear: { value: 1 },
         uFar: { value: 200 },
+        tArt: { value: null },
+        uArtCell: { value: this.artCell },
+        uArtCount: { value: 22 },
+        uArtLum: { value: 4.5 }, // brightness -> ramp position: 1 - exp(-luma * k)
+        uArtMin: { value: 0.3 }, // glyph value at the dark end of the ramp
+        uArtMax: { value: 1.25 }, // glyph value at the bright end
+        uArtDither: { value: 1.6 }, // per-cell ramp jitter (in letters): the images' letter variety
       },
       vertexShader: FS_VERT,
       fragmentShader: /* glsl */ `
@@ -113,6 +123,13 @@ export class Pipeline {
         uniform mat4 uInvViewProj;
         uniform float uNear;
         uniform float uFar;
+        uniform sampler2D tArt;
+        uniform vec2 uArtCell;
+        uniform float uArtCount;
+        uniform float uArtLum;
+        uniform float uArtMin;
+        uniform float uArtMax;
+        uniform float uArtDither;
         varying vec2 vUv;
 
         float hash12(vec2 p) {
@@ -183,8 +200,47 @@ export class Pipeline {
           return mix(c.rgb * uCreatureBg, c.rgb * uCreatureGain, m);
         }
 
+        bool isArt(float a) { return a > 0.46 && a < 0.55; }
+
+        // ---- ASCII art (hero / wyrm): the creature's crisp render is the source image of a fine grid.
+        // Each cell averages 4 samples; a letter from the density-sorted ART_CHARS ramp is picked by
+        // brightness (plus per-cell jitter for the images' letter variety) and keeps the source hue
+        // (white scales, orange lava, red wings, cyan blade) on a black backing.
+        vec3 artCell(vec3 c, vec2 acell, vec2 local) {
+          float lum = luma(c);
+          float v = 1.0 - exp(-lum * uArtLum);
+          float jit = (hash12(acell * 1.37 + 11.0) - 0.5) * uArtDither;
+          float idx = clamp(floor(v * (uArtCount - 1.0) + 0.5 + jit), 1.0, uArtCount - 1.0);
+          float m = texture2D(tArt, vec2((idx + local.x) / uArtCount, local.y)).a;
+          float mx = max(max(c.r, c.g), c.b);
+          vec3 hue = c / max(mx, 1e-4);
+          // saturated emissive parts (lava, the cyan blade, eyes) stay HDR so they bloom; bright but
+          // colourless parts (claws, teeth) don't, or they swell into glowing orbs
+          float sat = (mx - min(min(c.r, c.g), c.b)) / max(mx, 1e-4);
+          vec3 fg = hue * mix(uArtMin, uArtMax, v) * mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat));
+          return fg * m;
+        }
+
         void main() {
           vec2 px = gl_FragCoord.xy;
+          // creatures first: their own finer grid
+          vec2 acell = floor(px / uArtCell);
+          vec2 abase = acell * uArtCell;
+          vec3 asum = vec3(0.0);
+          float ahits = 0.0;
+          for (int i = 0; i < 4; i++) {
+            vec2 o = vec2(i == 1 || i == 3 ? 0.75 : 0.25, i >= 2 ? 0.75 : 0.25);
+            vec4 sa = texture2D(tScene, (abase + o * uArtCell) / uRes);
+            if (isArt(sa.a)) { asum += sa.rgb; ahits += 1.0; }
+          }
+          if (ahits >= 2.0) {
+            gl_FragColor = vec4(artCell(asum / ahits, acell, (px - abase) / uArtCell), 1.0);
+            return;
+          }
+          if (isArt(texture2D(tScene, px / uRes).a)) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); // creature edge sliver: black, like the images
+            return;
+          }
           vec2 cell = floor(px / uCell);
           vec2 cuv = (cell + 0.5) * uCell / uRes;
           vec4 c = texture2D(tScene, cuv);
@@ -195,6 +251,8 @@ export class Pipeline {
             col = texture2D(tScene, px / uRes).rgb; // untagged: pass through
           } else if (a < 0.46) {
             col = creatureCell(c, cell, local);
+          } else if (isArt(a)) {
+            col = texture2D(tScene, px / uRes).rgb; // world cell centred on a creature edge: raw pixel
           } else if (a < 0.8) {
             float l = 1.0 - exp(-luma(c.rgb) * uLumMap);
             float level = clamp(floor(l * 14.0), 0.0, 13.0);
@@ -356,6 +414,16 @@ export class Pipeline {
       this.cell.set(cellW, cellH);
       this.grid = createGridAtlas(cellW, cellH);
       this.asciiMat.uniforms.tGrid.value = this.grid.texture;
+    }
+    // creature ASCII art: ~2/3 of the world cell (owner: "smaller letters" so the hero gets rows)
+    const artH = Math.max(7, Math.round(H / 135));
+    const artW = Math.max(4, Math.round(artH * 0.6));
+    if (!this.art || artW !== this.artCell.x || artH !== this.artCell.y) {
+      this.art?.texture.dispose();
+      this.artCell.set(artW, artH);
+      this.art = createArtAtlas(artW, artH);
+      this.asciiMat.uniforms.tArt.value = this.art.texture;
+      this.asciiMat.uniforms.uArtCount.value = this.art.count;
     }
   }
 

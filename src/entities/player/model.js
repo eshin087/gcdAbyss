@@ -679,9 +679,15 @@ export function setHeroGlyphScale(mats, dist) {
 // glyphs sit on pure black) and averages a mid grey; only the blade, the gem, the buckles and the
 // hair tips glow. `inkGlow` (≈0.13 on cloth) keeps the shadow side a dim field of carets; outline
 // / rim stay low (the panel has no drawn outline): the black gaps between glyphs carry the form.
+/**
+ * Brightness of the smooth source the creature ASCII-art pass converts (FLAG.ART): ~0.6 keeps the
+ * owner's reference look (dense letters on lit faces, sparse ': ; i r' in shadow, dark gaps).
+ */
+export const ART_GAIN = 0.62;
+
 export function createHeroMaterials(U) {
   const S = (o, { max = null, lockX = false, fixed = false, zoomNear = null } = {}) => {
-    const m = createSurfaceGlyphMaterial(U, { glyphZoom: 0.62, ...o });
+    const m = createSurfaceGlyphMaterial(U, { glyphZoom: 0.62, artGain: ART_GAIN, ...o });
     if (!fixed && o.cell) {
       m.userData.cell = o.cell.slice();
       if (max) m.userData.cellMax = max;

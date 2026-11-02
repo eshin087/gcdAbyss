@@ -115,6 +115,60 @@ const RAMP_ROWS = {
   edge: ramp(['||!|', '-_-~', '////', '\\\\\\\\']),
 };
 
+/**
+ * Character set of the creature ASCII-art pass (the owner's reference images: classic image-to-text
+ * art). The atlas sorts it by measured ink coverage, so the shader can index it as a density ramp.
+ */
+export const ART_CHARS = ' .:;irsX235hAHSGM9#&B@';
+
+/**
+ * Pixel-exact single-row atlas of ART_CHARS sorted from sparse to dense, each glyph exactly
+ * cellW x cellH px. Returns { texture, count }.
+ */
+export function createArtAtlas(cellW, cellH) {
+  const chars = [...ART_CHARS];
+  const size = Math.max(6, Math.round(cellH * 0.98));
+  const font = `700 ${size}px ${FONT_STACK}`;
+  // measure ink coverage per glyph at the target size, then sort sparse -> dense
+  const probe = document.createElement('canvas');
+  probe.width = cellW;
+  probe.height = cellH;
+  const pctx = probe.getContext('2d', { willReadFrequently: true });
+  const ink = (ch) => {
+    pctx.clearRect(0, 0, cellW, cellH);
+    if (ch === ' ') return 0;
+    pctx.fillStyle = '#fff';
+    pctx.textAlign = 'center';
+    pctx.textBaseline = 'middle';
+    pctx.font = font;
+    pctx.fillText(ch, cellW / 2, cellH / 2 + 0.5);
+    const d = pctx.getImageData(0, 0, cellW, cellH).data;
+    let s = 0;
+    for (let i = 3; i < d.length; i += 4) s += d[i];
+    return s;
+  };
+  const sorted = chars.map((ch, i) => ({ ch, i, v: ink(ch) })).sort((a, b) => a.v - b.v || a.i - b.i);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = sorted.length * cellW;
+  canvas.height = cellH;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = font;
+  sorted.forEach(({ ch }, col) => {
+    if (ch !== ' ') ctx.fillText(ch, col * cellW + cellW / 2, cellH / 2 + 0.5);
+  });
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return { texture: tex, count: sorted.length };
+}
+
 /** Pixel-exact atlas: one row per GRID_ROW entry, each glyph exactly cellW x cellH px. */
 export function createGridAtlas(cellW, cellH) {
   const cols = GRID_COLS;
