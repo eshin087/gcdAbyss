@@ -22,6 +22,7 @@ const { GlyphParticles } = await imp('src/render/particles.js');
 const { Colliders } = await imp('src/world/colliders.js');
 const { TELL, TELL_STYLE, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
 const { Player } = await imp('src/entities/player/player.js');
+const { DIM: HERO_DIM, setHeroGlyphScale } = await imp('src/entities/player/model.js');
 const { Dragon } = await imp('src/entities/dragon/dragon.js');
 const { TUNING, SCALE } = await imp('src/entities/dragon/tuning.js');
 // scripted placements (place()) were authored for the x1.25 wyrm: they scale with its size
@@ -1125,7 +1126,62 @@ async function scenarioLab() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie };
+// ================================================================== scenario: the hero's rig
+async function scenarioHero() {
+  out('\n== scenario HERO (Shadow Swordsman rig: coat strips, streamers, hair stay finite and above the grass) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const p = game.player, r = p.rig, d = game.dragon;
+  p.debug.god = true;
+  const strips = r.coat.reduce((n, c) => n + c.strips.length, 0);
+  assert(r.coat.length === 7 && strips === 22, `coat skirt: 6 panels + the front flap, ${strips} torn strips`);
+  assert(r.streamers?.length === 2 && Object.keys(r.hair).length === 5, 'two sleeve streamers, five hair clusters');
+  // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
+  p.debug.teleport(d.position.x + 14, d.position.z + 14);
+  const v = new THREE.Vector3();
+  let bad = 0, low = Infinity, tipLow = Infinity, frames = 0;
+  const probe = () => {
+    frames++;
+    p.object3d.traverse((o) => { const e = o.matrixWorld.elements; for (let i = 0; i < 16; i++) if (!Number.isFinite(e[i])) { bad++; break; } });
+    for (const C of r.coat) for (const S of C.strips) { v.set(0, -S.len, 0).applyMatrix4(S.joint.matrixWorld); low = Math.min(low, v.y); }
+    v.set(0, 0, HERO_DIM.steelTip).applyMatrix4(r.sword.matrixWorld);
+    tipLow = Math.min(tipLow, v.y);
+  };
+  const go = (s) => { for (let i = 0, n = Math.round(s / DT); i < n; i++) { G.tick(DT); probe(); } };
+  input.axis = { x: 0, y: 1 };
+  go(1.0);
+  input.hold('ShiftLeft');
+  go(1.0);
+  input.release('ShiftLeft');
+  input.axis = { x: 0, y: 0 };
+  go(0.4);
+  input.tap('Space');
+  go(0.9);
+  for (let k = 0; k < 3; k++) { input.click(0); go(0.45); }
+  go(0.8);
+  input.press(0);
+  go(1.4);
+  input.up(0);
+  go(1.0);
+  assert(!bad, `rig matrices stay finite through every move (${frames} frames)`);
+  assert(low > -0.02, `torn strip tips stay above the grass (lowest ${low.toFixed(3)} m)`);
+  assert(tipLow > -0.06, `the steel point never sinks into the ground (lowest ${tipLow.toFixed(3)} m)`);
+  // glyph cells follow the view distance: the in-game size at the 36 m camera, finer in close-ups
+  // (small parts capped, the blade's two columns fixed); a bad distance never yields NaN
+  const coatU = r.materials.coat.uniforms.uCell.value;
+  const kFar = setHeroGlyphScale(r.mats, 36);
+  const farY = coatU.y;
+  const kNear = setHeroGlyphScale(r.mats, 3);
+  const nearY = coatU.y;
+  assert(kFar === 1 && kNear < 0.5 && nearY < farY * 0.5 && r.materials.hair.uniforms.uCell.value.x <= 0.045 + 1e-9 && r.materials.blade.uniforms.uCell.value.x === 0.045,
+    `glyph cells scale with the view distance (coat row ${farY.toFixed(3)} m at 36 m → ${nearY.toFixed(3)} m at 3 m)`);
+  setHeroGlyphScale(r.mats, NaN);
+  assert(r.mats.every((m) => Number.isFinite(m.uniforms.uCell.value.x + m.uniforms.uCell.value.y + m.uniforms.uGlyphZoom.value)), 'a bad view distance leaves every glyph cell finite');
+  return G;
+}
+
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie };
 const runs = [];
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
