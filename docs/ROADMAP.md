@@ -31,6 +31,10 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Hero after the Shadow Swordsman sheet (model, poses, slam finisher, lunge thrust, cyan FX)
 - [x] Wyrm after the Obsidian Drake sheet, 1.5× bigger; player reach band; hero-first boss camera
 - [x] Carved-glyph stones and half-sunk flagstones
+- [x] Lab model viewer + builder specs from the sheets (docs/art)
+- [x] Four-legged drake rebuild (art score 2 → 6) and closer hero (2.5 → 4.5)
+- [ ] Next look round: hero hair mass, the blade read from behind at the game camera, small
+      details (straps, boots)
 - [ ] Owner approval on the PR preview
 
 ## M2 — RPG foundations (v0.3)

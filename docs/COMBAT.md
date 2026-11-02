@@ -80,11 +80,16 @@ defence timings in `TUNE` (`player.js`).
 
 | Move | Input | Timing (windup / active / recovery) | Damage | Posture | Notes |
 |---|---|---|---|---|---|
-| Light 1 — sweep | LMB tap | 0.14 / 0.11 / 0.22 s (0.47 s) | 30 | 5 | blade drawn back over the right shoulder, horizontal sweep right → left, cyan arc |
-| Light 2 — backhand | LMB tap in the recovery | 0.14 / 0.11 / 0.22 s | 32 | 5 | left → right |
-| Slam — combo finisher | 3rd tap | 0.40 / 0.12 / 0.48 s (1.0 s) | 58 | 16 | two-handed overhead raise → slam into the ground; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
-| Thrust — charged | hold LMB ≥ 0.3 s, release | 0.07 / 0.20 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | low crouched charge (moves at ×0.4); the hero lunges 2.2–3.6 m along the facing; long cyan streak |
+| Light 1 — sweep | LMB tap | 0.14 / 0.11 / 0.22 s (0.47 s) | 30 | 5 | coiled low at the right hip (blade back-right, 15° down), sweeps round the front at chest height to left-back, then rises up-left over the head; cyan crescent |
+| Light 2 — backhand | LMB tap in the recovery | 0.14 / 0.11 / 0.22 s | 32 | 5 | left → right, the mirror of light 1 (rising finish) |
+| Slam — combo finisher | 3rd tap | 0.40 / 0.12 / 0.48 s (1.0 s) | 58 | 16 | two-handed: the blade rises past the head and hangs down the back at the apex (torso arched), then slams into the ground; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
+| Thrust — charged | hold LMB ≥ 0.3 s, release | 0.07 / 0.20 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | deep crouched charge, sword two-handed at the right hip pointing back-down (moves at ×0.4; lightning crawls on the blade past half charge); the release lunges 2.2–3.6 m along the facing with both arms driven out; a thin straight cyan beam |
 
+- Poses follow the owner's key-pose sheets (`docs/art/hero.md` §4); the timings above are unchanged
+  by them. The dodge roll stays 0.6 s (the sheet draws 0.55 s; shortening it is a tuning decision
+  that would move the i-frames, so it was not taken). The light sweeps keep an eased arc whose
+  front crossing lands at mid-active: a faster ease (closer to the sheet's 0.17 s "commit" frame)
+  swung past the front before the step-in assist closed the gap and lost the 3–3.5 m REACH cases.
 - Pacing: the next light starts right after the active frames; a roll / flask cancels a recovery
   after 35 %, movement after 60 %; RMB raises the guard out of any windup (not the active frames).
 - **Reach against giant targets** (`REACH`): the wyrm's chest hangs 2–4 m above the grass, above a
@@ -99,8 +104,36 @@ defence timings in `TUNE` (`player.js`).
 - Player: HP 160, 5 flasks (+70 HP), roll 0.6 s with i-frames 0.04–0.4 s, light combo 30/32 + slam
   58, charged thrust 70–110 by charge (moveset table above).
 - Cinder Wyrm: HP 1500, see `src/entities/dragon/tuning.js` for every attack's tell and timings.
-  Size ×1.875 (v0.3, `SCALE`; ~30 m nose to tail): reaches, radii, hurt spheres and AI ranges
-  scale with it, windups / tells / flash timing do not. The hero does not grow, so the 3D swings
-  were re-measured at this size: the bite needs ≥ 3.7 model units (6.9 m) from the root (closer it
-  passes over the hero), the wing-claw swipe connects 7.5–9.75 m out (wrist sphere 1.35 × SCALE,
-  the bigger thumb claw), the bite head snap is 18/s so the blow lands on the announced impact.
+  Size ×1.875 (`SCALE`): reaches, radii, hurt spheres and AI ranges scale with it, windups / tells
+  / flash timing do not. v0.4 four-legged rebuild (docs/art/dragon.md): every ability keeps its
+  name, tell, windup, flash timing and damage; who does the work changed, so the 3D swings were
+  re-measured against the (unscaled) hero in the integration sims (model units from the root):
+  - bite: the short S-neck (3.2 chain from a neck base 1.7 ahead of the root) lands it 3–6.5 out
+    (was 3.7–8.4 with the wyvern's long neck); head snap 18/s, snout sphere 1.05 × SCALE.
+  - swipe: now a FORELEG rake (paw sphere 1.1, wrist 0.8, forearm 0.75 × SCALE; 0.5 forward
+    lunge) landing 2–5.5 out from ~23° to ~77° off the nose (2.75–5.5 beyond ~66°: right beside
+    the shoulder the paw passes over the hero); the claw combo's three hits all land 3–5.4.
+  - stomp: rears up on the hind legs (`pose.rear`: both forefeet leave the ground), slams the
+    forefeet down onto (±1.2, 0, 2.9); the slam ring is unchanged (centre 2.9 ahead = between the
+    two landing paws, r 4.5). Its tell part is 'forefeet' (the red flash bursts at both paws).
+  - The hero is kept out from under the belly by a loins body circle (1.15 × SCALE) between the
+    chest and hips circles; each planted foot adds a 0.45 × SCALE circle.
+  - Stage 2 (attack performances per docs/art/dragon.md §5) re-measured in the sims / Lab:
+    `MOUTH_Z` 5.8 → 4.3 (the short neck spits from ~4.3 ahead), `CHARGE_REACH` 7.15 → 6.8 (snout
+    ~5.65 ahead during the run + its 1.15 sphere; the head goal now leads by the run speed so it
+    doesn't trail behind the chest), tail sweep `reach` 9.6 → 9.5 (the 16-segment tail's tip
+    reaches 8.9 in the spin + its 0.45 sphere + the hero's radius). Every AI pick of bite / swipe /
+    claw combo / tail / stomp lands in the coverage probe, and each hit lands close to its
+    `combat:flash` + `flashLead` across the picked distances (integration verifier, AI start path,
+    1–10 model units × 0–360°, both phases: bite −17…+67 ms, swipe −50…+33, claw combo −17…+33,
+    stomp 0, charge 0…+17, tail −83…+83). Timings, tells and damage unchanged.
+  - Tail sweep windup fix (verifier): the windup curled the tail back toward the player
+    (`tailCurl` = `dir` × 0.06, against the body's 0.35 rad backswing), and with the new resting
+    hook its tip lay over a hero standing straight behind, so the sweep landed on the first active
+    frame, up to 0.2 s before flash + lead (−200 ms AI path, −217 ms Lab path; v0.3 had −133 /
+    −67). It now coils away from the player (`tailCurl` = −`dir` × 0.06, the same side as the
+    backswing and the spin's trailing curl): −83 ms worst (AI path), −67 ms (Lab path).
+  - Look fix round 1 (no gameplay number changed): the wing forearm is 2.6 model units (was 2.05)
+    and the resting wings are mantled HALF in both phases (wrists ~7.5 up, ~14 m), so the two wing
+    hurt spheres (wrist, finger-1 knuckle) sit higher and further out; they were already above the
+    hero's sword band, and every melee band / AI range re-checks unchanged in the sims.

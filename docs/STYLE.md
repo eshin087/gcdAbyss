@@ -49,7 +49,7 @@ History matters here:
 | Trunks, bones, bonfire | screen-grid `STONE` 1.0: symbol ramp `. : - = + * % # 8 & @ M W` + **outline glyphs** (`\| - / \`) on silhouettes / depth steps of raised props | `createAsciiObjectMaterial` → `render/pipeline.js` |
 | Canopies | screen-grid `LEAF` 0.6: blobby ramp `. : o 0 O 8 @` | same |
 | Grass | ~260k instanced quads, each ONE glyph stroke (`\| / \ ' Y V v l i`) **anchored in the world** (no shimmer when the camera moves); gentle slow wind, trample pushers, wing gusts, burnt to ash glyphs; dim world-space soil glyphs between | `world/grass.js`, `world/ground.js` |
-| Hero, wyrm | **crisp surface glyphs**: one glyph per aGUV cell printed on the body, picked by local light, on near-black gaps, plus a moonlit silhouette line on the hero | `createSurfaceGlyphMaterial({ ascii })` |
+| Hero, wyrm | **crisp surface glyphs**: one glyph per aGUV cell printed on the body, picked by local light (a 4-glyph ramp, or a `levels` table of per-cell variants), on near-black gaps, plus a moonlit silhouette line on the hero | `createSurfaceGlyphMaterial({ ascii })` / `({ levels })` |
 | FX | camera-facing glyph particles, additive HDR (bloom) or alpha, drawn after the grid pass | `render/particles.js` |
 | Fire light | pooled point lights (8 visible) lighting every shader | `render/lights.js` |
 | Shadows | moon orthographic shadow map, casters on layer 1 (`markCaster`) | `render/pipeline.js` |
@@ -100,6 +100,27 @@ Rules of thumb:
 
   Override per part with `glyphs` / `cell`. Make aGUV +y run along the limb toward the tip or head,
   so chevrons point "forward" and strokes follow folds and hair.
+- **Panel-style variant tables (`levels`).** The owner's ASCII GAMEPLAY panels put a *different*
+  blocky glyph in every cell, with density and brightness following light. Reproduce that with
+  `levels`: up to 6 light levels (dark → bright), each a string of up to 8 variants picked per cell
+  by hash, e.g. `['', ".'", ':;', 'AV', 'A8BD', '80B@']`. Rules:
+  - The darkest level is empty (`''`) or sparse strokes (`' .:,'`, a space = empty cell), so shadow
+    sides break up into dots and gaps; 10–25 % empty interior cells carry the form.
+  - Mid levels hold the directional glyphs (`A V ^ v`) that follow aGUV; the top levels hold the
+    dense blocks (`8 B 0 D @`). Give each level 3–4 variants: one or two glyphs per level reads as
+    typeset text again.
+  - The level is taken from the light at the cell centre, so glyphs are always whole. The 4-glyph
+    `glyphs` ramp still picks per pixel; `levels: ['.', 'v', '^', 'A']` is that ramp with whole
+    glyphs.
+  - Pair it with `levelInk` for the panels' tonal ramp (grey flanks, near-white lit tops), e.g.
+    `[[0.2,0.2,0.22], ..., [0.8,0.8,0.84]]`. Keep inks desaturated; accents stay on `inkAlt`.
+- **Where the molten / accent colour sits.** On a single mesh, `glowAxis` (object space) puts the
+  `uGlow` seams and `uInkGlow` on the side facing it (`[0,-1,0]`: throat, chest keel, belly) and
+  `inkAxis` raises the `inkAlt` chance there (orange glyphs on the lower flanks), instead of
+  splitting the part into separate lava meshes.
+- **Seams.** `crack: 'voronoi'` draws molten seams as irregular fissures between plates (`crackScale`
+  plates of ~2.5 cells), not the glyph grid; use it on hide and lava plates. `seamAxis: 'y'` keeps
+  only the seams along aGUV y (radiating wing-membrane veins, no cross-hatching; `rowShift: 0`).
 - Wyrm cells are 0.17–0.27 model units on the body (×1.875 in the world: ~12 px at the default
   camera, ~9 px at the boss framing's pull-back) with `lumScale` 3.0–3.5. Scales are `.vVV`: aGUV
   +y runs toward the head on body / neck and toward the body on tail and limbs (`flip`), so each

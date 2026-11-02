@@ -7,6 +7,15 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 Look pass from the owner's v0.2 review (awaiting approval on the PR preview).
 
 ### Added
+- Lab **model viewer** (`lab.modelView`): Front / 3-4 / Side / Back / Game views on a dark
+  backdrop, for comparing the hero and wyrm against the concept sheets.
+- `docs/art/hero.md` and `docs/art/dragon.md`: builder specs measured from the owner's sheets.
+- Surface-glyph material options:
+  - `levels`: per-cell glyph variants per light level
+  - `levelInk`
+  - `glowAxis` / `inkAxis`: object-space underside glow and alt ink
+  - `crack: 'voronoi'` fissures
+  - `seamAxis`
 - Hero moveset from the owner's combat sheet: the 3rd light hit is a two-handed **overhead slam**
   (blue crystal shards). Hold-and-release LMB is a **lunging thrust** (2.2–3.6 m travel). Light
   sweeps leave cyan arc trails.
@@ -16,6 +25,23 @@ Look pass from the owner's v0.2 review (awaiting approval on the PR preview).
   camera zoomed in — for reviewing the hero, the wyrm and the grass up close. "Camera default" resets.
 
 ### Changed
+- **The wyrm is a four-legged drake** (owner's choice), rebuilt from the Obsidian Drake spec:
+  - columnar forelegs and digitigrade hind legs on a deep barrel chest
+  - separate wings resting half-raised like sails
+  - a short thick S-neck
+  - a hide of mixed blocky glyphs with a molten underside
+  - round red membrane glyphs with white bone lines
+
+  A new quadruped gait. Every ability is re-authored for four legs with the same names, tells,
+  windups, timings and damage. Art-director score vs the sheet: 2 → 6 / 10.
+- Hero matched more closely to the Shadow Swordsman sheet:
+  - one tapered torso with a small head and a fringed mop
+  - a tall stand collar
+  - an open A-line coat with ~22 tatters
+  - belts, the stepped right pauldron, armoured boots
+  - a bright 'A'-glyph field like the sheet's ASCII panel, with no neon outline
+
+  Glyphs shrink in close-ups and grow at the game camera. Score: 2.5 → 4.5 / 10.
 - Hero rebuilt after the owner's "Shadow Swordsman" sheet:
   - messy violet-sheen hair and a high collar
   - long black coat with torn purple tails
@@ -43,6 +69,8 @@ Look pass from the owner's v0.2 review (awaiting approval on the PR preview).
   marked by a brief white glint at the timing moment.
 
 ### Fixed
+- The tail sweep could land up to 0.2 s before its timing flash for a hero right behind the wyrm.
+- The wing membrane allocated ~100 KB per frame (`Math.hypot` boxing).
 - The two fallen standing stones' colliders sat off their bodies (walk-through half, blocked
   empty ground).
 

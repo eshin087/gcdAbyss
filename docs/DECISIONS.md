@@ -142,3 +142,18 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - All attacks land from 2–3.5 m in front (REACH scenario).
   - Very large future bosses will crop at the screen edge. That is accepted: readability of the
     player comes first.
+
+## ADR-014 — Four-legged drake; look work is reviewed against the sheets by an independent critic (2026-11-01)
+- **Context:** the restyled wyvern still didn't look like the owner's Obsidian Drake. A wyvern's
+  wings are its front legs, and the art is a quadruped with separate sail-like wings. The owner
+  asked for "as close as possible" and chose the rebuild.
+- **Decision:**
+  - The boss is a quadruped (`buildDrake`), with a new rig/gait and wings that rest half-raised.
+    Every ability keeps its name, tell, windup, flash timing and damage.
+  - Look work follows `docs/art/*.md`. It is checked in the Lab model viewer from the sheets'
+    angles, by an independent reviewer who scores silhouette, proportions, details, colours,
+    glyph rendering, poses and the game-camera read.
+- **Consequences:**
+  - Attack anchors moved to the real striking parts (forefeet, claws, snout, tail).
+  - Hit-timing spreads are measured per ability in COMBAT.md.
+  - Future look passes start from the critic's gap list rather than impressions.

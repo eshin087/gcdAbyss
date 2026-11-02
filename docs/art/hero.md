@@ -740,3 +740,211 @@ show at that scale, it belongs in a close-up only.
    detail.
 4. **Combo layout.** The sheet shows one light attack. Light 2 (the backhand) mirrors it, and the
    heavy slam stays the combo's 3rd hit (DEVLOG 3b).
+
+---
+
+## 7. Implementation notes (rebuild, 2026-11)
+
+What `src/entities/player/model.js`, `anim.js`, `fx.js` and `combat.js` now do, and where they
+depart from this spec.
+
+**Proportions.** Joints are unchanged except the shoulders (±0.17) and the head joint (+0.31 above
+the chest, 1.535 m). The idle stands 0.015 m above `DIM.pivot` (knees ≈165°), so the skull centre
+sits at 1.675 m (radii 0.078 / 0.10 / 0.09), the chin at ≈1.57 m and the crown at ≈1.78 m.
+`DIM.skull` holds the skull offset; the hair and the face are built around it.
+
+**Torso.** One lofted shell (`shellGeometry`: rings from the hips 0.30 W through the waist 0.27 at
+1.21 m and the chest 0.37 to the shoulders) on the spine joint, open at the front (0.08 m at the
+sternum, 0.17 m at the belt). A black shirt panel with 7 silver buttons fills the gap; narrow lapels
+in the `facing` material; a dark spearhead emblem on the back. aGUV x = angle × 0.15, so the glyph
+columns line up down the body. The yoke seam, princess seams and piping lines are not modelled
+(sub-pixel in game).
+
+**Collar.** `collarGeometry`: 1.47 → 1.61 m behind, front corners at 1.635 m, r 0.078 → 0.108, a V
+0.024 → 0.084 m wide. Outside in its own fine-grid `collar` material (cells 0.06 × 0.075: at the
+coat's 0.19 m cells the band held one huge glyph), inside the indigo `lining` (BackSide).
+
+**Hair.** A scalp cap with the face cut out (the hairline runs from +0.03 m at the front to −0.07 m
+behind), then 5 spring clusters: fringe (7 flattened clumps hanging ~75° down plus one strand over
+the right eye), left (the long lock to the jaw plus flicks), right (swept back, so the ear shows),
+crown (8 flicks ≤ 0.045 m, swept back: no star), nape (6 locks down to the collar). Clumps carry +y
+toward their tips, so the fringe reads as a jagged row of points over the eyes. Known gap: from the
+front the fringe still reads a little like a comb standing off the face; in game it is one row of
+cells.
+
+**Coat skirt.** `COAT_PANELS`: six panels plus the front flap, anchored at 1.12 m (`DIM.coatY`
+0.165). Each panel is two solid spring segments (sheets whose curvature radius grows with depth, so
+neighbours form a cone; coat outside, `lining` inside) and 3–4 torn strips (`tatterStrip`: notched
+edges, a claw curl, 1 in 4 forked). That is **22 strips, each on its own spring** (`_strips`:
+gravity + an outward flare − the panel's velocity, its own flutter, and a ground check). Rest flare
+16° (`COAT_FLARE` 0.3) with an idle breeze (back-left blows out the most). Velocity drag is
+`lag × (1 + 0.18 |v|)`: ≈40° behind vertical at the 4.6 m/s run and ≈60° at the 7.2 m/s sprint (the
+sheet's walk is slower than the game's run). Burn holes are not modelled.
+
+**Belts and straps.** W1 (1.21 m) and W2 (1.17 → 1.13 m) leather rings with silver buckles and
+rivets on the spine; H1 (left hip → right thigh, tilted 0.55 rad) with its buckle, and D1 with a
+D-ring and a metal tip, on the pelvis; D2 and its ring on the right thigh; C1 from the right
+collarbone to the left ribs (a tilted ring, so it also crosses the back); the A1 / A2 arm straps; the
+knee-guard straps.
+
+**Pauldron (right only).** P1 / P2 domes on the pauldron joint (it follows the arm 35 %), P3 / P4 arc
+plates on the upper arm itself (they follow it fully), a silver bevel under every plate, S1–S3 as
+flattened upswept blades (S2 / S3 angled out for the top-down star), S4 pointing out, the S5 fang over
+the chest, S6 / S7 down-back. The left shoulder is plain coat.
+
+**Arms.** Right: the sleeve, 3 vambrace lames with bevels, an elbow point, a wrist barb and a
+gauntlet. Left: the sleeve, a leather bracer with 2 silver bands, a silver cuff, and a fingerless
+glove with a skin fingertip patch. **Streamers**: two-segment springs (`_streamers`) from the back
+of the right upper arm (0.54 m) and the left elbow (0.35 m). They hang out ~20° at rest and stream
+back nearly level when running.
+
+**Legs.** Pants taper 0.15 → 0.11. Boots: a shell, 3 shin arc lames with bevels, instep lames, a heel
+and a silver sole welt. Kite knee guards with the top point leaning 15° out, a spike tip and side
+wings.
+
+**Sword.** 1.36 m of steel (pommel tip −0.19 → point `DIM.steelTip` 1.17), the blade 0.095 → 0.08
+wide with a 14 % tip taper. Upswept quillons (span ≈0.25) with inner hooks, cage rails with 3 barbs a
+side, a silver diamond frame around a 0.07 m violet gem proud of both flats, a kite pommel with a
+collar, and ferrules. The hit segment is unchanged (`bladeBase` 0.16 → `bladeTip` 1.5, plus
+`REACH.tipExt` 0.4); the tip's ground clamp uses the steel length. The blade material uses `levels`
+chevrons (2 columns, +y toward the tip) and `seamAxis: 'y'`, so only the edges and the ridge carry
+the cyan seam lines (no ladder). player.js keeps the flats dark at idle (uInkGlow 0.5) and flares
+them through strikes.
+
+**Materials (§3.2 as built).** Every large surface uses `levels` (whole glyphs, picked per cell from
+the cell-centre light) with the caret family at every level, dense `8` only on the lit levels (about
+1 in 7), no bar glyphs and no lone dots (polka dots). Departures from the §3.2 table, all found in
+the browser:
+- `lumScale` 3.5 and `gain` 1.4–1.8, not 5 / 2.4–2.6: at 5 every moonlit cell hit the top level and
+  the bloom turned the figure white.
+- `outline` 0.15–0.45 and `rim` 0.15–0.4, not 1.0–1.4: even 1.1 still read as a neon outline in
+  close-ups, and the game-camera read does not need it.
+- `inkGlow` ≈0.2–0.3 on cloth, with the shadow levels still carets, so the back stays a dim field of
+  glyphs instead of going black.
+- The inks lean slightly warm (r > b) because the moonlight is cold (B/R ≈ 1.7). Measured B/R of the
+  lit pixels is 1.15–1.28 in the dark close-ups (target ≤ 1.15); the remaining blue is the moonlight
+  itself.
+- Skin is `levels` of `' . : o` at 0.04 m, dim and warm, so the face is a sliver of light, not a pair
+  of eyes.
+
+**Poses (§4).** `guard` (idle: right foot ahead, weight left, head turned and tipped down, the sword
+1H at the thigh with the point on the grass ahead of the left boot); `loco` (run: blade back-down
+38°; sprint: lean ≈28°, blade level behind, fist pumping); `slashH` (the coil at the right hip, twist
+−35° → +55°, a rising finish through `elev2` in the attack data); `slamPose` (the windup goes ready →
+raise → blade hanging down the back at the apex, `a0` 3.75 rad through the wrists, the torso arched
+and the head up, then a 45° fold over the impact); `chargeStance` (deep wide crouch, **2H** at the
+right hip, blade back-down); `thrustPose` (the windup whips the blade onto the line, then a 60° → 40°
+lunge with **both arms extended**); `rollPose` (keyed to the six sheet frames on the 0.6 s roll:
+crouch, launch, ball, over the shoulder with the blade flat along the ground behind, a right-knee
+kneel with the point on the grass, a low guard; the blade path is keyed in root axes and converted
+through the body pitch). Timings and damage are unchanged; the dodge stays 0.6 s.
+
+**FX (§4.9).** Sweep arc: an `A` / `8` leading edge, `)` / `|` strokes along the motion, and a `+` /
+`·` halftone tail snapped to a 0.12 m world lattice (0.25–0.35 s). Thrust: a `-` / `=` core laid
+along the line with a `·` halo (thin and straight). Charge: motes, then jagged `/ \ ^` strokes past
+half charge, and a dust ring at full charge. Slam: 12 kite shards fanned across ~160° in the camera
+plane, standing crystals, rock debris and a ground ring. Blade halo: `·` dots on a 0.06 m lattice
+beside both edges and 0.02–0.3 m past the point, always on (dim at idle). Idle gem glints only fire
+while the hilt is steady.
+
+**Cost.** 112 meshes after merging (125 before), ≈14.5k triangles, and the animator takes ≈0.2 ms per
+update in the browser. The `npm test` scenario `hero` drives a run, a sprint, a roll, the light combo
+with the slam and a charged thrust, and checks that every rig matrix stays finite, no strip tip goes
+under the grass and the steel point never sinks into the ground.
+
+**Not done / open.** Burn holes in the panels, the yoke / princess seams, the argyle lining pattern,
+finger plates on the gauntlet, the fringe lifting at the slam apex, and the idle sword's ±3°
+breathing beyond the sway. (The glyph-scale gap of the first build is closed by fix round 1 below.)
+
+### 7.1 Fix round 1 (art-director review: hero 4/10 → this round)
+
+Each P0 / P1 gap of the review, and what was built for it.
+
+- **Glyph scale (P0).** `setHeroGlyphScale(mats, dist)` (model.js) runs every frame from
+  `Player._updateMaterials` with the camera → hero distance: k = clamp(dist / 12, 0.15, 1), so the
+  cells are the in-game size at the 36 m camera (and anywhere past 12 m) and shrink in close-ups:
+  the coat's 0.12 × 0.19 m cell becomes 0.04 × 0.063 m at 4 m (≈30 rows, the panel's field) and
+  ≈0.018 × 0.03 at 1.8 m. Small parts are capped at any distance (hair 0.045 × 0.055, collar
+  0.04 × 0.05, plates 0.05 × 0.06, spikes 0.04 × 0.05), so a curved part never holds one giant glyph
+  cut into stripes. Up close the cloth / plate glyphs also sit smaller in their cells (glyph zoom
+  0.62 → 0.85–1.0), which gives the panel's thin glyphs on black instead of "AAAA" wallpaper. The
+  blade keeps its two columns (width locked); the gem, eye and face keep fixed cells.
+- **Hair (P0).** A wider scalp cap (0.104 × 0.112 × 0.114) rooted with `capPoint`, and every clump is
+  now a flattened tapered lock (`clumpGeometry`: width along X, thickness along the curl, so the
+  fringe is wide side to side, not a fin jutting forward). Fringe: 7 locks, root half-width
+  0.017–0.019, 0.09–0.12 m long, ~72° down, tips curling back toward the face and ending ≈0.02 m in
+  front of it, plus one strand over the right eye. The mop: 13 broad locks rooted round the crown
+  whorl and 10 more at mid-height lie down over the scalp and lift 3–5 cm off it at their ends, so
+  the dome is hidden and the outline is a jagged ring of lock tips 0.04–0.06 m outside the cap; 7
+  shorter temple flicks stick out sideways and back; 3 short near-vertical crown flicks (≤ 0.045 m)
+  and 4 swept-back cowlicks; 6 nape locks. Each lock is split at 60 % of its length: the roots use
+  `hair` (ink ≈[0.22,0.22,0.3], no sheen), the outer 40 % uses `hairTip` (violet alt ink
+  [0.55,0.42,0.95] on 45 % of its cells), so the sheen sits on the strand ends only.
+- **Gem (P0).** The forte under the cage (z 0.125 → `DIM.forte` 0.35) is now dark gunmetal (`armor`)
+  between silver rails (`trim`), and the glyph blade starts above it. The gem is two half-gems at
+  y = ±0.016, each proud of its flat by 0.018 m, inside a silver frame. Gem ink [0.55,0.12,1.3],
+  base [0.22,0.04,0.5], emissive [0.9,0.2,2.2], ink glow 0.45 + 0.4 × the pulse (saturated violet,
+  not blown to white). `gemTick` keeps an always-on violet glow sprite (0.22–0.26 m, [0.6,0.15,1.4])
+  at the gem: a 3–4 px violet point at the game camera.
+- **Game-camera read (P0).** The blade self-lights with distance (`player.bladeFar`, 0 below 10 m →
+  1 at 28 m): the flats' ink glow 0.16 → 2.46, glyph zoom 0.72 → 0.46 (the chevrons fill their
+  cells) and the gaps' base lifts to [0.35,0.7,1.1], so at 36 m the sword is a solid bright cyan line
+  with bloom, the brightest thing on the hero; up close it stays dark steel with glowing edges and
+  ridge (seam glow `uGlow` 1.0 at idle, twice the old value). The `·` halo runs at 9–10 dots/s,
+  alpha ≥ 0.6, dots growing ×2.2 with distance, plus a bright `|` streak 0.06–0.26 m past the
+  point. Cloth stays under the bloom threshold (lit glyph lum ≈0.32–0.36 at the game camera).
+- **Pauldron (P1).** P1 is a shallow open dome shell, P2 a flat band wrapping the deltoid from front
+  to back (0.086 → 0.1 m: 0.03–0.045 m off the sleeve), P3 / P4 arc lames 0.03 m off the arm; every
+  lame has a 0.011 m `bevel` strip proud of its lower edge. The needles are replaced by flattened
+  wedges (`clumpGeometry`, 0.012 m thick, curving back): S1 0.09 × 0.05, S2 0.165 × 0.066 tilted 45°
+  out, S3 0.12 × 0.058 out-up, the fang S5 0.10 × 0.058 down over the chest, and two small wedges on
+  P3 / P4. S4 is gone. Spike outline / rim 0.15.
+- **Collar (P1).** 1.505 → 1.61 m behind, front corners 1.635; r 0.078 → 0.12 at the sides (0.096
+  deep) with a 0.015 m roll; the V opens from 0.028 m at the base to 0.156 m at the top, so the chin
+  and jaw show. Outside `collar` (cloth ink, cells ≤ 0.04 × 0.05); inside `collarIn` (ink
+  [0.3,0.27,0.55], base [0.03,0.025,0.08], self-lit enough to read blue-violet unlit).
+- **Face (P1).** Skin ink [0.78,0.72,0.7] on a warm base, fixed 0.016 m cells of dense `:o` / `o0`
+  glyphs with ink glow 0.44: the face is the lightest area of the head even in moon shadow. A
+  grey-violet `-` cell marks the visible left eye.
+- **Hem / tatters, cloth bloom and shadow sides (P1).** Hem ink ≈[0.35,0.33,0.34] with 18 % violet
+  alt cells, ink glow 0.15, glow mask 0 (no neon trim). Strip roots ≥ 0.065 m. Cloth (coat, collar,
+  pants, shirt) ink ≈0.25–0.42, slightly warm (r/b ≈ 1.2 against the cold moon), gain 0.85–0.95,
+  ink glow 0.13–0.15, and every ramp's darkest level is still carets (`'` / `^`), so shadow sides
+  print a dim caret field instead of black tubes.
+- **Belts (P1).** W1 / W2 / H1 / C1 are flat leather bands (`bandGeometry`) 0.048 / 0.04 / 0.034 /
+  0.035 m wide standing ≈0.012 m off the coat, leather ink [0.42,0.36,0.32] with stitched `: =`
+  levels; buckles 0.05 × 0.04 in `trim` (silver [0.8,0.84,1.0]).
+- **Knees and boots (P1).** Kite poleyns rebuilt as a faceted plate 0.10 W × 0.13 H with a raised
+  ridge, standing 0.02 m off the knee, `bevel` strips on all four edges and the ridge, wings, and a
+  wedge point to 0.60 m, all leaning 15° out. Shin lames carry `bevel` lower edges; the sole welt
+  moved to a quiet `welt` material (ink glow 0.18, no bloom).
+- **Blade surface (P1).** Flats ink [0.18,0.3,0.5] (dark steel) with sparse chevrons; the glow lives
+  on the edge and ridge seams. The last 0.15 m (`bladeTip`) is the brightest steel. Both columns
+  point to the tip.
+- **P2.** Lapel facings darkened to lining ink, with 8 mm grey-violet `piping` strips along the lapel
+  edges and down both front edges of the coat; the shirt has its own finer grid. Vambrace lames carry
+  bevel bands, an elbow wedge (0.065 m), a wrist barb and a trim cuff; the left bracer has bevel
+  bands and a 0.025 m trim cuff. Streamers 0.075 / 0.068 m wide. The back panels rest at ≈10° flare
+  (`flare: 0.18`; the sides keep 16° plus the breeze) and every panel top is tucked just inside the
+  coat shell under the belts (`DIM.coatY` 0.18, an elliptical anchor ring), so there is no lampshade
+  rim. Gem glints and motes move with the gem's own velocity and live ≤ 0.16 s; the full-charge glint
+  is smaller. The idle steel point rests on the ground (`TIP_FLOOR` 0.012). Light-attack stance
+  0.82 m with a 15° lean; at the slam apex the knees stay bent so the stance holds 0.85–0.9 m
+  (measured in the browser: the blade at the apex points (0.02, −0.67, −0.75); the sheet has
+  (0, −0.6, −0.8)).
+
+**Still open after round 1.** The light sweep's arc ease stays smoothstep: a faster start (40 % of
+the arc by 0.17 s, the sheet's commit frame) broke the 3–3.5 m REACH tests, so at 0.17 s the blade
+is still at the right side. Body lit-pixel B/R is ≈1.18–1.25 at the game camera (target ≤ 1.15; the
+moon itself is B/R 1.7 and the final grade cools dark pixels). The light finish rises up-left-back,
+not up-left-forward. The pauldron star reads in close-ups and from above but is only a few pixels at
+36 m.
+
+**Integration check (verifier).** At the boss camera (36 m, lock-on, the hero 9 m in front of the
+wyrm, seen from behind facing it) the figure is ~26 px tall and the blade hides behind the body;
+with the cloth / plate glyphs at zoom 0.62 their strokes went sub-pixel and the hero printed as a
+dark cone no brighter than the glyph stones around it (hero region mean luminance 40 vs 35 for
+the grass). The game-camera glyph zoom is now `GLYPH_SCALE.farZoom` 0.45 (model.js): every glyph
+fills its ~5 px cell, so the hero reads as the panel's light-grey caret field (mean 63, p75 105).
+Ink colours and the bloom threshold are unchanged (more lit pixels, not brighter ones); close-ups
+keep `zoomNear` (a 4 m Lab close-up moves 0.92 → 0.88).

@@ -5,6 +5,42 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-01 — Session 3c: match the concept sheets (four-legged drake)
+**Owner:** "The character hair and outfit doesn't look like the images. The dragon as well. Try to
+get it accurately as close as possible." They chose to rebuild the dragon as four-legged.
+
+**How (ultracode workflows):**
+1. **Prep workflow:**
+   - a Lab model viewer (side views, dark backdrop)
+   - specs measured from the sheets (`docs/art/hero.md`, `docs/art/dragon.md`)
+   - baseline art-director review: hero 2.5/10, dragon 2/10
+2. **Build workflow:**
+   - a material upgrade (`levels`, `glowAxis`/`inkAxis`, voronoi cracks, `seamAxis`)
+   - parallel hero and dragon chains: the dragon in two stages (anatomy/gait, then the
+     four-legged moveset), each followed by independent critic → fix rounds
+   - the owner asked to finish sooner, so the loop was capped at one fix round plus a final review
+   - integration verify, then side-by-side review boards
+   - two usage-limit interruptions were resumed from the workflow journal with no work lost
+
+**Results:**
+- **Dragon: 6/10.** Silhouette 7, proportions 7, game read 6; no P0 left.
+- **Hero: 4.5/10.** Glyph rendering 6, poses 6.5. Remaining P0s: the hair mass, and the blade
+  hidden from behind at the game camera.
+- **Verify fixed:**
+  - the tail sweep landing 0.2 s early from straight behind (fairness)
+  - membrane per-frame garbage
+  - hero glyph zoom at the game camera
+- **Verify flagged:**
+  - clawCombo hits 2/3 tell→impact is 0.65 s, below the 0.7 s rule (pre-existing)
+  - the AI rarely picks swipe/fireball/charge against a stationary hero
+
+**Boards:** `scratchpad/art/final/*.png` (sent to the owner).
+
+**Next:** the owner reviews the boards. A focused hero round (hair, blade read, details) is the
+obvious follow-up.
+
+---
+
 ## 2026-11-01 — Session 3b: copy the concept sheets; carved stones
 **Owner feedback:** "much better". They then shared concept art (Shadow Swordsman sheet,
 movement and combat key poses, Obsidian Drake sheet) and asked to make the hero and dragon look

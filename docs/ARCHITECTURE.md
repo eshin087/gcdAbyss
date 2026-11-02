@@ -71,6 +71,35 @@ Render helpers for creature modules:
   `uWarn` (vec4: rgb + strength in `.w`; glow on glyphs and the silhouette rim). Actors drive `uWarn`
   on all their materials for the red (dodge-only) tell — colour and ramp numbers in
   `TELL_STYLE.red.warn`, timing in COMBAT.md "Tell presentation".
+
+  **Optional features** (for the concept-sheet rebuilds; `docs/art/hero.md` §3, `docs/art/dragon.md`
+  §3). Each compiles in through `material.defines` only when its option is given; without them the
+  shader, uniforms and pixels are exactly the pre-existing ones. They apply to the crisp path, not
+  `grid: true`. Defaults live in `SURFACE_FEATURE_DEFAULTS`; bad values throw at construction.
+  - `levels: ['', ".'", ':;', 'AV', 'A8BD', '80B@']`: 1–6 strings, dark → bright, each up to 8 glyph
+    **variants** for that light level (`SURFACE_LEVELS`), one picked per cell by hash; a space (or
+    `''`) is an empty cell. Overrides `glyphs`. Level = `floor(clamp(light × lumScale + jitter) ×
+    count)` like the 4-glyph ramp, but the light is extrapolated to the **cell centre**, so every
+    glyph is drawn whole (the 4-glyph ramp picks per pixel and can cut a glyph at a light step).
+    Every glyph goes through `gi()` (throws if missing from the world atlas), and `npm test`'s glyph
+    check scans `levels: [...]` keys and `*_LEVELS` / `*_GLYPHS` / `*_RAMP` array constants.
+    Uploaded once as `uLvGlyph` (vec4[12]), `uLvCount` (float[6]), `uLvN`.
+  - `levelInk: [[r,g,b], ...]`: ink per light level (dark → bright, last repeats), replacing `ink`
+    (`inkAlt` still mixes in by chance). E.g. dim grey shadow glyphs, near-white lit tops.
+  - `glowAxis: [x,y,z]` (OBJECT space, so it follows the part as it animates), `glowBias` 0..1
+    (default 1; 0 = even), `glowRange [lo, hi]` (cosine band, default `[0, 0.75]`): `uGlow` (seams,
+    warm tint) and `uInkGlow` concentrate on the side whose normal faces the axis, e.g. `[0,-1,0]`
+    for a molten throat / chest / belly underside on a single mesh.
+  - `inkAxis: [x,y,z]` (alias `inkAltAxis`, OBJECT space), `inkAxisChance` (default 0.6),
+    `inkRange` (default `[0, 0.75]`): cells facing the axis pick `inkAlt` with up to that chance,
+    fading to `altChance` elsewhere (e.g. more orange alt glyphs on the lower flanks). Decided per
+    cell from the cell-centre normal, so a glyph is never half alt.
+  - `crack: 'grid' | 'voronoi'`: `'grid'` (default) = seams on the glyph cell borders; `'voronoi'` =
+    irregular fissures from a 3×3 cellular noise on aGUV, width jittered and pulse phased per plate.
+    `crackScale` = plate size in glyph cells (default 2.5), `crackWidth` multiplier (default 1).
+  - `seamAxis: 'both' | 'y' | 'x'`: `'y'` = seams run along aGUV y only (between columns, e.g.
+    radiating wing veins; use `rowShift: 0` so they stay continuous), `'x'` = along x only (between
+    rows). With `crack: 'voronoi'` it stretches the plates 3× along that axis instead.
 - `limbGeometry`, `ellipsoidGeometry`, `hornGeometry`, `cylindricalGUV`, `planarGUV` (`render/glyphGeometry.js`).
 - `createCarvedGlyphMaterial(U, opts)` (`render/materials.js`) — **carved glyphs for static rock**
   (standing stones, boulders, flagstones; future ruins). Glyph cells sit on a world-fixed lattice in
@@ -126,9 +155,36 @@ freezes never swallow a Ghostep.
 RMB cancels a charge (the LMB press is consumed); an RMB press during one's own swing is queued and
 raises the guard when recovery starts. Streams (breath) only Ghostep when the roll starts into them.
 
+Model (`player/model.js`, built to `docs/art/hero.md`, the Shadow Swordsman): private to the player
+module (nothing outside reads the rig). `DIM.bladeBase → DIM.bladeTip` (0.16 → 1.5 m along the
+sword, + `REACH.tipExt`) is the **hit segment**; the visible steel ends at `DIM.steelTip` (1.17 m:
+1.36 m of steel with the pommel) and the cyan dot halo past the point (`PlayerFx.bladeHalo`) carries
+the rest of the reach. The animator (`player/anim.js`) drives: `coat` = 7 skirt panels
+(`COAT_PANELS`: six + the front flap), each two spring segments plus `strips` (22 torn strips, one
+spring each, kept above the grass); `streamers` (two two-segment sleeve strips on the arms); `hair`
+= 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root mesh
+(`hair`) and a sheened-tip mesh (`hairTip`). Static meshes that share a joint and a material are
+merged at build time (fewer draw calls); only the flask stays separate.
+**Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every
+frame `Player._updateMaterials` measures the camera → hero distance (`player.viewDist`) and rescales
+the hero materials' glyph cells, k = clamp(dist / 12, 0.15, 1): in-game cells at the 36 m camera
+(and anywhere beyond 12 m), finer in Lab / showroom close-ups (≈30 rows for the figure at 4 m).
+Per material `userData.cell` (in-game cell), `userData.cellMax` (cap for small parts: hair, collar,
+plates), `userData.lockX` (the blade's two columns), `userData.zoom / zoomNear` (glyph zoom at the
+game camera, default `GLYPH_SCALE.farZoom` 0.45 so the glyphs fill their cells / in close-ups);
+materials without `userData.cell` (gem, eye, skin, flask) keep fixed
+cells. `player.bladeFar` (0 close-up … 1 at ≥ 28 m) makes the blade self-light with distance (dark
+steel with glowing edges up close, a solid cyan line at the game camera). It touches only the
+hero's own materials (no shared uniform, no allocation).
+FX helpers that changed shape: `PlayerFx.gemTick(dt, x, y, z, k, vx, vz, vy)` and
+`gemGlint(x, y, z, s, vx, vz, vy)` take the gem's own velocity (`player.gemVel`, measured from the
+gem joint each frame) so glints ride the hilt; `gemTick` also keeps an always-on 0.22–0.26 m violet
+glow point at the gem; `bladeHalo(dt, k, far)` grows its dots with distance and lays a short bright
+`|` streak 0.06–0.26 m past the point.
+
 ### Dragon — `src/entities/dragon/dragon.js` exports `class Dragon`
 ```
-constructor(game)                      // builds wyvern, sleeping at CONFIG.world.dragonSleep
+constructor(game)                      // builds the four-legged drake, sleeping at CONFIG.world.dragonSleep
 object3d, position (Vector3, root on ground), yaw
 bound: number                           // radius around the arena centre the root stays inside:
                                         // min(CONFIG.world.dragonBound, TUNING.bound = 24) (move, charge, leap target)
@@ -136,7 +192,9 @@ name = 'VAELGRIM, THE CINDER WYRM';  hp, maxHp;  phase: 1|2
 posture, maxPosture: number;  broken: boolean   // posture break = staggered + broken
 state: 'sleeping'|'waking'|'combat'|'staggered'|'airborne'|'dying'|'dead'
 hurtSpheres: Array<{x,y,z,r,part,mult}>  // world space, refreshed every update; part ∈ head|neck|body|tail|wing|leg
-bodyCircles: Array<{x,z,r}>              // ground footprint for player push-out (empty while airborne)
+                                        // (leg = the four legs; wing = the wing wrists + finger knuckles)
+bodyCircles: Array<{x,z,r}>              // ground footprint for player push-out (empty while airborne):
+                                        // chest, hips, neck base, loins, then each PLANTED foot (0..4 more)
 isTargetable(): boolean                 // false while sleeping/dying/dead
 lockPoint(out): Vector3                  // chest/neck base, for lock-on + camera
 startIntro()                            // wake → rise → roar; emits 'dragon:introDone' when the fight starts
@@ -158,13 +216,51 @@ debug: {                                // used by the Lab (generic shape every 
 }
 ```
 Size: the model is authored in model units and the root is scaled by `SCALE` (tuning.js, 1.875
-since v0.3, ~30 m nose to tail); every world-space number (reaches, radii, hurt spheres, body
-circles, AI ranges, FX, pushers, pose targets via `rootPt`) is multiplied by it. The hero does not
-scale, so 3D hit volumes / AI ranges are re-checked against him when `SCALE` changes (bite floor,
-swipe wrist sphere, bite snap rate in attacks.js).
-Look ("Obsidian Drake", model.js): materials in `model.mats` (scales, neck, belly, throat, lava,
-membrane, wingBone, bone, claw, teeth, maw, eye); crack glow per material from `model.glow`
-(`[phase-1 ember, × glow (phase 2 / death), × throat charge]`, applied in `_applyMaterials`).
+since v0.3); every world-space number (reaches, radii, hurt spheres, body circles, AI ranges, FX,
+pushers, pose targets via `rootPt`) is multiplied by it. The hero does not scale, so 3D hit volumes
+/ AI ranges are re-checked against him (integration sims) when `SCALE` or the anatomy changes.
+Body plan (v0.4, "four-legged rebuild", docs/art/dragon.md): a quadruped drake, withers 4.0 model
+units (7.5 m), columnar forelegs (elbow back) + digitigrade hind legs, a short thick upright S-neck
+(7 × 0.46 chain), a 16-segment tail lying in a sideways hook, and a separate pair of wings rooted on
+top of the back (humerus → forearm → wrist + thumb hook → 4 two-joint fingers, 4 membrane panels).
+Anatomy numbers live in tuning.js `ANATOMY`.
+Look ("Obsidian Drake", model.js): materials in `model.mats` (scales, limbs, neck, belly, throat,
+lava, membrane, wingBone, spine, bone, claw, teeth, maw, eye; `limbs` = the hide on legs, tail and
+the wing arm, its fissures running along the limb; the hide / membrane / bones use per-cell glyph
+`levels`, the hide's `inkGlow` is its shading floor); crack glow per material from `model.glow`
+(`[phase-1 ember, × glow (phase 2 / death), × throat charge]`, applied in `_applyMaterials`; every
+`model.mats` key needs a `model.glow` row except `eye`, which follows `rig.s.eyes`).
+Wing membrane (membrane.js): `new WingMembrane(material, side, restKey)` — 4 Coons panels rebuilt
+from the bones every frame (allocation-free); `aGUV` is laid out once from `restKey`
+(`WING_KEYS.HALF`), so the glyph grid is even in the resting pose; `aEdge` (0 inside → 1 on the free
+trailing edge) is a static per-vertex attribute for a ragged-edge discard (not read by the material
+yet). Resting body language (`TUNING.rest`): wings `spread` 0.5 (HALF) in both phases, ≤ 0.3 while
+walking; jaw 0.4 (phase 1) / 0.65 (phase 2); attacks return to `TUNING.rest.spread`.
+Rig (rig/anim.js, internal to the dragon module; attacks.js / ai.js are its only writers): each
+frame the brain writes a `pose` (head / look goals, `lookDown` = max nose-down head pitch, jaw 0..1
+→ 0.7 rad, pitch / roll / lower / twist, `spread[2]` per wing: 0 FOLD · 0.5 HALF (the painting's
+mantled sails) · 1 SPREAD, `mantle` 0..1 (breath display key: wrists held high in the hips frame,
+so the front crouch doesn't drag them down) / `droop` 0..1 (stunned: tips on the ground), flap (fingers fold on the upstroke), `pawOv[2]` front-paw override targets (rakes,
+slams, the charge's ground-pawing) + `pawPlant[2]` (one frame: that paw lands at its target, clamped
+into the leg's reach by `rig.clampPaw`, and becomes a ground contact the gait steps home), `rear`
+0..1 (front feet off the ground), stance (`stanceF` / `stanceH` wider, `strideF` / `strideH`
+forward, model units; `restep` 0..1 lowers the stride threshold so the feet re-plant there; in
+place they take quick overlapping steps, all four within ~0.7 s, so the stance ends symmetric),
+`hindLock` (hind feet stay planted: a lunge's push), `elbowsOut` 0..1 (braced / buckled forelegs),
+`swell` 0..1 (chest swell), `airReach` 0..1 (airborne legs reach down for the landing), airborne,
+sleep / dead / stagger, tail curl / wave / stiffness, gait speed + velocity) and the rig solves the
+body — a nose-up pitch / rise the planted forelegs can't follow sits the hips back onto the haunches
+— and refreshes `rig.pt` (world space): head, snout,
+mouth, jawTip, headFwd, eyes, nostrils, chest (ribcage joint), chestC (deep-chest centre), hips,
+neckBase, `legs[2]` (hind: hip, knee, ankle, toe), `arms[2]` (front: shoulder, elbow, wrist, toe),
+`wings[2]` (root, elbow, wrist, knuckles[4], tips[4], mids[4] = knuckles, attachH). Index 0 = the
+model-left (+X) side. Gait contacts (`rig.gait.limbs`): footL, footR, handL, handR; 4-beat lateral
+walk (LH → LF → RH → RF) up to 5 m/s, diagonal trot to 8, bound above.
+Striking-part names for tells (`partPos`): 'snout', 'head', 'mouth', 'claw' (a front paw, `b.wi`),
+'forefeet' (front-paw midpoint; flashes at both paws; 'wrists' is the v0.3 alias), 'tailTip',
+'shell', default chest. The stomp's red ground ring is centred between the two forefeet's landing
+spots (root frame (±1.2, 0, 2.9) model units); the slam presses the paws there (dust + a heavy
+`dragon:step` at each), holds them for 0.3 of the recovery, then plants them and steps home.
 
 Damages the player only via `game.player.takeHit(...)` with tell data; announces tells with
 `combat:tell` / `combat:flash` and shows them on its own body (no HUD marks):

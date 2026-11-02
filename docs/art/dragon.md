@@ -765,3 +765,235 @@ export const ANATOMY = {
   it to 5 × 0.46 and give the bite a bigger shoulder lunge.
 - Size: the painting dragon is about 1.2× the build. The ASCII panel's is about 0.6× relative to
   its hero. The build sits between them and matches today's gameplay envelope.
+
+## Implementation notes (v0.4 four-legged rebuild, stage 1: anatomy + locomotion)
+
+What was built from this spec, and where it deliberately differs. Stage 2 (attack poses, §5) builds
+on this.
+
+**Files.** `tuning.js` `ANATOMY` follows Appendix A (plus `ankleOff`, `wristOff`, `hipAttach`).
+`model.js` `buildDrake` (the old `buildWyvern` name is kept as an alias) returns `legs[]` (hind),
+`arms[]` (front: shoulder, humerus, forearm, hand, paw) and `wings[]` (root, humerus, forearm,
+wrist, `fingers[4]` + `distal[4]` joints, thumb, hipAttach, membrane). `membrane.js` has 4 panels,
+NU 10 × NV 13, finger edges bent at the knuckles, `SAG` 0.30 / 0.28 / 0.24 / 0.18 and 6–8 torn
+notches per panel. `rig/anim.js` holds the wing keys (`WING_KEYS`: FOLD, HALF, SPREAD, FOLD_LYING,
+chest frame), the front-leg IK and `pose.rear` / `pose.pawOv` / `pose.lookDown`. `rig/gait.js`
+walks the 4-beat lateral sequence. `rig/chain.js` gained `yawCurve`.
+
+**Measured in the Lab** (model units, standing tall): withers 4.16 (ribcage top, tilted 0.28 rad
+chest-up so its front pole runs into the neck base), keel 1.42, occiput (0, 4.94, 3.16) and snout
+(0, 4.75, 4.19) from the
+fitted S (`NECK_UP` pitch0 2.28, step −0.6, curve 0.03: the nape bulges back over the withers to
+z ~1.3), front toes (±1.25, 0, 2.15), hind toes (±1.25, 0, −1.45), hocks 0.75 off the ground. Wing
+wrist at HALF ~7.1. Tail: 16 × 0.52, leaves the rump ~45° down (pitch0 −0.8, +0.07 per segment) so
+it lies on the ground from ~40 %, then hooks to model-right with `yawStep` 0.035 + `yawCurve` 0.017
+(the 0.012 of §2.7 alone left the tip ~6 behind the root; this ends it at about (−2.4, 0, −3.4),
+beside the right hind foot's line).
+
+**Deviations from the spec (and why).**
+- HALF fingers are opened ~12° wider than §2.6 (`x` +0.1–0.15) and the wrist moved to x 1.65: the
+  sheet's directions are a side view, and from the front / game camera the sails were edge-on.
+- SPREAD uses the critic's high key (wrist (3.2, 6.45, 0.9), no finger tip ahead of the wrist), not
+  the §4 table's low forward-swept one.
+- Main horns: root pitch −0.22 (not −0.45), curve 0.3: with the steeper root the tips stood as two
+  vertical posts from the front. Overall they still rise ~25° above the skull line.
+- Legs are ~10 % thicker than §2.4 / §2.5 (forearm r 0.40 → 0.29, shin 0.46 → 0.29, metatarsus
+  0.29 → 0.23): the painting's legs are columns; the spec's radii read spindly next to the chest.
+- Walk cadence: ~1.6 s per cycle at 3 m/s (stride ~2.6), not 2.1 s (stride 3.4): the forelegs
+  (shoulder 2.75 up, 2.42 + 0.45 long) over-extend past ±1.3 of the home. One foot at a time,
+  LH → LF → RH → RF, each swing ~25 % of the cycle; homes lead the velocity by 0.6 s (0.12 s at a
+  charge) so the stride centres on the home.
+- Head: kept near level (`pose.lookDown`, default 0.14 rad max nose-down + ~3° rest droop) unless
+  an attack frees it (bite 1.2, breath 1.0, posture break 1.0, stagger 0.8). Jaw 1 = 0.7 rad; the
+  awake baseline is jaw 0.2 (phase 1), 0.35 standing tall, so the maw glows at rest.
+- Resting wings: the brain's awake baseline is spread 0.3 (phase 1) / 0.5 (phase 2, intro end,
+  taunt), 0.22 while walking, as §4.
+- Hide: `levels` with 6–8 variants per level (`' .:,'`, `':vco;('`, `'AVSDC5?K'`, `'8B0A69&Y'`),
+  per-level ink (dim grey → warm white), `lumScale` 1.4, `glyphZoom` 0.86 (smaller glyphs, more
+  black gap) and voronoi fissures (ember 0.04) instead of the glowing cell lattice. Neck material:
+  `glowAxis` [0, −1, 0] so its cracks (and the throat charge) sit on the throat / under the jaw.
+  Membrane ember 0.07 (0.2 lit every seam into orange stripes). Bones / horns are dimmer than the
+  spec table (wingBone ink 0.74, inkGlow 0.14, rim 0.3; bone ink 0.64, inkGlow 0.08) so the wing
+  arms and horns don't read as neon tubes from the game camera.
+- Sleep: neck curls back along the right flank (head ~(−2.2, 0.55, 0.9)); the 3.2 chain cannot
+  reach the right hind foot. Tail curls toward the head. Wings FOLD_LYING.
+- Death: hips roll 0.75 rad onto the right side (not 1.2), `lower` 1.2; one wing up, one pinned.
+
+**Gameplay contract after the rebuild.** Hurt spheres per Appendix A (23: head, 3 neck, 3 body
+(deep-chest centre `pt.chestC`, waist, hips), 4 tail, 2 per wing (wrist, finger-1 knuckle), 4 per
+side of legs). Body circles: chest 1.4, hips 1.3, neck base 0.9, plus a loins circle 1.15 (without
+it the hero stood under the belly between the legs, where no melee attack can reach) and 0.45 per
+planted foot. The swipe is a foreleg rake already (paw Bezier from §5); the AI melee bands were
+re-measured in the sims: bite 3–6.5, swipe 2–5.5 up to ~75° off the nose, claw combo 3–5.4.
+Stomp uses `pose.rear` and the 'forefeet' tell part. Breath: neck forward and down (−0.4), wings
+SPREAD. Charge head targets moved within the short neck's reach ((0, 2.4, 5.0) / (0, 2.3, 5.2)).
+
+**Left for stage 2.** All §5 attack performances (bite shoulder drive, rake windup roll, tail
+look-back / brace, stomp tripod + slam timing on the paws, breath crouch with chest swell, fireball
+recoil, charge bound + skid, leap flap / dive / land, roar stand), `MOUTH_Z` / `CHARGE_REACH` /
+tail-sweep reach re-measures, the posture-break and stagger poses (front collapse), the red-tell
+tint confined to ink (critic P2), the ragged-edge `aEdge` drips and `aBoneDist` gap (shader).
+
+## Implementation notes (v0.4 four-legged rebuild, stage 2: moveset)
+
+Every ability keeps its name, tell, windup / active / recovery, impact and `combat:flash` timing
+and damage; only the performance changed. Captures: windup and impact of every ability from the
+painting angle (right-front three-quarter, pitch 10) and the game camera.
+
+**New rig controls** (`rig/anim.js` pose fields, all reset every frame): `pawPlant[2]` (a paw lands
+at its `pawOv` target and becomes a ground contact; `Rig.clampPaw` pulls the spot into the leg's
+reach first, because §5's rake end P2 (∓0.4, 0, 4.6) is ~3 model units beyond a planted foreleg),
+`stanceF` / `stanceH` / `strideF` / `strideH` + `restep` (feet set wider / forward and re-planted:
+the gait's stride threshold drops to 35 %), `hindLock` (hind feet don't step: the bite's push),
+`elbowsOut` (braced breath forelegs, buckled stagger forelegs), `swell` (chest +6 % height),
+`airReach` (dive legs), `droop` (DROOP wing key: stagger / posture break, tips on the ground),
+`mantle` (MANTLE wing key: the breath display), plus finger folding on the flap upstroke. Two rig
+fixes found while capturing: a nose-up pitch the planted forelegs can't follow (roar, breath
+windup, combo finisher windup) now sits the hips back onto the haunches instead of leaving the paws
+dangling ~0.5 off the ground, and the smoothed head goal is carried with the body's altitude change
+(the leap landing stretched the neck straight up behind the dropping body); a look target right
+under the chest (the leap lands on the hero) keeps the head forward and down instead of craning
+back.
+
+**Per ability** (§5 table → what was built):
+- bite: windup sinks the shoulders (lower 0.15 → 0.35, pitch +0.1), forelegs set 0.25 wider, the
+  head cocks up and back over the neck base, throat 0.3, wings flare to 0.42; active pushes off
+  locked hind feet (the forelegs take the trot half-step); recovery rocks back onto the haunches.
+- swipe / claw combo: the paw lifts up-and-out then cocks (a readable hitch), body rolls away,
+  chest twists in, far foreleg braces; after the arc the paw slaps down and plants (dust, a light
+  step) and later steps home. Combo windup3 sits back (hind feet under the haunches, both wings
+  pulse, throat 0.25).
+- tail: wings folded tight (spread 0), the head looks over its shoulder at the hero (the neck's
+  yaw limit makes it a shoulder look), hind feet braced wide; the spin is unchanged.
+- stomp: rear-up as stage 1 plus the hind brace, chest swell and a still tail; the forefeet now
+  slam onto (±1.2, 0, 2.9) through `pawOv` (rate 40), plant there with dust + heavy steps, and step
+  home during the recovery. The ring centre (2.9 ahead) is the midpoint of those landing spots.
+- breath: windup plants all four feet wide, swells the chest, charges the throat, raises the wings
+  late; active = front crouch (pitch 0.2), elbows out, mouth ~1.8 off the ground ~5.6 ahead of the
+  root, wings SPREAD + MANTLE (high wrists, wide fingers: both sails read broad from the front and
+  from above; a forward-swept variant closer to the panel's far wing read as wings pointing at the
+  ground from the painting angle), slow tail lash.
+- fireball: head rears back, chest puffs; each spit bounces the front (pitch / lower recoil) and
+  jolts the wings; in phase 2 the head jerks toward each flank shell. `MOUTH_Z` 4.3 (measured).
+- charge: horns first (head pitched down toward the ground ahead, `lookDown` 0.6); the forefoot on
+  the hero's side paws the ground twice in the windup (dust, light steps) and re-plants; the run
+  pitches per stride; the head goal leads by the run speed (it trailed ~1 model unit behind);
+  recovery skids (dust off both paws) with the hind legs bunched under. `CHARGE_REACH` 6.8.
+- leap: windup bunches the legs (hind feet 0.55 forward, forefeet 0.45 back); the dive reaches all
+  four legs down; on landing the wings snap fully open for 0.3 of the recovery.
+- roar (Lab / phase-2 transition): chest swell, the forefeet lift late in the windup and stamp down
+  with the ring (dust + heavy steps), throat up to the sky.
+- recoil (parry): head and shoulders snap back, the forefeet hop once, the body slides back a
+  little. Stagger / posture break: the front collapses onto buckled forelegs (pitch 0.24 / 0.32),
+  hind legs braced, wings DROOP to the ground; the break's head lies reachable at (0, 0.75, 4.8).
+- phase 2: the combat idle stands tall (lower 0.03), jaw 0.35 (the maw glows), wings HALF.
+
+**Re-measured** (coverage probe = the AI start path at 2–9.4 model units × 0–π rad; every AI pick
+of bite, swipe, claw combo, tail and stomp lands; hits land within ~±50 ms of the flash +
+`flashLead`): swipe band tightened to 2.75+ beyond 1.15 rad off the nose (a finer probe grid
+missed 2.5 at 1.35 rad and 2.0 at 1.2);
+tail `reach` 9.5 (tip 8.9 + sphere + hero radius). Bite, claw combo, stomp, breath, fireball and
+charge bands unchanged.
+*Integration check (verifier):* a finer probe (1–10 model units, every 11.25°, ±π included, both
+phases, 2 s settle) found the tail sweep landing up to 0.2 s early for a hero within ~±7° of
+straight behind: the windup curl (`tailCurl` `dir` × 0.06) bent the hooked tail's tip back over
+him, so the spin hit on its first active frame. The windup now coils the tail away from the player
+(−`dir` × 0.06, with the backswing); worst case −83 ms, and every pick still lands. Measured
+spread of hit − (flash + lead) across all picks: bite −17…+67 ms, swipe −50…+33, claw combo
+−17…+33, stomp 0, charge 0…+17, tail −83…+83.
+
+**Follow-up pass** (fixes found while re-capturing every ability):
+- Re-stance in place: with `restep` the gait took 0.5 s steps one foot at a time, so a 0.75–1.1 s
+  windup re-planted only two feet and the breath / bite stance stayed lopsided (one forefoot at
+  x 1.25, the other at 1.55). In place (`restep`, root < 1.5 m/s) the walk now takes quick 0.26 s
+  steps that overlap past mid-swing; all four feet re-plant by ~0.75 s (breath: forefeet ±1.54 /
+  ±1.51, hind ±1.43 / ±1.45; bite forefeet ±1.49). The breath keeps `restep` through the active
+  phase. (A lower `restep` threshold, 20 % instead of 35 %, was tried and reverted: it shifted the
+  Lab-forced tail sweep's first contact ~0.2 s ahead of its flash in the RED scenario.)
+- A free paw (override, rear-up, airborne) hung its hand only 0.25 under the wrist, so a paw held
+  on the ground by an override sank 0.2 model below it. The hand now hangs its full length; the
+  stomp's paws sit on the ground.
+- Stomp recovery: the forefeet stay pressed into the slam spots for the first 0.3 of the recovery,
+  then plant and step home (they used to lift again in the first frames after the slam).
+- Death: the upper (left) legs stiffen out straight (the right ones stay pinned under the roll).
+
+**Still open** (outside the dragon module): the red-tell tint confined to ink (the uWarn wash turns
+the whole body orange-red), the ragged membrane `aEdge` drips and the `aBoneDist` bone gap (shader
+work in `src/render`); the panel's forward-swept far wing.
+
+## Implementation notes (fix round 1: art-director review at 5 / 10)
+
+What changed after the first art-director pass (findings P0–P1, plus what was reachable of P2), and
+what is still open. Supersedes the stage-1 notes where they disagree (resting spread, wing arm,
+hide material numbers). Captures: `scratchpad/art/dragon_fix_r1/*.png` (game camera at pitch 58 /
+dist 38, painting angle yaw 300 pitch 8, panel angles yaw 315–330 pitch 30, close-ups).
+
+**Wings (P0 + P1).**
+- Resting spread is HALF (0.5) in both phases (`TUNING.rest`: spread 0.5, ≤ 0.3 while walking,
+  jaw 0.4 / 0.65); every attack returns to it. At 0.3 the sails were edge-on from the game camera.
+- `ANATOMY.wingForearm` 2.05 → 2.6 (arm 4.1 ≈ 1.0 H). HALF wrist (±1.9, 7.5, 1.15) (elbow ~135°),
+  fingers f0 (0.62, −0.12, −0.68), f1 (0.58, −0.5, −0.62), f2 (0.46, −0.78, −0.42),
+  f3 (0.3, −0.95, −0.07): ~20–25° apart, opened toward the front so the 58° camera sees each sail's
+  face (wider than the critic's numbers on f1/f2: with the sheet's back-sweep the right sail stayed
+  a sliver from the front).
+- SPREAD (roar / leap) wrist (±2.9, 7.4, 2.1), f0 (0.82, 0.4, −0.3): the leading finger rises ~23°
+  above the wrist (a dihedral), the others fan out and down with little back-sweep. MANTLE (breath)
+  wrist (±2.3, 7.9, 2.0) is held in the HIPS frame (`hipsWrist`, blended by the mantle weight in
+  `_updateWings`), so the front crouch no longer drags the wrists down; fingers f0 (0.8, 0.45,
+  −0.22) … f3 (0.28, −0.92, −0.22). The forward wrist is what makes the far wing show its membrane
+  from the front three-quarter (the panel's forward-swept far wing). Measured: roar wrists
+  (±2.55, 7.44), head 5.9; breath wrists (±2.18, 6.7) with the head at 2.3. The far wing in the
+  roar at yaw 315 is still mostly an upright arm (its sail shows as a strip above the back).
+- FOLD wrist (±1.35, 4.6, 2.1), pole up-back: with the long forearm the old fold buried the elbow
+  in the waist; FOLD_LYING moved to match.
+- Wing arm (humerus + forearm) is hide (`limbs`), r 0.30 → 0.22 with 5 trailing spikes per
+  segment and leading-edge serrations; only the fingers are `wingBone` (r 0.10, ink 0.58, gain 1.7,
+  rim 0.2, inkGlow 0.05: thin lines, no bloom).
+- Thumb hook 1.1 × r 0.17, curve −0.55, aimed up-forward (HALF (0.08, 0.78, 0.62)) with a new
+  `aimJointUp` (rolls the joint so the curve hooks the tip down in front): it is the top-most bright
+  shape of each wing.
+- Membrane: `SAG` [0.42, 0.40, 0.34, 0.22] (one deep scallop per panel); `RAG` mostly 0–0.04 with
+  1–2 irregular rips (0.12–0.18) per panel (the regular sawtooth read as feathers). `aGUV` is laid
+  out once from the HALF key in 3D (`new WingMembrane(mat, side, WING_KEYS.HALF)`), so the resting
+  grid is square and even; `aEdge` (0 → 1 on the free trailing edge) is computed for the shader's
+  future ragged-edge discard. Material: `glyphZoom` 0.8, L0 glyph-filled (`'.:co'`), `inkGlow` 0.32
+  (the backlit sail reads red, as a translucent bat wing does), seam ember 0.04.
+
+**Hide (P1).** Five `levels` (`'vco:ce.o'` → `'8B0A69&Y'`, the darkest prints small letters),
+pre-warmed `levelInk` [0.26, 0.23, 0.2] → [0.64, 0.52, 0.38] against the blue moon, `lumScale` 2.0,
+`glyphZoom` 0.74, `inkGlow` 0.25 as the shading floor (shadowed flanks print grey glyphs).
+Measured on the painting view: bright-glyph mean sRGB (199, 198, 202), B − R +3 (was +24);
+blue-grey 11 % of lit pixels (was 44 %). Fissures: voronoi `crackScale` 3.5, `crackWidth` 0.7,
+ember 0.015 (phase 2 × 0.45); `limbs` (legs, tail, wing arm) and `neck` add `seamAxis: 'y'` so the
+fissures run along the limb. The neck no longer uses `glowAxis` (it would also mask the floor);
+the throat strip carries the molten S.
+
+**Head (P1).** Main horns splay π ∓ 0.30 (a V from the front); bone material ink 0.48, gain 1.9,
+rim 0.25, inkGlow 0.02, lit glyphs only in the top level (`'A|!A'`). Teeth × 1.4 (upper fang 0.22,
+lower 0.18), teeth base [0.3, 0.27, 0.23] and inkGlow 0.08; maw ink deep orange [1.0, 0.4, 0.07],
+base [0.3, 0.05, 0.01], inkGlow 1.15 (a yellow-white maw swallowed the teeth). Eye ellipsoid
+(0.07, 0.045, 0.11), 0.03 lower, emissive [2.2, 0.8, 0.1], `uInkGlow` eyes × 1.3.
+
+**Neck, chest (P1).** Shingles: 3 rows per side (±40°, ±70°, ±100°), 2 per row per segment, rows
+offset half a plate; pointed blades 0.50 → 0.38 long, r 0.14, flat 0.3, lifted 15°, in the `neck`
+hide. Throat strip offset −0.45 r, longer overlap per segment (continuous). Sternum: `belly` with
+`BELLY_LEVELS` (no chevron-heavy rows), `seamAxis 'y'`, gain 1.1, ember 0.45, plus a narrow
+(sx 0.25) `throat` strip down the keel: the molten seam continues the S onto the chest.
+
+**Claws (P1).** Front: 4 claws 0.5 / 0.6 / 0.6 / 0.5, r 0.13, rooted at the toe tips (y +0.14),
+splayed ±0.5 rad with the roots spread (the right paw's claws used to cross: the x offset ignored
+the side sign), arcing out and hooking down so the tips touch the ground. Hind: 0.6 / 0.7 / 0.6,
+r 0.13. Paw / foot pads 0.48 / 0.46 wide, raised onto the ground (they sank ~0.15). Toe / paw joints
+are aimed with `aimJointUp` (no roll: the hind foot was rolled ~20°). Claw inkGlow 0.12 (no halo).
+
+**Not closable inside the dragon module** (need `src/render/materials.js`):
+1. Upright glyphs (P1): an `upright` option on `createSurfaceGlyphMaterial` that rotates the atlas
+   lookup so glyph +y follows screen-up (from dFdx/dFdy of aGUV) and never mirrors; to enable on
+   scales, limbs, neck, belly, throat, lava and membrane. Today glyphs follow each part's aGUV and
+   show sideways / upside down from most views.
+2. Broken fissure net (P1): a per-plate-pair hash mask so only ~25 % of voronoi edges glow. Mitigated
+   here with bigger, thinner plates and a 0.015 ember, but phase 2 still shows closed cells.
+3. Ragged-edge drips: read `aEdge` (already on the membrane geometry) and discard a cell when
+   `hash(cell) < smoothstep(0.75, 1.0, aEdge) × 0.6`.
+4. A true shading floor (`levelFloor`: clamp the level input ≥ 0.3, L0 only where n·up < −0.3)
+   instead of the `inkGlow` approximation, which brightens the lit glyphs a little too.
