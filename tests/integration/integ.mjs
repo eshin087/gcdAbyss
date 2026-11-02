@@ -3,7 +3,7 @@
 // src/main.js (construction order, frame order, debugTimeScale in dt). World is a light mock built on
 // the real Colliders. A bot drives the input: it moves, attacks, blocks, parries and dodges.
 // usage: node integ.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI, ABYSS_TRACE=1 logs combat events)
-//   scenario: gate | breath | win | die | parry | block | red | lab | all (default all)
+//   scenario: gate | breath | win | die | parry | block | reach | red | lab | all (default all)
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ui, fireWin, AUDIO, resetWindow } from './shim.mjs';
@@ -23,7 +23,9 @@ const { Colliders } = await imp('src/world/colliders.js');
 const { TELL, TELL_STYLE, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
 const { Player } = await imp('src/entities/player/player.js');
 const { Dragon } = await imp('src/entities/dragon/dragon.js');
-const { TUNING } = await imp('src/entities/dragon/tuning.js');
+const { TUNING, SCALE } = await imp('src/entities/dragon/tuning.js');
+// scripted placements (place()) were authored for the x1.25 wyrm: they scale with its size
+const SIZE = SCALE / 1.25;
 const { Hud } = await imp('src/ui/hud.js');
 const { AudioEngine } = await imp('src/audio/audio.js');
 const { GameFlow } = await imp('src/game/flow.js');
@@ -57,7 +59,8 @@ const PAYLOAD = {
   'combat:flash': { source: 's', attack: 's', tell: 't', x: 'n', y: 'n', z: 'n' },
   'player:attack': { kind: 's', combo: 'n', charge: 'n' },
   'player:charge': { t: 'n' },
-  'player:hitDragon': { damage: 'n', part: 's', point: 'p', heavy: 'b', crit: 'b' },
+  'player:hitDragon': { damage: 'n', part: 's', point: 'p', heavy: 'b', crit: 'b', kind: 's' },
+  'player:slam': { x: 'n', z: 'n' },
   'player:hurt': { damage: 'n', kind: 's', hp: 'n' },
   'player:block': { damage: 'n', tell: 't' },
   'player:parry': { tell: 't', attack: 's' },
@@ -383,6 +386,7 @@ function place(G, dist, ang = 0) {
   const { game } = G;
   const d = game.dragon, p = game.player;
   const a = d.yaw + ang;
+  dist *= SIZE;
   p.debug.teleport(d.position.x + Math.sin(a) * dist, d.position.z + Math.cos(a) * dist);
   p.yaw = Math.atan2(d.position.x - p.position.x, d.position.z - p.position.z);
   p.debug.heal();
@@ -754,7 +758,7 @@ async function scenarioParry() {
 
 // ================================================================== scenario: block (hold RMB)
 async function scenarioBlock() {
-  out('\n== scenario BLOCK (hold RMB: normal swipe, blue bite; charged heavy; RMB cancels a charge) ==');
+  out('\n== scenario BLOCK (hold RMB: normal swipe, blue bite; charged thrust; RMB cancels a charge) ==');
   const G = build();
   const { game } = G;
   fightSetup(G);
@@ -776,7 +780,7 @@ async function scenarioBlock() {
   out(`   bite: result ${b.res} hp ${b.hp0} → ${b.hpAtHit} (expected -${wantB.toFixed(2)})`);
   assert(b.res === RESULT.BLOCKED && near(b.hp0 - b.hpAtHit, wantB, 0.01), `blocked blue bite chips by DEFENSE.blockReduction.blue (${(b.hp0 - b.hpAtHit).toFixed(2)})`);
   assert(p.blocking === true || p.state === 'block', 'guard still up after a blocked blue hit');
-  // charged heavy: hold LMB past the charge threshold, release (no stamina cost). From the flank:
+  // charged thrust: hold LMB past the charge threshold, release (no stamina cost). From the flank:
   // the 25 % bigger wyrm's chest sits above sword height, so straight ahead only the head (when low) is in reach
   settle(G);
   place(G, 3, Math.PI / 2);
@@ -790,8 +794,8 @@ async function scenarioBlock() {
   const ch = seen.filter((e) => e[0] === 'player:charge'), atk = seen.filter((e) => e[0] === 'player:attack'), hit = seen.find((e) => e[0] === 'player:hitDragon');
   out(`   heavy: charging ${charging} k ${k?.toFixed(2)} · charge events ${ch.length} (t ${ch[0]?.[1]?.t}) · attacks ${JSON.stringify(atk.map((e) => e[1]))} · hit ${hit ? `${hit[1].damage} heavy ${hit[1].heavy}` : 'none'}`);
   assert(charging && k >= 0.99 && ch.length === 1 && ch[0][1].t > 0, 'LMB hold → charge state, one player:charge {t}');
-  assert(atk.length === 1 && atk[0][1].kind === 'heavy' && atk[0][1].charge >= 0.99, 'release → one player:attack {kind:heavy, charge 1} (no light swing first)');
-  assert(hit?.[1]?.heavy === true, 'charged heavy connects (player:hitDragon heavy)');
+  assert(atk.length === 1 && atk[0][1].kind === 'thrust' && atk[0][1].charge >= 0.99, 'release → one player:attack {kind:thrust, charge 1} (no light swing first)');
+  assert(hit?.[1]?.heavy === true && hit?.[1]?.kind === 'thrust', 'charged thrust connects (player:hitDragon heavy, kind thrust)');
   // RMB cancels a charge into the guard; releasing LMB afterwards does not fire the heavy
   settle(G);
   seen.length = 0;
@@ -807,6 +811,78 @@ async function scenarioBlock() {
   run(G, 0.3, { passive: true });
   G.watch = null;
   assert(wasCharging && blockingNow && !seen.some((e) => e[0] === 'player:attack'), `RMB cancels a charge into block, no heavy on release (${seen.map((e) => e[0]).join(',')})`);
+  return G;
+}
+
+// ================================================================== scenario: reach (every hero attack, from the front)
+async function scenarioReach() {
+  out('\n== scenario REACH (idle wyrm, hero straight in front: light 1, light 2, slam, thrust at 2-3.5 m) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const d = game.dragon, p = game.player;
+  settle(G);
+  const fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
+  // the wyrm's front hurt surface at sword reach: the most forward body sphere (its chest, 2-4 m up)
+  const chest = () => d.hurtSpheres.filter((h) => h.part === 'body').reduce((a, h) => ((h.x - d.position.x) * fx + (h.z - d.position.z) * fz > (a.x - d.position.x) * fx + (a.z - d.position.z) * fz ? h : a));
+  const surf = () => { const c = chest(); return Math.hypot(p.position.x - c.x, p.position.z - c.z) - c.r; };
+  const c0 = chest();
+  out(`   chest sphere: ${((c0.x - d.position.x) * fx + (c0.z - d.position.z) * fz).toFixed(2)} m ahead of the root, y ${c0.y.toFixed(2)} (r ${c0.r.toFixed(2)}): above sword height`);
+  /** Hero `gap` m (horizontal) from the chest surface, straight in front, facing it; fresh wyrm. */
+  const stand = (gap) => {
+    const c = chest();
+    p.debug.teleport(c.x + fx * (c.r + gap), c.z + fz * (c.r + gap));
+    p.yaw = Math.atan2(c.x - p.position.x, c.z - p.position.z);
+    p.debug.heal();
+    aimAt(G);
+  };
+  const fresh = () => { d.hp = d.maxHp; d.posture = 0; run(G, 1.0, { passive: true }); settle(G); };
+  const KINDS = { L1: 'light', L2: 'light', slam: 'slam', thrust: 'thrust' };
+  const CHARGE_HOLD = 1.3; // s: a full charge
+  /** One measured attack at `gap`; earlier combo hits swing in open air far from the wyrm. */
+  const trial = (name, gap) => {
+    fresh();
+    let hit = null, at = NaN, slamEv = 0;
+    const kinds = [];
+    if (name === 'thrust') {
+      stand(gap);
+      at = surf();
+      G.watch = (n, dd) => { if (n === 'player:hitDragon' && !hit) hit = dd; if (n === 'player:attack') kinds.push(dd.kind); };
+      input.press(0);
+      run(G, CHARGE_HOLD, { passive: true });
+      aimAt(G);
+      input.up(0);
+      run(G, 1.0, { passive: true });
+    } else {
+      const n = name === 'L1' ? 1 : name === 'L2' ? 2 : 3;
+      if (n > 1) { p.debug.teleport(d.position.x + fx * 40, d.position.z + fz * 40); aimAt(G); }
+      for (let k = 0; k < n; k++) {
+        if (k === n - 1) {
+          stand(gap);
+          at = surf();
+          G.watch = (nn, dd) => { if (nn === 'player:hitDragon' && !hit) hit = dd; if (nn === 'player:attack') kinds.push(dd.kind); if (nn === 'player:slam') slamEv++; };
+        }
+        aimAt(G);
+        input.click(0);
+        run(G, k < n - 1 ? 0.3 : 1.3, { passive: true });
+      }
+    }
+    G.watch = null;
+    return { name, gap, at, hit, kinds, slamEv };
+  };
+  // (CHARGE_HOLD hoisted above)
+  const rows = [];
+  for (const gap of [0, 2, 2.5, 3, 3.5]) {
+    const r = ['L1', 'L2', 'slam', 'thrust'].map((nm) => trial(nm, gap));
+    rows.push(r);
+    out(`   ${gap ? `${gap.toFixed(1)} m` : 'contact'}`.padEnd(12) + r.map((t) => `${t.name} ${t.hit ? `${t.hit.kind}/${t.hit.part} ${Math.round(t.hit.damage)}` : 'MISS'} @${t.at.toFixed(2)}`.padEnd(30)).join(''));
+  }
+  for (const r of rows) for (const t of r) {
+    const where = t.gap ? `${t.gap} m` : 'contact';
+    assert(!!t.hit && t.hit.kind === KINDS[t.name] && t.kinds[0] === KINDS[t.name], `${t.name} connects from the front at ${where} (${t.hit ? `${t.hit.kind} on ${t.hit.part}` : 'miss'}, hero ${t.at.toFixed(2)} m from the chest surface)`);
+  }
+  assert(rows.every((r) => r[2].slamEv === 1), 'the slam meets the ground once per swing (player:slam)');
+  assert(rows.every((r) => r[2].hit?.heavy === true && r[3].hit?.heavy === true && r[0].hit?.heavy === false), 'slam and thrust hit heavy, light sweeps do not');
   return G;
 }
 
@@ -1049,7 +1125,7 @@ async function scenarioLab() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie };
+const SCENARIOS = { gate: scenarioGate, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie };
 const runs = [];
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
