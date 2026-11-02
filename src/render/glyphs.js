@@ -169,6 +169,68 @@ export function createArtAtlas(cellW, cellH) {
   return { texture: tex, count: sorted.length };
 }
 
+/**
+ * 3x5 pixel font for ART_CHARS: rows top → bottom, 3 bits each (4 = left, 2 = middle, 1 = right).
+ * A browser font at 5–6 px fills the whole cell with grey, so the hero's small letters are drawn
+ * from this bitmap instead.
+ */
+const PIXEL_3X5 = {
+  ' ': [0, 0, 0, 0, 0],
+  '.': [0, 0, 0, 0, 2],
+  ':': [0, 2, 0, 2, 0],
+  ';': [0, 2, 0, 2, 4],
+  i: [2, 0, 2, 2, 2],
+  r: [0, 3, 4, 4, 4],
+  s: [0, 3, 4, 1, 6],
+  X: [5, 5, 2, 5, 5],
+  2: [6, 1, 2, 4, 7],
+  3: [6, 1, 2, 1, 6],
+  5: [7, 4, 6, 1, 6],
+  h: [4, 4, 6, 5, 5],
+  A: [2, 5, 7, 5, 5],
+  H: [5, 5, 7, 5, 5],
+  S: [3, 4, 2, 1, 6],
+  G: [3, 4, 5, 5, 3],
+  M: [5, 7, 7, 5, 5],
+  9: [7, 5, 7, 1, 6],
+  '#': [5, 7, 5, 7, 5],
+  '&': [2, 5, 2, 5, 3],
+  B: [6, 5, 6, 5, 6],
+  '@': [2, 5, 7, 4, 3],
+};
+
+/** Letter cell of the pixel-font art atlas at integer scale s: a 3x5 glyph + 1 px spacing. */
+export const pixelArtCell = (s) => [4 * s, 6 * s];
+
+/**
+ * ART_CHARS as a pixel-font atlas (the hero's finer letter grid): each 3x5 glyph scaled by `s`,
+ * top-left in its (4s x 6s) cell, so letters keep the reference's one-pixel gaps. Sorted sparse →
+ * dense by lit pixels, like createArtAtlas. Returns { texture, count }.
+ */
+export function createPixelArtAtlas(s = 1) {
+  s = Math.max(1, Math.round(s) || 1);
+  const [cw, ch] = pixelArtCell(s);
+  const lit = (rows) => rows.reduce((n, r) => n + (r & 1) + ((r >> 1) & 1) + ((r >> 2) & 1), 0);
+  const sorted = [...ART_CHARS].map((c, i) => ({ rows: PIXEL_3X5[c] ?? PIXEL_3X5[' '], i })).sort((a, b) => lit(a.rows) - lit(b.rows) || a.i - b.i);
+  const canvas = document.createElement('canvas');
+  canvas.width = sorted.length * cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  sorted.forEach(({ rows }, col) => {
+    rows.forEach((bits, y) => {
+      for (let x = 0; x < 3; x++) if (bits & (4 >> x)) ctx.fillRect(col * cw + x * s, y * s, s, s);
+    });
+  });
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return { texture: tex, count: sorted.length };
+}
+
 /** Pixel-exact atlas: one row per GRID_ROW entry, each glyph exactly cellW x cellH px. */
 export function createGridAtlas(cellW, cellH) {
   const cols = GRID_COLS;

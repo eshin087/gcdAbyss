@@ -35,6 +35,7 @@ export class NameTags {
     this.dragon = new Tag(this.layer, 'ab-tag foe', 'Vaelgrim');
     this.reticle = new Tag(this.layer, 'ab-tag ab-reticle', '◇');
     this.v = new THREE.Vector3();
+    this.pv = new THREE.Vector3();
     this.lock = new THREE.Vector3();
     this.w = window.innerWidth || 1;
     this.h = window.innerHeight || 1;
@@ -61,7 +62,10 @@ export class NameTags {
 
     const p = g.player;
     if (visible && p?.position) {
-      this._place(this.player, num(p.position.x), num(p.position.y) + 2.2, num(p.position.z));
+      // above the drawn head: the hero leans away from the camera (player.leanPoint)
+      const v = this.pv.set(num(p.position.x), num(p.position.y) + 2.2, num(p.position.z)); // 0.35 m over the head
+      if (typeof p.leanPoint === 'function') p.leanPoint(v);
+      this._place(this.player, v.x, v.y, v.z);
     } else this.player.show(false);
 
     const d = g.dragon;

@@ -138,8 +138,11 @@ export function bandHit(spheres, ax, ay, az, bx, by, bz, rad, up, down, out) {
  * swept volume against hurt spheres with 3 sub-steps through the vertical reach band.
  */
 export class SwordSweep {
-  constructor(sword) {
+  /** `unlean(v)` (optional) maps a visual world point onto the upright gameplay body before hit
+   *  tests; a, b, pa, pb and point() stay visual (trails and sparks follow the drawn blade). */
+  constructor(sword, unlean = null) {
     this.sword = sword;
+    this.unlean = unlean;
     this.a = new THREE.Vector3(); // hilt, this frame
     this.b = new THREE.Vector3(); // tip, this frame
     this.pa = new THREE.Vector3(); // last frame
@@ -189,6 +192,10 @@ export class SwordSweep {
       const t = s / 3;
       sa.lerpVectors(this.pa, this.a, t);
       sb.lerpVectors(this.pb, this.b, t);
+      if (this.unlean) {
+        this.unlean(sa);
+        this.unlean(sb);
+      }
       if (bandHit(spheres, sa.x, sa.y, sa.z, sb.x, sb.y, sb.z, REACH.radius, up, REACH.down, out) > 0) return true;
     }
     return false;

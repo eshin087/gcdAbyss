@@ -674,6 +674,50 @@ export function setHeroGlyphScale(mats, dist) {
   return k;
 }
 
+/**
+ * Camera lean (ADR-017). Seen from the steep game camera, a standing figure mostly shows its top and
+ * spans about half its height on screen. The hero's root therefore shears the body away from the
+ * camera, with the feet planted, so the figure faces the view like the owner's reference and gets
+ * ~1.5x the letter rows. The lean angle is `frac` × the camera's pitch below the horizon (29° at
+ * the 58° game camera, ~0 in a side view), capped at `max`. Visual only: gameplay reads unleaned
+ * positions (Player.unlean).
+ */
+export const LEAN = { frac: 0.5, max: (32 * Math.PI) / 180 };
+
+/**
+ * Drawn size of the hero (model units → world metres), owner: "a little bigger for his details to
+ * show". Visual only, like the lean: hits, the hurt cylinder and the dragon's aim keep the 1.85 m
+ * body (Player.unlean divides it out). The blade then draws to 1.8 m, about the gameplay reach
+ * (DIM.bladeTip 1.5 + REACH.tipExt 0.4).
+ */
+export const HERO_SCALE = 1.2;
+
+/**
+ * Make `root` compose its matrix as T · lean · R · HERO_SCALE while `lean.on` (drawing, FX, the
+ * sword sweep), or the plain T · R while it is off: the animator runs with it off, so its IK, ground
+ * clamps and coat springs work on the upright 1.85 m body in metres. Returns the live lean
+ * { k, dx, dz, on }: the drawn body shifts by k · height along the horizontal unit vector (dx, dz).
+ */
+export function installLean(root) {
+  const lean = { k: 0, dx: 0, dz: -1, on: true };
+  root.updateMatrix = function updateLeanMatrix() {
+    this.matrix.compose(this.position, this.quaternion, this.scale);
+    if (lean.on) {
+      const e = this.matrix.elements;
+      for (let c = 0; c < 12; c += 4) {
+        e[c] *= HERO_SCALE;
+        e[c + 1] *= HERO_SCALE;
+        e[c + 2] *= HERO_SCALE;
+        const y = e[c + 1];
+        e[c] += lean.k * lean.dx * y;
+        e[c + 2] += lean.k * lean.dz * y;
+      }
+    }
+    this.matrixWorldNeedsUpdate = true;
+  };
+  return lean;
+}
+
 // The moonlight is cold (B/R ≈ 1.7), so the body inks lean warm: lit glyphs come out the panel's
 // neutral grey instead of lavender. Cloth stays under the bloom threshold (no halos: the panel's
 // glyphs sit on pure black) and averages a mid grey; only the blade, the gem, the buckles and the
