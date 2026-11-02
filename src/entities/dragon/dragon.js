@@ -4,7 +4,7 @@ import { markCaster, LAYER_CASTER } from '../../render/pipeline.js';
 import { damp, lerp, clamp, turnToward, yawTo, angleDiff, wrapAngle } from '../../core/math.js';
 import { TELL, TELL_STYLE, RESULT, POSTURE, tellDefaults } from '../../combat/rules.js';
 import { TUNING, SCALE } from './tuning.js';
-import { buildWyvern } from './model.js';
+import { buildDrake } from './model.js';
 import { Rig, createPose, resetPose } from './rig/anim.js';
 import { Brain, SEQ } from './ai.js';
 import { ATTACKS, MELEE } from './attacks.js';
@@ -21,14 +21,17 @@ const S = SCALE;
 const TARGETABLE = new Set(['waking', 'combat', 'staggered', 'airborne']);
 const POSTURE_STATES = new Set(['combat', 'staggered', 'airborne']);
 const PARTS = TUNING.partMult;
-// hurt volumes in v0.1 metres (x SCALE): order matches _refreshHurt
+// hurt volumes in model units (x SCALE): order matches _refreshHurt (four-legged drake, v0.4)
 const HURT = [
-  ['head', 0.85], ['neck', 0.62], ['neck', 0.56], ['neck', 0.5],
-  ['body', 1.35], ['body', 1.45], ['body', 1.35],
-  ['tail', 0.62], ['tail', 0.5], ['tail', 0.38], ['tail', 0.28],
-  ['wing', 0.45], ['wing', 0.45], ['wing', 0.55], ['wing', 0.45], ['wing', 0.45], ['wing', 0.55],
-  ['leg', 0.6], ['leg', 0.42], ['leg', 0.6], ['leg', 0.42],
+  ['head', 0.85], ['neck', 0.6], ['neck', 0.56], ['neck', 0.5],
+  ['body', 1.35], ['body', 1.3], ['body', 1.25], // deep chest, waist, hips
+  ['tail', 0.55], ['tail', 0.45], ['tail', 0.35], ['tail', 0.25],
+  ['wing', 0.5], ['wing', 0.5], ['wing', 0.5], ['wing', 0.5], // per wing: wrist, finger-1 knuckle
+  // per side: front upper arm, front wrist, hind thigh, hind hock
+  ['leg', 0.55], ['leg', 0.42], ['leg', 0.65], ['leg', 0.42],
+  ['leg', 0.55], ['leg', 0.42], ['leg', 0.65], ['leg', 0.42],
 ];
+const FOOT_CIRCLE = 0.45; // body-circle radius around each planted foot (model units)
 const MAX_ATK_BOXES = 32;
 // red windup glow (TELL_STYLE.red.warn): rgb + strength ramp / spike / decay
 const WARN = TELL_STYLE.red.warn ?? { color: [1.0, 0.12, 0.05], from: 0.15, to: 0.6, spike: 1.6, decay: 0.25 };
@@ -38,7 +41,7 @@ export class Dragon {
   constructor(game) {
     this.game = game;
     this.name = 'VAELGRIM, THE CINDER WYRM';
-    this.model = buildWyvern(game.U);
+    this.model = buildDrake(game.U);
     this.object3d = this.model.root;
     this.position = this.object3d.position;
     this.yaw = 0;
@@ -56,10 +59,16 @@ export class Dragon {
     this.bodyCircles = [];
     // fixed pools; the public arrays are refilled from these every frame (stable identities)
     this._hurtPool = HURT.map(([part, r]) => ({ x: 0, y: 0, z: 0, r: r * S, part, mult: PARTS[part] ?? 1 }));
+    // chest, hips, neck base, waist, then the four feet (hind L/R, front L/R)
     this._circlePool = [
-      { x: 0, z: 0, r: 1.5 * S },
       { x: 0, z: 0, r: 1.4 * S },
-      { x: 0, z: 0, r: 1.0 * S },
+      { x: 0, z: 0, r: 1.3 * S },
+      { x: 0, z: 0, r: 0.9 * S },
+      { x: 0, z: 0, r: 1.15 * S }, // the loins: the hero is kept out from under the belly
+      { x: 0, z: 0, r: FOOT_CIRCLE * S },
+      { x: 0, z: 0, r: FOOT_CIRCLE * S },
+      { x: 0, z: 0, r: FOOT_CIRCLE * S },
+      { x: 0, z: 0, r: FOOT_CIRCLE * S },
     ];
     // debug hitboxes: attack spheres tested this frame (+ a stable output array for the Lab)
     this._atkBoxes = Array.from({ length: MAX_ATK_BOXES }, () => ({ x: 0, y: 0, z: 0, r: 0, kind: 'attack' }));
@@ -404,10 +413,11 @@ export class Dragon {
         return out.copy(pt.head);
       case 'mouth':
         return out.copy(pt.mouth);
-      case 'claw':
-        return out.copy(pt.wings[b?.wi ?? 0]?.wrist ?? pt.chest);
-      case 'wrists':
-        return out.lerpVectors(pt.wings[0].wrist, pt.wings[1].wrist, 0.5);
+      case 'claw': // a front paw (b.wi: 0 = left, 1 = right)
+        return out.copy(pt.arms[b?.wi ?? 0]?.toe ?? pt.chest);
+      case 'forefeet':
+      case 'wrists': // v0.3 name (the wyvern's wing wrists): the front paws now
+        return out.lerpVectors(pt.arms[0].toe, pt.arms[1].toe, 0.5);
       case 'tailTip': {
         const t = this.rig.tail;
         return out.copy(t.p[t.n]);
@@ -437,10 +447,10 @@ export class Dragon {
       this._warnAt = this.time;
       this._warnAction = a;
     }
-    if (b.part === 'wrists') {
-      const w = this.rig.pt.wings;
-      this.fx.tellFlash(b.tell, w[0].wrist.x, w[0].wrist.y, w[0].wrist.z);
-      this.fx.tellFlash(b.tell, w[1].wrist.x, w[1].wrist.y, w[1].wrist.z);
+    if (b.part === 'forefeet' || b.part === 'wrists') {
+      const w = this.rig.pt.arms;
+      this.fx.tellFlash(b.tell, w[0].toe.x, w[0].toe.y, w[0].toe.z);
+      this.fx.tellFlash(b.tell, w[1].toe.x, w[1].toe.y, w[1].toe.z);
     } else this.fx.tellFlash(b.tell, p.x, p.y, p.z);
     const z = a.def?.zone;
     if (typeof z === 'function') {
@@ -600,23 +610,24 @@ export class Dragon {
     set(1, nk[2]);
     set(2, nk[4]);
     set(3, nk[Math.min(6, nk.length - 1)]);
-    set(4, pt.chest);
-    set(5, t.lerpVectors(pt.chest, pt.hips, 0.5));
+    set(4, pt.chestC); // the deep chest (keel 1.4 .. withers 4.0 model)
+    set(5, t.lerpVectors(pt.chestC, pt.hips, 0.5));
     set(6, pt.hips);
     set(7, tl[3]);
     set(8, tl[6]);
     set(9, tl[9]);
-    set(10, tl[Math.min(12, tl.length - 1)]);
+    set(10, tl[Math.min(13, tl.length - 1)]);
     for (let k = 0; k < 2; k++) {
       const w = pt.wings[k];
-      set(11 + k * 3, w.elbow);
-      set(12 + k * 3, w.wrist);
-      set(13 + k * 3, w.mids[1]);
+      set(11 + k * 2, w.wrist);
+      set(12 + k * 2, w.knuckles[1]);
     }
     for (let k = 0; k < 2; k++) {
-      const l = pt.legs[k];
-      set(17 + k * 2, t.lerpVectors(l.hip, l.knee, 0.5));
-      set(18 + k * 2, l.ankle);
+      const a = pt.arms[k], l = pt.legs[k], o = 15 + k * 4;
+      set(o, t.lerpVectors(a.shoulder, a.elbow, 0.5));
+      set(o + 1, a.wrist);
+      set(o + 2, t.lerpVectors(l.hip, l.knee, 0.5));
+      set(o + 3, l.ankle);
     }
 
     const H = this.hurtSpheres;
@@ -632,7 +643,19 @@ export class Dragon {
       cp[1].z = pt.hips.z;
       cp[2].x = pt.neckBase.x;
       cp[2].z = pt.neckBase.z;
-      C.push(cp[0], cp[1], cp[2]);
+      cp[3].x = (pt.chest.x + pt.hips.x) * 0.5;
+      cp[3].z = (pt.chest.z + pt.hips.z) * 0.5;
+      C.push(cp[0], cp[1], cp[2], cp[3]);
+      // planted feet (a raised paw / reared-up front does not block)
+      const G = this.rig.gait.limbs;
+      for (let k = 0; k < 4; k++) {
+        const l = G[k], c = cp[4 + k];
+        if (l.free || l.pos.y > 0.6 * S) continue;
+        const p = k < 2 ? pt.legs[k].toe : pt.arms[k - 2].toe;
+        c.x = p.x;
+        c.z = p.z;
+        C.push(c);
+      }
     }
   }
 
@@ -644,8 +667,8 @@ export class Dragon {
     for (let k = 0; k < 2; k++) {
       const toe = pt.legs[k].toe;
       W.setPusher(1 + k, toe.x, toe.y, toe.z, 1.1 * S);
-      const w = pt.wings[k].wrist;
-      W.setPusher(3 + k, w.x, w.y - 0.3 * S, w.z, 1.0 * S);
+      const w = pt.arms[k].toe;
+      W.setPusher(3 + k, w.x, w.y, w.z, 0.9 * S);
     }
     const bodyY = s.alt > 1 ? 5 : 0.4;
     const br = lerp(1.4, 2.3, lying) * S;
@@ -687,7 +710,7 @@ export class Dragon {
     }
     if (m.eye) {
       m.eye.uniforms.uGlow.value = eyes;
-      m.eye.uniforms.uInkGlow.value = eyes * 2.5;
+      m.eye.uniforms.uInkGlow.value = eyes * 1.3; // a hot amber slit, not a glowing ball
     }
   }
 

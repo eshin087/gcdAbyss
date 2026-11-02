@@ -10,6 +10,7 @@ import { clamp, damp, angleDiff } from '../../core/math.js';
 // faces the player / taunts their corpse. Lab triggers (debug.trigger) bypass the decision loop.
 
 const S = SCALE;
+const REST = TUNING.rest; // resting body language (wings HALF, jaw open)
 const rand = (a, b) => a + Math.random() * (b - a);
 const ATTACK_NAMES = new Set(Object.keys(ATTACKS));
 const NO_BEATS = [];
@@ -42,13 +43,16 @@ export const SEQ = {
         pose.stateRate = 2.4;
         d.turnToward(s.yawTo, 1.3, dt);
         pose.speed = 1.5;
-        pose.spread[0] = pose.spread[1] = 0.25 * a.k;
+        pose.spread[0] = pose.spread[1] = 0.5 * a.k; // wings rise to the mantled HALF pose
+        pose.spreadRate = 2.5;
+        pose.jaw = 0.35;
       } else if (a.phase === 'roar') {
         d.turnToward(s.yawTo, 0.8, dt);
         roarPose(d, a, 1);
       } else {
+        pose.spread[0] = pose.spread[1] = 0.5;
         pose.spreadRate = 3;
-        pose.jaw = 0.1;
+        pose.jaw = 0.35;
       }
     },
     end(d, a, interrupted) {
@@ -67,17 +71,24 @@ export const SEQ = {
       d.game.shake?.(0.25);
     },
     update(d, a) {
+      // the front collapses onto buckling forelegs (chest down, hips up, hind legs braced wide), neck
+      // limp and low, wings drooping half-open to the ground
       const pose = d.pose;
       const rec = a.k > 0.78;
       pose.stagger = rec ? 0 : 1;
-      pose.lower = rec ? 0.25 : 0.65;
-      pose.pitch = rec ? 0.05 : 0.15;
+      pose.lower = rec ? 0.2 : 0.35;
+      pose.pitch = rec ? 0.05 : 0.24;
       pose.bodyRate = 4;
+      pose.elbowsOut = rec ? 0.2 : 0.85;
+      pose.stanceH = 0.2;
+      pose.restep = 1;
       pose.jaw = rec ? 0.1 : 0.35;
       pose.eyes = 0.45;
-      pose.spread[0] = pose.spread[1] = rec ? 0 : 0.22;
+      pose.spread[0] = pose.spread[1] = rec ? 0.3 : 0.35;
       pose.spreadRate = 2;
+      pose.droop = rec ? 0 : 0.75;
       pose.tailWave = 0.02;
+      pose.lookDown = 0.8;
       d.rootPt(pose.look, Math.sin(d.time * 1.3) * 1.5, 0, 9);
     },
     end(d) {
@@ -108,23 +119,30 @@ export const SEQ = {
       // the meter drains over the break: a visible timer for the punish window
       d.posture = d.maxPosture * (1 - a.k);
       d.emitPosture();
+      // the front collapses: chest dropped onto buckled forelegs (elbows out) while the hips stay up
+      // on braced hind legs; the neck goes limp, the head on the ground in front within sword reach;
+      // the wings droop half-open with their tips on the ground; the tail lies limp
       pose.stagger = rec ? 0.3 : 1;
-      pose.lower = rec ? 0.35 : 0.75;
-      pose.pitch = rec ? 0.08 : 0.28;
+      pose.lower = rec ? 0.25 : 0.42;
+      pose.pitch = rec ? 0.08 : 0.32;
       pose.bodyRate = rec ? 3 : 5;
+      pose.elbowsOut = rec ? 0.3 : 1;
+      pose.stanceH = 0.25;
+      pose.restep = 1;
       if (!rec) {
-        // head down on the ground just in front of the chest, within sword reach
-        pose.head = d.rootPt(pose.headTarget, 0, 0.75, 6.0);
+        pose.head = d.rootPt(pose.headTarget, 0, 0.75, 4.8);
         pose.headRate = a.t < 0.4 ? 5 : 2.5;
         pose.headOffset.y += Math.sin(d.time * 2.1) * 0.05 * S;
       } else pose.headRate = 3;
       d.rootPt(pose.look, Math.sin(d.time * 0.9) * 1.2, 0, 9);
       pose.lookRate = 2;
+      pose.lookDown = 1.0; // head slumped to the ground
       pose.jaw = rec ? 0.15 : 0.45;
       pose.eyes = rec ? 0.7 : 0.3;
-      pose.spread[0] = pose.spread[1] = rec ? 0 : 0.18;
+      pose.spread[0] = pose.spread[1] = rec ? 0.3 : 0.35;
       pose.spreadRate = 2;
-      pose.tailWave = 0.02;
+      pose.droop = rec ? 0 : 1;
+      pose.tailWave = 0;
       if (!rec) d.fx.stunStars(dt, d.rig.pt.head);
     },
     end(d) {
@@ -144,6 +162,7 @@ export const SEQ = {
       d.throat = 0;
     },
     update(d, a, dt) {
+      // head and shoulders snap back, the forefeet hop back once (the body slides back a little)
       const pose = d.pose, f = d.fwd;
       const e = 1 - a.k * a.k; // snap back, ease out
       pose.headRate = a.k < 0.35 ? 16 : 5;
@@ -155,8 +174,10 @@ export const SEQ = {
       pose.pitch = -0.14 * e;
       pose.lower = -0.1 * e;
       pose.bodyRate = 8;
+      pose.rear = a.k < 0.45 ? 0.55 * Math.sin((Math.PI * a.k) / 0.45) : 0;
+      if (a.k < 0.35) d.moveForward(-1.4 * S * (1 - a.k / 0.35), dt);
       pose.eyes = 0.8;
-      pose.spread[0] = pose.spread[1] = 0.2 * e;
+      pose.spread[0] = pose.spread[1] = REST.spread + 0.15 * e;
       if (a.k > 0.6) d.turnToward(d.sense.yawTo, d.turnRate * 0.4, dt);
     },
   },
@@ -172,12 +193,13 @@ export const SEQ = {
     update(d, a, dt) {
       const pose = d.pose;
       d.turnToward(d.sense.yawTo, d.turnRate * 0.5, dt);
+      pose.spread[0] = pose.spread[1] = 0.5;
       if (a.phase === 'windup') {
         pose.head = d.rootPt(pose.headTarget, 0, 6.0, 2.6);
         pose.headRate = 4;
         pose.jaw = 0.25;
       } else if (a.phase === 'roar') roarPose(d, a, 0.6);
-      else pose.jaw = 0.1;
+      else pose.jaw = 0.35;
     },
   },
 
@@ -443,6 +465,13 @@ export class Brain {
     pose.vel.set(0, 0, 0);
     pose.speed = 0;
     pose.look.copy(d.sense.chest);
+    // resting baseline while awake (actions override): jaw open so the lit maw and the fangs show,
+    // wings mantled HALF like the painting's tall sails (both phases: at 0.3 the sails were edge-on
+    // from the game camera and read as two white lances); phase 2 opens the jaw wider
+    if (d.state !== 'sleeping' && d.state !== 'dead') {
+      pose.jaw = REST.jaw[d.phase === 2 ? 1 : 0];
+      pose.spread[0] = pose.spread[1] = REST.spread;
+    }
     for (const k in this.cooldowns) this.cooldowns[k] = Math.max(0, this.cooldowns[k] - dt);
 
     // a full posture meter breaks as soon as allowed (e.g. right after landing a leap)
@@ -539,6 +568,8 @@ export class Brain {
     if (this.walkSpeed > 0.05) d.moveForward(this.walkSpeed, dt);
     else pose.speed = Math.max(pose.speed, 1);
     pose.tailWave = 0.08 + this.walkSpeed * 0.02;
+    pose.lower = d.phase === 2 ? 0.03 : 0.15; // combat idle a little lower than standing tall; phase 2 stands tall
+    if (this.walkSpeed > 0.5) pose.spread[0] = pose.spread[1] = Math.min(pose.spread[0], REST.walkSpread); // tucked while walking
     this._idleLife(dt);
 
     if (this.idleTimer <= 0) {

@@ -72,14 +72,16 @@ export class Chain {
 
   /**
    * Rest polyline from `origin`, angles in `frameQ`:
-   *   yaw_i = yaw0 + yawStep*i + waveAmp*sin(wavePhase - i*0.5)*(i/n)
+   *   yaw_i = yaw0 + yawStep*i + yawCurve*i*i + waveAmp*sin(wavePhase - i*0.5)*(i/n)
    *   pitch_i = pitch0 + pitchStep*i + pitchCurve*i*i   (pitchCurve < 0 with pitchStep > 0 = S-curve)
+   * yawCurve > 0 makes a lateral HOOK (straight at the base, curling ever tighter toward the tip);
+   * a constant yawStep makes a circle.
    */
-  buildRest(origin, frameQ, { pitch0 = 0, pitchStep = 0, pitchCurve = 0, yaw0 = 0, yawStep = 0, waveAmp = 0, wavePhase = 0 }) {
+  buildRest(origin, frameQ, { pitch0 = 0, pitchStep = 0, pitchCurve = 0, yaw0 = 0, yawStep = 0, yawCurve = 0, waveAmp = 0, wavePhase = 0 }) {
     const r = this.rest;
     r[0].copy(origin);
     for (let i = 0; i < this.n; i++) {
-      const yaw = yaw0 + yawStep * i + waveAmp * Math.sin(wavePhase - i * 0.5) * (i / this.n);
+      const yaw = yaw0 + yawStep * i + yawCurve * i * i + waveAmp * Math.sin(wavePhase - i * 0.5) * (i / this.n);
       const pitch = pitch0 + pitchStep * i + pitchCurve * i * i;
       frameDir(_d, yaw, pitch, frameQ);
       if (i === 0) this.baseAxis.copy(_d);

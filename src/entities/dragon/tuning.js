@@ -1,4 +1,4 @@
-// Gameplay + anatomy numbers for the wyvern. Everything a designer might want to tweak lives here.
+// Gameplay + anatomy numbers for the drake. Everything a designer might want to tweak lives here.
 // Shared combat windows (parry / block / dodge / posture) live in src/combat/rules.js — never here.
 
 import { TELL } from '../../combat/rules.js';
@@ -44,6 +44,10 @@ export const TUNING = {
   // seconds before each attack is first allowed once the fight starts (the intro roar)
   openingCooldowns: { breath: 7, fireball: 5, charge: 4, leap: 10 },
   flashDecay: 9,
+  // resting body language while awake (ai.js baseline; attacks return to it): wings mantled HALF
+  // (0 FOLD, 0.5 HALF, 1 SPREAD: the painting's tall sails, the biggest shapes at the game camera),
+  // tucked a little while walking; the jaw rests open so the lit maw shows (1 = 0.7 rad) [P1, P2]
+  rest: { spread: 0.5, walkSpread: 0.3, jaw: [0.4, 0.65] },
 
   // Every attack declares its tell (TELL.NORMAL / BLUE / RED) and may override parryable /
   // blockable (defaults: tellDefaults(tell) in rules.js). Times in seconds (P1 values; P2 x0.85 on
@@ -57,7 +61,7 @@ export const TUNING = {
       damage: 22, knockback: 2, reach: 5.4 * S, cooldown: 1.2, weight: 3,
     },
     swipe: {
-      label: 'Wing-claw swipe', tell: TELL.NORMAL,
+      label: 'Claw swipe (foreleg rake)', tell: TELL.NORMAL,
       windup: 0.8, active: 0.25, impact: 0.15, recovery: 0.7,
       damage: 18, knockback: 3, cooldown: 1.6, weight: 2.6,
     },
@@ -77,7 +81,9 @@ export const TUNING = {
       // impact: player straight behind; + impactFlank for a player at the flank (~80 deg off the nose)
       windup: 0.9, active: 0.45, impact: 0.2, impactFlank: 0.1, recovery: 0.9,
       damage: 20, knockback: 3, cooldown: 2.5, weight: 3, spin: 200 * DEG,
-      minReach: 2.0 * S, reach: 9.6 * S, // swept-arc band around the root
+      // swept-arc band around the root: the 16-segment tail's tip reaches 8.9 model units out in the
+      // spin (measured v0.4) + its 0.45 hit sphere + the hero's radius
+      minReach: 2.0 * S, reach: 9.5 * S,
     },
     stomp: {
       label: 'Stomp', tell: TELL.RED,
@@ -117,26 +123,43 @@ export const TUNING = {
 };
 
 // Skeleton proportions in MODEL units (see SCALE above). Root = ground point under the torso centre,
-// facing +Z, model-left = +X. See model.js for how these are assembled.
+// facing +Z, model-left = +X. See model.js for how these are assembled and docs/art/dragon.md
+// (§1.2 skeleton layout, Appendix A) for where every number comes from.
+// v0.4 "four-legged rebuild": a quadruped drake (columnar forelegs + digitigrade hind legs) with a
+// separate pair of wings rising from the back (the v0.3 wyvern walked on its wing wrists).
 export const ANATOMY = {
-  hipY: 2.0, // hips joint height when standing
-  hipZ: -1.0,
-  chest: [0, 0.2, 2.2], // chest joint, in hips frame
-  neckBase: [0, 0.45, 0.9], // in chest frame
+  withers: 4.0, // reference height H (top of the shoulders, no spikes): every ratio in the art spec is x H
+  hipY: 2.4, // pelvis body joint when standing
+  hipZ: -1.45,
+  chest: [0, 0.45, 2.7], // ribcage body joint, hips frame -> root (0, 2.85, 1.25)
+  neckBase: [0, 0.45, 0.45], // chest frame -> root (0, 3.3, 1.7)
   neckSegs: 7,
-  neckLen: 0.68,
-  headLen: 1.45,
-  tailBase: [0, 0.0, -0.95], // in hips frame
-  tailSegs: 14,
+  neckLen: 0.46, // 3.2 chain, coiled into an upright S at rest (reads ~2.3); stretches for the bite
+  headLen: 1.3,
+  tailBase: [0, 0.15, -1.1], // hips frame -> root (0, 2.55, -2.55)
+  tailSegs: 16,
   tailLen: 0.52,
-  hipJoint: [0.95, -0.25, 0.0], // in hips frame (x mirrored)
-  thigh: 1.15,
-  shin: 1.05,
-  meta: 0.75,
-  shoulder: [1.0, 0.25, 0.4], // in chest frame (x mirrored)
-  humerus: 1.6,
-  forearm: 2.2,
-  fingers: [3.8, 3.4, 3.0],
-  footHome: [1.25, 0, -0.55], // toe contact, root frame
-  wristHome: [2.5, 0.35, 2.6], // wing knuckle contact, root frame
+  // hind legs (digitigrade: knee forward, hock high behind the toe)
+  hipJoint: [1.0, -0.1, 0.1], // hips frame (x mirrored)
+  thigh: 1.25,
+  shin: 1.3,
+  meta: 0.78,
+  footHome: [1.25, 0, -1.45], // hind toe contact, root frame
+  ankleOff: [0, 0.75, -0.15], // hock above / behind the toe contact (world-aligned, x yaw)
+  // front legs (columnar, semi-digitigrade: elbow back, wrist 0.5 off the ground)
+  shoulder: [1.0, -0.1, 0.6], // chest frame (x mirrored) -> root (+-1.0, 2.75, 1.85)
+  humerus: 1.05,
+  forearm: 1.37,
+  hand: 0.45,
+  handHome: [1.25, 0, 2.15], // front toe contact, root frame (outside the chest: reads from above)
+  wristOff: [0, 0.42, -0.2], // front wrist above / behind the toe contact
+  // wings: separate limbs on top of the back, behind the neck base
+  wingRoot: [0.7, 1.0, -0.25], // chest frame -> root (+-0.7, 3.85, 1.0)
+  wingHumerus: 1.5,
+  // arm 4.1 (~1.0 H): long enough for the roar / breath wrists to stand ~1.85 H high and well out to
+  // the side (the panel's raised 'M'); the half-raised sail keeps a ~135° elbow (fix round 1)
+  wingForearm: 2.6,
+  fingers: [5.4, 6.0, 4.8, 3.4], // f0 = leading edge, f3 = inner
+  knuckle: [0.62, 0.58, 0.6, 0.65], // proximal fraction of each finger (the distal kink joint)
+  hipAttach: [1.0, 0.5, -0.15], // inner membrane's flank attach, hips frame -> root (+-1.0, 2.9, -1.6)
 };
