@@ -36,6 +36,8 @@ const CSS = `
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y; /* phones: the panel scrolls even though the game blocks page panning */
+  -webkit-overflow-scrolling: touch;
   pointer-events: auto;
   font-size: 11px;
   line-height: 1.35;
@@ -61,6 +63,7 @@ const CSS = `
 .lab-title { font-weight: 700; font-size: 12px; letter-spacing: 0.24em; color: var(--lab-ember); }
 .lab-hint { flex: 1; font-size: 10px; color: var(--lab-faint); white-space: nowrap; }
 .lab-head .lab-btn { padding: 0 6px; line-height: 15px; }
+.lab-head .lab-close { min-width: 24px; font-size: 14px; line-height: 17px; }
 .lab-status {
   padding: 3px 8px;
   font-size: 10px;
@@ -94,7 +97,7 @@ const CSS = `
 .lab-grid.c6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 /* model viewer: every HUD layer fades out (opacity, so HUD rules that force visibility on
    descendants cannot leak through); the Lab panel stays */
-#ui.lab-mv > :not(.lab-root) { opacity: 0 !important; pointer-events: none !important; }
+#ui.lab-mv > :not(.lab-root):not(.lab-badge) { opacity: 0 !important; pointer-events: none !important; }
 .lab-btn {
   appearance: none;
   margin: 0;
@@ -183,18 +186,47 @@ const CSS = `
   position: absolute;
   left: 50%;
   top: 8px;
-  z-index: 40;
+  z-index: 41;
   transform: translateX(-50%);
-  padding: 2px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  min-height: 22px;
+  padding: 2px 10px;
   font-size: 10px;
   line-height: 14px;
-  letter-spacing: 0.08em;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   white-space: nowrap;
   color: var(--lab-ember);
   background: rgba(6, 9, 14, 0.8);
   border: 1px solid rgba(255, 138, 61, 0.45);
   pointer-events: auto;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.lab-badge:hover { background: rgba(255, 138, 61, 0.12); border-color: rgba(255, 138, 61, 0.7); }
+.lab-badge.open { color: #ffe2cc; background: rgba(255, 138, 61, 0.16); border-color: var(--lab-ember); }
+.lab-badge.cheats { font-weight: 400; letter-spacing: 0.08em; }
+
+/* touch screens: finger-sized toggle and close button */
+@media (pointer: coarse) {
+  .lab-badge { min-width: 64px; min-height: 36px; padding: 0 14px; font-size: 11px; }
+  .lab-head .lab-close { min-width: 36px; min-height: 36px; font-size: 18px; }
+}
+html.abyss-touch .lab-badge { min-width: 64px; min-height: 36px; padding: 0 14px; font-size: 11px; }
+html.abyss-touch .lab-head .lab-close { min-width: 36px; min-height: 36px; font-size: 18px; }
+html.abyss-touch .lab-hint { display: none; }
+
+/* small screens (phones in landscape): compact panel that always fits, scrolling inside */
+@media (max-height: 560px), (max-width: 700px) {
+  .lab-root { width: min(296px, calc(100vw - 12px)); max-height: calc(100% - 130px); font-size: 10px; }
+  .lab-sec-h { padding: 6px 8px; }
+  .lab-btn { padding: 4px 4px; font-size: 10px; }
+  .lab-hint { display: none; }
+  html.abyss-touch .lab-root { left: 6px; top: 86px; max-height: calc(100% - 92px); }
 }
 `;
 

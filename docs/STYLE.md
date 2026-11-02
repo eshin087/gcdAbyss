@@ -49,7 +49,16 @@ History matters here:
 | Trunks, bones, bonfire | screen-grid `STONE` 1.0: symbol ramp `. : - = + * % # 8 & @ M W` + **outline glyphs** (`\| - / \`) on silhouettes / depth steps of raised props | `createAsciiObjectMaterial` → `render/pipeline.js` |
 | Canopies | screen-grid `LEAF` 0.6: blobby ramp `. : o 0 O 8 @` | same |
 | Grass | ~260k instanced quads, each ONE glyph stroke (`\| / \ ' Y V v l i`) **anchored in the world** (no shimmer when the camera moves); gentle slow wind, trample pushers, wing gusts, burnt to ash glyphs; dim world-space soil glyphs between | `world/grass.js`, `world/ground.js` |
-| Hero, wyrm | **crisp surface glyphs**: one glyph per aGUV cell printed on the body, picked by local light (a 4-glyph ramp, or a `levels` table of per-cell variants), on near-black gaps, plus a moonlit silhouette line on the hero | `createSurfaceGlyphMaterial({ ascii })` / `({ levels })` |
+| Hero, wyrm | **v0.4: classic ASCII art** (the owner's reference images).
+- The creature material renders a smooth shaded SOURCE image tagged `FLAG.ART`.
+- The ASCII pass converts it on a fine screen grid (~2/3 of the world cell, about 5x8 px at 1080p).
+- Each cell averages 4 samples, picks a letter from the density-sorted `ART_CHARS` ramp (`. : ; i r s X 2 3 5 h A H S G M 9 # & B @`) by brightness with a little per-cell jitter, and keeps the source hue (white scales, orange lava, red wings, cyan blade) on black.
+- Per-material `artGain` sets the source brightness (wyrm 0.28, hero 1.1).
+- The hero tags `FLAG.ART_HERO` (0.48) and gets his own treatment:
+  - a finer grid of 3x5 pixel-font letters in 4x6 px cells (a browser font fills cells that small)
+  - drawn 1.2x and leaned away from the camera (feet planted), so he stands up on screen like the reference: ~25 letter rows at the 36 m camera instead of ~9
+  - a fixed key light and darkening toward his silhouette, so letters run dim at the edges and dense in the light, the same in moonlight and firelight
+  - depth-edge gaps tuned for the game camera (`uArtEdge.x` 0.004): cells spanning a part boundary go black, the reference's dark separations | `createSurfaceGlyphMaterial` (flag defaults to `FLAG.ART`) → `render/pipeline.js` `artCell` |
 | FX | camera-facing glyph particles, additive HDR (bloom) or alpha, drawn after the grid pass | `render/particles.js` |
 | Fire light | pooled point lights (8 visible) lighting every shader | `render/lights.js` |
 | Shadows | moon orthographic shadow map, casters on layer 1 (`markCaster`) | `render/pipeline.js` |
@@ -146,3 +155,19 @@ Rules of thumb:
  .,'`:;-~_=+*^<>/\|!ilIjtYVvXxyoOcaeszr0Q@#%&8$BNMWwmnuqpdbkh{}()[]?"1234567890ACDEFGHJKLPRSTUZ·•°×
 ```
 `gi(ch)` throws if a glyph is missing — stick to this set.
+
+### Creature ASCII art (v0.4)
+- **Look:** the reference is classic image-to-text art. It is a fixed grid of upright characters,
+  their density following brightness, coloured per character, with a black backing and the
+  silhouette defined only by where characters stop. The surface-glyph detail (levels, cracks, ink
+  axes) still shapes the source image, so it shows up as light, colour and letter choice.
+- **Brightness:** keep the source in the ramp's mid-range. Too bright saturates to `@B&` and blooms
+  into a white blur; too dark leaves faint `: ; i r` dust. Tune with per-material `artGain`, then
+  the pass's `uArtLum` / `uArtMin` / `uArtMax`.
+- **Glow:** only saturated colours (lava, blade, eyes) keep HDR glow. Bright colourless parts
+  (claws, teeth) are capped, or they swell into orbs under bloom.
+- **Scale:** at the 36 m game camera the hero is ~25 rows of 4x6 px pixel letters (~15 on a phone
+  at LOW). Close-ups (Lab model viewer) show the full reference look.
+- **Hero contrast:** his source sits around luma 0.15–0.45 thanks to the key light; the pass maps
+  it with a black point (`uArtBlack.x` 0.04) and `uArtLum.x` 3, so the whole ramp is used: `: ; i r`
+  at the edges, `X 2 3 5 h A` in the body, `# & B @ M` in the light.

@@ -157,3 +157,55 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - Attack anchors moved to the real striking parts (forefeet, claws, snout, tail).
   - Hit-timing spreads are measured per ability in COMBAT.md.
   - Future look passes start from the critic's gap list rather than impressions.
+
+## ADR-015 — Creatures as classic ASCII art: screen-grid conversion of a shaded source (2026-11-02)
+- **Context:** the owner shared two reference images and asked for the hero and dragon to "look more
+  ASCII like". The references are image-to-text conversions: upright characters on a fixed grid,
+  density by brightness, per-character colour, black backing. Glyphs printed on 3D surfaces
+  (ADR-011) don't read that way.
+- **Decision:**
+  - Creature materials render a smooth shaded source (`FLAG.ART`).
+  - The ASCII pass converts it on a finer grid than the world's (owner's choice: smaller letters so
+    the hero keeps a few rows at the game camera), using a density-sorted `ART_CHARS` ramp and the
+    source hue.
+  - Per-material `artGain` balances bright and dark inks.
+  - The world grid (stones, trees) and the world-anchored grass are unchanged.
+- **Consequences:**
+  - Characters re-pick as creatures move, the inherent "ASCII video" look. This is acceptable for
+    actors; the ground stays calm.
+  - Surface-glyph patterns now only shape the source image.
+  - At the default camera the hero is a small letter cluster; detail lives in close-ups.
+
+## ADR-016 — Touch is a virtual layer on the input system; phones get their own camera (2026-11-02)
+- **Context:** the owner tests on a phone. They couldn't close the Lab (it is keyboard-toggled) and
+  had no controls.
+- **Decision:**
+  - Touch controls feed virtual keys, buttons and an analog axis into `core/input.js`
+    (`setVirtual`, `setVirtualAxis`). Player and flow code are unchanged and read the same API.
+  - Auto-aim parks `game.mouseGround` on the dragon instead of forcing lock-on.
+  - The camera rig has a phone profile: 20 m default, extra zoom capped at 3 m.
+  - Phones default to LOW quality.
+  - Landscape only.
+- **Consequences:**
+  - Gameplay and tests are shared between desktop and touch (a `touch` test scenario).
+  - Real-device checks are still needed for native multi-touch, iOS gestures and frame rate.
+
+## ADR-017 — The hero is drawn bigger and leaned toward the camera; gameplay keeps the upright body (2026-11-02)
+- **Context:** the owner saw the hero in game as ~9 rows of dense letters, "not showing the details"
+  of the close-ups, and asked whether he should be bigger. From the 58° camera a standing figure
+  shows mostly its top and spans about half its height; at 36 m that is ~5 % of the screen.
+- **Decision:**
+  - The hero's root draws him `HERO_SCALE` 1.2x and sheared away from the camera by half its pitch
+    (29°, feet planted), so he faces the view. The animator poses the plain body first
+    (`lean.on = false`); the drawn transform is applied after it.
+  - Gameplay stays on the upright 1.85 m body: the sword's hit test unleans its points, the
+    dragon aims at the unleaned chest, the hurt cylinder is unchanged. FX follow the drawn body.
+  - The hero gets a finer pixel-font letter grid and a key-lit, edge-darkened source.
+  - The camera distance is unchanged (wheel / pinch zoom still work).
+- **Consequences:**
+  - ~2.7x the letter rows with no change to combat balance or framing.
+  - The drawn blade (1.8 m) is about the gameplay reach (1.5 m + `REACH.tipExt` 0.4).
+  - The drawn body overlaps more of an attack's area than the hurt cylinder (generous to the player).
+  - The moon shadow is cast by the leaned, scaled body.
+  - New code that reads hero joint positions for gameplay must use `player.unlean()`.
+

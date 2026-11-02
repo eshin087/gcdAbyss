@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
 import { FS_VERT } from './shaderLib.js';
-import { createGridAtlas, GRID_COLS, GRID_ROW } from './glyphs.js';
+import { createGridAtlas, createArtAtlas, createPixelArtAtlas, pixelArtCell, GRID_COLS, GRID_ROW } from './glyphs.js';
 
 // Frame pipeline:
 //   1. moon shadow map  (casters = objects on LAYER_CASTER)
@@ -76,6 +76,13 @@ export class Pipeline {
     // --- ASCII grid pass (see FLAG in materials.js and GRID_ROW in glyphs.js)
     this.cell = new THREE.Vector2(7, 12);
     this.grid = null;
+    // finer character grid for the hero / wyrm ASCII art (FLAG.ART), owner's choice: ~5x8 px letters
+    this.artCell = new THREE.Vector2(4, 7);
+    this.art = null;
+    // the hero's own, finer grid: 3x5 pixel-font letters in 4x6 cells (x2 from 2160 px tall), so he
+    // gets ~1.5x the rows of the wyrm's letters at the game camera
+    this.heroCell = new THREE.Vector2(4, 6);
+    this.heroArt = null;
     this.asciiMat = new THREE.ShaderMaterial({
       uniforms: {
         tScene: { value: this.sceneRT.texture },
@@ -94,6 +101,24 @@ export class Pipeline {
         uInvViewProj: { value: new THREE.Matrix4() },
         uNear: { value: 1 },
         uFar: { value: 200 },
+        tArt: { value: null },
+        uArtCell: { value: this.artCell },
+        uArtCount: { value: 22 },
+        tHeroArt: { value: null },
+        uHeroCell: { value: this.heroCell },
+        uHeroCount: { value: 22 },
+        // per creature kind: x = hero (FLAG.ART_HERO), y = wyrm / other (FLAG.ART)
+        // hero: his source (key-lit, U.uArtHeroKey) sits around luma 0.15–0.45 in moonlight and by the
+        // fire alike; black point + gentle curve spread it over the whole ramp, dim to dense
+        uArtLum: { value: new THREE.Vector2(3.0, 4.5) }, // brightness -> ramp position: 1 - exp(-luma * k)
+        uArtBlack: { value: new THREE.Vector2(0.04, 0.0) }, // source luma treated as black (contrast)
+        uArtMin: { value: new THREE.Vector2(0.14, 0.3) }, // glyph value at the dark end of the ramp
+        uArtMax: { value: 0.8 }, // glyph value at the bright end (tone-maps to white without bloom haloes)
+        uArtDither: { value: new THREE.Vector2(1.1, 1.6) }, // per-cell ramp jitter (letters): variety
+        // relative depth jump inside a cell that marks a part boundary (arm over coat, leg over leg):
+        // such cells go black, the reference images' dark gaps between parts (0 = off). The hero's is
+        // low (0.004 = 0.14 m at the 36 m camera, ~1 letter of depth), or no gap ever opens in game.
+        uArtEdge: { value: new THREE.Vector2(0.004, 0.0) },
       },
       vertexShader: FS_VERT,
       fragmentShader: /* glsl */ `
@@ -113,6 +138,18 @@ export class Pipeline {
         uniform mat4 uInvViewProj;
         uniform float uNear;
         uniform float uFar;
+        uniform sampler2D tArt;
+        uniform vec2 uArtCell;
+        uniform float uArtCount;
+        uniform sampler2D tHeroArt;
+        uniform vec2 uHeroCell;
+        uniform float uHeroCount;
+        uniform vec2 uArtLum;
+        uniform vec2 uArtBlack;
+        uniform vec2 uArtMin;
+        uniform float uArtMax;
+        uniform vec2 uArtDither;
+        uniform vec2 uArtEdge;
         varying vec2 vUv;
 
         float hash12(vec2 p) {
@@ -183,8 +220,86 @@ export class Pipeline {
           return mix(c.rgb * uCreatureBg, c.rgb * uCreatureGain, m);
         }
 
+        bool isArt(float a) { return a > 0.46 && a < 0.55; }
+        bool isHero(float a) { return a > 0.46 && a < 0.49; } // FLAG.ART_HERO = 0.48, FLAG.ART = 0.5
+
+        // ---- ASCII art (hero / wyrm): the creature's crisp render is the source image of a fine grid.
+        // Each cell averages 4 samples; a letter from the density-sorted ART_CHARS ramp is picked by
+        // brightness (plus per-cell jitter for the images' letter variety) and keeps the source hue
+        // (white scales, orange lava, red wings, cyan blade) on a black backing.
+        vec3 artCell(vec3 c, vec2 acell, vec2 local, float hero) {
+          float lum = max(luma(c) - mix(uArtBlack.y, uArtBlack.x, hero), 0.0);
+          float v = 1.0 - exp(-lum * mix(uArtLum.y, uArtLum.x, hero));
+          float jit = (hash12(acell * 1.37 + 11.0) - 0.5) * mix(uArtDither.y, uArtDither.x, hero);
+          float n = hero > 0.5 ? uHeroCount : uArtCount;
+          float idx = clamp(floor(v * (n - 1.0) + 0.5 + jit), 1.0, n - 1.0);
+          vec2 auv = vec2((idx + local.x) / n, local.y);
+          float m = hero > 0.5 ? texture2D(tHeroArt, auv).a : texture2D(tArt, auv).a;
+          float mx = max(max(c.r, c.g), c.b);
+          vec3 hue = c / max(mx, 1e-4);
+          // saturated emissive parts (lava, the cyan blade, eyes) stay HDR so they bloom; bright but
+          // colourless parts (claws, teeth) don't, or they swell into glowing orbs
+          float sat = (mx - min(min(c.r, c.g), c.b)) / max(mx, 1e-4);
+          vec3 fg = hue * mix(mix(uArtMin.y, uArtMin.x, hero), uArtMax, v) * mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat));
+          return fg * m;
+        }
+
         void main() {
           vec2 px = gl_FragCoord.xy;
+          // the hero first: his own pixel-font grid
+          vec2 hcell = floor(px / uHeroCell);
+          vec2 hbase = hcell * uHeroCell;
+          vec3 hsum = vec3(0.0);
+          float hhits = 0.0, hmin = 1e9, hmax = 0.0;
+          for (int i = 0; i < 4; i++) {
+            vec2 o = vec2(i == 1 || i == 3 ? 0.75 : 0.25, i >= 2 ? 0.75 : 0.25);
+            vec2 suv = (hbase + o * uHeroCell) / uRes;
+            vec4 sa = texture2D(tScene, suv);
+            if (isHero(sa.a)) {
+              hsum += sa.rgb;
+              hhits += 1.0;
+              float dz = linDepth(suv);
+              hmin = min(hmin, dz);
+              hmax = max(hmax, dz);
+            }
+          }
+          if (hhits >= 2.0) {
+            if (uArtEdge.x > 0.0 && (hmax - hmin) > uArtEdge.x * hmin) {
+              gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); // part boundary: a dark gap, like the references
+              return;
+            }
+            gl_FragColor = vec4(artCell(hsum / hhits, hcell, (px - hbase) / uHeroCell, 1.0), 1.0);
+            return;
+          }
+          // the wyrm (other creatures): the art grid
+          vec2 acell = floor(px / uArtCell);
+          vec2 abase = acell * uArtCell;
+          vec3 asum = vec3(0.0);
+          float ahits = 0.0, dmin = 1e9, dmax = 0.0;
+          for (int i = 0; i < 4; i++) {
+            vec2 o = vec2(i == 1 || i == 3 ? 0.75 : 0.25, i >= 2 ? 0.75 : 0.25);
+            vec2 suv = (abase + o * uArtCell) / uRes;
+            vec4 sa = texture2D(tScene, suv);
+            if (isArt(sa.a) && !isHero(sa.a)) {
+              asum += sa.rgb;
+              ahits += 1.0;
+              float dz = linDepth(suv);
+              dmin = min(dmin, dz);
+              dmax = max(dmax, dz);
+            }
+          }
+          if (ahits >= 2.0) {
+            if (uArtEdge.y > 0.0 && (dmax - dmin) > uArtEdge.y * dmin) {
+              gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+              return;
+            }
+            gl_FragColor = vec4(artCell(asum / ahits, acell, (px - abase) / uArtCell, 0.0), 1.0);
+            return;
+          }
+          if (isArt(texture2D(tScene, px / uRes).a)) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); // creature edge sliver: black, like the images
+            return;
+          }
           vec2 cell = floor(px / uCell);
           vec2 cuv = (cell + 0.5) * uCell / uRes;
           vec4 c = texture2D(tScene, cuv);
@@ -195,6 +310,8 @@ export class Pipeline {
             col = texture2D(tScene, px / uRes).rgb; // untagged: pass through
           } else if (a < 0.46) {
             col = creatureCell(c, cell, local);
+          } else if (isArt(a)) {
+            col = texture2D(tScene, px / uRes).rgb; // world cell centred on a creature edge: raw pixel
           } else if (a < 0.8) {
             float l = 1.0 - exp(-luma(c.rgb) * uLumMap);
             float level = clamp(floor(l * 14.0), 0.0, 13.0);
@@ -356,6 +473,25 @@ export class Pipeline {
       this.cell.set(cellW, cellH);
       this.grid = createGridAtlas(cellW, cellH);
       this.asciiMat.uniforms.tGrid.value = this.grid.texture;
+    }
+    // creature ASCII art: ~2/3 of the world cell (owner: "smaller letters" so the hero gets rows)
+    const artH = Math.max(7, Math.round(H / 135));
+    const artW = Math.max(4, Math.round(artH * 0.6));
+    if (!this.art || artW !== this.artCell.x || artH !== this.artCell.y) {
+      this.art?.texture.dispose();
+      this.artCell.set(artW, artH);
+      this.art = createArtAtlas(artW, artH);
+      this.asciiMat.uniforms.tArt.value = this.art.texture;
+      this.asciiMat.uniforms.uArtCount.value = this.art.count;
+    }
+    const hs = Math.max(1, Math.floor(H / 1080));
+    const [heroW, heroH] = pixelArtCell(hs);
+    if (!this.heroArt || heroW !== this.heroCell.x || heroH !== this.heroCell.y) {
+      this.heroArt?.texture.dispose();
+      this.heroCell.set(heroW, heroH);
+      this.heroArt = createPixelArtAtlas(hs);
+      this.asciiMat.uniforms.tHeroArt.value = this.heroArt.texture;
+      this.asciiMat.uniforms.uHeroCount.value = this.heroArt.count;
     }
   }
 

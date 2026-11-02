@@ -112,6 +112,9 @@ export const GLOW = {
   maw: [0.55, 0.6, 1.3],
 };
 
+/** Brightness of the smooth source the creature ASCII-art pass converts (see FLAG.ART). */
+export const ART_GAIN = 0.28;
+
 export function createDragonMaterials(U) {
   const mats = {
     // back / flanks / shoulders / haunches: mixed blocky glyphs over obsidian
@@ -266,6 +269,9 @@ export function createDragonMaterials(U) {
       seed: 3.3,
     }),
   };
+  // ASCII-art source brightness (FLAG.ART): the wyrm's bright inks would saturate the letter ramp to
+  // '@B&' and bloom; at ~0.28 the lit hide keeps the owner's references' white-to-grey letter range
+  for (const m of Object.values(mats)) m.uniforms.uArtGain.value = ART_GAIN;
   return mats;
 }
 

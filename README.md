@@ -34,6 +34,24 @@ npm run build      # rebuilds dist/index.html
 | **E** | rest at bonfire |
 | **Esc** | pause · **H** help · **M** mute · **F1** Lab · **F2** quality · **F3** FPS · **wheel** zoom |
 
+### On a phone (touch, landscape)
+Touch controls appear on touch devices (first touch, or `?touch` in the URL; `?touch=0` keeps them off).
+Portrait shows a "rotate your phone" screen and pauses.
+
+| | |
+|---|---|
+| **Left thumb: stick** | move (floats under your thumb) · push to the rim = sprint |
+| **ATTACK** (big) | tap = light combo · **hold & release** = charged thrust |
+| **BLOCK** | **hold** = block · **tap just before impact** = parry |
+| **DODGE** | dodge roll · just before impact = Ghostep |
+| **FLASK · LOCK · \|\|** | drink flask · lock on · pause |
+| **Tap the prompt** | rest at the bonfire / fight again |
+| **Tap the screen** | start / rise again after death |
+| **Pinch** | zoom |
+
+Attacks and facing auto-aim at the wyrm in the fight; otherwise the hero faces where the stick points.
+Phones get a closer camera (20 m, pinch 14–34 m) and start on LOW quality (pause menu → QUALITY).
+
 ## The fight
 Walk north from the bonfire into the stone circle and the wyrm wakes. Every attack shows a tell:
 - **white** — normal: block it, parry it or dodge it;
@@ -44,7 +62,7 @@ Every tell flashes ~0.35 s before impact. Parries and hits fill the wyrm's gold 
 breaks, crits land. Below half health it ignites, roars a shock ring, gets faster and starts leaping.
 
 ## The Lab (debug mode)
-`?lab` in the URL or **F1** opens the Lab: trigger any ability (1–9), loop abilities, jump to phase 2,
+`?lab` in the URL or **F1** (or the floating **LAB** button at the top, on phones) opens the Lab: trigger any ability (1–9), loop abilities, jump to phase 2,
 stagger / posture break / kill / reset, god mode, infinite flasks, slow-mo and frame stepping, hitbox
 overlay and a parry/dodge timing trainer. See [src/dev/README.md](src/dev/README.md).
 

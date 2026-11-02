@@ -682,6 +682,51 @@ const CSS = `
 .ab-btn.primary { justify-content: center; gap: 8px; color: #fff; }
 .ab-btn .v { color: var(--ab-gold); }
 .ab-sep { height: 1px; margin: 14px 0 12px; background: var(--ab-line); }
+
+/* ---------- touch devices (src/ui/touch.js adds .ab-touch; desktop never gets it) ---------- */
+.ab-root:not(.ab-touch) .tp-only { display: none !important; }
+.ab-touch .kb-only { display: none !important; }
+.ab-touch .ab-log, .ab-touch .ab-help { display: none; }
+/* the interaction prompt is a tap target ("[E] Rest" → TAP › Rest at bonfire) */
+.ab-touch .ab-prompt { bottom: 40px; z-index: 7; padding: 9px 16px; border-color: rgba(255, 138, 61, 0.55); }
+.ab-touch .ab-prompt.on { pointer-events: auto; touch-action: none; }
+.ab-touch .ab-prompt .ab-key { display: none; }
+.ab-touch .ab-prompt::before { content: 'TAP \\203A  '; color: var(--ab-ember); letter-spacing: 0.14em; }
+.ab-touch .ab-pause-panel { max-height: calc(100% - 16px); overflow-y: auto; touch-action: pan-y; overscroll-behavior: contain; }
+.ab-touch .ab-btn { min-height: 38px; }
+/* phones in landscape (~360-430 px tall): scale the panels down, keep the thumbs' corners free */
+@media (max-height: 560px) {
+  .ab-touch { font-size: 10px; }
+  .ab-touch .ab-pf { left: 8px; top: 6px; transform: scale(0.8); transform-origin: 0 0; }
+  .ab-touch .ab-map { right: 8px; top: 6px; transform: scale(0.6); transform-origin: 100% 0; }
+  .ab-touch .ab-boss { bottom: 10px; width: min(38vw, 380px); min-width: 0; }
+  .ab-touch .ab-boss-name { font-size: 10px; letter-spacing: 0.12em; overflow: hidden; text-overflow: ellipsis; }
+  .ab-touch .ab-boss-head { margin-bottom: 2px; }
+  .ab-touch .ab-banner .band { height: 112px; }
+  .ab-touch .ab-banner .sub { margin-top: 40px; font-size: 10px; }
+  .ab-touch .ab-banner.k-area { top: 22%; }
+  .ab-touch .ab-banner.k-area .sub { margin-top: 20px; }
+  .ab-touch .ab-banner.k-victory { top: 24%; }
+  .ab-touch .ab-stats { top: calc(24% + 44px); padding: 6px 12px 7px; }
+  .ab-touch .ab-stats .row { line-height: 15px; font-size: 10px; }
+  .ab-touch[data-state='victory'] .ab-prompt { bottom: 10px; }
+  .ab-touch .ab-mini { top: 22%; }
+  .ab-touch .ab-title { padding-top: 0; }
+  .ab-touch .ab-logo { font-size: clamp(8px, 1.45vw, 15px); }
+  .ab-touch .ab-title-rule { margin-top: 8px; }
+  .ab-touch .ab-title-sub { margin-top: 6px; font-size: 10px; }
+  .ab-touch .ab-press { margin-top: 16px; }
+  .ab-touch .ab-title-ctrl { margin-top: 10px; font-size: 9.5px; line-height: 17px; }
+  .ab-touch .ab-legend.title { margin-top: 6px; font-size: 9.5px; }
+  .ab-touch .ab-credit { bottom: 5px; font-size: 9px; }
+  /* below the floating LAB toggle (top centre, 36 px) when the Lab is in the page */
+  .ab-touch .ab-pause { align-items: flex-end; padding-bottom: 6px; }
+  .ab-touch .ab-pause-panel { width: min(420px, 92vw); max-height: calc(100% - 54px); padding: 10px 16px 12px; }
+  .ab-touch .ab-pause-title { font-size: 16px; margin-bottom: 6px; }
+  .ab-touch .ab-btn { margin: 5px 0; padding: 0 10px; }
+  .ab-touch .ab-sep { margin: 9px 0 8px; }
+  .ab-touch .ab-ctrls { font-size: 10px; }
+}
 `;
 
 export function injectHudStyle() {

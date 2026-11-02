@@ -5,6 +5,40 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-02
+The hero and the wyrm are drawn as classic ASCII art (the owner's reference images). The game is
+playable on phones.
+
+### Added
+- **Touch controls**, shown on phones (or with `?touch`):
+  - a floating ASCII stick (push to the rim to sprint)
+  - ATTACK (tap = combo, hold = charged thrust), BLOCK (hold = block, tap = parry), DODGE, FLASK,
+    LOCK and pause
+  - auto-aim at the dragon, pinch zoom, tap prompts and "tap to begin"
+  - landscape only, with a rotate overlay
+  - a closer phone camera (20 m), LOW quality and a compact HUD
+- **Lab show/hide on touch:** a floating `LAB` / `× LAB` toggle and a 36 px close button. The
+  compact panel scrolls inside itself on small screens. VIEW → Touch UI tests the layer on desktop.
+
+### Changed
+- **The hero shows his details in game** (owner: "isn't showing the details like in your preview
+  pictures"). He went from ~9 to ~25 letter rows at the desktop camera (~5 → ~15 on a phone):
+  - drawn 1.2x bigger and leaned away from the camera, feet planted, so he stands up on screen
+    instead of being seen from above (visual only: hits, hurt box and the dragon's aim unchanged)
+  - his own finer letters: a 3x5 pixel font in 4x6 px cells, with the reference's 1 px gaps
+  - shading like the reference: a fixed key light, dim letters toward the silhouette, black gaps
+    between overlapping parts at the game camera too
+  - phones upscale the 1x render crisply (pixelated) instead of blurring the letters
+- The hero's ASCII art follows the owner's reference more closely: steadier, brighter letters and
+  black gaps at part boundaries instead of 'random text'. White letters no longer bloom.
+- The hero and the wyrm render through a fine screen-space ASCII-art grid:
+  - letters `. : ; i r s X 2 3 5 h A H S G M 9 # & B @` picked by brightness and coloured per cell
+    (white scales, orange lava, red wings, cyan blade, violet gem), on black
+  - letters are ~2/3 the size of the world grid's (owner's choice), so the hero still gets rows at
+    the game camera
+  - red tells, hit flashes and the death dissolve carry through, because they are colour in the
+    source
+
 ## [0.3.0] - 2026-11-01
 Look pass from the owner's v0.2 review and concept sheets.
 

@@ -15,9 +15,12 @@ import { gi } from './glyphs.js';
 //   0            NONE     pass-through (particles never reach the scene target)
 //   0.04..0.44   CREATURE screen-grid glyphs that follow the surface flow (opt-in `grid: true`,
 //                the v0.2 look); the value packs set x 24 screen-space flow angles
+//   0.5          ART      hero / wyrm: their crisp render is the SOURCE IMAGE of a fine screen-space
+//                         ASCII-art grid (letters picked by brightness, coloured per cell);
+//   0.48         ART_HERO the same, with the hero's own pass settings (pipeline uArt* .x)
 //   0.6          LEAF     blobby foliage ramp
 //   1.0          STONE    letter ramp + edge outlines
-export const FLAG = { NONE: 0.0, LEAF: 0.6, STONE: 1.0 };
+export const FLAG = { NONE: 0.0, ART_HERO: 0.48, ART: 0.5, LEAF: 0.6, STONE: 1.0 };
 export const ASCII_SETS = { scales: 0, strands: 1, plates: 2, smooth: 3 };
 /**
  * Surface-glyph defaults per `ascii` set: 4-glyph ramp (dark → bright) and cell size in aGUV
@@ -153,6 +156,8 @@ const SHARED = [
   'uCamPos', 'uPLPos', 'uPLCol', 'uPLRad', 'uShadowMap', 'uShadowMatrix', 'uShadowTexel',
   'uGlyphAtlas', 'uScorch', 'uScorchBounds',
 ];
+// shared by surface-glyph materials only (declared in their own shader, not COMMON_GLSL)
+const SURFACE_SHARED = ['uArtSolid', 'uArtHeroEdge', 'uArtHeroKey'];
 
 /**
  * Geometry attributes required: position, normal, aCol (vec3 albedo, linear), aFlag (float),
@@ -237,7 +242,9 @@ export function createAsciiObjectMaterial(U, { fadeNearPlayer = false, side = TH
  *   rim:   moon-coloured rim light strength (keeps silhouettes readable on dark grass)
  *   emissive: [r,g,b] crack glow colour (driven by uniforms.uGlow 0..1 at runtime)
  *   glowMask: 0..1 how much this part participates in uGlow
- *   side: THREE side;  flag: FLAG value (keep NONE for creatures)
+ *   side: THREE side;  flag: FLAG value (default FLAG.ART: creatures are converted to ASCII art)
+ *   artGain: brightness of the smooth ASCII-art source (default 1): bright-inked bodies (the wyrm) use
+ *          < 1 so the letter ramp keeps its mid tones instead of saturating to '@B&'
  *   outline: moonlit silhouette line strength, independent of ink (default 1.1) — keeps near-black
  *          parts (the hero's coat) readable on dark grass; 0 for large bodies (reads as plastic)
  *   glyphZoom: < 1 draws each glyph larger inside its cell (less atlas padding → denser, crisper
@@ -288,6 +295,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       ...pickShared(U, SHARED),
+      ...pickShared(U, SURFACE_SHARED),
       ...feat.uniforms,
       uAsciiSet: { value: asciiSet },
       uBase: { value: new THREE.Color(...(o.base ?? [0.016, 0.014, 0.016])) },
@@ -311,7 +319,8 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uTint: { value: new THREE.Color(1, 1, 1) },
       uWarn: { value: new THREE.Vector4(1, 0.1, 0.05, 0) },
       uSeed: { value: o.seed ?? Math.random() * 97 },
-      uFlag: { value: o.flag ?? 0 },
+      uFlag: { value: o.flag ?? FLAG.ART },
+      uArtGain: { value: o.artGain ?? 1 },
     },
     vertexShader: /* glsl */ `
       attribute vec2 aGUV;
@@ -356,6 +365,10 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec4 uWarn;
       uniform float uSeed;
       uniform float uFlag;
+      uniform float uArtSolid;
+      uniform float uArtHeroEdge;
+      uniform float uArtHeroKey;
+      uniform float uArtGain;
       uniform float uAsciiSet;
       varying vec3 vW;
       varying vec3 vN;
@@ -469,7 +482,10 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float sh = shadowAt(vW + n * 0.1);
         vec3 L = lightAt(vW, n, 0.25, sh);
         vec3 V = normalize(uCamPos - vW);
-        float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * uRim;
+        // ASCII-art source (FLAG.ART; FLAG.ART_HERO below 0.49): smooth shading for the art pass
+        float artW = uArtSolid * step(0.46, uFlag) * step(uFlag, 0.55);
+        float heroArt = artW * step(uFlag, 0.49);
+        float rim = pow(1.0 - max(dot(n, V), 0.0), 3.0) * uRim * (1.0 - heroArt);
 
         float lum = luma(L) * uLumScale + (h - 0.5) * 0.4;
 #if defined(SG_LEVELS) || defined(SG_INK_AXIS)
@@ -521,11 +537,17 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
 #else
         vec3 ink = inkC * (L * uGain + rim * uMoonColor * 2.0) + inkC * uInkGlow;
 #endif
-        vec3 col = mix(base, ink, m);
+        // the hero's art source also gets a fixed key light from the camera's upper left
+        ink += inkC * (heroArt * uArtHeroKey * max(dot(n, normalize(V + vec3(-0.5, 0.9, 0.0))), 0.0));
+        // smooth shading reads as clean light-to-dark letter gradients
+        vec3 col = mix(mix(base, ink, m), ink * uArtGain, artW);
         // moonlit silhouette line (not scaled by ink): a thin cool edge around the whole shape
-        // (steep falloff: a wide one shades whole cones/flares grey and reads as a plastic mesh)
-        float edgeL = pow(1.0 - max(dot(n, V), 0.0), 6.0);
-        col += uMoonColor * edgeL * uOutline * (0.35 + 0.65 * sh);
+        // (steep falloff: a wide one shades whole cones/flares grey and reads as a plastic mesh).
+        // The hero's art source darkens toward its silhouettes instead (the reference's dim edges).
+        float facing = max(dot(n, V), 0.0);
+        float edgeL = pow(1.0 - facing, 6.0);
+        col += uMoonColor * edgeL * uOutline * (0.35 + 0.65 * sh) * (1.0 - heroArt);
+        col *= 1.0 - heroArt * uArtHeroEdge * (1.0 - facing) * (1.0 - facing);
 
         // molten seams: thin hot cracks between scale rows/columns, the glyphs stay readable
 #ifdef SG_VORONOI

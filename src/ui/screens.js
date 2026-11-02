@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config.js';
-import { button, controlsGrid, el, fillKeyText, tellLegend } from './dom.js';
+import { button, controlsGrid, el, fillKeyText, tellLegend, touchGrid } from './dom.js';
 
 // Full-screen / panel UI: title, pause menu, help panel, victory record.
 
@@ -32,6 +32,18 @@ const TITLE_KEYS = [
   '[F1] lab',
 ];
 
+// the same list for the touch controls (src/ui/touch.js); shown instead on touch devices
+const TITLE_TOUCH = [
+  '[STICK] move · rim: sprint',
+  '[ATTACK] tap: combo · hold: thrust',
+  '[BLOCK] hold · tap: parry',
+  '[DODGE] roll',
+  '[FLASK] heal',
+  '[LOCK] lock-on',
+  '[||] pause',
+  '[PINCH] zoom',
+];
+
 export class TitleScreen {
   constructor(parent, visible) {
     this.root = el('div', 'ab-title', null, parent);
@@ -40,11 +52,14 @@ export class TitleScreen {
     this.logo = el('pre', 'ab-logo', LOGO.join('\n'), inner);
     el('div', 'ab-title-rule', '◆', inner);
     el('div', 'ab-title-sub', 'an ASCII action RPG  ·  demo: the Cinder Wyrm', inner);
-    el('div', 'ab-press', 'PRESS ANY KEY', inner);
-    const ctrl = el('div', 'ab-title-ctrl', null, inner);
+    el('div', 'ab-press kb-only', 'PRESS ANY KEY', inner);
+    el('div', 'ab-press tp-only', 'TAP TO BEGIN', inner);
+    const ctrl = el('div', 'ab-title-ctrl kb-only', null, inner);
     for (const item of TITLE_KEYS) fillKeyText(el('span', 'item', null, ctrl), item);
+    const tctrl = el('div', 'ab-title-ctrl tp-only', null, inner);
+    for (const item of TITLE_TOUCH) fillKeyText(el('span', 'item', null, tctrl), item);
     tellLegend(inner).classList.add('title');
-    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.3", this.root);
+    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.4", this.root);
 
     // shimmer: a sweeping column of '▓' plus a few random '▒' over the solid blocks
     this.chars = [...LOGO.join('\n')];
@@ -119,8 +134,16 @@ export class PauseMenu {
     this.btnMute = button(panel, '', () => game.flow?.toggleMute?.());
     fillKeyText(el('span', '', null, this.btnMute), 'SOUND [M]');
     this.muteVal = el('span', 'v', '', this.btnMute);
+    // touch devices: fullscreen (hides the browser bars; Android also locks landscape), if supported
+    const doc = globalThis.document;
+    if (doc?.fullscreenEnabled && typeof doc.documentElement?.requestFullscreen === 'function') {
+      this.btnFull = button(panel, 'tp-only', () => toggleFullscreen());
+      el('span', '', 'FULLSCREEN', this.btnFull);
+      this.fullVal = el('span', 'v', '', this.btnFull);
+    }
     el('div', 'ab-sep', null, panel);
-    controlsGrid(panel);
+    controlsGrid(panel).classList.add('kb-only');
+    touchGrid(panel).classList.add('tp-only');
     tellLegend(panel);
     this.on = false;
     this._q = null;
@@ -146,7 +169,26 @@ export class PauseMenu {
       this._m = m;
       this.muteVal.textContent = m ? 'MUTED' : 'ON';
     }
+    if (this.fullVal) {
+      const f = !!globalThis.document?.fullscreenElement;
+      if (f !== this._f) {
+        this._f = f;
+        this.fullVal.textContent = f ? 'ON' : 'OFF';
+      }
+    }
   }
+}
+
+/** Enter / leave fullscreen; in fullscreen also try to lock landscape (Android; iOS has neither). */
+function toggleFullscreen() {
+  const doc = globalThis.document;
+  if (!doc) return;
+  if (doc.fullscreenElement) {
+    doc.exitFullscreen?.()?.catch?.(() => {});
+    return;
+  }
+  const p = doc.documentElement?.requestFullscreen?.({ navigationUI: 'hide' });
+  p?.then?.(() => globalThis.screen?.orientation?.lock?.('landscape')?.catch?.(() => {}))?.catch?.(() => {});
 }
 
 export class HelpPanel {

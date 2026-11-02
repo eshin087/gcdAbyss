@@ -16,7 +16,11 @@ html,
 body {
   margin: 0;
   height: 100%;
+  height: 100dvh; /* phones: the visible viewport, not the one behind the browser bars */
   overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%; /* iOS must not inflate the HUD text in landscape */
+  text-size-adjust: 100%;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--mono);

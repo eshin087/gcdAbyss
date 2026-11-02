@@ -3,7 +3,7 @@ import { CONFIG } from '../../core/config.js';
 import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../../core/math.js';
 import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
-import { buildHero, setHeroGlyphScale } from './model.js';
+import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE } from './model.js';
 import { HeroAnimator } from './anim.js';
 import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
@@ -149,7 +149,9 @@ export class Player {
     this.anim = new HeroAnimator(this.rig, this);
     this.anim.onFootstep = (side) => this._footstep(side);
     this.fx = new PlayerFx(game, this.rig);
-    this.sweep = new SwordSweep(this.rig.sword);
+    // camera lean (model.js LEAN): visual only; hits and the dragon's aim use unleaned positions
+    this.lean = installLean(this.object3d);
+    this.sweep = new SwordSweep(this.rig.sword, (v) => this.unlean(v));
 
     markCaster(this.object3d);
     game.scene.add(this.object3d);
@@ -269,7 +271,7 @@ export class Player {
     if (burn > 0) this.burnT = Math.max(this.burnT, burn);
     this.flash = 1;
     const big = knockdown || dmg >= 25;
-    this.getChestPos(this._v);
+    this.getChestPos(this._v, true);
     this.fx.hurt(this._v.x, this._v.y, this._v.z, nx, nz, big);
     this._emit('player:hurt', { damage: dmg, kind, hp: this.hp });
 
@@ -300,12 +302,51 @@ export class Player {
     return RESULT.HIT;
   }
 
-  getChestPos(out) {
+  /** Chest point, world space. Unleaned (where the body really is) unless `visual` (FX anchors). */
+  getChestPos(out, visual = false) {
     out = out || new THREE.Vector3();
     this.rig.chest.getWorldPosition(out);
+    if (!visual) this.unlean(out);
     out.y += 0.1;
     if (!Number.isFinite(out.x + out.y + out.z)) out.set(this.position.x, 1.3, this.position.z);
     return out;
+  }
+
+  /** Lean away from the camera: LEAN.frac × its pitch below the horizon (model.js LEAN). */
+  _updateLean() {
+    const L = this.lean, cam = this.game.camera;
+    if (!L) return;
+    L.k = 0;
+    if (!cam?.matrixWorld) return;
+    const e = cam.matrixWorld.elements;
+    const fx = -e[8], fy = -e[9], fz = -e[10];
+    const h = Math.hypot(fx, fz);
+    if (!(h > 1e-3) || !Number.isFinite(fy)) return;
+    const a = Math.min(LEAN.max, Math.max(0, LEAN.frac * Math.atan2(-fy, h)));
+    L.k = Math.tan(a);
+    L.dx = fx / h;
+    L.dz = fz / h;
+  }
+
+  /** World point on the drawn body (leaned, HERO_SCALE) → the same point on the upright 1.85 m
+   *  gameplay body. */
+  unlean(v) {
+    const L = this.lean, p = this.position;
+    const k = L?.k || 0;
+    let x = v.x - p.x, y = v.y - p.y, z = v.z - p.z;
+    x -= k * L.dx * y;
+    z -= k * L.dz * y;
+    v.set(p.x + x / HERO_SCALE, p.y + y / HERO_SCALE, p.z + z / HERO_SCALE);
+    return v;
+  }
+
+  /** Point on the upright gameplay body → where it is drawn (leaned, HERO_SCALE): the name tag. */
+  leanPoint(v) {
+    const L = this.lean, p = this.position;
+    const k = L?.k || 0;
+    const x = (v.x - p.x) * HERO_SCALE, y = (v.y - p.y) * HERO_SCALE, z = (v.z - p.z) * HERO_SCALE;
+    v.set(p.x + x + k * (L?.dx || 0) * y, p.y + y, p.z + z + k * (L?.dz || 0) * y);
+    return v;
   }
 
   respawn(x, z) {
@@ -410,7 +451,12 @@ export class Player {
 
     this.yaw = wrapAngle(fin(this.yaw, Math.PI));
     this.object3d.rotation.y = this.yaw;
+    this._updateLean();
+    // the animator poses the plain upright body; the drawn one (lean, HERO_SCALE) is applied after
+    this.lean.on = false;
     this.anim.update(dt);
+    this.lean.on = true;
+    this.object3d.updateMatrixWorld(true);
     this._combat();
     this._updateFx(dt);
     this._updateMaterials(dt);
@@ -1344,7 +1390,7 @@ export class Player {
   /** Point `f` (0 hilt … 1 tip) along the blade, world space (falls back to the chest). */
   _bladePoint(f, out) {
     if (this.sweep.valid) return this.sweep.point(f, out);
-    return this.getChestPos(out);
+    return this.getChestPos(out, true);
   }
 
   _combat() {

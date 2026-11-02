@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, damp, easeOutCubic, easeInOutSine, wrapAngle, TAU } from '../../core/math.js';
-import { DIM, HAIR_CLUSTERS } from './model.js';
+import { DIM, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
 
 // Procedural animation for the Wanderer, keyed to the owner's concept sheets ("Movement" / "Combat
 // key poses"). Every frame a target POSE (a flat Float32Array) is built for the current clip as a
@@ -977,7 +977,8 @@ export class HeroAnimator {
     this.moveW = damp(this.moveW, clamp(sp / 3, 0, 1), 10, dt);
     this.sprintW = damp(this.sprintW, pl.state === 'sprint' ? 1 : 0, 6, dt);
     const prev = this.phase;
-    this.phase += (sp * dt) / (1.2 + 0.15 * sp);
+    // the drawn hero is HERO_SCALE tall: his stride is too, so the cycle slows to keep feet planted
+    this.phase += (sp * dt) / ((1.2 + 0.15 * sp) * HERO_SCALE);
     if (WALK_KEYS.has(this.key) && sp > 0.8 && this.onFootstep) {
       if (Math.floor(prev) !== Math.floor(this.phase)) this.onFootstep(1); // left foot lands
       if (Math.floor(prev + 0.5) !== Math.floor(this.phase + 0.5)) this.onFootstep(-1);

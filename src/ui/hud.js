@@ -44,7 +44,7 @@ export class Hud {
     this.bannerUi = new Banner(this.root);
     this.statsUi = new StatsPanel(this.root);
     this.help = new HelpPanel(this.root);
-    const hint = el('div', 'ab-hint ab-play', null, this.root);
+    const hint = el('div', 'ab-hint ab-play kb-only', null, this.root);
     fillKeyText(hint, '[H] help  [Esc] pause');
     this.titleUi = new TitleScreen(this.root, (game.state || 'title') === 'title');
     this.pauseUi = new PauseMenu(game, this.root);
@@ -200,6 +200,11 @@ export class Hud {
 
   clearBanner(instant = false) {
     this.bannerUi.clear(instant);
+  }
+
+  /** The prompt shown now (raw text with "[E]" key tokens), or null. Touch controls make it tappable. */
+  get promptText() {
+    return this._prompt;
   }
 
   prompt(text) {

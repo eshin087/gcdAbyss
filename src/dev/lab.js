@@ -11,7 +11,8 @@ import { ModelViewer, VIEW_ANGLES } from './modelView.js';
 // player.debug, flow.debug) and writes only game.debugTimeScale, so any future enemy that implements
 // the same `debug` shape plugs in. Every call is optional-chained: a missing API shows "n/a".
 //
-// Toggle: F1 or ` (backquote), or load with ?lab. While open: 1-9 trigger abilities, [ ] step time.
+// Toggle: F1 or ` (backquote), the floating LAB button (top centre; phones have no F1), or load with
+// ?lab. While open: 1-9 trigger abilities, [ ] step time.
 
 const TIME_STEPS = [0, 0.1, 0.25, 0.5, 1, 2];
 const STATES = ['explore', 'boss', 'dead', 'victory'];
@@ -69,7 +70,7 @@ export class Lab {
     this.game = game;
     this.open = false;
     this.root = null; // panel DOM, built on first open
-    this.badge = null; // closed-state reminder ("LAB · god · x0.25"), built on demand
+    this.badge = null; // floating LAB toggle (+ "· god · x0.25" cheats while closed), built on demand
     this.ui = {};
     this.prefs = loadPrefs();
     if (!this.prefs.collapsed || typeof this.prefs.collapsed !== 'object') this.prefs.collapsed = {};
@@ -435,7 +436,7 @@ export class Lab {
     const dbg = g.player?.debug;
     if (dbg && typeof dbg === 'object') dbg.god = true;
     this._teleport('front', 7);
-    this._cameraDistance(CONFIG.camera.minDistance);
+    this._cameraDistance(finite(g.cameraRig?.minDistance, CONFIG.camera.minDistance));
     this._status('showroom: AI off, god mode, camera close (wheel / "Camera default" to reset)', 'ok');
     this._refresh();
     this._syncBadge();
@@ -511,10 +512,21 @@ export class Lab {
     setText(u.mvInfo, d ? `${d.target} · d ${d.dist} m${d.auto.dist ? ' (fit)' : ''} · h ${d.height} m · AI off, god, HUD hidden` : 'off · console: __game.lab.modelView({ target, yaw, pitch, dist, height, dark })');
   }
 
+  _toggleTouch() {
+    const t = this.game.touch;
+    if (typeof t?.setActive !== 'function') {
+      this._status('n/a: game.touch (touch controls)', 'warn');
+      return;
+    }
+    t.setActive(!t.active);
+    setClass(this.ui.touchBtn, 'on', !!t.active);
+    this._status(`touch UI ${t.active ? 'on' : 'off'}${t.active && t.phone ? ' (phone camera)' : ''}`, 'ok');
+  }
+
   _cameraDistance(d) {
     const rig = this.game.cameraRig;
     if (!rig) return;
-    rig.targetDistance = Number.isFinite(d) ? d : CONFIG.camera.distance;
+    rig.targetDistance = Number.isFinite(d) ? d : finite(rig.defaultDistance, CONFIG.camera.distance);
   }
 
   _teleport(where, dist = 8) {
@@ -639,7 +651,7 @@ export class Lab {
       const head = el('div', 'lab-head', null, root);
       el('span', 'lab-title', 'LAB', head);
       el('span', 'lab-hint', 'F1 / ` toggle · 1-9 abilities · [ ] time', head);
-      button(head, 'x', () => this.setOpen(false));
+      button(head, '×', () => this.setOpen(false), 'lab-close').title = 'close the Lab (F1)';
       this.ui.status = el('div', 'lab-status', 'ready', root);
 
       this._buildFight(root);
@@ -746,6 +758,9 @@ export class Lab {
     button(show, 'Showroom', () => this.showroom()).title =
       'look-dev: fight on, AI off, god mode, hero 7 m in front of the wyrm, camera zoomed in';
     button(show, 'Camera default', () => this._cameraDistance(null)).title = 'back to the default camera distance';
+    this.ui.touchBtn = button(show, 'Touch UI', () => this._toggleTouch());
+    this.ui.touchBtn.title = 'show / hide the phone touch controls (stick + buttons, close camera, LOW quality); ?touch in the URL forces them';
+    setClass(this.ui.touchBtn, 'on', !!this.game.touch?.active);
     const row = el('div', 'lab-row', null, body);
     this.ui.hitBtn = button(row, 'Hitboxes', () => this.setHitboxes(!this.hitboxes));
     setClass(this.ui.hitBtn, 'on', this.hitboxes);
@@ -895,6 +910,7 @@ export class Lab {
     if (!u.dv) return;
     const d = this.target, p = g.player;
     const ddbg = d?.debug;
+    setClass(u.touchBtn, 'on', !!g.touch?.active); // a first touch can switch it on behind our back
 
     // dragon
     const dv = u.dv;
@@ -1022,7 +1038,11 @@ export class Lab {
     }
   }
 
-  /** Small always-visible reminder while the panel is closed but Lab cheats are active. */
+  /**
+   * The floating LAB toggle (top centre): shown whenever the Lab exists in the page (?lab, or opened
+   * once) or a Lab cheat is active; it opens / closes the panel (phones have no F1). While closed it
+   * also lists the active cheats ("LAB · god · x0.25").
+   */
   _syncBadge() {
     const g = this.game;
     const flags = [];
@@ -1033,10 +1053,12 @@ export class Lab {
     if (ts !== 1) flags.push(ts === 0 ? 'FROZEN' : `x${ts}`);
     if (this.loop.on) flags.push(`loop ${this.selected}`);
     if (this.target?.debug?.aiEnabled === false) flags.push('AI off');
-    const sig = this.open ? '' : flags.join(' · ');
+    const cheats = flags.join(' · ');
+    const show = !!this.root || !!cheats;
+    const sig = show ? (this.open ? 'open' : `closed|${cheats}`) : '';
     if (sig === this._badgeSig) return;
     this._badgeSig = sig;
-    if (!sig) {
+    if (!show) {
       setClass(this.badge, 'lab-hidden', true);
       return;
     }
@@ -1046,15 +1068,19 @@ export class Lab {
         injectLabStyle();
         const host = document.getElementById?.('ui') ?? document.body;
         if (!host) return;
-        this.badge = el('div', 'lab-badge', null, host);
-        this.badge.title = 'Lab cheats active — click or press F1 to open the Lab';
-        this.badge.addEventListener('click', () => this.setOpen(true));
+        this.badge = el('div', 'lab-badge lab-toggle', null, host);
+        this.badge.title = 'Lab: show / hide the debug panel (F1)';
+        this.badge.setAttribute?.('role', 'button');
+        this.badge.addEventListener('click', () => this.toggle());
+        this.badge.addEventListener('contextmenu', (e) => e.preventDefault?.());
       } catch (err) {
         this._fail('badge', err);
         return;
       }
     }
-    setText(this.badge, `LAB · ${sig}`);
+    setText(this.badge, this.open ? '× LAB' : cheats ? `LAB · ${cheats}` : 'LAB');
+    setClass(this.badge, 'open', this.open);
+    setClass(this.badge, 'cheats', !this.open && !!cheats);
     setClass(this.badge, 'lab-hidden', false);
   }
 }

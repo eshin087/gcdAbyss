@@ -16,7 +16,8 @@ This file is the **source of truth for cross-module APIs and event names** (cont
 
 ## Frame order (src/main.js)
 ```
-lab.update(realDt) → flow.update(dt, realDt) → player.update(dt) → dragon.update(dt)
+wheel zoom → mouse ray (mouseGround) → touch.update(realDt) → lab.update(realDt)
+→ flow.update(dt, realDt) → player.update(dt) → dragon.update(dt)
 → lab.postUpdate() → camera (rig) → view override → shared uniforms → world.update(dt)
 → lights.update → fx.update → hud.update(realDt) → audio.update(realDt) → render
 ```
@@ -30,7 +31,7 @@ updating underneath; `null` snaps back to the game camera. A missing, non-finite
 override is skipped for that frame (never throws, never feeds NaN).
 `dt = realDt × game.timeScale × game.debugTimeScale × hit-stop`. `realDt` is unscaled. Input edges
 (`pressed`) are valid for exactly one frame. Construction order: world, audio, player, dragon, hud,
-flow, lab — constructors must not dereference modules built later.
+touch, flow, lab — constructors must not dereference modules built later.
 
 ## The `game` context (passed to every constructor)
 | field | what |
@@ -38,9 +39,10 @@ flow, lab — constructors must not dereference modules built later.
 | `THREE`, `CONFIG` | three.js namespace, `core/config.js` |
 | `renderer, scene, fxScene, camera, pipeline, U` | rendering. `U` = shared uniforms (`render/shaderLib.js`) |
 | `events` | pub/sub: `on(name, fn)` → unsubscribe fn, `emit(name, data)` |
-| `input` | `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. |
-| `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame |
-| `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus` |
+| `input` | `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
+| `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame; with touch controls on, the touch aim point (see Touch controls) |
+| `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus`, `zoom(steps)` (2.5 m per step, clamped to the profile), `targetDistance`; distance profile `setMobile(bool)` / `mobile`, `defaultDistance`, `minDistance`, `maxDistance`, `maxExtraZoom` (desktop: `CONFIG.camera.distance/min/max`, unlimited extra zoom; phone: `mobileDistance` 20 / `mobileMinDistance` 14 / `mobileMaxDistance` 34, extra zoom (lock-on, boss framing, title / intro shots) capped at `mobileMaxExtraZoom` 3 m). `setMobile` resets the zoom to the profile default. |
+| `touch` | touch controls (`ui/touch.js`, below): `active`, `phone`, `portrait`, `autoAim`, `setActive(bool)`, `update(realDt)` |
 | `shake(a)` | camera trauma (0.15 light hit … 0.7 huge slam) |
 | `hitstop(sec, scale=0.04)` | brief time-scale dip measured in real seconds (also used for Ghostep slow-mo: `hitstop(0.6, 0.3)`) |
 | `debugTimeScale` | Lab multiplier on game time (1 = normal). Only the Lab writes it. |
@@ -51,12 +53,32 @@ flow, lab — constructors must not dereference modules built later.
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
-| `settings` | `{ quality: 0..2, showFps: bool }`; `applyQuality()` re-applies |
+| `settings` | `{ quality: 0..2, showFps: bool }`; `applyQuality()` re-applies. Touch devices start on `CONFIG.defaultQualityTouch` (LOW) unless the player picked one. |
 
 Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `DEFENSE`, `POSTURE`,
 `tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code.
 
 Render helpers for creature modules:
+- **v0.4 creature ASCII art:**
+  - `FLAG.ART_HERO` (0.48) selects the hero's pass settings. The pass uniforms are vec2:
+    x = hero, y = wyrm (`uArtLum`, `uArtBlack` (source luma treated as black), `uArtMin`,
+    `uArtDither`, and `uArtEdge`, the relative depth jump that blacks out part boundaries).
+    `uArtMax` is shared (0.8, so white letters don't bloom).
+  - The hero has his own, finer grid: `createPixelArtAtlas(s)` in `glyphs.js` draws `ART_CHARS`
+    from a 3x5 pixel font into (4s x 6s) cells (`pixelArtCell`; s = 2 from 2160 px tall). The pass
+    tests the hero grid first (`tHeroArt`, `uHeroCell`), then the wyrm's grid for the other
+    `FLAG.ART` pixels.
+  - Shared, hero source only: `U.uArtHeroKey` (a fixed key light from the camera's upper left, so
+    he shades the same in moonlight and firelight) and `U.uArtHeroEdge` (darkening toward his
+    silhouette instead of the moonlit outline).
+  - `createSurfaceGlyphMaterial` now defaults `flag` to `FLAG.ART` (0.5). With the shared
+    `U.uArtSolid` = 1, the material writes a smooth shaded source (ink × `artGain`, no glyph gaps).
+  - The ASCII pass (`pipeline.js`) converts every `FLAG.ART` pixel to a fine screen grid of
+    `ART_CHARS` letters (`createArtAtlas` in `glyphs.js`; cell ≈ H/135 px), coloured by the
+    source hue.
+  - Set `U.uArtSolid` = 0 to feed the patterned surface render instead (look-dev A/B).
+  - Options: `artGain` (source brightness, default 1). Pass uniforms: `uArtLum`, `uArtMin`,
+    `uArtMax`, `uArtDither`.
 - `createSurfaceGlyphMaterial(U, opts)` (`render/materials.js`). **v0.3: crisp surface glyphs.** One
   glyph per aGUV cell is printed on the body (aGUV +y = "glyph up"), picked by local light, over
   near-black gaps (`base`). Pass `ascii: <set>` to pick the default ramp + cell (`SURFACE_SETS`):
@@ -132,7 +154,9 @@ get alive(): boolean
 isInvulnerable(): boolean              // roll i-frames, Ghostep, get-up, dead
 takeHit({ damage, from:{x,z}, knockback=0, knockdown=false, kind='hit', burn=0,
           tell='normal', parryable, blockable, attack, attacker }): RESULT   // see COMBAT.md
-getChestPos(out: Vector3): Vector3
+getChestPos(out: Vector3, visual = false): Vector3   // upright gameplay body; visual = the drawn one (FX)
+unlean(v: Vector3): Vector3            // drawn (leaned, HERO_SCALE) world point → upright gameplay body
+leanPoint(v: Vector3): Vector3         // upright gameplay point → where it is drawn (name tag)
 respawn(x, z)                          // full restore, idle, facing north, clears burn/lock/crit
 restAtBonfire()                        // refill hp/flasks (no teleport)
 update(dt)
@@ -142,6 +166,11 @@ Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move
 light combo (sweep → backhand sweep → two-handed slam finisher), LMB hold ≥ 0.3 s then release =
 charged lunging thrust · RMB hold = block, RMB tap before impact =
 parry · Space = dodge roll · Shift = sprint · F = flask · Tab / MMB = lock-on. (E is flow's.)
+Drawn body vs gameplay body (ADR-017): the root draws the hero `HERO_SCALE` (1.2) tall and leaned
+away from the camera (`model.js` `LEAN`, `installLean`). The animator runs with `lean.on = false`
+(plain upright 1.85 m body, so IK and ground clamps work in metres); the drawn transform is applied
+after it. FX read the drawn joints; the sword sweep's hit test, `getChestPos()` (the dragon's aim)
+and the hurt cylinder use the upright body (`SwordSweep(sword, unlean)`).
 Deals damage via `game.dragon.takeHit(...)` using `game.dragon.hurtSpheres`, tested through a
 vertical reach band (`REACH` in `player/combat.js`: a sphere overlapping the blade's swept wall
 extended `up` m above / `down` m below it counts, so the giant wyrm's chest is in reach from the
@@ -283,8 +312,18 @@ banner(text, kind, opts)             // kind: 'death'|'victory'|'area'|'bonfire'
 bannerHint(text) / clearBanner(instant)   // sub-line under the current banner; flow uses both
 showStats(rows)                      // victory / death run stats
 prompt(text|null)                    // interaction prompt, e.g. "[E] Rest at bonfire"
+promptText                           // getter: the prompt shown now (raw "[E] ..." text) or null
+promptEl                             // the prompt's element (touch controls make it a tap target)
 showTitle() / hideTitle();  showPause(bool);  toggleHelp()
 ```
+**Touch layout:** the touch controls add `.ab-touch` to the HUD root (`.ab-root`). Elements with
+`kb-only` are hidden then, `tp-only` ones only show then (title "PRESS ANY KEY" ↔ "TAP TO BEGIN",
+the keyboard ↔ touch control lists in the title and pause menu, the pause menu's FULLSCREEN item
+where the Fullscreen API exists). With `.ab-touch` the log, the key hint and the help panel are
+hidden, the prompt becomes a tap target ("TAP › Rest at bonfire"), the pause panel scrolls; below
+560 px of height (phones in landscape) the player frame (×0.8) and minimap (×0.6) shrink, the boss
+bar narrows to the bottom centre between the thumbs, and the title / banners / record compact.
+Desktop (no `.ab-touch`) is unchanged.
 Renders no attack tells of its own: no text, icons, rings or arrows (tells are read from the
 attacker — COMBAT.md). Its only tell cue is a brief red screen-edge flash (~0.25 s, game time,
 stronger on the attacker's side) on a red `combat:flash`, dropped by a stagger / posture break /
@@ -303,7 +342,12 @@ M mute, H help, F3 fps. Boss framing (`boss` state, `TUNE.bossCam`): the overrid
 box of the hero + `dragon.hurtSpheres` (tall parts leaned up-screen) and adds at most 5 m of zoom
 (`maxZoom`; kept small so the hero stays readable, which is the owner's priority). The hero is
 always kept inside the view, and the far end of the wyrm crops first. It fades out when the hero is > 16–36 m from the body or has wheel-zoomed in
-(Lab Showroom).
+(Lab Showroom; "zoomed in" is measured against the rig's own profile, `rig.minDistance` →
+`rig.defaultDistance`). On a phone (`cameraRig.mobile`) `TUNE.bossCamMobile` overrides it: weight
+0.85, at most 2 m of zoom (the rig caps extra zoom at 3 m anyway), a wider landscape view to the
+sides, and the hero may sit lower (`marginSouth` 1.6 m) so more of the wyrm shows above it.
+Touch: with `game.touch.active` the death hint reads "tap to rise again" and the "H: controls ·
+Esc: pause" log line is skipped. Screen taps reach `_dismissPressed` as a virtual LMB press.
 
 ### Audio — `src/audio/audio.js` exports `class AudioEngine`
 ```
@@ -317,13 +361,21 @@ toggleMute(); muted: boolean;  setVolume(0..1)
 
 ### Lab — `src/dev/lab.js` exports `class Lab`
 ```
-constructor(game)          // hidden unless URL has ?lab or the user presses F1 / backquote
+constructor(game)          // hidden unless URL has ?lab or the user presses F1 / backquote / the LAB button
 update(realDt)             // panel refresh + hitbox overlay (runs before flow)
 postUpdate()               // main.js calls it after the actors update so the overlay matches this frame
 open: boolean
 showroom()                 // look-dev preset: fight on, AI off, god mode, hero 7 m in front, camera close
 modelView(opts | null)     // model viewer (below)
 ```
+**Floating toggle** (`.lab-badge.lab-toggle`, top centre, clear of the player frame): shown whenever
+the Lab exists in the page (`?lab`, or opened once) or a Lab cheat is active; a tap / click opens or
+closes the panel (phones have no F1). Closed it reads `LAB` (+ `· god · x0.25 …` while cheats run),
+open `× LAB`. The panel's own `×` and the toggle are 36 px touch targets on coarse pointers / touch.
+Small screens (≤ 560 px tall or ≤ 700 px wide): a compact panel with a max-height that always fits
+and scrolls inside (`touch-action: pan-y`). VIEW → **Touch UI** switches the touch controls on / off
+(desktop testing of the phone layout, camera and quality).
+
 Debug panel to test the fight without playing it: trigger any `dragon.debug.abilities()`, phase /
 stagger / posture break / kill / reset, jump flow states, god mode, infinite flasks, time scale,
 AI on/off, hitbox overlay, teleport. Talks only to the `debug` APIs above, plus the
@@ -356,6 +408,42 @@ bounding boxes of the current pose; with the panel open the actor is centred in 
 right. `solo` hides the other actor only between `lab.postUpdate` and the next `lab.update` (the
 actors never see their `visible` flag change). Poses are driven as usual — `dragon.debug.trigger(name)`,
 player inputs / methods — and stepped with `__tick(dt, frames)`.
+
+### Touch controls — `src/ui/touch.js` exports `class TouchControls`
+```
+constructor(game)          // inert (no DOM, no state) until activated: `pointer: coarse` at boot, ?touch, or the first touch
+active: boolean;  phone: boolean   // phone = active and the short screen side ≤ CONFIG.camera.mobileMaxSide (600 px)
+portrait: boolean;  autoAim: boolean
+setActive(on)              // Lab "Touch UI", tests; off restores the desktop camera + quality + HUD
+update(realDt)             // main.js, after the mouse ray, before the Lab / flow / player
+```
+A layer on top of `core/input.js`: nothing else reads it, the player and flow keep reading
+`game.input`. Mapping (all through `input.setVirtual` / `setVirtualAxis`, so edges and tap vs hold
+timings are the real device's):
+
+| control | feeds | behaviour |
+|---|---|---|
+| stick (left thumb, floats under the thumb in the left 42 % × lower 74 %) | `setVirtualAxis` | analog: dead zone 0.16, full run at 0.62 of the 52 px travel; ≥ 0.94 (rim) holds `ShiftLeft` = sprint (off below 0.86) |
+| ATTACK | `Mouse0` | tap = light combo, hold ≥ 0.3 s = charge, release = thrust; shows an ASCII charge meter `[###...]` |
+| BLOCK | `Mouse2` | hold = block, tap just before impact = parry |
+| DODGE | `Space` | roll / perfect dodge |
+| FLASK · LOCK · PAUSE (glyph `\|\|`) | `KeyF` · `Tab` · `Escape` | flask count, LOCK lit while locked on |
+| the HUD prompt | `Key<letter>` from its `[E]` / `[R]` token | rest at the bonfire / fight again |
+| a bare-screen tap on title / death | `Mouse0` | "press any key" |
+| two bare-screen fingers in play | `cameraRig.zoom` | pinch (distance × start / now) |
+
+**Aim** (`game.mouseGround`, each frame in `explore` / `bossIntro` / `boss`): with the dragon
+targetable and within `CONFIG.touch.autoAimRange` (32 m) it is the dragon's lock point (attacks,
+facing and the camera look-ahead go to it, like a cursor parked on it); otherwise it sits
+`CONFIG.touch.aimDistance` (6 m) ahead of the hero along the last stick direction. LOCK still toggles
+the real lock-on. Controls show only in play states (hidden on title / pause / death / victory /
+model viewer); hiding releases every held control. **Portrait** (`innerHeight > innerWidth`): a
+"rotate your phone" overlay (z 60, on `<body>`), controls released, play states pause. Activation
+also: `html.abyss-touch` (touch-action none, no callouts, crisp `image-rendering: pixelated`),
+`.ab-touch` on the HUD, the phone camera profile, and `CONFIG.defaultQualityTouch` when the
+quality is still the default. Pointer Events with multi-touch (each control captures its own
+pointer); long-press menus, iOS gesture zoom and page panning are blocked while active (the Lab
+panel and the pause panel still scroll). Tuning: `CONFIG.touch`, sizes / look in `ui/touchStyle.js`.
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:

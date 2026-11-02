@@ -13,6 +13,7 @@ import { World } from './world/world.js';
 import { Player } from './entities/player/player.js';
 import { Dragon } from './entities/dragon/dragon.js';
 import { Hud } from './ui/hud.js';
+import { TouchControls } from './ui/touch.js';
 import { AudioEngine } from './audio/audio.js';
 import { GameFlow } from './game/flow.js';
 import { Lab } from './dev/lab.js';
@@ -78,13 +79,18 @@ async function boot() {
   game.player = new Player(game);
   game.dragon = new Dragon(game);
   game.hud = new Hud(game);
+  game.touch = new TouchControls(game); // inert on desktop; may pick the touch quality preset
   game.flow = new GameFlow(game);
   game.lab = new Lab(game);
 
   const applyQuality = () => {
     const q = CONFIG.quality[game.settings.quality];
     game.world.setGrassQuality?.(q.grass);
-    pipeline.setSize(innerWidth, innerHeight, Math.min(q.dpr, devicePixelRatio || 1, CONFIG.render.maxPixelRatio));
+    const dpr = Math.min(q.dpr, devicePixelRatio || 1, CONFIG.render.maxPixelRatio);
+    pipeline.setSize(innerWidth, innerHeight, dpr);
+    // an upscaled canvas (LOW on a phone: a 1x render on a 3x screen) stays crisp: the hero's
+    // 3x5 pixel letters blur into grey under the browser's smooth upscale
+    game.renderer.domElement.style.imageRendering = dpr < (devicePixelRatio || 1) - 0.01 ? 'pixelated' : '';
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
   };
@@ -217,6 +223,7 @@ async function boot() {
 
     if (game.input.wheel) game.cameraRig.zoom(game.input.wheel);
     updateMouseGround();
+    safe('touch', () => game.touch.update(realDt)); // touch aim overrides mouseGround
 
     safe('lab', () => game.lab.update(realDt));
     safe('flow', () => game.flow.update(dt, realDt));

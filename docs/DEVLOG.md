@@ -5,6 +5,85 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-02 — Session 4b: the hero shows his details in game
+**Owner:** "everything is perfect but the main character isn't showing the details like it does in
+your preview pictures", with a screenshot (~13 rows of dense `MMBM` letters) and the reference again.
+"Do we need to make the character a little bigger?"
+
+**Measured:** the hero was ~9 visible rows at the 36 m camera (1038 px tall) and ~5 on a phone (20 m,
+390 px, 4x7 cells). The reference is ~90 rows. Tuned by the bonfire, his source was too bright (all
+dense letters); in the arena it was 40 % darker.
+
+**Done:**
+- **Bigger on screen, gameplay unchanged (ADR-017):** `HERO_SCALE` 1.2 + a camera lean (half the
+  camera pitch, feet planted), applied after the animator. `unlean()` for the sweep's hit test and
+  the dragon's aim; `leanPoint()` for the name tag; the run cycle slows by `HERO_SCALE`.
+- **Hero letter grid:** `createPixelArtAtlas` (3x5 pixel font, 4x6 px cells); the pass tests the
+  hero grid first. Browser fonts at 5–6 px filled whole cells (tried: solid blocks).
+- **Shading:** `U.uArtHeroKey` 1.15 (fixed key light), `U.uArtHeroEdge` 0.7 (darker toward the
+  silhouette, no moonlit outline on the hero), `uArtBlack.x` 0.04, `uArtLum.x` 3, `uArtMin.x` 0.14,
+  `uArtDither.x` 1.1, `uArtEdge.x` 0.004 (0.018 never fired at 36 m).
+- **Phones:** an upscaled canvas uses `image-rendering: pixelated`.
+- Result: ~25 rows at the desktop camera (front, back and running all read as the swordsman), ~15
+  on a phone; the Lab close-up keeps the reference look. `npm test` green.
+
+**Released:** owner: "push out all the changes to production including the mobile controls".
+PR #3 squash-merged as v0.4.0 (classic ASCII-art creatures, touch controls, phone camera, Lab
+toggle, hero detail).
+
+**Open issues / next:**
+- Real-phone check of the pixelated upscale (non-integer DPRs such as 2.625 give uneven strokes).
+- The lean follows the camera: cut-in cameras get half their pitch.
+
+---
+
+## 2026-11-02 — Session 4: classic ASCII-art creatures
+**Owner:** "Make the character and dragon look more ASCII like. Right now it doesn't have the ASCII
+art style." They attached two reference images (a dragon and a hooded figure as coloured
+image-to-text art) and chose smaller letters over zooming the camera in.
+
+**Done:**
+- New `FLAG.ART` class and creature ASCII-art path in the pipeline:
+  - a finer grid than the world's (H/135 px cells: 4x7 at 720p, 5x8 at 1080p)
+  - 4-sample cell average
+  - a density-sorted `ART_CHARS` atlas built at runtime
+  - brightness → letter with per-cell jitter, colour = source hue, HDR only for saturated parts
+- Creature materials default to `FLAG.ART` with a smooth shaded source (`U.uArtSolid`). Per-material
+  `artGain`: wyrm 0.28, hero 0.62.
+- Tuned in the Lab model viewer (close-ups) and at the game camera (`uArtLum` 4.5, `uArtMin` 0.3).
+  Red tells and the stomp ring read in ASCII.
+
+**Follow-up (same day):** the owner said the dragon looks good but the hero "looks like a bunch of
+random text". They also couldn't close the Lab on their phone, and asked for touch controls.
+- **Hero:** own pass settings via `FLAG.ART_HERO`:
+  - `artGain` 1.1
+  - jitter 0.5
+  - ramp floor 0.42
+  - depth-edge gaps (`uArtEdge` 0.018)
+  - `uArtMax` 0.8, so white letters don't bloom
+
+  It now reads like the reference figure.
+- **Phone (agent):**
+  - touch layer on `core/input.js`
+  - an ASCII stick and buttons with auto-aim
+  - a phone camera profile (20 m), LOW quality on phones, a compact HUD
+  - a rotate overlay
+  - the Lab `LAB` / `× LAB` toggle
+  - a `touch` test scenario
+- **Decisions:** ADR-016.
+
+**Open issues / next:**
+- Real-phone check:
+  - native multi-touch
+  - iOS long-press and scroll blocking
+  - audio unlock on the first tap
+  - LOW quality look and frame rate
+  - whether rim-sprint triggers by accident
+- At the desktop game camera the hero is still a small letter cluster.
+- Characters re-pick as creatures move (inherent to the style).
+
+---
+
 ## 2026-11-01 — Session 3c: match the concept sheets (four-legged drake)
 **Owner:** "The character hair and outfit doesn't look like the images. The dragon as well. Try to
 get it accurately as close as possible." They chose to rebuild the dragon as four-legged.

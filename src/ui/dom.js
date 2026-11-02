@@ -108,6 +108,28 @@ export function controlsGrid(parent) {
   return grid;
 }
 
+// The touch-controls reference (pause menu on touch devices; src/ui/touch.js).
+export const TOUCH_CONTROLS = [
+  ['STICK', 'move · push to the rim: sprint'],
+  ['ATTACK', 'tap: combo · hold: charged thrust'],
+  ['BLOCK', 'hold: block · tap: parry'],
+  ['DODGE', 'roll · perfect dodge = Ghostep'],
+  ['FLASK', 'drink flask'],
+  ['LOCK', 'lock-on (attacks auto-aim anyway)'],
+  ['||', 'pause'],
+  ['TAP', 'the prompt: rest / fight again'],
+  ['PINCH', 'zoom'],
+];
+
+export function touchGrid(parent) {
+  const grid = el('div', 'ab-ctrls', null, parent);
+  for (const [k, a] of TOUCH_CONTROLS) {
+    el('span', 'ab-key', k, el('span', 'k', null, grid));
+    el('span', 'a', a, grid);
+  }
+  return grid;
+}
+
 /**
  * One-line attack-tell legend for the title / pause / help screens (the tells themselves are only
  * shown in the world): "red flash = dodge only · white glint = parry timing · perfect dodge = Ghostep".
