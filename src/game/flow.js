@@ -40,6 +40,10 @@ const TUNE = {
   // Fades back to the plain hero camera when the hero is farther than `far` m from the body.
   // maxZoom stays small on purpose: the hero must stay readable (owner feedback), the wyrm may crop
   bossCam: { weight: 1, lean: 0.6, margin: 3, north: 0.39, south: 0.22, side: 0.44, maxZoom: 5, near: 16, far: 36 },
+  // phones (cameraRig.mobile): the close camera stays close (the rig also caps extra zoom); the wider
+  // landscape screen shows more to the sides; the hero may sit lower (marginSouth: the bottom
+  // centre is free, the thumbs cover the corners) so more of the wyrm shows above it
+  bossCamMobile: { weight: 0.85, margin: 3.5, marginSouth: 1.6, north: 0.37, south: 0.24, side: 0.52, maxZoom: 2 },
   deathBannerDelay: 0.7,
   deathHold: 4.5,
   deathSlowmo: 0.35,
@@ -51,6 +55,8 @@ const TUNE = {
   warmVictory: 0.12,
   debugVictoryTimeout: 12, // s: Lab 'victory' forces the state if the dragon never reports its death
 };
+
+const BOSS_CAM_MOBILE = { ...TUNE.bossCam, ...TUNE.bossCamMobile };
 
 const finite = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
@@ -368,7 +374,7 @@ export class GameFlow {
     g.audio?.setMusic?.('ambient');
     this._log('Ash drifts through the hollow. Something vast sleeps among the bones to the north.', 'lore');
     this._log('Rest at the bonfire to restore your flasks.', 'lore');
-    this._log('H: controls  ·  Esc: pause', 'system');
+    if (!g.touch?.active) this._log('H: controls  ·  Esc: pause', 'system');
     // ease the camera from the establishing shot back to the player
     this._ovW = 0;
     this._ovZ = 0;
@@ -521,7 +527,9 @@ export class GameFlow {
 
   /** Boss framing (TUNE.bossCam): hero + the wyrm's hurt spheres in view at the default camera. */
   _bossFrame(rdt) {
-    const g = this.game, T = TUNE.bossCam, H = g.dragon?.hurtSpheres, p = g.player?.position;
+    const g = this.game, H = g.dragon?.hurtSpheres, p = g.player?.position;
+    const rig = g.cameraRig;
+    const T = rig?.mobile ? BOSS_CAM_MOBILE : TUNE.bossCam;
     this._ovLambda = 1.5;
     if (!Array.isArray(H) || !H.length || !p || !Number.isFinite(p.x + p.z)) {
       this._ovW = 0;
@@ -544,16 +552,18 @@ export class GameFlow {
     const m = T.margin;
     const need = Math.max((x1 - x0 + 2 * m) / (2 * T.side), (z1 - z0 + 2 * m) / (T.north + T.south));
     const C = CONFIG.camera;
-    const base = finite(g.cameraRig?.targetDistance, C.distance);
-    // wheel-zoomed in (Lab showroom too): the player asked for a close-up, frame less
-    const user = clamp((base - C.minDistance) / Math.max(1, C.distance - C.minDistance), 0, 1);
+    const def = finite(rig?.defaultDistance, C.distance), min = finite(rig?.minDistance, C.minDistance);
+    const base = finite(rig?.targetDistance, def);
+    // wheel / pinch-zoomed in (Lab showroom too): the player asked for a close-up, frame less
+    const user = clamp((base - min) / Math.max(1, def - min), 0, 1);
     const dist = Math.hypot(p.x - cx / n, p.z - cz / n);
     this._ovW = T.weight * user * clamp((T.far - dist) / (T.far - T.near), 0, 1);
     this._ovZ = this._ovW > 0 ? clamp(need - base, 0, T.maxZoom) * user : 0;
     // centre the box in the (asymmetric) view, then keep the hero inside it
     const D = base + this._ovZ;
     const tx = clamp((x0 + x1) / 2, p.x - T.side * D + m, p.x + T.side * D - m);
-    const tz = clamp((z0 + z1) / 2 + ((T.north - T.south) / 2) * D, p.z - T.south * D + m, p.z + T.north * D - m);
+    const ms = T.marginSouth ?? m;
+    const tz = clamp((z0 + z1) / 2 + ((T.north - T.south) / 2) * D, p.z - T.south * D + ms, p.z + T.north * D - m);
     const f = this._ov.focus;
     const k = this._ov.weight > 0.05 ? 1 - Math.exp(-4 * rdt) : 1; // override idle: start on target
     f.x += (tx - f.x) * k;
@@ -590,7 +600,7 @@ export class GameFlow {
     }
     if (!this.canRetry && this.deathT >= TUNE.deathHold) {
       this.canRetry = true;
-      g.hud?.bannerHint?.('press any key to rise again');
+      g.hud?.bannerHint?.(g.touch?.active ? 'tap to rise again' : 'press any key to rise again');
     }
     if (this.canRetry && !this.respawning && this._dismissPressed()) {
       g.hud?.bannerHint?.(null);

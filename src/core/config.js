@@ -23,6 +23,24 @@ export const CONFIG = {
     followLambda: 5.5,
     near: 1,
     far: 220,
+    // Phones (touch controls on and the short screen side ≤ mobileMaxSide CSS px): a much closer
+    // camera so the hero reads and the wyrm fills the view. Pinch zooms between min and max.
+    // Lock-on, boss framing and the title / intro shots may add at most mobileMaxExtraZoom on top.
+    mobileDistance: 20,
+    mobileMinDistance: 14,
+    mobileMaxDistance: 34,
+    mobileMaxExtraZoom: 3,
+    mobileMaxSide: 600,
+  },
+
+  // Touch controls (src/ui/touch.js). Sizes in CSS px.
+  touch: {
+    stickRadius: 52, // knob travel
+    deadZone: 0.16, // fraction of stickRadius ignored
+    runAt: 0.62, // deflection that reaches full run speed (analog below)
+    sprintAt: 0.94, // stick pushed to the rim = sprint (Shift)
+    autoAimRange: 32, // m: in a fight, attacks / facing auto-aim at the dragon within this range
+    aimDistance: 6, // m ahead of the hero along the stick when there is nothing to auto-aim at
   },
 
   render: {
@@ -41,4 +59,5 @@ export const CONFIG = {
     { name: 'HIGH', grass: 260000, dpr: 2 },
   ],
   defaultQuality: 2,
+  defaultQualityTouch: 0, // touch devices start on LOW (phones with DPR 3 + 260k blades crawl)
 };

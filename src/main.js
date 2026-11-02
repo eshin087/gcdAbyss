@@ -13,6 +13,7 @@ import { World } from './world/world.js';
 import { Player } from './entities/player/player.js';
 import { Dragon } from './entities/dragon/dragon.js';
 import { Hud } from './ui/hud.js';
+import { TouchControls } from './ui/touch.js';
 import { AudioEngine } from './audio/audio.js';
 import { GameFlow } from './game/flow.js';
 import { Lab } from './dev/lab.js';
@@ -78,6 +79,7 @@ async function boot() {
   game.player = new Player(game);
   game.dragon = new Dragon(game);
   game.hud = new Hud(game);
+  game.touch = new TouchControls(game); // inert on desktop; may pick the touch quality preset
   game.flow = new GameFlow(game);
   game.lab = new Lab(game);
 
@@ -217,6 +219,7 @@ async function boot() {
 
     if (game.input.wheel) game.cameraRig.zoom(game.input.wheel);
     updateMouseGround();
+    safe('touch', () => game.touch.update(realDt)); // touch aim overrides mouseGround
 
     safe('lab', () => game.lab.update(realDt));
     safe('flow', () => game.flow.update(dt, realDt));
