@@ -3,7 +3,7 @@ import { CONFIG } from '../../core/config.js';
 import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../../core/math.js';
 import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
-import { buildHero } from './model.js';
+import { buildHero, setHeroGlyphScale } from './model.js';
 import { HeroAnimator } from './anim.js';
 import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
@@ -130,6 +130,11 @@ export class Player {
     this._tip = new THREE.Vector3();
     this._tipPrev = new THREE.Vector3();
     this._gem = new THREE.Vector3();
+    this._gemPrev = new THREE.Vector3();
+    this.gemVel = { x: 0, y: 0, z: 0 }; // the hilt's own velocity: glints ride with the gem
+    this.glyphScale = 1; // hero glyph-cell scale from the view distance (model.js setHeroGlyphScale)
+    this.viewDist = 36; // camera → hero distance (m), sampled each frame
+    this.bladeFar = 1; // 0 close-up … 1 game camera: how much the blade self-lights
     this._ghostSegs = new Float32Array(16 * 6);
 
     // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, heal(), teleport(x, z) })
@@ -956,7 +961,8 @@ export class Player {
     this._emit('player:attack', { kind: def.kind, combo: def.combo, charge });
     if (def.kind !== 'light') this.anim.kickCoat(def.kind === 'thrust' ? 0.5 + 0.5 * charge : 0.45);
     this.rig.gem.getWorldPosition(this._gem);
-    this.fx.gemGlint(this._gem.x, this._gem.y, this._gem.z, def.kind === 'light' ? 0.6 : 1, this.groundVel.x, this.groundVel.z);
+    const gv = this.gemVel;
+    this.fx.gemGlint(this._gem.x, this._gem.y, this._gem.z, def.kind === 'light' ? 0.6 : 1, gv.x, gv.z, gv.y);
   }
 
   _startCharge() {
@@ -980,7 +986,7 @@ export class Player {
     if (st.k >= 1 && !this.chargeFull) {
       this.chargeFull = true;
       this._bladePoint(0.95, this._v);
-      this.fx.chargeReady(this._v.x, this._v.y, this._v.z);
+      this.fx.chargeReady(this._v.x, this._v.y, this._v.z, this.position.x, this.position.z);
     }
     if (!L.held) {
       this._releaseThrust(L.t);
@@ -1456,23 +1462,49 @@ export class Player {
     if (sw.valid) {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);
+      // the blade's dot halo: dim at idle, brighter while it glows (strikes, charge, crit)
+      if (this.alive && this.object3d.visible !== false) {
+        const bu = this.rig.materials.blade.uniforms;
+        this.fx.bladeHalo(dt, clamp((bu.uInkGlow.value - 0.16) * 0.7, 0.25, 2), this.bladeFar);
+      }
     }
-    // the violet gem: a steady glow point, idle glints, a fast flicker while charging
+    // the violet gem: an always-on glow point, idle glints, a fast flicker while charging. Every
+    // gem particle moves with the hilt's own velocity (not the root's), so nothing is left behind
+    // by a swing or the lunge.
+    this.rig.gem.getWorldPosition(this._gem);
+    const gv = this.gemVel, gp = this._gemPrev;
+    if (dt > 0 && Number.isFinite(gp.x)) {
+      gv.x = clamp((this._gem.x - gp.x) / dt, -30, 30);
+      gv.y = clamp((this._gem.y - gp.y) / dt, -30, 30);
+      gv.z = clamp((this._gem.z - gp.z) / dt, -30, 30);
+    }
+    gp.copy(this._gem);
     if (this.state !== 'dead' && this.object3d.visible !== false) {
-      this.rig.gem.getWorldPosition(this._gem);
       const charging = this.state === 'charge';
-      const vx = this.groundVel.x, vz = this.groundVel.z;
-      this.fx.gemTick(dt, this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + this.chargeK : 0.35, vx, vz);
+      this.fx.gemTick(dt, this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + this.chargeK : 0.35, gv.x, gv.z, gv.y);
       this.gemT -= dt;
       if (this.gemT <= 0) {
         this.gemT = charging ? 0.22 : TUNE.gemGlintEvery * (0.6 + 0.8 * Math.random());
-        this.fx.gemGlint(this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + 0.5 * this.chargeK : 0.45, vx, vz);
+        // only while the hilt is steady: a glint left behind by a fast swing floats off the gem
+        if (charging || LOCO.has(this.state)) this.fx.gemGlint(this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + 0.5 * this.chargeK : 0.45, gv.x, gv.z, gv.y);
       }
     }
   }
 
   _updateMaterials(dt) {
     const M = this.rig.materials;
+    // glyph cells follow the view distance: in-game size at the 36 m camera, a ~30-row field in
+    // the Lab / showroom close-ups (hero.md §7)
+    const cam = this.game.camera?.position;
+    if (cam) {
+      const p = this.position;
+      const d = Math.hypot(cam.x - p.x, cam.y - p.y - 1.1, cam.z - p.z);
+      if (Number.isFinite(d)) {
+        this.viewDist = d;
+        this.glyphScale = setHeroGlyphScale(this.rig.mats, d);
+      }
+    }
+    const far = smoothstep(10, 28, this.viewDist); // 0 in close-ups … 1 at the game camera
     this.flash = Math.max(0, this.flash - dt * 6);
     this.ghostFx = Math.max(0, this.ghostFx - dt * TUNE.ghostepFade);
     const burnTarget = this.burnT > 0 ? 0.28 + 0.1 * Math.sin(this.time * 17) : 0;
@@ -1486,45 +1518,55 @@ export class Player {
       u.uFlash.value = this.flash * 0.85;
       u.uDissolve.value = dissolve;
       u.uTint.value.setRGB(tr, tg, tb);
-      if (m !== M.blade && m !== M.flask && m !== M.gem) u.uGlow.value = this.burnGlow;
+      if (m !== M.blade && m !== M.bladeTip && m !== M.flask && m !== M.gem) u.uGlow.value = this.burnGlow;
     }
-    // blade: icy edges always lit (a slow shimmer), flaring through every strike, rising with the
-    // charge (the thrust stays hot through its follow-through) and pulsing in the crit window
-    let ink = 0.85 + 0.12 * Math.sin(this.time * 2.6), glow = 0.4 + 0.08 * Math.sin(this.time * 3.7);
+    // blade: dark faceted flats with the icy edge / ridge seams always lit (a slow shimmer),
+    // flaring through every strike, rising with the charge (the thrust stays hot through its
+    // follow-through) and pulsing in the crit window. At the game camera the 0.09 m blade is ~4 px
+    // wide and its seams are sub-pixel, so the flats self-light more with distance: the sword stays
+    // the brightest thing on the hero there, while close-ups keep dark steel with glowing edges.
+    let ink = 0.16 + 2.3 * far + 0.06 * Math.sin(this.time * 2.6), glow = 1.0 + 0.12 * Math.sin(this.time * 3.7);
     const a = this.atk, st = this.state;
     if (st === 'charge') {
       const k = this.chargeK;
       ink = 1.0 + 1.6 * k + (this.chargeFull ? 0.3 * Math.sin(this.time * 18) : 0);
-      glow = 0.55 + 0.85 * k;
+      glow = 1.0 + 0.8 * k;
     } else if (a && (st === 'attack' || st === 'heavy') && !a.pending) {
       const d = a.def, t = a.t;
       if (t >= d.windup - 0.06 && t <= d.windup + d.active + 0.12) {
         ink = d.heavy ? 2.2 : 1.6;
-        glow = d.heavy ? 1.1 : 0.75;
+        glow = d.heavy ? 1.5 : 1.25;
       }
       if (d.kind === 'thrust') {
         const fade = 1 - smoothstep(d.windup + d.active, d.windup + d.active + 0.3, t);
         ink = Math.max(ink, (1.2 + 1.4 * this.releaseK) * fade);
-        glow = Math.max(glow, (0.6 + 0.6 * this.releaseK) * fade);
+        glow = Math.max(glow, (1.0 + 0.6 * this.releaseK) * fade);
       }
     }
     if (this.critTimer > 0) {
       ink = Math.max(ink, 1.3 + 0.4 * Math.sin(this.time * 14));
-      glow = Math.max(glow, 0.7);
+      glow = Math.max(glow, 1.2);
     }
     if (!this.alive) {
       ink *= 0.5;
       glow *= 0.4;
     }
-    const bu = M.blade.uniforms;
+    const bu = M.blade.uniforms, tu = M.bladeTip.uniforms;
     bu.uInkGlow.value = dt > 0 ? damp(bu.uInkGlow.value, ink, 18, dt) : ink;
     bu.uGlow.value = dt > 0 ? damp(bu.uGlow.value, glow, 14, dt) : glow;
+    tu.uInkGlow.value = bu.uInkGlow.value + 0.3; // the point stays the brightest steel
+    tu.uGlow.value = bu.uGlow.value;
+    // far away the chevrons grow to fill their cells, so the ~4 px blade reads as a solid cyan line
+    bu.uGlyphZoom.value = tu.uGlyphZoom.value = 0.72 - 0.26 * far;
+    // … and the dark steel between them lights up too (gaps are base × light)
+    bu.uBase.value.setRGB(0.02 + 0.33 * far, 0.03 + 0.67 * far, 0.05 + 1.05 * far);
+    this.bladeFar = far;
     // the violet gem breathes; burns brighter while charging and through heavy swings
     const heavyNow = st === 'charge' || (!!a && !!a.def?.heavy && (st === 'attack' || st === 'heavy'));
     const gemTarget = (heavyNow ? 1.6 : 0.8) + 0.25 * Math.sin(this.time * 2.1) + (st === 'charge' ? 0.8 * this.chargeK : 0);
     const gu = M.gem.uniforms;
     gu.uGlow.value = dt > 0 ? damp(gu.uGlow.value, gemTarget, 10, dt) : gemTarget;
-    gu.uInkGlow.value = 1.4 + gu.uGlow.value;
+    gu.uInkGlow.value = 0.45 + 0.4 * gu.uGlow.value; // saturated violet, not blown out to white
   }
 
   // ------------------------------------------------------------------ debug (Lab)

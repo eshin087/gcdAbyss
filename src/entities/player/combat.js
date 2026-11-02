@@ -11,10 +11,11 @@ import { DIM } from './model.js';
 //
 // Swing shapes (`anim`) are read by anim.js:
 //   kind 'h'      — horizontal sweep; a0/a1/a2 = blade azimuth in body space (0 = ahead, + = the
-//                   hero's left) at coil / end of active frames / follow-through; elev0 → elev =
-//                   blade pitch from the raised windup to the strike.
+//                   hero's left) at coil / end of active frames / follow-through; elev0 → elev →
+//                   elev2 = blade pitch at the coil, the strike and the end of the follow-through.
 //   kind 'slam'   — two-handed vertical slam; a0/a1/a2 = blade elevation (π/2 = straight up,
-//                   0 = ahead, − = into the ground) at the overhead coil / impact / follow-through.
+//                   0 = ahead, − = into the ground, > π/2 = back over the head) at the overhead
+//                   coil / impact / follow-through; ready → raise = the windup's path to a0.
 //   kind 'thrust' — the charged lunge: blade level along the facing line, hand driven forward.
 // The arc travels a0 → a1 during the active frames, so the blade crosses the front of the hero
 // exactly while it can hit.
@@ -27,13 +28,15 @@ export const LIGHT = [
     kind: 'light', combo: 1, damage: 30, poise: 12, heavy: false,
     windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
     hitstop: 0.055, shake: 0.12,
-    anim: { kind: 'h', a0: -2.05, a1: 1.3, a2: 1.9, elev0: 0.45, elev: -0.06 }, // right → left
+    // coiled low at the right hip (blade back-right, 15° down) → round the front at chest height
+    // → left-back at shoulder height, then RISING up-left over the head (sheet frames 02-05)
+    anim: { kind: 'h', a0: -2.4, a1: 2.2, a2: 2.45, elev0: -0.25, elev: 0.05, elev2: 0.7 }, // right → left
   },
   {
     kind: 'light', combo: 2, damage: 32, poise: 12, heavy: false,
     windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
     hitstop: 0.055, shake: 0.12,
-    anim: { kind: 'h', a0: 1.85, a1: -1.35, a2: -1.95, elev0: 0.35, elev: -0.04 }, // left → right (backhand)
+    anim: { kind: 'h', a0: 2.3, a1: -2.15, a2: -2.4, elev0: -0.2, elev: 0.05, elev2: 0.65 }, // left → right (backhand, mirrored)
   },
   {
     // the combo finisher: raise two-handed overhead, slam down, crystal shards burst from the ground
@@ -42,7 +45,9 @@ export const LIGHT = [
     hitstop: 0.11, shake: 0.42,
     up: 1.0, // reach band above the blade: lower than the sweeps' so the raise can't tag the neck overhead
     shards: { radius: 1.7, height: 3.2 }, // ground burst at the impact point (hits if the blade missed)
-    anim: { kind: 'slam', a0: 2.55, a1: -0.72, a2: -0.8 },
+    // windup: blade low ahead (ready) → up-back 33° past the head (raise, mid-windup) → hanging
+    // down the back at the apex (a0, the wrists coil); active: over the top into the ground ahead
+    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8 },
   },
 ];
 
