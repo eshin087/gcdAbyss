@@ -59,7 +59,7 @@ export class TitleScreen {
     const tctrl = el('div', 'ab-title-ctrl tp-only', null, inner);
     for (const item of TITLE_TOUCH) fillKeyText(el('span', 'item', null, tctrl), item);
     tellLegend(inner).classList.add('title');
-    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.3", this.root);
+    el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.4", this.root);
 
     // shimmer: a sweeping column of '▓' plus a few random '▒' over the solid blocks
     this.chars = [...LOGO.join('\n')];
