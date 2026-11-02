@@ -189,9 +189,12 @@ export function createGrass(U, { count = 260000, extent = 150, density, height, 
 /**
  * Default meadow: dense in the clearing, thinner under the forest, none on stones / bare spots.
  * Baked into a 0.5 m grid so per-sample lookups are O(1).
- * bare: [{x, z, r}] circles with no grass (flagstones, bonfire ash, nest dirt).
+ * bare: [{x, z, r}] circles with no grass (bonfire ash, nest dirt).
+ * slabs: [{x, z, r, outline: [[x, z], ...]}] half-sunk flagstones. Grass grows right up to their
+ *   edges (blades rooted just outside lean over the slab on screen) and a few blades push up
+ *   through the slab near its rim; the middle stays almost bare. Evaluated exactly per sample.
  */
-export function meadowDensity(colliders, treeSpots, bare = [], extent = 150) {
+export function meadowDensity(colliders, treeSpots, bare = [], extent = 150, slabs = []) {
   const res = 0.5;
   const N = Math.ceil(extent / res);
   const half = extent / 2;
@@ -218,14 +221,50 @@ export function meadowDensity(colliders, treeSpots, bare = [], extent = 150) {
       }
     }
   };
-  for (const c of colliders.circles) stamp(c.x, c.z, c.r + 0.8, (dd) => (dd < c.r + 0.1 ? 0 : 0.4));
+  for (const c of colliders.circles) {
+    // stones and boulders: grass grows up against the rock (their colliders are a little wider
+    // than the stone); trunks and the bonfire keep a trodden ring
+    if (c.tag === 'stone' || c.tag === 'boulder') stamp(c.x, c.z, c.r + 0.4, (dd) => (dd < c.r * 0.8 ? 0 : 0.7));
+    else stamp(c.x, c.z, c.r + 0.8, (dd) => (dd < c.r + 0.1 ? 0 : 0.4));
+  }
   for (const t of treeSpots) stamp(t.x, t.z, t.r, (dd) => 0.5 + 0.5 * (dd / t.r));
   for (const b of bare) stamp(b.x, b.z, b.r, (dd) => Math.min(1, Math.max(0, (dd - b.r * 0.75) / (b.r * 0.25))));
+  // bounding box of all slabs: most samples skip the exact test
+  let sx0 = Infinity, sx1 = -Infinity, sz0 = Infinity, sz1 = -Infinity;
+  for (const s of slabs) {
+    sx0 = Math.min(sx0, s.x - s.r);
+    sx1 = Math.max(sx1, s.x + s.r);
+    sz0 = Math.min(sz0, s.z - s.r);
+    sz1 = Math.max(sz1, s.z + s.r);
+  }
+  const slabFactor = (x, z) => {
+    if (x < sx0 || x > sx1 || z < sz0 || z > sz1) return 1;
+    for (const s of slabs) {
+      if (Math.abs(x - s.x) > s.r || Math.abs(z - s.z) > s.r) continue;
+      const e = insideDist(s.outline, x, z);
+      if (e > 0) return e < 0.1 ? 0.45 : e < 0.22 ? 0.14 : 0.03;
+    }
+    return 1;
+  };
   return (x, z) => {
     const i = Math.floor((x + half) / res), j = Math.floor((z + half) / res);
     if (i < 0 || j < 0 || i >= N || j >= N) return 0;
-    return grid[j * N + i];
+    return grid[j * N + i] * slabFactor(x, z);
   };
+}
+
+/** Distance from (x, z) to the nearest edge of polygon `poly` if inside it, else 0. */
+function insideDist(poly, x, z) {
+  let inside = false;
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i], [xj, zj] = poly[j];
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+    const ex = xj - xi, ez = zj - zi;
+    const t = Math.max(0, Math.min(1, ((x - xi) * ex + (z - zi) * ez) / (ex * ex + ez * ez || 1)));
+    best = Math.min(best, Math.hypot(x - xi - ex * t, z - zi - ez * t));
+  }
+  return inside ? best : 0;
 }
 
 export function meadowHeight(x, z, rng) {

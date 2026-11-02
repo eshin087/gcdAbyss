@@ -3,11 +3,13 @@ import { COMMON_GLSL } from './shaderLib.js';
 import { gi } from './glyphs.js';
 
 // Material families (see STYLE.md):
-//  - AsciiObject: rocks, ruins, trees. Writes a FLAG in alpha so the post pass converts the
+//  - AsciiObject: trees, bones, the bonfire. Writes a FLAG in alpha so the post pass converts the
 //    object into a screen-space character grid (stone ramp for flag≈1, leaf ramp for flag≈0.6).
 //  - SurfaceGlyph: creatures and the player. Glyphs are laid out ON the surface (in aGUV space,
 //    meters), oriented along the body, chosen by lighting — "arranged symbols" for scales/armour.
 //    v0.3: crisp glyphs on near-black gaps + a moonlit silhouette outline (see STYLE.md).
+//  - CarvedGlyph: static rock (stones, boulders, flagstones). Crisp glyphs on a world-fixed,
+//    camera-facing lattice, chosen by facet light, with contour hatching, cracks and moss.
 
 // Alpha flag values written into the scene target (decoded by the ASCII pass in pipeline.js):
 //   0            NONE     pass-through (particles never reach the scene target)
@@ -287,4 +289,247 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
     blending: THREE.NoBlending,
   });
   return mat;
+}
+
+/**
+ * Carved-glyph defaults (stones, boulders, flagstones). Ramps are 6 dark → bright levels, each a
+ * string of 4 per-cell variants; a space is an empty cell (a dark gap). `topGlyphs` is used on
+ * facets that face up (slab tops, caps), `sideGlyphs` on the rest. `crackGlyphs` and
+ * `strokeGlyphs` are ordered by screen direction: horizontal, rising diagonal, vertical, falling
+ * diagonal. Strokes hatch the mid-lit side facets along their contour (`/` on a rock's left flank,
+ * `|` down a standing stone's side, `\` on the right flank), so every facet reads as a carved plane.
+ */
+export const CARVED_DEFAULTS = {
+  sideGlyphs: [': ;.', ';:.,', ':;:-', '=;%:', '%#=&', '#8@%'],
+  topGlyphs: ['.  .', '. ,.', ':-;.', '=:~;', '=%#-', '#=%&'],
+  mossGlyphs: ',;"*',
+  crackGlyphs: '-/|\\',
+  strokeGlyphs: '-/|\\',
+  strokeLevels: [2, 3],
+  cell: [0.22, 0.28],
+};
+const CARVED_LEVELS = 6;
+
+/**
+ * Carved glyph material for rocks: crisp glyphs fixed on the stone, chosen by light (lit facets
+ * dense, shadow sides sparse), over a dark slab of the stone's own hue, with world-fixed crack
+ * lines, moss patches and moonlit chamfer edges. Renders directly (alpha = FLAG.NONE), so the
+ * screen-grid ASCII pass leaves it alone.
+ *
+ * Glyph lattice: cells live on a plane perpendicular to the default camera view (fixed yaw,
+ * `viewPitch`), anchored in WORLD space — upright, the same size on every facet and seam-free, but
+ * they never re-pick as the camera moves or zooms (no swimming). Rows get random sideways offsets
+ * so columns never line up into text. Only for static geometry baked in world space.
+ *
+ * Geometry attributes: position, normal (flat facet normals read best), aCol (vec3 albedo,
+ * linear), aAO (0..1), aMoss (0..1 moss tendency), aInk (per-vertex ink multiplier, 1 = full),
+ * aEdge (0..1 moonlit edge band, e.g. slab chamfers).
+ *
+ * Options (all optional): sideGlyphs / topGlyphs (ramps), mossGlyphs, crackGlyphs, strokeGlyphs
+ * (4 each; see CARVED_DEFAULTS), strokeLevels [from, to] (ramp levels hatched with strokes; [9, 9]
+ * turns hatching off), cell [w,h] lattice meters (keep >= ~6 screen px at the default camera),
+ * viewPitch (rad, default 58° = CONFIG.camera.pitch), gain (ink brightness), lumScale (how fast
+ * glyphs climb the ramp: level = 1 - exp(-light * lumScale), a soft knee so moonlit tops and
+ * dimmer flanks both land on it), jitter (per-cell ramp randomness), inkFloor (keeps shadow-side
+ * glyphs faintly visible), base (dark slab brightness vs ink), mossInk [r,g,b], crackAmount 0..1,
+ * edge (chamfer line strength), glyphZoom, fadeNearPlayer (dither away in front of the player),
+ * side (THREE side, default DoubleSide).
+ */
+export function createCarvedGlyphMaterial(U, o = {}) {
+  const toRamp = (rows) => {
+    const out = [];
+    for (let l = 0; l < CARVED_LEVELS; l++) {
+      const s = (rows[Math.min(l, rows.length - 1)] ?? ' ').padEnd(4, ' ');
+      for (let v = 0; v < 4; v++) out.push(s[v] === ' ' ? -1 : gi(s[v]));
+    }
+    return out;
+  };
+  const four = (str) => {
+    const g = [...str].map(gi);
+    while (g.length < 4) g.push(g[g.length - 1]);
+    return new THREE.Vector4(g[0], g[1], g[2], g[3]);
+  };
+  const pitch = o.viewPitch ?? (58 * Math.PI) / 180;
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      ...pickShared(U, SHARED),
+      uPlayerScreen: U.uPlayerScreen,
+      uResolution: U.uResolution,
+      uFadeOn: { value: o.fadeNearPlayer ? 1 : 0 },
+      uLatU: { value: new THREE.Vector3(1, 0, 0) },
+      uLatV: { value: new THREE.Vector3(0, Math.cos(pitch), -Math.sin(pitch)) },
+      uCell: { value: new THREE.Vector2(...(o.cell ?? CARVED_DEFAULTS.cell)) },
+      uSideRamp: { value: toRamp(o.sideGlyphs ?? CARVED_DEFAULTS.sideGlyphs) },
+      uTopRamp: { value: toRamp(o.topGlyphs ?? CARVED_DEFAULTS.topGlyphs) },
+      uMossGlyphs: { value: four(o.mossGlyphs ?? CARVED_DEFAULTS.mossGlyphs) },
+      uCrackGlyphs: { value: four(o.crackGlyphs ?? CARVED_DEFAULTS.crackGlyphs) },
+      uStrokeGlyphs: { value: four(o.strokeGlyphs ?? CARVED_DEFAULTS.strokeGlyphs) },
+      uStrokeLevels: { value: new THREE.Vector2(...(o.strokeLevels ?? CARVED_DEFAULTS.strokeLevels)) },
+      uMossInk: { value: new THREE.Color(...(o.mossInk ?? [0.03, 0.058, 0.028])) },
+      uGain: { value: o.gain ?? 3.4 },
+      uLumScale: { value: o.lumScale ?? 4.0 },
+      uJitter: { value: o.jitter ?? 0.3 },
+      uInkFloor: { value: o.inkFloor ?? 0.13 },
+      uBase: { value: o.base ?? 0.12 },
+      uCrack: { value: o.crackAmount ?? 1 },
+      uEdge: { value: o.edge ?? 0 },
+      uGlyphZoom: { value: o.glyphZoom ?? 0.72 },
+    },
+    vertexShader: /* glsl */ `
+      attribute vec3 aCol;
+      attribute float aAO;
+      attribute float aMoss;
+      attribute float aInk;
+      attribute float aEdge;
+      varying vec3 vW;
+      varying vec3 vN;
+      varying vec3 vCol;
+      varying float vAO;
+      varying float vMoss;
+      varying float vInk;
+      varying float vEdge;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vW = wp.xyz;
+        vN = normalize(mat3(modelMatrix) * normal);
+        vCol = aCol;
+        vAO = aAO;
+        vMoss = aMoss;
+        vInk = aInk;
+        vEdge = aEdge;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      ${COMMON_GLSL}
+      #define CG_LEVELS ${CARVED_LEVELS}
+      uniform vec4 uPlayerScreen;
+      uniform vec2 uResolution;
+      uniform float uFadeOn;
+      uniform vec3 uLatU;
+      uniform vec3 uLatV;
+      uniform vec2 uCell;
+      uniform float uSideRamp[CG_LEVELS * 4];
+      uniform float uTopRamp[CG_LEVELS * 4];
+      uniform vec4 uMossGlyphs;
+      uniform vec4 uCrackGlyphs;
+      uniform vec4 uStrokeGlyphs;
+      uniform vec2 uStrokeLevels;
+      uniform vec3 uMossInk;
+      uniform float uGain;
+      uniform float uLumScale;
+      uniform float uJitter;
+      uniform float uInkFloor;
+      uniform float uBase;
+      uniform float uCrack;
+      uniform float uEdge;
+      uniform float uGlyphZoom;
+      varying vec3 vW;
+      varying vec3 vN;
+      varying vec3 vCol;
+      varying float vAO;
+      varying float vMoss;
+      varying float vInk;
+      varying float vEdge;
+
+      // smooth value noise on the lattice plane (cell-centre lookups keep each cell's glyph whole)
+      float cgNoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash12(i), b = hash12(i + vec2(1.0, 0.0));
+        float c = hash12(i + vec2(0.0, 1.0)), d = hash12(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+      float pick4(vec4 g, float k) { return k < 0.5 ? g.x : k < 1.5 ? g.y : k < 2.5 ? g.z : g.w; }
+
+      void main() {
+        if (uFadeOn > 0.5) {
+          vec2 sp = gl_FragCoord.xy / uResolution;
+          vec2 d = (sp - uPlayerScreen.xy) * vec2(uResolution.x / uResolution.y, 1.0);
+          float viewDepth = 1.0 / gl_FragCoord.w;
+          if (viewDepth < uPlayerScreen.z - 1.5) {
+            float t = smoothstep(0.17, 0.07, length(d));
+            if (bayer4(gl_FragCoord.xy * 0.5) < t * 0.92) discard;
+          }
+        }
+        vec3 n = normalize(gl_FrontFacing ? vN : -vN);
+
+        // world-fixed lattice on the view-aligned plane; each row slides by a random amount
+        vec2 q = vec2(dot(vW, uLatU), dot(vW, uLatV));
+        vec2 gc = q / uCell;
+        float row = floor(gc.y);
+        float shift = hash12(vec2(row, 41.7));
+        vec2 g = vec2(gc.x + shift, gc.y);
+        vec2 cell = floor(g);
+        vec2 f = fract(g);
+        vec2 cq = vec2(cell.x + 0.5 - shift, cell.y + 0.5) * uCell; // cell centre, lattice meters
+        float h = hash12(cell);
+        float vari = floor(fract(h * 13.37 + 0.31) * 4.0);
+
+        float sh = shadowAt(vW + n * 0.12);
+        vec3 L = lightAt(vW, n, 0.2, sh) * vAO;
+        float lum = 1.0 - exp(-luma(L) * uLumScale) + (h - 0.5) * uJitter;
+        float lvf = clamp(floor(lum * float(CG_LEVELS)), 0.0, float(CG_LEVELS - 1));
+        int ri = int(lvf) * 4 + int(vari);
+        bool top = n.y > 0.8;
+        float idx = top ? uTopRamp[ri] : uSideRamp[ri];
+        vec3 ink = vCol * uGain * vInk;
+
+        // hatching: mid-lit side facets get strokes along their screen contour (left flank '/',
+        // vertical side '|', right flank '\'); facets whose contour runs flat keep the ramp, so
+        // no rows of dashes appear. ~1 cell in 4 keeps its ramp glyph to stay hand-made.
+        vec2 ns = vec2(dot(n, uLatU), dot(n, uLatV));
+        if (!top && lvf >= uStrokeLevels.x && lvf <= uStrokeLevels.y && length(ns) > 0.3 && fract(h * 5.71) > 0.25) {
+          vec2 t = vec2(-ns.y, ns.x);
+          float k = mod(floor(mod(atan(t.y, t.x), 3.14159265) / 0.7853982 + 0.5), 4.0);
+          if (k > 0.5) idx = pick4(uStrokeGlyphs, k);
+        }
+
+        // moss: clumps on up-facing / low parts, dim green glyphs
+        float mossN = cgNoise(cq * 1.7 + 3.1) * 0.8 + hash12(cell + 7.7) * 0.2;
+        if (mossN > 1.0 - vMoss * 0.42) {
+          idx = pick4(uMossGlyphs, min(lvf * 0.67, 3.0));
+          ink = uMossInk * uGain;
+        }
+
+        // cracks: meandering iso-lines of a world-fixed noise, only in some regions. On tops they
+        // are a line of stroke glyphs following the crack; on (hatched) sides a dark empty seam.
+        float region = smoothstep(0.5, 0.7, cgNoise(cq * 0.42 + 11.0)) * uCrack;
+        if (region > 0.0) {
+          vec2 p = cq * 1.5 + 5.0;
+          float c0 = cgNoise(p);
+          vec2 gr = vec2(cgNoise(p + vec2(0.03, 0.0)) - c0, cgNoise(p + vec2(0.0, 0.03)) - c0) / 0.03 * 1.5;
+          float dist = abs(c0 - 0.5) / max(length(gr), 1e-3);
+          if (dist < uCell.x * 0.5 * region) {
+            vec2 t = vec2(-gr.y, gr.x);
+            float a = mod(atan(t.y, t.x), 3.14159265);
+            idx = top ? pick4(uCrackGlyphs, mod(floor(a / 0.7853982 + 0.5), 4.0)) : -1.0;
+            ink = vCol * uGain * vInk * 0.8;
+          }
+        }
+
+        float m = 0.0;
+        if (idx >= 0.0) {
+          // small sideways nudge per cell: glyphs never sit in perfect typeset columns
+          vec2 fz = (f - vec2((fract(h * 7.13) - 0.5) * 0.2, 0.0) - 0.5) * uGlyphZoom + 0.5;
+          m = smoothstep(0.2, 0.7, glyphGrad(idx, fz, dFdx(gc) * uGlyphZoom, dFdy(gc) * uGlyphZoom));
+        }
+        vec3 base = vCol * (L * uBase + 0.006);
+        vec3 col = mix(base, ink * (L + uInkFloor), m);
+        // moonlit chamfer: a thin edge that catches the light, chipped (broken per cell)
+        float chip = step(0.3, hash12(cell + 3.3));
+        col += vCol * (L + uInkFloor) * uGain * 0.45 * vEdge * uEdge * chip;
+
+        // dragon fire scorches low stones; embers glow in the glyphs
+        vec2 sc = scorchAt(vW.xz);
+        float low = 1.0 - smoothstep(0.3, 1.4, vW.y);
+        col *= 1.0 - sc.x * 0.55 * low;
+        col += vec3(1.0, 0.28, 0.04) * sc.y * sc.y * low * (0.08 + 0.5 * m);
+        col = applyFog(col, vW);
+        gl_FragColor = vec4(col, 0.0);
+      }
+    `,
+    side: o.side ?? THREE.DoubleSide,
+    blending: THREE.NoBlending,
+  });
 }

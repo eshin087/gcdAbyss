@@ -25,7 +25,7 @@ export class World {
     game.scene.add(this.forest.group);
     this.scorch = new Scorch(U, game);
     const extent = 150;
-    const density = meadowDensity(this.colliders, this.forest.treeSpots, this.forest.bare, extent);
+    const density = meadowDensity(this.colliders, this.forest.treeSpots, this.forest.bare, extent, this.forest.slabs);
     const q = CONFIG.quality[CONFIG.quality.length - 1];
     this.grass = createGrass(U, { count: q.grass, extent, density, height: meadowHeight });
     game.scene.add(this.grass.mesh);
