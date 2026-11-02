@@ -175,3 +175,17 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     actors; the ground stays calm.
   - Surface-glyph patterns now only shape the source image.
   - At the default camera the hero is a small letter cluster; detail lives in close-ups.
+
+## ADR-016 — Touch is a virtual layer on the input system; phones get their own camera (2026-11-02)
+- **Context:** the owner tests on a phone. They couldn't close the Lab (it is keyboard-toggled) and
+  had no controls.
+- **Decision:**
+  - Touch controls feed virtual keys, buttons and an analog axis into `core/input.js`
+    (`setVirtual`, `setVirtualAxis`). Player and flow code are unchanged and read the same API.
+  - Auto-aim parks `game.mouseGround` on the dragon instead of forcing lock-on.
+  - The camera rig has a phone profile: 20 m default, extra zoom capped at 3 m.
+  - Phones default to LOW quality.
+  - Landscape only.
+- **Consequences:**
+  - Gameplay and tests are shared between desktop and touch (a `touch` test scenario).
+  - Real-device checks are still needed for native multi-touch, iOS gestures and frame rate.

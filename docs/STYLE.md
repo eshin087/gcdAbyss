@@ -53,7 +53,12 @@ History matters here:
 - The creature material renders a smooth shaded SOURCE image tagged `FLAG.ART`.
 - The ASCII pass converts it on a fine screen grid (~2/3 of the world cell, about 5x8 px at 1080p).
 - Each cell averages 4 samples, picks a letter from the density-sorted `ART_CHARS` ramp (`. : ; i r s X 2 3 5 h A H S G M 9 # & B @`) by brightness with a little per-cell jitter, and keeps the source hue (white scales, orange lava, red wings, cyan blade) on black.
-- Per-material `artGain` sets the source brightness (wyrm 0.28, hero 0.62). | `createSurfaceGlyphMaterial` (flag defaults to `FLAG.ART`) → `render/pipeline.js` `artCell` |
+- Per-material `artGain` sets the source brightness (wyrm 0.28, hero 1.1).
+- The hero tags `FLAG.ART_HERO` (0.48) and gets its own pass settings (the `.x` of `uArtLum` /
+  `uArtMin` / `uArtDither` / `uArtEdge`):
+  - steadier letters
+  - a brighter ramp floor
+  - depth-edge gaps: cells spanning a part boundary go black, the reference's dark separations | `createSurfaceGlyphMaterial` (flag defaults to `FLAG.ART`) → `render/pipeline.js` `artCell` |
 | FX | camera-facing glyph particles, additive HDR (bloom) or alpha, drawn after the grid pass | `render/particles.js` |
 | Fire light | pooled point lights (8 visible) lighting every shader | `render/lights.js` |
 | Shadows | moon orthographic shadow map, casters on layer 1 (`markCaster`) | `render/pipeline.js` |

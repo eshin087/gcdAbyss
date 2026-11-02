@@ -4,9 +4,23 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-The hero and the wyrm are drawn as classic ASCII art (the owner's reference images).
+The hero and the wyrm are drawn as classic ASCII art (the owner's reference images). The game is
+playable on phones.
+
+### Added
+- **Touch controls**, shown on phones (or with `?touch`):
+  - a floating ASCII stick (push to the rim to sprint)
+  - ATTACK (tap = combo, hold = charged thrust), BLOCK (hold = block, tap = parry), DODGE, FLASK,
+    LOCK and pause
+  - auto-aim at the dragon, pinch zoom, tap prompts and "tap to begin"
+  - landscape only, with a rotate overlay
+  - a closer phone camera (20 m), LOW quality and a compact HUD
+- **Lab show/hide on touch:** a floating `LAB` / `× LAB` toggle and a 36 px close button. The
+  compact panel scrolls inside itself on small screens. VIEW → Touch UI tests the layer on desktop.
 
 ### Changed
+- The hero's ASCII art follows the owner's reference more closely: steadier, brighter letters and
+  black gaps at part boundaries instead of 'random text'. White letters no longer bloom.
 - The hero and the wyrm render through a fine screen-space ASCII-art grid:
   - letters `. : ; i r s X 2 3 5 h A H S G M 9 # & B @` picked by brightness and coloured per cell
     (white scales, orange lava, red wings, cyan blade, violet gem), on black

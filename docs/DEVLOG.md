@@ -21,9 +21,33 @@ image-to-text art) and chose smaller letters over zooming the camera in.
 - Tuned in the Lab model viewer (close-ups) and at the game camera (`uArtLum` 4.5, `uArtMin` 0.3).
   Red tells and the stomp ring read in ASCII.
 
+**Follow-up (same day):** the owner said the dragon looks good but the hero "looks like a bunch of
+random text". They also couldn't close the Lab on their phone, and asked for touch controls.
+- **Hero:** own pass settings via `FLAG.ART_HERO`:
+  - `artGain` 1.1
+  - jitter 0.5
+  - ramp floor 0.42
+  - depth-edge gaps (`uArtEdge` 0.018)
+  - `uArtMax` 0.8, so white letters don't bloom
+
+  It now reads like the reference figure.
+- **Phone (agent):**
+  - touch layer on `core/input.js`
+  - an ASCII stick and buttons with auto-aim
+  - a phone camera profile (20 m), LOW quality on phones, a compact HUD
+  - a rotate overlay
+  - the Lab `LAB` / `× LAB` toggle
+  - a `touch` test scenario
+- **Decisions:** ADR-016.
+
 **Open issues / next:**
-- At the game camera the hero is a ~4x6-letter cluster; readable as "the bright figure", not as
-  a character.
+- Real-phone check:
+  - native multi-touch
+  - iOS long-press and scroll blocking
+  - audio unlock on the first tap
+  - LOW quality look and frame rate
+  - whether rim-sprint triggers by accident
+- At the desktop game camera the hero is still a small letter cluster.
 - Characters re-pick as creatures move (inherent to the style).
 
 ---

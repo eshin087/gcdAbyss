@@ -37,6 +37,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
       details (straps, boots)
 - [x] Owner approval; released as v0.3.0
 - [~] Classic ASCII-art creatures (screen-grid conversion, owner's references): awaiting approval
+- [~] Phone support: touch controls, phone camera, Lab toggle (needs a real-device check)
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
