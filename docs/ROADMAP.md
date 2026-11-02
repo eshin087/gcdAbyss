@@ -36,6 +36,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] Next look round: hero hair mass, the blade read from behind at the game camera, small
       details (straps, boots)
 - [x] Owner approval; released as v0.3.0
+- [~] Classic ASCII-art creatures (screen-grid conversion, owner's references): awaiting approval
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions

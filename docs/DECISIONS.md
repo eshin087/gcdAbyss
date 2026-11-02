@@ -157,3 +157,21 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - Attack anchors moved to the real striking parts (forefeet, claws, snout, tail).
   - Hit-timing spreads are measured per ability in COMBAT.md.
   - Future look passes start from the critic's gap list rather than impressions.
+
+## ADR-015 — Creatures as classic ASCII art: screen-grid conversion of a shaded source (2026-11-02)
+- **Context:** the owner shared two reference images and asked for the hero and dragon to "look more
+  ASCII like". The references are image-to-text conversions: upright characters on a fixed grid,
+  density by brightness, per-character colour, black backing. Glyphs printed on 3D surfaces
+  (ADR-011) don't read that way.
+- **Decision:**
+  - Creature materials render a smooth shaded source (`FLAG.ART`).
+  - The ASCII pass converts it on a finer grid than the world's (owner's choice: smaller letters so
+    the hero keeps a few rows at the game camera), using a density-sorted `ART_CHARS` ramp and the
+    source hue.
+  - Per-material `artGain` balances bright and dark inks.
+  - The world grid (stones, trees) and the world-anchored grass are unchanged.
+- **Consequences:**
+  - Characters re-pick as creatures move, the inherent "ASCII video" look. This is acceptable for
+    actors; the ground stays calm.
+  - Surface-glyph patterns now only shape the source image.
+  - At the default camera the hero is a small letter cluster; detail lives in close-ups.

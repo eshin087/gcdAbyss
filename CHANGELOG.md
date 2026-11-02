@@ -4,6 +4,16 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
+The hero and the wyrm are drawn as classic ASCII art (the owner's reference images).
+
+### Changed
+- The hero and the wyrm render through a fine screen-space ASCII-art grid:
+  - letters `. : ; i r s X 2 3 5 h A H S G M 9 # & B @` picked by brightness and coloured per cell
+    (white scales, orange lava, red wings, cyan blade, violet gem), on black
+  - letters are ~2/3 the size of the world grid's (owner's choice), so the hero still gets rows at
+    the game camera
+  - red tells, hit flashes and the death dissolve carry through, because they are colour in the
+    source
 
 ## [0.3.0] - 2026-11-01
 Look pass from the owner's v0.2 review and concept sheets.

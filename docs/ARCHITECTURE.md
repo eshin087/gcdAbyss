@@ -57,6 +57,15 @@ Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `
 `tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code.
 
 Render helpers for creature modules:
+- **v0.4 creature ASCII art:**
+  - `createSurfaceGlyphMaterial` now defaults `flag` to `FLAG.ART` (0.5). With the shared
+    `U.uArtSolid` = 1, the material writes a smooth shaded source (ink × `artGain`, no glyph gaps).
+  - The ASCII pass (`pipeline.js`) converts every `FLAG.ART` pixel to a fine screen grid of
+    `ART_CHARS` letters (`createArtAtlas` in `glyphs.js`; cell ≈ H/135 px), coloured by the
+    source hue.
+  - Set `U.uArtSolid` = 0 to feed the patterned surface render instead (look-dev A/B).
+  - Options: `artGain` (source brightness, default 1). Pass uniforms: `uArtLum`, `uArtMin`,
+    `uArtMax`, `uArtDither`.
 - `createSurfaceGlyphMaterial(U, opts)` (`render/materials.js`). **v0.3: crisp surface glyphs.** One
   glyph per aGUV cell is printed on the body (aGUV +y = "glyph up"), picked by local light, over
   near-black gaps (`base`). Pass `ascii: <set>` to pick the default ramp + cell (`SURFACE_SETS`):

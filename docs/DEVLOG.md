@@ -5,6 +5,29 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-02 — Session 4: classic ASCII-art creatures
+**Owner:** "Make the character and dragon look more ASCII like. Right now it doesn't have the ASCII
+art style." They attached two reference images (a dragon and a hooded figure as coloured
+image-to-text art) and chose smaller letters over zooming the camera in.
+
+**Done:**
+- New `FLAG.ART` class and creature ASCII-art path in the pipeline:
+  - a finer grid than the world's (H/135 px cells: 4x7 at 720p, 5x8 at 1080p)
+  - 4-sample cell average
+  - a density-sorted `ART_CHARS` atlas built at runtime
+  - brightness → letter with per-cell jitter, colour = source hue, HDR only for saturated parts
+- Creature materials default to `FLAG.ART` with a smooth shaded source (`U.uArtSolid`). Per-material
+  `artGain`: wyrm 0.28, hero 0.62.
+- Tuned in the Lab model viewer (close-ups) and at the game camera (`uArtLum` 4.5, `uArtMin` 0.3).
+  Red tells and the stomp ring read in ASCII.
+
+**Open issues / next:**
+- At the game camera the hero is a ~4x6-letter cluster; readable as "the bright figure", not as
+  a character.
+- Characters re-pick as creatures move (inherent to the style).
+
+---
+
 ## 2026-11-01 — Session 3c: match the concept sheets (four-legged drake)
 **Owner:** "The character hair and outfit doesn't look like the images. The dragon as well. Try to
 get it accurately as close as possible." They chose to rebuild the dragon as four-legged.
