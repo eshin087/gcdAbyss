@@ -166,10 +166,11 @@ export const WYRM_ART = {
   neck: { ...HIDE_ART, scale: [0.4, 0.3], vein: [3.4, 0.36, 0.1, 0.6] },
   // the head keeps fine scales (the neck's big plates turned the skull into a few flat tiles)
   head: { ...HIDE_ART, scale: [0.2, 0.15], vein: [3.0, 0.3, 0.08, 0.45] },
-  belly: { ...LAVA_ART, scale: [0.56, 0.4], ink: [0.42, 0.34, 0.29], rimInk: [0.7, 0.48, 0.3], glow: [1.2, 0] },
+  // the sternum: the brightest scales on the body, lit gold from below (the reference's focal chest)
+  belly: { ...LAVA_ART, scale: [0.56, 0.4], tone: [0.0, 0.24, 2.0, 0.22], ink: [0.42, 0.34, 0.29], rimInk: [0.85, 0.55, 0.3], glow: [1.2, 0], under: [1.0, 0.32, 0.07, 1.5] },
   // the throat: orange-lit scales with amber rims, kept under the bloom threshold at rest (a gold
   // hot spot glowed like a lamp under the jaw); it still flares for the breath / roar charge
-  throat: { ...LAVA_ART, scale: [0.4, 0.3], tone: [0.0, 0.26, 1.3, 0.24], ink: [0.55, 0.3, 0.16], rimInk: [0.9, 0.5, 0.2], glow: [1.2, 0.04], under: [1.0, 0.3, 0.06, 1.0] },
+  throat: { ...LAVA_ART, scale: [0.4, 0.3], tone: [0.0, 0.28, 1.5, 0.24], ink: [0.55, 0.3, 0.16], rimInk: [0.9, 0.5, 0.2], glow: [1.2, 0.04], under: [1.0, 0.3, 0.06, 1.0] },
   lava: LAVA_ART,
   // deep crimson, blotched, torn: [mottle, ember specks, tear noise frequency, trailing-edge tears]
   membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], under: UNDER },
