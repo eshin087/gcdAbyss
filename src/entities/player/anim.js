@@ -1116,7 +1116,8 @@ const TIP_FLOOR = 0.012; // the steel point rests ON the ground (its outer corne
 // how far from the grip the steel starts to count
 const BLADE_CLEAR = [0.1, 0.085, 0.15];
 const _mB = new THREE.Matrix4();
-const _cA = new THREE.Vector3(), _cB = new THREE.Vector3(), _cC = new THREE.Vector3(), _cD = new THREE.Vector3();
+const LEG_PTS = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()); // R hip, knee, ankle; L hip, knee, ankle
+const _cD = new THREE.Vector3();
 const _cE = new THREE.Vector3(), _cP = new THREE.Vector3(), _cQ = new THREE.Vector3();
 const HAND_FLOOR = 0.1; // grip / off-hand centre height floor
 const FOOT_FLOOR = 0.06; // ankle height floor
@@ -1700,9 +1701,9 @@ export class HeroAnimator {
     // so a hip twist in a turn, a foot landing forward or a fall swings it clear instead. The
     // ground wins last (raising the point can swing it back toward a shin: two rounds).
     if (this.key !== 'attack') {
-      this._bladeClear(r);
+      this._bladeClear(r, true);
       this._tipFloor(r);
-      this._bladeClear(r);
+      this._bladeClear(r, false);
     }
     this._tipFloor(r);
     _by.set(p[P.swF], p[P.swF + 1], p[P.swF + 2]);
@@ -1741,17 +1742,23 @@ export class HeroAnimator {
   /** Swing the blade direction _bz (body space, from the grip r.sword.position) out of both legs'
    *  thigh and shin capsules: the closest blade point moves straight away from the limb by the
    *  overlap (continuous in the overlap, so it eases in and out without a pop). */
-  _bladeClear(r) {
-    _mB.copy(r.body.matrixWorld).invert();
+  _bladeClear(r, fresh) {
+    const L = LEG_PTS;
+    if (fresh) {
+      // hip, knee, ankle of each leg in body space (after this frame's leg IK)
+      _mB.copy(r.body.matrixWorld).invert();
+      for (let li = 0; li < 2; li++) {
+        const leg = li ? r.legs.L : r.legs.R, o = li * 3;
+        leg.thigh.getWorldPosition(L[o]).applyMatrix4(_mB);
+        leg.shin.getWorldPosition(L[o + 1]).applyMatrix4(_mB);
+        leg.foot.getWorldPosition(L[o + 2]).applyMatrix4(_mB);
+      }
+    }
     const G = r.sword.position;
     for (let pass = 0; pass < 2; pass++) {
-      for (let li = 0; li < 2; li++) {
-        const leg = li ? r.legs.L : r.legs.R;
-        leg.thigh.getWorldPosition(_cA).applyMatrix4(_mB); // hip
-        leg.shin.getWorldPosition(_cB).applyMatrix4(_mB); // knee
-        leg.foot.getWorldPosition(_cC).applyMatrix4(_mB); // ankle
-        this._clearSeg(G, _cA, _cB, BLADE_CLEAR[0]);
-        this._clearSeg(G, _cB, _cC, BLADE_CLEAR[1]);
+      for (let o = 0; o < 6; o += 3) {
+        this._clearSeg(G, L[o], L[o + 1], BLADE_CLEAR[0]);
+        this._clearSeg(G, L[o + 1], L[o + 2], BLADE_CLEAR[1]);
       }
     }
   }
