@@ -203,10 +203,19 @@ function surfaceFeatures(o, cell) {
  *                        grey); fire light keeps its colour
  *   vein: [strength, share, width, plate]  molten fissures x uGlow: voronoi plates of `plate` aGUV
  *                        units, only `share` of the fissures glow (a broken, branching net), `width`
+ *   crack: [strength, share, lo, hi]  molten cracks x uGlow IN THE SCALE GAPS (needs `scale`): jagged
+ *                        lines that follow the scale outlines, wandering across the hide in a few long
+ *                        runs plus `share` of single scales, only on surfaces facing down (world normal:
+ *                        smoothstep(lo, hi, -n.y), e.g. [-0.4, 0.6]: none on the back, some on the
+ *                        flanks, full under the belly / throat / tail)
+ *   vary: 0..1           per-scale brightness variation of the scale bodies (default 0.8; lower = a
+ *                        calmer hide, the reference's even charcoal)
  *   glow: [gaps, all]    emissive x uGlow in the scale gaps (molten plates) / everywhere (maw, eye)
  *   under: [r,g,b,k]     warm light from below on down-facing surfaces (lava light under the jaw)
  *   membrane: [mottle, specks, tears, edgeTears]  wing membranes only (needs aEdge / aBone): dark
  *                        mottling, ember specks, holes, a ragged trailing edge
+ *   boneGlow: [width, base, hot]  membranes: the orange streaks along the finger bones, `width` model
+ *                        units out from a bone, emissive `base` + `hot` x uGlow (default [0.3, 0.05, 0.9])
  */
 function wyrmFeatures(w, defines, uniforms) {
   const v = (a, n, d) => (Array.isArray(a) && a.length === n && a.every(Number.isFinite) ? a : d);
@@ -228,6 +237,8 @@ function wyrmFeatures(w, defines, uniforms) {
   uniforms.uWKey = { value: new THREE.Vector3(...v(w.key, 3, [0, 0.7, 1])) };
   uniforms.uWEnvSat = { value: Number.isFinite(w.envSat) ? w.envSat : 1 };
   uniforms.uWVein = { value: new THREE.Vector4(...v(w.vein, 4, [0, 0.4, 0.06, 1])) };
+  uniforms.uWCrack = { value: new THREE.Vector4(...v(w.crack, 4, [0, 0, -0.4, 0.6])) };
+  uniforms.uWVary = { value: Number.isFinite(w.vary) ? w.vary : 0.8 };
   // molten colour of veins / gaps / glow: a red-orange (ACES turns a (1, 0.34, 0.05) lava gold)
   uniforms.uWEmit = { value: new THREE.Color(...v(w.emit, 3, [1.0, 0.17, 0.03])) };
   uniforms.uWGlow = { value: new THREE.Vector2(...v(w.glow, 2, [0, 0])) };
@@ -235,6 +246,7 @@ function wyrmFeatures(w, defines, uniforms) {
   if (w.membrane != null) {
     defines.SG_WYRM_MEMBRANE = '';
     uniforms.uWMem = { value: new THREE.Vector4(...v(w.membrane, 4, [0.5, 0.03, 0.1, 0.4])) };
+    uniforms.uWMemBone = { value: new THREE.Vector3(...v(w.boneGlow, 3, [0.3, 0.05, 0.9])) };
   }
 }
 
@@ -587,11 +599,14 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec3 uCamRight;
       uniform vec3 uCamUp;
       uniform vec4 uWVein;
+      uniform vec4 uWCrack;
+      uniform float uWVary;
       uniform vec3 uWEmit;
       uniform vec2 uWGlow;
       uniform vec4 uWUnder;
   #ifdef SG_WYRM_MEMBRANE
       uniform vec4 uWMem;
+      uniform vec3 uWMemBone;
       varying float vEdge;
       varying float vBone;
   #endif
@@ -627,7 +642,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float a = mod(atan(s.y, s.x), 3.14159265);
         return 1.0 + mod(floor(a / 0.7853982 + 0.5), 4.0);
       }
-      vec2 wScales(vec2 p, out vec3 rimT) {
+      // sInfo: the scale the point lies on (its grid id xy, its hash z) and the distance to its gap in
+      // gap widths (w): the molten cracks pick scales and glow a few gap widths around the gap
+      vec2 wScales(vec2 p, out vec3 rimT, out vec4 sInfo) {
         float ppx = max(max(length(dFdx(p)), length(dFdy(p))), 1e-6); // scale units per pixel
         float rimW = max(uWTone.w, 4.5 * ppx);
         float gapW = max(uWGap.x, uWGap.y * ppx);
@@ -649,8 +666,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         else if (dOwn > 0.0) { dIn = dOwn; dCov = -dUp; axl = ax; id = vec2(floor(px), row); tg = vec2(f.x > 0.0 ? 1.0 : -1.0, wEdgeD(ax)); }
         else { dIn = f.y + 1.0 - eO; dCov = -dOwn; axl = 0.5 - ax; id = vec2(xo, row - 1.0); tg = vec2(1.0, 0.0); }
         float hs = hash12(id + uSeed * 0.37);
+        sInfo = vec4(id, hs, mix(dCov / max(gapW, 1e-4), 9.0, lod)); // (no cracks once scales alias)
         float t = clamp(dCov / max(dCov + dIn, 1e-4), 0.0, 1.0); // 0 under the overlap .. 1 at its edge
-        float body = uWTone.y * (0.6 + 0.8 * hs) * (0.3 + 0.7 * t * t);
+        float body = uWTone.y * (1.0 + uWVary * (hs - 0.5)) * (0.3 + 0.7 * t * t);
         // the free edge catches the light most at its tip: a bright chevron per scale that fades
         // toward the shoulders (a continuous rim drew a fishnet lattice over the hide)
         float rim = (1.0 - smoothstep(0.0, rimW, dIn)) * (1.0 - 0.8 * smoothstep(0.16, 0.46, axl)) * (0.55 + 0.45 * fract(hs * 7.3));
@@ -701,7 +719,8 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vec2 gs = gp / max(uWScale, vec2(1e-4));
         vec2 jx = dFdx(gs), jy = dFdy(gs);
         vec3 rimT = vec3(0.0);
-        vec2 sc = uWScale.x > 0.0 ? wScales(gs, rimT) : vec2(1.0, 0.0);
+        vec4 sInfo = vec4(0.0, 0.0, 0.0, 9.0);
+        vec2 sc = uWScale.x > 0.0 ? wScales(gs, rimT, sInfo) : vec2(1.0, 0.0);
         // stroke glyph code for the art pass (alpha = flag + 0.01 x code): scale rims draw '\ /'
         // along their edge (the reference's scale outlines), thin parts (uWShape.y 2: spikes, claws,
         // bones) draw strokes along their length
@@ -726,14 +745,28 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         // flat field), darker toward the torn edge, embers along the bones, sparse ember specks
         float mo = wNoise(vG * 0.75 + 11.3) * 0.65 + wNoise(vG * 2.4 + 3.1) * 0.35;
         col *= mix(1.0 - uWMem.x, 1.0 + 0.5 * uWMem.x, smoothstep(0.32, 0.68, mo)) * (1.0 - 0.45 * smoothstep(0.5, 1.0, vEdge));
-        float bone = 1.0 - smoothstep(0.0, 0.3, vBone);
+        float bone = 1.0 - smoothstep(0.0, uWMemBone.x, vBone);
         vec2 sq = vG / 0.075;
         float spk = step(1.0 - uWMem.y, hash12(floor(sq) + uSeed)) * step(0.36, mo) * (1.0 - smoothstep(0.22, 0.45, length(fract(sq) - 0.5))); // round embers, not squares
-        col += uWEmit * (spk * (0.3 + 0.9 * hot) + bone * bone * (0.05 + 0.9 * hot));
+        col += uWEmit * (spk * (0.3 + 0.9 * hot) + bone * bone * (uWMemBone.y + uWMemBone.z * hot));
   #endif
         if (uWVein.x > 0.0 && hot > 0.001) {
           float vn = wVeins(vG / uWVein.w, uWVein.y, uWVein.z / uWVein.w);
           col += uWEmit * hot * uWVein.x * vn * (0.75 + 0.25 * sin(uTime * 2.3 + vG.y * 3.1));
+        }
+        // molten cracks in the scale gaps (the reference: jagged orange lines along the scale outlines on
+        // the chest, throat, belly, inner legs and tail underside; none across the back): a smooth noise
+        // over the scale grid picks winding runs of scales (its 0.5 isoline) plus a share of single ones,
+        // and their gap glows, faded in on down-facing surfaces
+        // (the glow spreads ~2.5 gap widths from the gap's middle: a thin hot core and a halo, wide
+        // enough to light the letters across it, where the gap alone only nicked a pixel of them)
+        float cg = 1.0 - smoothstep(0.0, 2.5, sInfo.w);
+        if (uWCrack.x > 0.0 && hot > 0.001 && cg > 0.001) {
+          float uw = smoothstep(uWCrack.z, uWCrack.w, -n.y);
+          float nf = wNoise(sInfo.xy * 0.31 + uSeed * 1.3);
+          float run = 1.0 - smoothstep(0.05, 0.11, abs(nf - 0.5));
+          float one = step(1.0 - uWCrack.y, fract(sInfo.z * 13.17));
+          col += uWEmit * hot * uWCrack.x * (cg * cg + sc.y) * 0.5 * max(run, one) * uw * (0.8 + 0.2 * sin(uTime * 2.3 + sInfo.z * 6.28));
         }
         col += uWEmit * hot * (uWGlow.x * sc.y + uWGlow.y);
         col += vec3(1.0, 0.92, 0.85) * uFlash * (0.15 + 0.6 * sc.x);

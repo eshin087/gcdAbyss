@@ -64,22 +64,24 @@ export const WING_KEYS = {
     kink: [-6 * DEG, -12 * DEG, -5 * DEG, 0],
     thumb: nrm([0.1, -0.55, 0.85]),
   },
-  // the combat stance (the owner's reference painting): both wings raised high, the arm rising out and
-  // up (elbow ~140°) to a wrist ~1.9 H up and 2.1 out: the peak of the wing. From there the fingers
-  // fan out and down, ~30° apart, the leading one drooping a little toward its tip, so each wing
-  // reads as the painting's bat 'M' (the wrist a peak, the outer edge falling away). The leading
-  // edge sweeps back ~30° off the side and the inner fingers come round to point down and a little
-  // forward, so each sail faces out, forward and a little up: a broad face from every side and from
-  // above. Fanned straight out to the side (a sail facing dead ahead: wide from the low front) it was
-  // edge-on from the side, the painting's three-quarter view and the 58° game camera at most yaws (a
-  // thin lance, and a flat airplane 'T' from the front); swept back ~45° (v0.4) it read narrow from
-  // the low front. The painting's far wing reaching past the head is the look sweep (REST_POSE.sweep).
+  // the combat stance (the owner's reference painting): both wings raised high and spread wide, the arm
+  // rising out and up to a wrist ~1.85 H up and 2.1 out: the peak of the wing. From there the sail is
+  // CAMBERED: the leading finger falls away back and down from the peak (the painting's bat 'M'), the
+  // next two fan straight out and forward-down so the outer sail faces UP and forward, and the inner
+  // finger hangs down so the inner sail (down to the hip) faces out like a cape. Fitted (coordinate
+  // descent, round 2) to the projected membrane area over the 58° game camera's whole ring of yaws
+  // plus the reference and front views, both wings: any flat sail is edge-on from somewhere on that
+  // ring (v0.4's back-swept one from the front three-quarters; round 1's out-forward one at ±45° and
+  // from behind, and its far wing at the reference view: ~0.12-0.2 of the wing's area). This one keeps
+  // every wing at >= 0.42 of its area from every one of those views (a rising leading edge scored
+  // 0.44 but drew a flat bar across the top of the reference view). The painting's far wing reaching
+  // past the head is still the look sweep (REST_POSE.sweep: the foe off to one side).
   // Thumb: up and forward, its tip hooking down in front (the top-most accent).
   // The membrane's glyph grid is laid out on this key (membrane.js), so it is square at rest.
   HALF: {
-    wrist: ck(2.1, 7.6, 0.95),
+    wrist: ck(2.1, 7.5, -0.78),
     pole: [0.35, -0.05, -1],
-    fingers: [[0.78, -0.1, -0.45], [0.66, -0.55, -0.4], [0.45, -0.85, -0.15], [0.26, -0.92, 0.18]].map(nrm),
+    fingers: [[0.629, -0.249, -0.736], [0.953, -0.259, 0.158], [0.694, -0.374, 0.615], [0.173, -0.98, 0.098]].map(nrm),
     kink: [-8 * DEG, -22 * DEG, -8 * DEG, 0],
     thumb: nrm([0.1, 0.8, 0.6]),
   },
@@ -242,7 +244,8 @@ export function resetPose(p) {
  * planted wide). Model units / radians. Exported so it can be tuned live from the console
  * (`(await import('/src/entities/dragon/rig/anim.js')).REST_POSE`).
  *   neck   : rest S (chest frame, see Chain.buildRest): rises up and back over the withers (the nape
- *            crest ~5.0 up), arches over and comes down forward to the head (occiput ~(0, 4.65, 3.25))
+ *            crest ~4.75 up), arches over and comes down forward to the head, which hangs low and
+ *            forward like the painting's (occiput ~(0, 4.25, 3.45), mouth ~3.4 up and ~4.5 ahead)
  *   lookDown / headDip: how far the resting head may tip nose-down toward what it watches, and its
  *            resting droop (the old pose held it level: 0.14 / 0.05)
  *   stance : rest feet offsets (front out / forward, hind out / back) on top of ANATOMY's homes
@@ -257,9 +260,9 @@ export function resetPose(p) {
  *            the far wing needs the long swing to show past the head, the near one only a little)
  */
 export const REST_POSE = {
-  neck: { pitch0: 2.05, pitchStep: -0.42, pitchCurve: -0.006 },
-  lookDown: 0.32,
-  headDip: 0.12,
+  neck: { pitch0: 1.7, pitchStep: -0.3, pitchCurve: -0.025 },
+  lookDown: 0.45,
+  headDip: 0.22,
   stance: {
     frontOut: 0.15, frontFwd: 0.22, hindOut: 0.12, hindBack: -0.15,
     // standing idle (not walking, turning or attacking): extra fore / aft per foot, the painting's

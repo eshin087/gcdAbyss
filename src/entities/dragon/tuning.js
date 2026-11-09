@@ -46,8 +46,9 @@ export const TUNING = {
   flashDecay: 9,
   // resting body language while awake (ai.js baseline; attacks return to it): wings mantled HALF
   // (0 FOLD, 0.5 HALF, 1 SPREAD: the painting's tall sails, the biggest shapes at the game camera),
-  // tucked a little while walking; the jaw rests open so the lit maw shows (1 = 0.7 rad) [P1, P2]
-  rest: { spread: 0.5, walkSpread: 0.3, jaw: [0.4, 0.65] },
+  // tucked a little while walking; the jaw rests open like the painting's snarl, so the lit maw and
+  // the fangs show (1 = 0.7 rad; visual only) [P1, P2]
+  rest: { spread: 0.5, walkSpread: 0.3, jaw: [0.65, 0.85] },
 
   // Every attack declares its tell (TELL.NORMAL / BLUE / RED) and may override parryable /
   // blockable (defaults: tellDefaults(tell) in rules.js). Times in seconds (P1 values; P2 x0.85 on
@@ -159,7 +160,12 @@ export const ANATOMY = {
   // arm 4.1 (~1.0 H): long enough for the roar / breath wrists to stand ~1.85 H high and well out to
   // the side (the panel's raised 'M'); the half-raised sail keeps a ~135° elbow (fix round 1)
   wingForearm: 2.6,
-  fingers: [5.4, 6.0, 4.8, 3.4], // f0 = leading edge, f3 = inner
-  knuckle: [0.62, 0.58, 0.6, 0.65], // proximal fraction of each finger (the distal kink joint)
+  // f0 = leading edge, f3 = inner. knuckle = proximal fraction of each finger (the distal kink joint).
+  // The proximal bones (wrist -> knuckle: fingers x knuckle = 3.35 / 3.48 / 2.88 / 2.21) are v0.4's:
+  // the knuckles carry the wing hurt spheres (dragon.js). Only the distal bones (knuckle -> tip) are
+  // longer (~1.35x, visual only): the owner's reference has huge bat wings (~1.6x was too much for the
+  // game camera: the span nearly filled the screen).
+  fingers: [6.2, 6.9, 5.5, 3.9],
+  knuckle: [(5.4 * 0.62) / 6.2, (6.0 * 0.58) / 6.9, (4.8 * 0.6) / 5.5, (3.4 * 0.65) / 3.9],
   hipAttach: [1.0, 0.5, -0.15], // inner membrane's flank attach, hips frame -> root (+-1.0, 2.9, -1.6)
 };
