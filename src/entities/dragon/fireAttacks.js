@@ -422,9 +422,9 @@ const diveBomb = {
       d.position.x = lerp(a.p0.x, a.hov.x, easeInOutSine(k));
       d.position.z = lerp(a.p0.z, a.hov.z, easeInOutSine(k));
       fly(pose, DB.alt * e, 0.95, 2.2);
-      pose.hover = smoothstep(0.3, 1, k);
+      pose.hover = smoothstep(0, 0.6, k); // (early: the hanging tail curls up as it climbs)
       pose.glide = 0.45 * k; // (the beat's span a little lower: the raised sails reached the camera)
-      pose.pitch = -0.25 - 0.15 * k;
+      pose.pitch = -0.2 - 0.2 * k;
       pose.head = pose.headTarget.copy(pt.neckBase).addScaledVector(d.fwd, 2.0 * S);
       pose.head.y += 0.6 * S;
       pose.jaw = 0.4;
@@ -632,7 +632,7 @@ const hoverBarrage = {
     while (a.shot < a.n && a.shot < a.aimed && a.t >= a.shot * HB.interval + HB.aim) this.launch(d, a, a.shot++);
     fly(pose, HB.alt + 0.4 * Math.sin(a.t * 3.3), 0.85, 2.0);
     pose.hover = 1;
-    pose.pitch = -0.33;
+    pose.pitch = -0.26;
     pose.headExact = true; // each shell leaves the mouth
     pose.head = pose.headTarget.copy(pt.neckBase).addScaledVector(d.fwd, 2.2 * S);
     pose.head.y -= 0.5 * S;

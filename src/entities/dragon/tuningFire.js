@@ -39,13 +39,13 @@ export const FIRE_ATTACKS = {
     minDist: 9,
     weight: [0, 1.1, 1.1], cooldown: 15,
   },
-  // rises ~8 m and spits 3-5 fireballs while hovering; each shell's landing spot rings red from
+  // rises ~9 m and spits 3-5 fireballs while hovering; each shell's landing spot rings red from
   // `aim` s before the spit; then it lands
   hoverBarrage: {
     label: 'Hover barrage', tell: TELL.RED, phase: 2,
     windup: 0.8, rise: 1.0, aim: 0.4, interval: 0.5, land: 1.2,
     shots: [3, 5], // random count, inclusive
-    alt: 8, standoff: 13, // hovers this far beside the player (east / west, so it stays on screen)
+    alt: 9, standoff: 13, // hovers this far beside the player (east / west, so it stays on screen)
     lead: 0.55, // aim lead (s of the player's velocity)
     radius: 3.2, damage: 15, burn: 1.2, knockback: 2.5, maxHits: 2,
     minDist: 8,

@@ -881,8 +881,10 @@ export class Rig {
     const base = set(this._tb[0], lerp(-0.8, R.pitch0, lw), lerp(0.07, R.pitchStep, lw), 0, s.tailCurl + 0.035 * hook / TAIL_HOOK, hook, s.tailWave, this.time * 1.4);
     base.pitchCurve = R.pitchCurve * lw;
     base.dipAmp = R.dipAmp * lw;
-    // in the air it streams back as a rudder; hovering it hangs and sways; diving it streams straight
-    const air = set(this._tb[1], -0.6 - 0.55 * s.hover + 0.3 * s.dive, -0.005 - 0.01 * s.hover, 0, s.tailCurl * 0.5, 0.002, 0.04 + 0.1 * s.hover, this.time * (2.0 - 0.7 * s.hover));
+    // in the air it streams back as a rudder, a little below level (a 15.6 m tail held 34° down reached
+    // the ground's sword band from a 7-8 m flight); hovering it hangs from the tilted body and curls back
+    // up toward the tip, swaying; diving it streams straight
+    const air = set(this._tb[1], -0.35 - 0.2 * s.hover + 0.15 * s.dive, -0.005 + 0.075 * s.hover, 0, s.tailCurl * 0.5, 0.002, 0.04 + 0.1 * s.hover, this.time * (2.0 - 0.7 * s.hover));
     // asleep: curls around toward the head (model-right, where the neck lies)
     const sleep = set(this._tb[2], -0.5, 0.06, 0.25, 0.14, 0.006, 0.02, this.time * 0.6);
     const p = mixParams(base, air, s.airborne, this._tp);
