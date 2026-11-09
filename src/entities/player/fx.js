@@ -568,11 +568,12 @@ export class PlayerFx {
     const sw = this.rig?.sword;
     if (!fx || !sw || !(k > 0)) return;
     const e = sw.matrixWorld.elements;
-    // the edge-wave: a short bright streak laid along the blade 0.06–0.26 m past the steel point
+    const tip = DIM.drawnTip ?? DIM.steelTip; // the drawn point (model.js), not anim's grass-clamp point
+    // the edge-wave: a short bright streak laid along the blade 0.06–0.26 m past the drawn point
     this.tipAcc += dt * 14;
     while (this.tipAcc >= 1) {
       this.tipAcc -= 1;
-      const zz = DIM.steelTip + R(0.06, 0.2);
+      const zz = tip + R(0.06, 0.2);
       const x = e[8] * zz + e[12], y = e[9] * zz + e[13], z = e[10] * zz + e[14];
       const dl = Math.hypot(e[8], e[9], e[10]) || 1;
       if (!Number.isFinite(x + y + z) || y < 0.02) continue;
@@ -588,7 +589,7 @@ export class PlayerFx {
     while (this.haloAcc >= 1) {
       this.haloAcc -= 1;
       const past = Math.random() < 0.3;
-      const zz = past ? DIM.steelTip + R(0.02, 0.3) : R(DIM.forte, DIM.steelTip);
+      const zz = past ? tip + R(0.02, 0.3) : R(DIM.forte, tip);
       const xx = past ? R(-0.02, 0.02) : (Math.random() < 0.5 ? -1 : 1) * R(0.06, 0.12);
       // sword space (xx, 0, zz) → world
       const x = e[0] * xx + e[8] * zz + e[12], y = e[1] * xx + e[9] * zz + e[13], z = e[2] * xx + e[10] * zz + e[14];
