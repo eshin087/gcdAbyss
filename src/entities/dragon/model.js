@@ -24,6 +24,8 @@ import { WING_KEYS } from './rig/anim.js';
 export const TAIL_FLIP = true;
 
 // ---- materials (docs/art/dragon.md §3.2) ------------------------------------------------------
+// What the player sees is the ASCII-art source WYRM_ART (below; uArtSolid 1). The surface-glyph
+// options here are the patterned render behind the look-dev A/B (uArtSolid 0).
 // Per-cell glyph variants (`levels`, dark → bright, a space = empty cell): the hide reads as dense
 // mixed blocky glyphs instead of one chevron. Every glyph must be in the world atlas (npm test).
 // Five hide levels: even the darkest prints small glyphs (the panel fills ~95 % of the silhouette;
@@ -166,7 +168,10 @@ export const WYRM_ART = {
   eye: { ink: [0.45, 0.12, 0.02], light: [0.3, 0, 0, 0.05], glow: [0, 1.0], emit: [0.85, 0.17, 0.02] },
 };
 
-/** Brightness of the smooth source the creature ASCII-art pass converts (see FLAG.ART). */
+/**
+ * Brightness of the generic smooth art source (FLAG.ART without the `wyrm` option). The wyrm's
+ * materials all carry WYRM_ART, whose wyrmMain source replaces it; kept for the generic path.
+ */
 export const ART_GAIN = 0.28;
 
 export function createDragonMaterials(U) {
@@ -325,8 +330,7 @@ export function createDragonMaterials(U) {
       seed: 3.3,
     }),
   };
-  // ASCII-art source brightness (FLAG.ART): the wyrm's bright inks would saturate the letter ramp to
-  // '@B&' and bloom; at ~0.28 the lit hide keeps the owner's references' white-to-grey letter range
+  // generic art-source brightness (only used if a part ever drops its WYRM_ART source)
   for (const m of Object.values(mats)) m.uniforms.uArtGain.value = ART_GAIN;
   return mats;
 }
