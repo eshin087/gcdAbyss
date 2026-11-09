@@ -296,7 +296,7 @@ const aimAt = (G) => { const d = G.game.dragon; G.game.mouseGround.set(d.positio
 //   blue / normal → tap RMB 0.12 s before impact (parry) · red → Space 0.1 s before impact (Ghostep)
 //   streams that cannot be parried (breath) → hold the guard through them
 //   act() returns true while an answer is due (the bot holds its swings)
-function makeDefender(G) {
+function makeDefender(G, { skill = 1 } = {}) {
   const pend = [];
   const stats = { tells: 0, parryTry: 0, dodgeTry: 0, blockTry: 0 };
   const lead = TUNING.flashLead;
@@ -307,7 +307,9 @@ function makeDefender(G) {
       const t = G.game.time;
       if (n === 'combat:tell' && Number.isFinite(d?.impactIn)) {
         stats.tells++;
-        pend.push({ attack: d.attack, tell: d.tell, at: t + d.impactIn, done: false, stream: d.attack === 'breath' });
+        // skill < 1 (the probe): some tells are simply not read (no answer at all)
+        const miss = skill < 1 && Math.random() > skill;
+        pend.push({ attack: d.attack, tell: d.tell, at: t + d.impactIn, done: miss, stream: d.attack === 'breath' });
       } else if (n === 'combat:flash') {
         // the flash is the authoritative timing cue: re-time the matching pending impact
         let best = null;
@@ -526,7 +528,7 @@ async function scenarioWin() {
   assert(game.dragon.state === 'combat', `dragon in combat (got ${game.dragon.state})`);
   assert(cls('ab-boss')?.classList.contains('on'), 'boss bar shown');
   assert(game.audio.musicMode === 'boss', `boss music (got ${game.audio.musicMode})`);
-  // fight until victory (v0.5: 4200 HP over three phases, the strings: a 3-5 min fight)
+  // fight until victory (4500 HP over three phases, the strings and the fire: a 3-5 min fight for a human)
   let maxPhase = 1, sawBreak = false, sawAir = false, chainMax = 0;
   const picks = {}, phaseT = [game.time, NaN, NaN], breakT = [];
   G.watch = (n, dd) => {
@@ -580,6 +582,38 @@ async function scenarioWin() {
   const again = run(G, 40, { god: true, attack: false }, () => game.state === 'boss');
   assert(again, 'second fight reaches boss state');
   out('   states: ' + evLog.filter((l) => l.includes(' state ')).map((l) => l.split(' state ')[1]).join(', '));
+  return G;
+}
+
+// ================================================================== scenario: probe (difficulty, opt-in)
+// Not part of 'all': `node tests/integration/integ.mjs . probe` (env ABYSS_SKILL = the share of tells
+// the bot answers, default 0.8; ABYSS_SEED reseeds). A mortal bot with the win scenario's habits
+// fights until it wins or dies: a rough read of the fight's length and danger for tuning.
+async function scenarioProbe() {
+  const skill = Number(process.env.ABYSS_SKILL ?? 0.8);
+  out(`
+== scenario PROBE (mortal bot, answers ${Math.round(skill * 100)} % of tells) ==`);
+  const G = build();
+  const { game, input, counts } = G;
+  G.defend = makeDefender(G, { skill });
+  run(G, 1.0);
+  input.tap('Space');
+  G.tick(DT);
+  run(G, 30, { god: true, attack: false }, () => game.state === 'bossIntro');
+  run(G, 20, { god: true, attack: false }, () => game.state === 'boss');
+  const p = game.player, d = game.dragon;
+  const t0 = game.time, phaseT = [0, NaN, NaN];
+  let hurt = 0, worst = 0;
+  G.watch = (n, e) => {
+    if (n === 'dragon:phase') phaseT[e.n - 1] = game.time - t0;
+    if (n === 'player:hurt') { hurt += e?.damage ?? 0; worst = Math.max(worst, e?.damage ?? 0); }
+  };
+  const done = run(G, 900, { god: false, defend: true }, () => game.state === 'victory' || !p.alive || p.state === 'dead' || game.state === 'dead');
+  G.watch = null;
+  const c = (n) => counts[n] || 0;
+  const res = game.state === 'victory' ? 'WIN' : done ? 'DIED' : 'TIMEOUT';
+  out(`   ${res} after ${(game.time - t0).toFixed(1)} s · wyrm hp ${d.hp}/${d.maxHp} (${Math.round((100 * d.hp) / d.maxHp)} %) phase ${d.phase} (P2 at ${phaseT[1].toFixed(0)} s, P3 at ${phaseT[2].toFixed(0)} s)`);
+  out(`   hero: took ${hurt} dmg (worst ${worst}) · heals ${c('player:heal')} · parries ${c('player:parry')} · chains ${c('combat:deflectChain')} · perfect ${c('player:perfectDodge')} · plunges ${c('player:plungeHit')} · breaks ${c('dragon:postureBreak')} · hits ${c('player:hitDragon')}`);
   return G;
 }
 
@@ -1101,7 +1135,7 @@ async function scenarioPlunge() {
   assert(tr.iframes && tr.finite, 'invulnerable and finite throughout');
   assert([1, 2, 3, 4, 5].every((ph) => tr.phases.has(ph)), `hang → dive → ride → flip → land (${[...tr.phases].join('')})`);
   assert(since(c0, 'player:plunge') === 1 && since(c0, 'player:plungeHit') === 1, `one dive, one hit (${since(c0, 'player:plunge')} / ${since(c0, 'player:plungeHit')})`);
-  assert(near(dealt, Math.round(P.damage * TUNING.partMult.head), 1), `the blade hits the head once: ${dealt} (DEFENSE.plunge.damage ${P.damage} × head)`);
+  assert(near(dealt, P.damage, 1), `the blade hits the head once: ${dealt} (DEFENSE.plunge.damage ${P.damage}, final: onPlunge takes it exact)`);
   assert(tr.state !== 'plunge' && tr.frames * DT < 3.2, `the move ends (${(tr.frames * DT).toFixed(2)} s)`);
   assert(L.y === 0 && Math.hypot(L.x, L.z) <= bound && !inBody(L.x, L.z, p.radius - 0.05), 'lands on the ground, inside the arena, clear of the body');
   assert(side > 0.3 && ahead > 0 && Math.hypot(toL.x, toL.z) >= P.landMin - 1, `lands in front of the head, toward where he came from (cos ${side.toFixed(2)}, ${ahead.toFixed(1)} m ahead of it)`);
@@ -1269,12 +1303,15 @@ async function scenarioDeflect() {
   const calls = ui.findAll((e) => e.classList?.contains('ab-call') && e.classList?.contains('on')).map((e) => e.textContent);
   out('   call-outs:', JSON.stringify(calls));
   assert(calls.some((t) => /DEFLECT ×5/.test(t)), 'combat:deflectChain → a "DEFLECT ×N" call-out');
-  // mashing is still not a parry: a press without a full re-arm (released < parryRearm before) fails
+  // a successful deflect re-arms at once (player.rmb.chain): two blows only 0.3 s apart, each tapped in
+  // time with the guard held 0.2 s, both deflect. Mashing (whiffed presses) still needs the full
+  // re-arm: scenario PARRY's mashed RMB.
   const m = string(2, 0.3, 0.2);
-  out(`   2 blows 0.3 s apart, taps held 0.2 s (no time to re-arm): ${m.res.join(' ')}`);
-  assert(m.res[0] === RESULT.PARRIED && m.res[1] !== RESULT.PARRIED, 'faster than the re-arm allows: the second press does not parry (anti-mash kept)');
+  out(`   2 blows 0.3 s apart, taps held 0.2 s (a deflect re-arms on release): ${m.res.join(' ')}`);
+  assert(m.res[0] === RESULT.PARRIED && m.res[1] === RESULT.PARRIED, 'after a deflect the next timed press parries again (no re-arm wait)');
   // between parries in rhythm the guard lingers up, then eases down
-  assert(p.guardHold === 0 || p.guardHold < 1, 'guardHold eases off after the string');
+  run(G, 1.2, { passive: true });
+  assert(p.guardHold === 0 || p.guardHold < 1, `guardHold eases off after the string (${p.guardHold})`);
   return G;
 }
 
@@ -1606,15 +1643,23 @@ async function scenarioFire() {
   G.watch = null;
   input.axis = { x: 0, y: 0 };
   const chits = G.hits.slice(ch0).filter((h) => h.attack === 'eruptions');
+  // each blow must fall inside SOME pillar's live window: flash + lead .. + active (a moving hero may
+  // walk into a pillar that is still erupting, after the next pillar's flash: pairing every blow
+  // with the latest flash read that as early)
+  const ER_ACT = TUNING.attacks.eruptions.active;
   let cworst = 0;
   for (const h of chits) {
-    const f = cf.filter((t) => t <= h.t + 1e-6).pop();
-    const err = f === undefined ? Infinity : h.t - (f + lead);
-    if (Math.abs(err) > Math.abs(cworst)) cworst = err;
+    let best = Infinity;
+    for (const f of cf) {
+      const e = h.t - (f + lead);
+      const out = e < 0 ? e : e > ER_ACT ? e - ER_ACT : 0; // distance outside the live window
+      if (Math.abs(out) < Math.abs(best)) best = out;
+    }
+    if (Math.abs(best) > Math.abs(cworst)) cworst = best;
   }
-  out(`   P3 eruption chase: ${isChase}, pillars alive at once ${maxPillars}, tells ${ct.length} flashes ${cf.length}, blows ${chits.length} (worst ${(cworst * 1000).toFixed(0)} ms after flash+lead)`);
+  out(`   P3 eruption chase: ${isChase}, pillars alive at once ${maxPillars}, tells ${ct.length} flashes ${cf.length}, blows ${chits.length} (worst ${(cworst * 1000).toFixed(0)} ms outside a pillar's live window)`);
   assert(isChase && maxPillars >= 2 && ct.length >= 6 && ct.length === cf.length, 'phase 3: the eruptions chase the hero with announced pillars (one flash per tell)');
-  assert(chits.length <= ER_MAX_CHASE_HITS && Math.abs(cworst) <= 2.5 * DT, 'the chase deals at most its hit cap, each blow on its flash');
+  assert(chits.length <= ER_MAX_CHASE_HITS && Math.abs(cworst) <= 2.5 * DT, 'the chase deals at most its hit cap, each blow inside a pillar live window (flash + lead .. + active)');
   d.phase = 1;
   run(G, 1, { passive: true });
 
@@ -2379,9 +2424,10 @@ async function scenarioPlungeReact() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, probe: scenarioProbe };
 const runs = [];
-for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
+const OPT_IN = new Set(['probe']); // run only when named
+for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
 
 out('');
