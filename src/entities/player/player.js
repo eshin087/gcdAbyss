@@ -52,6 +52,11 @@ export const TUNE = {
   blockEventGap: 0.4, // s: blocked stream ticks are reported at most this often (summed damage)
   parryDur: 0.3, // s of the deflect flick
   parryCancel: 0.12, // s into the parry after which an attack / roll may cancel it (riposte)
+  // the deflect chain (parries in rhythm against a multi-hit string): parries at most this far
+  // apart count up (sparks, the clang's pitch, the snap side); each one slides the hero back a little
+  deflectChainGap: 1.1,
+  deflectPush: 0.16, // m
+  guardLinger: [0.32, 0.6], // s after a parry: the guard stays up between taps, then eases down
   guardBreakDur: 0.45, // s stumble before the knockdown
   ghostepDur: 0.32, // s of the Ghostep reappear pose
   ghostepCancel: 0.08, // s into the Ghostep after which attack / roll / block may cancel it
@@ -59,6 +64,7 @@ export const TUNE = {
   ghostepMaxRange: 12, // attacker farther than this: slow-mo + crit without the teleport
   ghostepAssist: 1.2, // s of aim assist toward the attacker after a Ghostep (no lock-on)
   ghostepFade: 3.2, // 1/s fade of the reappear dissolve / cold tint
+  plungeFade: 7, // 1/s: the plunge's reappear above the head resolves faster (it hangs only briefly)
   rollCoatKick: 0.7, // the coat tails fly out as the dodge starts
   gemGlintEvery: 1.8, // s between idle glints of the violet gem (± 40 %)
 };
@@ -66,6 +72,14 @@ export const TUNE = {
 const CONTROL = new Set(['explore', 'bossIntro', 'boss']);
 const LOCO = new Set(['idle', 'run', 'sprint']);
 const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
+// plunge phases (DEFENSE.plunge; the animator reads player.plungeAnim)
+export const PL = Object.freeze({ VANISH: 0, HANG: 1, DIVE: 2, RIDE: 3, FLIP: 4, LAND: 5 });
+// the landing search turns the spring-off direction by these (rad) when the body is in the way
+const LAND_TURNS = [0, 0.45, -0.45, 0.9, -0.9, 1.35, -1.35, 1.8, -1.8, 2.4, -2.4, Math.PI];
+const PLUNGE_BEHIND_TURN = 1.0; // rad off the nose: a hero who came from behind lands front-side
+const PLUNGE_RIDE_MAX = 40; // m/s: the rider eases through a jump of the head (never teleports)
+// cross-fade (s) into each plunge phase's pose: the impact lands almost at once
+const PL_BLEND = [0.02, 0.03, 0.05, 0.025, 0.06, 0.05];
 
 export class Player {
   constructor(game) {
@@ -136,6 +150,17 @@ export class Player {
     this.viewDist = 36; // camera → hero distance (m), sampled each frame
     this.bladeFar = 1; // 0 close-up … 1 game camera: how much the blade self-lights
     this._ghostSegs = new Float32Array(16 * 6);
+    // the plunge (state 'plunge', DEFENSE.plunge): the attacker, the phase clock, the head point
+    // this frame, the spring-off direction (dx, dz: from the head toward the landing side), the
+    // ride offset, the flip's start and landing. position.y carries the visual lift while it runs.
+    this.pl = {
+      att: null, exec: false, phase: PL.VANISH, t: 0, hit: false, dealt: 0, ox: 0, oz: 0, dx: 0, dz: 1,
+      pt: new THREE.Vector3(), off: new THREE.Vector3(), from: new THREE.Vector3(), land: new THREE.Vector3(),
+      hitPt: { x: 0, y: 0, z: 0 }, flipDur: 0.5, fxT: 0, streak: false,
+    };
+    this.plungeAnim = { phase: PL.VANISH, u: 0, t: 0, exec: false, h: 0 }; // read by anim.js
+    this.deflect = { n: 0, t: -Infinity, side: 1 }; // the parry chain (TUNE.deflectChainGap)
+    this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
 
     // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, heal(), teleport(x, z) })
     this.debug = {
@@ -144,6 +169,8 @@ export class Player {
       heal: () => this._debugHeal(),
       teleport: (x, z) => this._teleport(x, z),
       kill: () => this._debugKill(), // used by flow.debug.toState('dead') when present
+      // Lab / captures: start the plunge on the dragon now (any range; also in the air)
+      plunge: (execution = false) => this._debugPlunge(execution),
     };
 
     this.anim = new HeroAnimator(this.rig, this);
@@ -176,7 +203,8 @@ export class Player {
 
   isInvulnerable() {
     if (!this.alive) return true;
-    if (this.iframeT > 0) return true; // Ghostep
+    if (this.state === 'plunge') return true; // the whole plunge (takeHit ignores hits in it)
+    if (this.iframeT > 0) return true; // Ghostep / the plunge's landing
     if (this.state === 'roll') {
       const R = this.rollBack ? TUNE.backstep : TUNE.roll;
       return this.stateT >= R.iframes[0] && this.stateT <= R.iframes[1];
@@ -186,14 +214,16 @@ export class Player {
   }
 
   /**
-   * Resolve an incoming hit (docs/COMBAT.md), in order: ignored → perfect dodge (Ghostep) →
-   * i-frames → parry → block / guard break → hit. Returns a RESULT value.
+   * Resolve an incoming hit (docs/COMBAT.md), in order: ignored → perfect dodge (the plunge, or
+   * the Ghostep) → i-frames → parry → block / guard break → hit. Returns a RESULT value.
+   * `hit.plunge === false` (hazards) keeps a perfect dodge from turning into the plunge.
    */
   takeHit(hit = {}) {
     hit = hit && typeof hit === 'object' ? hit : {};
     if (!this.alive) return RESULT.IGNORED;
     const g = this.game;
     if (g.state === 'victory' || g.state === 'title') return RESULT.IGNORED;
+    if (this.state === 'plunge') return RESULT.IGNORED; // in the air / on the head: out of reach
     const kind = typeof hit.kind === 'string' ? hit.kind : 'hit';
     const tell = hit.tell === TELL.BLUE || hit.tell === TELL.RED ? hit.tell : TELL.NORMAL;
     const def = tellDefaults(tell);
@@ -202,11 +232,12 @@ export class Player {
     const attack = hit.attack ?? null;
     const attacker = hit.attacker && typeof hit.attacker === 'object' ? hit.attacker : null;
 
-    // (b) perfect dodge: the roll started within the window before this impact → Ghostep. A stream
-    // (breath) ticks every 0.15 s, so it only counts when dodging INTO it, not rolling out of it.
+    // (b) perfect dodge: the roll started within the window before this impact → the plunge (or the
+    // Ghostep). A stream (breath) ticks every 0.15 s, so it only counts when dodging INTO it, not
+    // rolling out of it.
     const streamTick = !(fin(hit.knockback, 0) > 0) && !hit.knockdown;
     if (this.state === 'roll' && this.stateT <= DEFENSE.perfectDodgeWindow && !(streamTick && this.chipGuard > 0)) {
-      this._ghostep(attacker, attack, tell);
+      this._perfectDodge(attacker, attack, tell, hit.plunge !== false);
       return RESULT.PERFECT;
     }
     // (c) i-frames: one event per roll / get-up per attack (a breath stream ticks many times)
@@ -388,6 +419,11 @@ export class Player {
     this.assist.target = null;
     this.assist.t = 0;
     this.ghostFx = 0;
+    this.pl.att = null;
+    this.pl.phase = PL.VANISH;
+    this.deflect.n = 0;
+    this.deflect.t = -Infinity;
+    this.guardHold = 0;
     this.flash = 0;
     this.burnGlow = 0;
     this.chipGuard = 0;
@@ -431,6 +467,9 @@ export class Player {
     if (this.assist.t > 0) this.assist.t -= dt;
     if (this.slowmoPending > 0 && !(fin(g.hitstopTimer) > 0)) this._slowmo(this.slowmoPending);
     this.recoil = Math.max(0, this.recoil - dt * 5);
+    // between parries in rhythm the guard stays up (anim.js holds the block's arms and blade)
+    const GL = TUNE.guardLinger, since = this.time - this.deflect.t;
+    this.guardHold = this.alive ? 1 - smoothstep(GL[0], GL[1], since) : 0;
     this._updateLock();
 
     this.stateT += dt;
@@ -463,7 +502,18 @@ export class Player {
 
     const st = this.state;
     const r = st === 'roll' ? TUNE.pusherRoll : st === 'knockdown' || st === 'dead' || st === 'guardBreak' ? TUNE.pusherDown : TUNE.pusher;
-    g.world?.setPusher?.(0, this.position.x, 0, this.position.z, r);
+    // (in the air the pusher's height lifts it off the grass: world.setPusher ignores y > 1.5)
+    g.world?.setPusher?.(0, this.position.x, st === 'plunge' ? fin(this.position.y) : 0, this.position.z, r);
+    if (st === 'plunge') this._plungeCamera();
+  }
+
+  /** Ask the camera to keep the hero and the head on screen through the plunge (core/cameraRig). */
+  _plungeCamera() {
+    const rig = this.game.cameraRig, pl = this.pl, p = this.position;
+    if (typeof rig?.keep !== 'function') return;
+    rig.keep(p.x, p.y + 1.1, p.z, 1.7, true);
+    rig.keep(pl.pt.x, pl.pt.y - 0.9, pl.pt.z, 2.2, true);
+    if (pl.phase === PL.FLIP) rig.keep(pl.land.x, 0.9, pl.land.z, 1.4, true);
   }
 
   // ------------------------------------------------------------------ input + lock-on
@@ -674,6 +724,9 @@ export class Player {
       case 'ghostep':
         this._tickGhostep();
         break;
+      case 'plunge':
+        this._tickPlunge(dt);
+        break;
       case 'stagger':
         this.want.x = this.want.z = 0;
         if (this.stateT >= TUNE.staggerDur) this._toLoco(0.14);
@@ -695,7 +748,8 @@ export class Player {
     }
   }
 
-  /** Start whatever is buffered (or a held charge), if allowed. Returns true if a new action began. */
+  /** Start whatever is buffered (or a held charge), if allowed. Returns true if a new action began.
+   *  An attack press near a posture-broken wyrm's head is the plunge execution instead. */
   _tryAction(allowRoll = true, allowAttack = true, allowHeal = true) {
     if (allowAttack && this.lmb.held && this.lmb.t >= CHARGE.hold) return this._startCharge();
     const a = this.buf.action;
@@ -706,6 +760,7 @@ export class Player {
     }
     if (a === 'light' && allowAttack) {
       this.buf.action = null;
+      if (this._tryExecution()) return true;
       return this._startAttack(LIGHT[0]);
     }
     if (a === 'heal' && allowHeal) {
@@ -772,22 +827,38 @@ export class Player {
     }
   }
 
+  /**
+   * A parry (deflect). Parries in rhythm (≤ TUNE.deflectChainGap apart: a multi-hit string, Sekiro
+   * style) count up the chain: the blade snaps to alternate sides, the clash sparks grow, the clang
+   * rises in pitch (player:parry `chain`). No lockout: the next tap can parry the next hit at once
+   * (the state allows a guard), and the guard lingers between taps (guardHold).
+   */
   _parry(tell, attack, sx, sz) {
     const g = this.game, p = this.position;
+    let nx = -Math.sin(this.yaw), nz = -Math.cos(this.yaw); // the pushback: away from the blow
     if (Number.isFinite(sx) && Number.isFinite(sz)) {
       const dx = sx - p.x, dz = sz - p.z;
-      if (dx * dx + dz * dz > 1e-4) this.yaw = Math.atan2(dx, dz);
+      const l = Math.hypot(dx, dz);
+      if (l > 1e-2) {
+        this.yaw = Math.atan2(dx, dz);
+        nx = -dx / l;
+        nz = -dz / l;
+      }
     }
+    const D = this.deflect;
+    D.n = this.time - D.t <= TUNE.deflectChainGap ? Math.min(99, D.n + 1) : 1;
+    D.t = this.time;
+    D.side = D.n & 1 ? 1 : -1;
     this.atk = null;
     this.chargeK = 0;
     this.blockStunT = 0;
-    this.kb.x = this.kb.z = 0;
-    this._enter('parry', 'parry', 0.04);
+    this._setKb(nx, nz, TUNE.deflectPush * (tell === TELL.BLUE ? 1.6 : 1));
+    this._enter('parry', 'parry', 0.03);
     this._bladePoint(0.62, this._v);
-    this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE);
+    this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE, D.n, -nx, -nz);
     this._hitstop(0.08);
-    g.shake?.(0.2);
-    this._emit('player:parry', { tell, attack });
+    g.shake?.(Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
+    this._emit('player:parry', { tell, attack, chain: D.n });
   }
 
   _block(dmg, tell, attack, chip, nx, nz) {
@@ -848,16 +919,31 @@ export class Player {
     this.anim.kickCoat(0.8);
   }
 
-  // --- Ghostep ---------------------------------------------------------
-  /** Perfect dodge reward: blink behind the attacker, slow time, open the crit window. */
-  _ghostep(attacker, attack, tell) {
+  // --- perfect dodge: the plunge / the Ghostep ------------------------------
+  /**
+   * Perfect dodge reward. An attacker that offers the plunge (plungePoint / onPlunge: the wyrm):
+   * the plunge onto its head when in range and the hit allows it, otherwise slow-mo + crits where
+   * the hero dodged (no teleport). Any other attacker: the v0.2 Ghostep (a blink behind it).
+   */
+  _perfectDodge(attacker, attack, tell, allowPlunge = true) {
+    if (this._plungeable(attacker)) {
+      if (allowPlunge && this._startPlunge(attacker, false, attack, tell)) return;
+      this._ghostep(attacker, attack, tell, false);
+      return;
+    }
+    this._ghostep(attacker, attack, tell, true);
+  }
+
+  /** Ghostep: slow time, open the crit window; with `teleport`, blink behind the attacker (within
+   *  TUNE.ghostepMaxRange). */
+  _ghostep(attacker, attack, tell, teleport = true) {
     const g = this.game, p = this.position;
     const ox = p.x, oz = p.z;
     const nSegs = this._sampleGhost();
     const ap = attacker?.position;
     const hasAtk = !!ap && Number.isFinite(ap.x) && Number.isFinite(ap.z);
     let moved = false;
-    if (hasAtk && Math.hypot(ap.x - ox, ap.z - oz) <= TUNE.ghostepMaxRange) {
+    if (teleport && hasAtk && Math.hypot(ap.x - ox, ap.z - oz) <= TUNE.ghostepMaxRange) {
       // behind = attacker.position − attacker forward × distance (forward from its yaw, else away from us)
       let fwd = fin(attacker.yaw, NaN);
       if (!Number.isFinite(fwd)) fwd = Math.atan2(ox - ap.x, oz - ap.z);
@@ -943,6 +1029,344 @@ export class Player {
       }
     }
     if (t >= TUNE.ghostepDur) this._toLoco(0.14);
+  }
+
+  // --- the plunge (contract 2; numbers: DEFENSE.plunge) ----------------------
+  // VANISH (afterimage at the dodge spot, hidden) → HANG (reappears above the head, coiled, in the
+  // slow-mo) → DIVE (accelerating, blade trail) → impact: attacker.onPlunge once, hitstop, burst →
+  // RIDE (keeps its offset to the head top while the head is slammed down) → FLIP (backflip arc to a
+  // landing in front of the head, toward where he came from) → LAND (crouch, crit window, then free).
+  // position.y is the visual lift; x / z stay the ground point under the hero. Hits are ignored and
+  // body circles don't push him until LAND.
+
+  /** Does `att` offer the plunge (plungePoint + onPlunge) and stand alive? */
+  _plungeable(att) {
+    return !!att && typeof att.plungePoint === 'function' && typeof att.onPlunge === 'function' &&
+      att.state !== 'dying' && att.state !== 'dead' && att.state !== 'sleeping';
+  }
+
+  /** att.plungePoint into `out` (finite), else null. Never throws. */
+  _plungePoint(att, out) {
+    if (!att || typeof att.plungePoint !== 'function') return null;
+    try {
+      const r = att.plungePoint(out);
+      if (r && Number.isFinite(out.x + out.y + out.z)) return out;
+    } catch (err) {
+      console.error('[player] plungePoint failed', err);
+    }
+    return null;
+  }
+
+  /** Posture-broken wyrm, attack pressed within DEFENSE.plunge.execRange of its head: execution. */
+  _tryExecution() {
+    const d = this.game.dragon;
+    if (!d?.broken || !this._plungeable(d)) return false;
+    if (!this._startPlunge(d, true)) return false;
+    this.lmb.held = false; // the press is spent: no charge waiting after the landing
+    return true;
+  }
+
+  /**
+   * Start the plunge on `att` (false: out of range / no head point). `exec` = the posture-break
+   * execution (starts at the hang, no slow-mo, no perfect-dodge events).
+   */
+  _startPlunge(att, exec, attack = null, tell = TELL.NORMAL, anyRange = false) {
+    const g = this.game, p = this.position, P = DEFENSE.plunge, pl = this.pl;
+    if (!this._plungePoint(att, pl.pt)) return false;
+    const ox = p.x, oz = p.z;
+    if (!anyRange && !(Math.hypot(pl.pt.x - ox, pl.pt.z - oz) <= (exec ? P.execRange : P.range))) return false;
+    const nSegs = this._sampleGhost(); // the afterimage left at the dodge spot
+    pl.att = att;
+    pl.exec = !!exec;
+    pl.ox = ox;
+    pl.oz = oz;
+    pl.hit = false;
+    pl.dealt = 0;
+    pl.fxT = 0;
+    this._plungeDir(att, pl);
+    pl.phase = exec ? PL.HANG : PL.VANISH;
+    pl.t = 0;
+    this._plungeHang(pl, 0, p);
+    this.yaw = Math.atan2(-pl.dx, -pl.dz); // facing the head, his back to the landing side
+    this.object3d.rotation.y = this.yaw;
+    this.vel.x = this.vel.z = this.kb.x = this.kb.z = 0;
+    this.want.x = this.want.z = 0;
+    this.groundVel.x = this.groundVel.z = 0;
+    this.atk = null;
+    this.chargeK = 0;
+    this.blockStunT = 0;
+    this.buf.action = null;
+    this.critTimer = 0; // reopened on landing
+    this.iframeT = 0;
+    this.assist.target = null;
+    this.assist.t = 0;
+    this.ghostFx = 1;
+    this._enter('plunge', 'plunge', 0.02);
+    this.anim.teleported();
+    this.sweep.valid = false;
+    this.anim.kickCoat(1, this.anim.noise);
+    this.fx.plungeBlink(this._ghostSegs, nSegs, ox, oz, p.x, p.y, p.z);
+    g.world?.setPusher?.(0, p.x, p.y, p.z, TUNE.pusher);
+    if (!exec) {
+      this._slowmo(DEFENSE.ghostep.slowmoTime);
+      g.shake?.(0.15);
+      this._emit('player:perfectDodge', { attack, tell });
+      this._emit('player:ghostep', { x: p.x, z: p.z });
+    }
+    this._plungeAnimSync();
+    return true;
+  }
+
+  /**
+   * The spring-off direction (unit, ground plane): from the head toward where the hero came from.
+   * One who came from behind the head (over the body) springs off in front of it on his side.
+   */
+  _plungeDir(att, pl) {
+    const pt = pl.pt, ay = fin(att?.yaw, NaN);
+    const fx = Number.isFinite(ay) ? Math.sin(ay) : 0, fz = Number.isFinite(ay) ? Math.cos(ay) : 1;
+    let vx = pl.ox - pt.x, vz = pl.oz - pt.z;
+    const l = Math.hypot(vx, vz);
+    if (l > 0.3) {
+      vx /= l;
+      vz /= l;
+    } else {
+      vx = fx; // right under the head: off along its nose
+      vz = fz;
+    }
+    if (vx * fx + vz * fz < -0.3) {
+      const side = fx * vz - fz * vx > 0 ? -1 : 1; // which side of the nose he came from
+      const a = Math.atan2(fx, fz) + side * PLUNGE_BEHIND_TURN;
+      vx = Math.sin(a);
+      vz = Math.cos(a);
+    }
+    pl.dx = vx;
+    pl.dz = vz;
+  }
+
+  /** The hang point above the head at hang progress u (a short rise that settles: the apex). */
+  _plungeHang(pl, u, out) {
+    const P = DEFENSE.plunge, rise = 0.32 * (1 - (1 - u) * (1 - u));
+    return out.set(pl.pt.x + pl.dx * P.appearBack, pl.pt.y + P.appearUp + rise, pl.pt.z + pl.dz * P.appearBack);
+  }
+
+  /** Where he lands on the head: just on his side of the head top. */
+  _plungeSeat(pl, out) {
+    const P = DEFENSE.plunge;
+    return out.set(pl.pt.x + pl.dx * P.rideBack, pl.pt.y - 0.05, pl.pt.z + pl.dz * P.rideBack);
+  }
+
+  /** Next plunge phase; the animator re-enters the clip with a short cross-fade (anim.js). */
+  _plungePhase(n) {
+    this.pl.phase = n;
+    this.pl.t = 0;
+    this._plungeAnimSync();
+    this.anim.play('plunge', PL_BLEND[n] ?? 0.05);
+  }
+
+  _tickPlunge(dt) {
+    const P = DEFENSE.plunge, pl = this.pl, p = this.position;
+    this.want.x = this.want.z = 0;
+    pl.t += dt;
+    // the head this frame (the wyrm's pose of the last frame); gone (killed and removed, a reset
+    // that drops the API): spring off from where he is
+    const head = this._plungePoint(pl.att, pl.pt);
+    if (!head && pl.phase < PL.FLIP) {
+      if (pl.phase === PL.DIVE) this._plungeImpact(); // he still lands his blow
+      this._plungeFlip();
+    }
+    switch (pl.phase) {
+      case PL.VANISH:
+        this._plungeHang(pl, 0, p);
+        if (pl.t >= P.vanish) {
+          this._plungePhase(PL.HANG);
+          this.ghostFx = 1; // resolves out of the cold dissolve over the hang
+        }
+        break;
+      case PL.HANG:
+        this._plungeHang(pl, clamp(pl.t / P.hang, 0, 1), p);
+        if (pl.t >= P.hang) {
+          this._plungePhase(PL.DIVE);
+          this.anim.kickCoat(0.6, this.anim.noise);
+          this._emit('player:plunge', { execution: pl.exec });
+        }
+        break;
+      case PL.DIVE: {
+        const u = clamp(pl.t / P.dive, 0, 1);
+        this._plungeHang(pl, 1, this._v);
+        this._plungeSeat(pl, this._v2);
+        p.lerpVectors(this._v, this._v2, u * u); // accelerating onto the head
+        if (u >= 1) this._plungeImpact();
+        break;
+      }
+      case PL.RIDE: {
+        // riding the head down: keep the offset to its top (eased through a jump of the head)
+        this._v.copy(pl.pt).add(pl.off);
+        const d = this._v.distanceTo(p), max = PLUNGE_RIDE_MAX * dt;
+        if (d > max && d > 1e-6) p.lerp(this._v, max / d);
+        else p.copy(this._v);
+        if (pl.t >= P.ride) this._plungeFlip();
+        break;
+      }
+      case PL.FLIP: {
+        const u = clamp(pl.t / pl.flipDur, 0, 1), f = pl.from, L = pl.land;
+        p.x = f.x + (L.x - f.x) * u;
+        p.z = f.z + (L.z - f.z) * u;
+        p.y = Math.max(0, f.y * (1 - u) + P.flipUp * 4 * u * (1 - u));
+        if (u >= 1) this._plungeLand();
+        break;
+      }
+      case PL.LAND:
+      default:
+        // the landing crouch: free to act after landCancel (attack, roll, guard), then loco
+        if (pl.t >= P.landCancel) {
+          if (this._tryAction(true, true, false)) return;
+          if (this.rmb.held) {
+            this._startBlock(0.12);
+            return;
+          }
+          if (pl.t >= P.land * 0.6 && this.intent.len > 0.1) {
+            this._toLoco(0.16);
+            return;
+          }
+        }
+        if (pl.t >= P.land) this._toLoco(0.16);
+    }
+    if (!Number.isFinite(p.x + p.y + p.z)) {
+      p.set(fin(pl.ox, CONFIG.world.playerSpawn.x), 0, fin(pl.oz, CONFIG.world.playerSpawn.z));
+      this._plungeLand();
+    }
+    this._plungeAnimSync();
+  }
+
+  /** The blade meets the head: onPlunge once, the hitstop, the burst, then ride it. */
+  _plungeImpact() {
+    const P = DEFENSE.plunge, pl = this.pl, g = this.game, p = this.position;
+    if (pl.hit) return;
+    pl.hit = true;
+    this._plungeSeat(pl, p);
+    pl.off.subVectors(p, pl.pt);
+    const exec = pl.exec;
+    const damage = exec ? P.execDamage : P.damage;
+    const hp = pl.hitPt;
+    hp.x = pl.pt.x;
+    hp.y = pl.pt.y - 0.25;
+    hp.z = pl.pt.z;
+    let dealt = damage;
+    if (this._plungeable(pl.att)) {
+      try {
+        const r = pl.att.onPlunge({ damage, posture: P.posture, point: hp, execution: exec });
+        if (Number.isFinite(r)) dealt = r;
+      } catch (err) {
+        console.error('[player] onPlunge failed', err);
+      }
+    } else dealt = 0;
+    pl.dealt = dealt;
+    this._plungePhase(PL.RIDE);
+    this._hitstop(P.impactStop, 0.03);
+    g.shake?.(exec ? P.execShake : P.impactShake);
+    g.world?.gust?.(hp.x, hp.z, 1.4, 8);
+    this.anim.kickCoat(0.9, this.anim.noise);
+    this.fx.plungeImpact(hp.x, hp.y, hp.z, pl.dx, pl.dz, exec);
+    if (dealt > 0) this._emit('player:hitDragon', { damage: dealt, part: 'head', point: { x: hp.x, y: hp.y, z: hp.z }, heavy: true, crit: exec, kind: 'plunge' });
+    this._emit('player:plungeHit', { damage: dealt, execution: exec });
+  }
+
+  /** Rip the blade out and spring off: a backflip arc to a clear landing in front of the head. */
+  _plungeFlip() {
+    const P = DEFENSE.plunge, pl = this.pl, p = this.position;
+    if (!Number.isFinite(p.y) || p.y < 0) p.y = 0;
+    pl.from.copy(p);
+    this._plungeLanding(pl, pl.land);
+    pl.flipDur = clamp(P.flip[0] + 0.035 * Math.max(0, p.y - 2), P.flip[0], P.flip[1]);
+    // facing the head (his takeoff point) from the landing: the flip carries him backward
+    const fx = p.x - pl.land.x, fz = p.z - pl.land.z;
+    if (fx * fx + fz * fz > 0.04) this.yaw = Math.atan2(fx, fz);
+    this._plungePhase(PL.FLIP);
+    this.anim.kickCoat(0.8, this.anim.noise);
+    if (pl.hit) this.fx.plungeRip(pl.hitPt.x, pl.hitPt.y, pl.hitPt.z, pl.dx, pl.dz);
+  }
+
+  /** A clear landing in front of the head along the spring-off direction (turned off the body if
+   *  it is in the way), clamped to the arena and resolved against the stones. */
+  _plungeLanding(pl, out) {
+    const P = DEFENSE.plunge, g = this.game, pt = pl.pt;
+    const circles = pl.att?.bodyCircles ?? g.dragon?.bodyCircles;
+    const B = CONFIG.world.playerBound;
+    const base = Math.atan2(pl.dx, pl.dz);
+    for (const da of LAND_TURNS) {
+      const a = base + da, sx = Math.sin(a), sz = Math.cos(a);
+      for (let r = P.landMin; r <= P.landMax + 1e-6; r += 0.75) {
+        const x = pt.x + sx * r, z = pt.z + sz * r;
+        if (Math.hypot(x, z) > B - 1) break; // farther only leaves the arena
+        if (this._inBody(circles, x, z, this.radius + P.landClear)) continue;
+        out.set(x, 0, z);
+        g.world?.resolve?.(out, this.radius, B);
+        if (!Number.isFinite(out.x + out.z)) continue;
+        if (Math.hypot(out.x - x, out.z - z) > 1.5 || this._inBody(circles, out.x, out.z, this.radius + 0.2)) continue;
+        pl.dx = sx;
+        pl.dz = sz;
+        return out;
+      }
+    }
+    // cornered: come down where he is (resolve pushes him clear of stones and the arena edge)
+    out.set(fin(pl.from.x, pl.ox), 0, fin(pl.from.z, pl.oz));
+    g.world?.resolve?.(out, this.radius, B);
+    if (!Number.isFinite(out.x + out.z)) out.set(pl.ox, 0, pl.oz);
+    return out;
+  }
+
+  _inBody(circles, x, z, r) {
+    if (!Array.isArray(circles)) return false;
+    for (let i = 0; i < circles.length; i++) {
+      const c = circles[i];
+      if (!c || !(c.r > 0) || !Number.isFinite(c.x + c.z)) continue;
+      const m = c.r + r;
+      if ((x - c.x) * (x - c.x) + (z - c.z) * (z - c.z) < m * m) return true;
+    }
+    return false;
+  }
+
+  /** Touchdown: the crouch, a short slide, the crit window, a moment of i-frames. */
+  _plungeLand() {
+    const P = DEFENSE.plunge, pl = this.pl, g = this.game, p = this.position;
+    p.set(fin(pl.land.x, p.x), 0, fin(pl.land.z, p.z));
+    this._collide();
+    if (!Number.isFinite(p.x + p.z)) p.set(pl.ox, 0, pl.oz);
+    p.y = 0;
+    const tx = pl.pt.x - p.x, tz = pl.pt.z - p.z;
+    if (Number.isFinite(tx + tz) && tx * tx + tz * tz > 0.04) this.yaw = Math.atan2(tx, tz);
+    this.critTimer = DEFENSE.ghostep.critWindow;
+    this.iframeT = P.landIframes;
+    const tgt = this._plungeable(pl.att) ? pl.att : null;
+    this.assist.target = tgt;
+    this.assist.t = tgt ? TUNE.ghostepAssist : 0;
+    this.vel.x = this.vel.z = 0; // the flip's momentum goes into the crouch and a short slide
+    this._setKb(pl.dx, pl.dz, 0.55);
+    this._plungePhase(PL.LAND);
+    this.fx.plungeLand(p.x, p.z, pl.dx, pl.dz);
+    g.shake?.(0.22);
+    g.world?.gust?.(p.x, p.z, 0.8, 4);
+    this._emit('player:footstep', { x: p.x, z: p.z, sprint: true });
+    this.anim.kickCoat(0.7, this.anim.noise);
+  }
+
+  /** What the animator reads (anim.js plunge block). */
+  _plungeAnimSync() {
+    const pl = this.pl, A = this.plungeAnim, P = DEFENSE.plunge;
+    A.phase = pl.phase;
+    A.t = pl.t;
+    A.exec = pl.exec;
+    A.h = this.position.y;
+    const dur = pl.phase === PL.VANISH ? P.vanish : pl.phase === PL.HANG ? P.hang : pl.phase === PL.DIVE ? P.dive
+      : pl.phase === PL.RIDE ? P.ride : pl.phase === PL.FLIP ? pl.flipDur : P.land;
+    A.u = clamp(pl.t / Math.max(1e-3, dur), 0, 1);
+  }
+
+  /** Lab / captures: plunge onto the dragon now, from anywhere (even onto a flying wyrm). */
+  _debugPlunge(execution = false) {
+    const d = this.game.dragon;
+    if (!this.alive || !this._plungeable(d) || this.state === 'plunge') return false;
+    return this._startPlunge(d, !!execution, 'debug', TELL.RED, true);
   }
 
   // --- roll --------------------------------------------------------------
@@ -1133,6 +1557,7 @@ export class Player {
       const b = this.buf.action;
       if (b === 'light') {
         this.buf.action = null;
+        if (this._tryExecution()) return;
         const next = d.kind === 'light' ? LIGHT[d.combo % LIGHT.length] : LIGHT[0];
         if (this._startAttack(next)) return;
       } else if (b === 'roll' && r >= TUNE.rollCancel) {
@@ -1270,6 +1695,12 @@ export class Player {
   _integrate(dt) {
     if (dt <= 0) return;
     const v = this.vel, w = this.want;
+    if (this.state === 'plunge' && this.pl.phase < PL.LAND) {
+      // in the air / on the head: _tickPlunge placed him (no body push-out, no ground clamp)
+      v.x = v.z = this.kb.x = this.kb.z = 0;
+      this.groundVel.x = this.groundVel.z = 0;
+      return;
+    }
     let lambda;
     switch (this.state) {
       case 'roll':
@@ -1286,6 +1717,7 @@ export class Player {
       case 'guardBreak':
       case 'parry':
       case 'ghostep':
+      case 'plunge':
       case 'dead':
         lambda = 10;
         break;
@@ -1431,8 +1863,21 @@ export class Player {
         a.impact = true;
         this._slamImpact(a);
       }
-    }
+    } else if (this.state === 'plunge') this._plungeTrail(sw);
     sw.commit();
+  }
+
+  /** The dive's blade trail: the swept band between frames + a long streak behind the point (the
+   *  impact frame draws the last stretch into the head). */
+  _plungeTrail(sw) {
+    const pl = this.pl, ph = pl.phase;
+    sw.point(1, this._tip);
+    if (ph === PL.DIVE || (ph === PL.RIDE && pl.streak)) {
+      this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, 'slam', pl.exec);
+      this.fx.thrustStreak(this._tipPrev, this._tip, 1, pl.exec);
+      pl.streak = ph === PL.DIVE;
+    } else pl.streak = false;
+    this._tipPrev.copy(this._tip);
   }
 
   /** The slam meets the ground: crystal shards burst at the blade's point (and hit, if the blade
@@ -1532,11 +1977,23 @@ export class Player {
         }
       }
     }
+    // the plunge: cold motes gathering on him through the hang, embers spurting from the wound while
+    // he rides the head
+    const hidden = this.state === 'plunge' && this.pl.phase === PL.VANISH;
+    if (this.state === 'plunge' && dt > 0) {
+      const pl = this.pl;
+      if (pl.phase === PL.HANG) {
+        this.getChestPos(this._v, true);
+        this.fx.plungeHang(dt, this._v.x, this._v.y, this._v.z);
+      } else if (pl.phase === PL.RIDE && pl.hit) {
+        this.fx.plungeRide(dt, pl.hitPt.x, pl.pt.y - 0.1, pl.hitPt.z, pl.dx, pl.dz, 1 - smoothstep(0.5, 1, this.plungeAnim.u));
+      }
+    }
     if (sw.valid) {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);
       // the blade's dot halo: dim at idle, brighter while it glows (strikes, charge, crit)
-      if (this.alive && this.object3d.visible !== false) {
+      if (this.alive && this.object3d.visible !== false && !hidden) {
         const bu = this.rig.materials.blade.uniforms;
         this.fx.bladeHalo(dt, clamp((bu.uInkGlow.value - 0.16) * 0.7, 0.25, 2), this.bladeFar);
       }
@@ -1552,7 +2009,7 @@ export class Player {
       gv.z = clamp((this._gem.z - gp.z) / dt, -30, 30);
     }
     gp.copy(this._gem);
-    if (this.state !== 'dead' && this.object3d.visible !== false) {
+    if (this.state !== 'dead' && this.object3d.visible !== false && !hidden) {
       const charging = this.state === 'charge';
       this.fx.gemTick(dt, this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + this.chargeK : 0.35, gv.x, gv.z, gv.y);
       this.gemT -= dt;
@@ -1579,13 +2036,17 @@ export class Player {
     }
     const far = smoothstep(10, 28, this.viewDist); // 0 in close-ups … 1 at the game camera
     this.flash = Math.max(0, this.flash - dt * 6);
-    this.ghostFx = Math.max(0, this.ghostFx - dt * TUNE.ghostepFade);
+    const plunging = this.state === 'plunge';
+    this.ghostFx = Math.max(0, this.ghostFx - dt * (plunging ? TUNE.plungeFade : TUNE.ghostepFade));
     const burnTarget = this.burnT > 0 ? 0.28 + 0.1 * Math.sin(this.time * 17) : 0;
     this.burnGlow = damp(this.burnGlow, burnTarget, 8, dt);
-    // Ghostep reappear: cells resolve out of a cold dissolve, ink tinted blue-white
+    // Ghostep / plunge reappear: cells resolve out of a cold dissolve, ink tinted blue-white (the
+    // plunge's vanish: gone entirely until he reappears above the head)
     const gk = this.ghostFx;
-    const dissolve = smoothstep(0.55, 1, gk) * 0.85;
-    const tr = 1 + gk * 0.8, tg = 1 + gk * 1.4, tb = 1 + gk * 2.6;
+    const dissolve = plunging && this.pl.phase === PL.VANISH ? 1 : smoothstep(0.55, 1, gk) * 0.85;
+    // through the hang and the dive he keeps a cold cast: it parts him from the wyrm's grey scales
+    const tk = plunging && (this.pl.phase === PL.HANG || this.pl.phase === PL.DIVE) ? Math.max(gk, 0.4) : gk;
+    const tr = 1 + tk * 0.8, tg = 1 + tk * 1.4, tb = 1 + tk * 2.6;
     for (const m of this.rig.mats) {
       const u = m.uniforms;
       u.uFlash.value = this.flash * 0.85;
@@ -1615,6 +2076,16 @@ export class Player {
         ink = Math.max(ink, (1.2 + 1.4 * this.releaseK) * fade);
         glow = Math.max(glow, (1.0 + 0.6 * this.releaseK) * fade);
       }
+    } else if (plunging) {
+      // the plunge: the blade blazes from the hang through the ride, cooling through the flip
+      const ph = this.pl.phase;
+      if (ph >= PL.HANG && ph <= PL.RIDE) {
+        ink = ph === PL.HANG ? 1.8 + 0.3 * Math.sin(this.time * 30) : 2.6;
+        glow = ph === PL.HANG ? 1.4 : 1.7;
+      } else if (ph === PL.FLIP) {
+        ink = Math.max(ink, 1.6);
+        glow = Math.max(glow, 1.25);
+      }
     }
     if (this.critTimer > 0) {
       ink = Math.max(ink, 1.3 + 0.4 * Math.sin(this.time * 14));
@@ -1635,7 +2106,7 @@ export class Player {
     bu.uBase.value.setRGB(0.02 + 0.33 * far, 0.03 + 0.67 * far, 0.05 + 1.05 * far);
     this.bladeFar = far;
     // the violet gem breathes; burns brighter while charging and through heavy swings
-    const heavyNow = st === 'charge' || (!!a && !!a.def?.heavy && (st === 'attack' || st === 'heavy'));
+    const heavyNow = st === 'charge' || (plunging && this.pl.phase <= PL.RIDE) || (!!a && !!a.def?.heavy && (st === 'attack' || st === 'heavy'));
     const gemTarget = (heavyNow ? 1.6 : 0.8) + 0.25 * Math.sin(this.time * 2.1) + (st === 'charge' ? 0.8 * this.chargeK : 0);
     const gu = M.gem.uniforms;
     gu.uGlow.value = dt > 0 ? damp(gu.uGlow.value, gemTarget, 10, dt) : gemTarget;
@@ -1655,6 +2126,7 @@ export class Player {
     z = Number(z);
     if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
     const p = this.position;
+    if (this.state === 'plunge') this._toLoco(0.1); // a Lab teleport ends a plunge on the ground
     p.set(x, 0, z);
     this._collide();
     if (!Number.isFinite(p.x) || !Number.isFinite(p.z)) p.set(x, 0, z);

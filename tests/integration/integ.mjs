@@ -3,7 +3,7 @@
 // src/main.js (construction order, frame order, debugTimeScale in dt). World is a light mock built on
 // the real Colliders. A bot drives the input: it moves, attacks, blocks, parries and dodges.
 // usage: node integ.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI, ABYSS_TRACE=1 logs combat events)
-//   scenario: gate | breath | win | die | parry | block | reach | red | lab | touch | all (default all)
+//   scenario: gate | breath | win | die | parry | block | reach | red | plunge | deflect | lab | touch | all (default all)
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ui, fireWin, AUDIO, resetWindow, El } from './shim.mjs';
@@ -21,7 +21,7 @@ const { LightPool } = await imp('src/render/lights.js');
 const { GlyphParticles } = await imp('src/render/particles.js');
 const { Colliders } = await imp('src/world/colliders.js');
 const { TELL, TELL_STYLE, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
-const { Player } = await imp('src/entities/player/player.js');
+const { Player, TUNE: TUNE_P } = await imp('src/entities/player/player.js');
 const { DIM: HERO_DIM, setHeroGlyphScale } = await imp('src/entities/player/model.js');
 const { Dragon } = await imp('src/entities/dragon/dragon.js');
 const { TUNING, SCALE } = await imp('src/entities/dragon/tuning.js');
@@ -66,11 +66,14 @@ const PAYLOAD = {
   'player:slam': { x: 'n', z: 'n' },
   'player:hurt': { damage: 'n', kind: 's', hp: 'n' },
   'player:block': { damage: 'n', tell: 't' },
-  'player:parry': { tell: 't', attack: 's' },
+  'player:parry': { tell: 't', attack: 's', chain: 'n' },
   'player:guardBreak': { attack: 's' },
   'player:dodge': { kind: 's' },
   'player:perfectDodge': { attack: 's', tell: 't' },
   'player:ghostep': { x: 'n', z: 'n' },
+  'player:plunge': { execution: 'b' },
+  'player:plungeHit': { damage: 'n', execution: 'b' },
+  'combat:deflectChain': { count: 'n' },
   'player:heal': { amount: 'n', flasks: 'n' },
   'player:footstep': { x: 'n', z: 'n', sprint: 'b' },
   'player:lockOn': { on: 'b' },
@@ -536,6 +539,7 @@ async function scenarioWin() {
   assert(c('combat:tell') >= 3 && c('combat:flash') >= 3 && c('combat:flash') <= c('combat:tell'), `attacks announced with combat:tell + combat:flash (${c('combat:tell')} / ${c('combat:flash')})`);
   assert(c('player:parry') >= 1 && c('player:parry') === c('dragon:parried'), `bot parried in a live fight (player:parry ${c('player:parry')} = dragon:parried ${c('dragon:parried')})`);
   assert(c('player:perfectDodge') >= 1 && c('player:perfectDodge') === c('player:ghostep'), `bot Ghostepped a red tell in a live fight (${c('player:perfectDodge')})`);
+  assert(c('player:plungeHit') >= 1 && c('player:plungeHit') <= c('player:plunge'), `perfect dodges plunged onto the head in a live fight (${c('player:plunge')} dives, ${c('player:plungeHit')} hits)`);
   assert((c('dragon:postureBreak') > 0) === sawBreak, `dragon:postureBreak ↔ dragon.broken (${c('dragon:postureBreak')} / ${sawBreak})`);
   assert(c('player:guardBreak') === 0, 'the reacting bot never guard-broke (red tells are dodged, not blocked)');
   assert(c('player:charge') === 0 && c('player:noStamina') === 0, 'no charge from taps, no stamina events');
@@ -901,7 +905,7 @@ async function scenarioReach() {
 
 // ================================================================== scenario: red tells (tail, stomp)
 async function scenarioRed() {
-  out('\n== scenario RED (tail / stomp: block fails, perfect dodge → Ghostep → crit) ==');
+  out('\n== scenario RED (tail / stomp: block fails, perfect dodge → the plunge → crit) ==');
   const G = build();
   const { game, input } = G;
   fightSetup(G);
@@ -955,24 +959,25 @@ async function scenarioRed() {
   place(G, 6);
   const rp = forceAttack(G, 'tail', { answer: 'parry' });
   assert(rp.res === RESULT.HIT && evn(rp, 'player:parry') === 0, `red tail is not parryable (got ${rp.res})`);
-  // perfect dodge: Space 0.1 s before impact → Ghostep behind the wyrm, slow-mo, crit window
+  // perfect dodge: Space 0.1 s before impact → the plunge onto the wyrm's head (slow-mo at the
+  // vanish), then the landing in front of the head with the crit window open (scenario PLUNGE
+  // covers the move itself)
   settle(G);
   place(G, 6);
   const pd = forceAttack(G, 'tail', { answer: 'dodge', settle: 1 });
-  out(`   tail dodge: Space ${(pd.pressLead ?? NaN).toFixed(3)} s before · result ${pd.res} · crit ${p.critTimer.toFixed(2)} · slow-mo x${game.hitstopScale} for ${game.hitstopTimer.toFixed(2)} s`);
+  out(`   tail dodge: Space ${(pd.pressLead ?? NaN).toFixed(3)} s before · result ${pd.res} · state ${p.state} · slow-mo x${game.hitstopScale} for ${game.hitstopTimer.toFixed(2)} s`);
   assert(pd.res === RESULT.PERFECT, `perfect dodge → 'perfectDodge' (got ${pd.res})`);
   assert(evn(pd, 'player:perfectDodge') === 1 && evn(pd, 'player:ghostep') === 1, 'player:perfectDodge + player:ghostep emitted');
   assert(pd.hpAtHit === pd.hp0, 'no damage on a perfect dodge');
-  const g = pd.ghost;
-  if (g) {
-    const fx = Math.sin(g.dyaw), fz = Math.cos(g.dyaw);
-    const along = (g.px - g.dx) * fx + (g.pz - g.dz) * fz;
-    const dist = Math.hypot(g.px - g.dx, g.pz - g.dz);
-    out(`   ghostep landed ${dist.toFixed(2)} m from the wyrm, ${along.toFixed(2)} m along its facing`);
-    assert(along < -1 && dist >= DEFENSE.ghostep.distanceBehind - 0.5 && dist <= DEFENSE.ghostep.distanceBehind + 3, 'teleported behind the dragon');
-  } else assert(false, 'ghostep position recorded');
-  assert(p.critTimer > 0, `crit window open (critTimer ${p.critTimer.toFixed(2)})`);
+  assert(p.state === 'plunge', `a perfect dodge of the wyrm in range → the plunge (state ${p.state})`);
   assert(near(game.hitstopScale, DEFENSE.ghostep.slowmoScale, 1e-6) || p.slowmoPending > 0, `Ghostep slow-mo x${DEFENSE.ghostep.slowmoScale} (got x${game.hitstopScale})`);
+  run(G, 4, { passive: true }, () => p.state !== 'plunge');
+  {
+    const dist = Math.hypot(p.position.x - d.position.x, p.position.z - d.position.z);
+    out(`   the plunge landed ${dist.toFixed(2)} m from the wyrm's root, y ${p.position.y}, crit ${p.critTimer.toFixed(2)}`);
+    assert(p.state !== 'plunge' && p.position.y === 0 && Number.isFinite(dist), 'the plunge ends back on the ground');
+  }
+  assert(p.critTimer > 0, `crit window open after the landing (critTimer ${p.critTimer.toFixed(2)})`);
   // the next hit carries crit
   let crit = null;
   G.watch = (n, dd) => { if (n === 'player:hitDragon' && !crit) crit = dd; };
@@ -982,20 +987,269 @@ async function scenarioRed() {
     G.tick(DT);
   }
   G.watch = null;
-  out('   first hit after the Ghostep:', crit ? `damage ${crit.damage} part ${crit.part} crit ${crit.crit}` : 'none');
+  out('   first hit after the plunge:', crit ? `damage ${crit.damage} part ${crit.part} crit ${crit.crit}` : 'none');
   assert(crit?.crit === true, 'next hit inside the crit window carries crit');
   // stomp: red AoE, perfect dodge as well
   settle(G);
   place(G, 3.6);
   const st = forceAttack(G, 'stomp', { answer: 'dodge', settle: 1 });
   out(`   stomp dodge: result ${st.res}`);
-  assert(st.tell === TELL.RED && st.res === RESULT.PERFECT && evn(st, 'player:ghostep') === 1, `stomp perfect dodge → Ghostep (got ${st.res})`);
+  assert(st.tell === TELL.RED && st.res === RESULT.PERFECT && evn(st, 'player:ghostep') === 1, `stomp perfect dodge → the plunge's blink (got ${st.res})`);
   // a posture break (dragon freeze-frame) during the Ghostep slow-mo must not turn it into a freeze
   const slow0 = game.hitstopScale, left0 = game.hitstopTimer;
   assert(d.debug.postureBreak() === true, 'posture break during the Ghostep slow-mo');
   G.tick(DT);
   out(`   slow-mo x${slow0} ${left0.toFixed(2)} s left → after the break x${game.hitstopScale} ${game.hitstopTimer.toFixed(2)} s`);
   assert(near(game.hitstopScale, DEFENSE.ghostep.slowmoScale, 1e-6), `Ghostep slow-mo survives the break freeze (x${game.hitstopScale})`);
+  return G;
+}
+
+// ================================================================== scenario: the plunge (contract 2, player side)
+/** Projected NDC of a world point with the game camera (the real CameraRig drives it). */
+function ndc(G, x, y, z) {
+  const v = new THREE.Vector3(x, y, z).project(G.game.camera);
+  return { x: v.x, y: v.y, ok: Number.isFinite(v.x + v.y) && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
+}
+
+async function scenarioPlunge() {
+  out('\n== scenario PLUNGE (perfect dodge → dive onto the head, ride, backflip off; plunge:false / out of range / no API; execution; in the air) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const d = game.dragon, p = game.player, P = DEFENSE.plunge;
+  const bound = CONFIG.world.playerBound;
+  const head = new THREE.Vector3();
+  const inBody = (x, z, r) => d.bodyCircles.some((c) => Math.hypot(x - c.x, z - c.z) < c.r + r);
+  /** Tick until the plunge ends (≤ max s): its track, i-frames, camera framing, phases seen. */
+  const ride = (max = 5) => {
+    const tr = { maxY: 0, phases: new Set(), iframes: true, finite: true, offscreen: 0, frames: 0, ignored: true };
+    for (let i = 0; i < Math.round(max / DT) && p.state === 'plunge'; i++) {
+      aimAt(G);
+      G.tick(DT);
+      if (p.state !== 'plunge') break;
+      tr.frames++;
+      tr.phases.add(p.plungeAnim.phase);
+      tr.maxY = Math.max(tr.maxY, p.position.y);
+      if (!p.isInvulnerable()) tr.iframes = false;
+      if (![p.position.x, p.position.y, p.position.z].every(Number.isFinite)) tr.finite = false;
+      // the camera keeps the hero and the head on screen through the move
+      d.plungePoint(head);
+      // (the vanish is invisible: the camera only has to have him once he reappears)
+      if (p.plungeAnim.phase > 0 && (!ndc(G, p.position.x, p.position.y + 1.1, p.position.z).ok || !ndc(G, head.x, head.y, head.z).ok)) {
+        tr.offscreen++;
+        if (process.env.ABYSS_TRACE) out('     OFF', p.plungeAnim.phase, p.plungeAnim.u.toFixed(2), JSON.stringify(ndc(G, p.position.x, p.position.y + 1.1, p.position.z)), JSON.stringify(ndc(G, head.x, head.y, head.z)));
+      }
+      if (i === 5) {
+        const hp = p.hp;
+        tr.ignored = p.takeHit({ damage: 40, tell: TELL.NORMAL, attack: 'bite', from: { x: d.position.x, z: d.position.z }, attacker: d, knockback: 3 }) === RESULT.IGNORED && p.hp === hp;
+      }
+    }
+    tr.state = p.state;
+    return tr;
+  };
+  const since = (c0, n) => (G.counts[n] || 0) - (c0[n] || 0);
+
+  // 1) a perfect dodge of the bite, in range → the plunge, one hit on the head, a landing in front
+  settle(G);
+  place(G, 6);
+  const origin = p.position.clone();
+  const hp0 = d.hp, c0 = { ...G.counts };
+  const r = forceAttack(G, 'bite', { answer: 'dodge', settle: 1 });
+  const plunging = p.state === 'plunge';
+  const lift = p.position.y;
+  const head0 = d.plungePoint(new THREE.Vector3()), root0 = d.position.clone(), yaw0 = d.yaw, dir0 = { x: p.pl.dx, z: p.pl.dz };
+  const tr = ride();
+  const dealt = hp0 - d.hp;
+  d.plungePoint(head);
+  const L = p.position;
+  // measured from the head where he dodged it (the wyrm's reaction moves the head afterwards)
+  const toO = { x: origin.x - head0.x, z: origin.z - head0.z }, toL = { x: L.x - head0.x, z: L.z - head0.z };
+  const side = (toO.x * toL.x + toO.z * toL.z) / ((Math.hypot(toO.x, toO.z) * Math.hypot(toL.x, toL.z)) || 1);
+  const F0 = { x: Math.sin(yaw0), z: Math.cos(yaw0) };
+  const ahead = (L.x - root0.x) * F0.x + (L.z - root0.z) * F0.z - ((head0.x - root0.x) * F0.x + (head0.z - root0.z) * F0.z);
+  out(`   geometry: root ${root0.x.toFixed(1)},${root0.z.toFixed(1)} yaw ${yaw0.toFixed(2)} · head at the dodge ${head0.x.toFixed(1)},${head0.z.toFixed(1)} · origin ${origin.x.toFixed(1)},${origin.z.toFixed(1)} · spring-off dir ${dir0.x.toFixed(2)},${dir0.z.toFixed(2)} · head now ${head.x.toFixed(1)},${head.z.toFixed(1)} · landed ${L.x.toFixed(1)},${L.z.toFixed(1)}`);
+  out(`   bite dodge: ${r.res} → state ${plunging ? 'plunge' : p.state}, reappears ${lift.toFixed(1)} m up · phases ${[...tr.phases].join('')} in ${(tr.frames * DT).toFixed(2)} s · max y ${tr.maxY.toFixed(1)} · head damage ${dealt} · landed ${Math.hypot(toL.x, toL.z).toFixed(1)} m from the head (cos to the origin side ${side.toFixed(2)}, ${ahead.toFixed(1)} m ahead) · crit ${p.critTimer.toFixed(2)} · off-screen frames ${tr.offscreen}`);
+  assert(r.res === RESULT.PERFECT && plunging, `a perfect dodge of the wyrm in range → the plunge (${r.res}, ${plunging})`);
+  assert(evn(r, 'player:perfectDodge') === 1 && evn(r, 'player:ghostep') === 1, 'player:perfectDodge + player:ghostep still emitted (the HUD call-out, stats)');
+  assert(lift >= P.appearUp && lift > head.y, `reappears above the head (${lift.toFixed(1)} m)`);
+  assert(tr.ignored, 'hits are ignored mid-plunge');
+  assert(tr.iframes && tr.finite, 'invulnerable and finite throughout');
+  assert([1, 2, 3, 4, 5].every((ph) => tr.phases.has(ph)), `hang → dive → ride → flip → land (${[...tr.phases].join('')})`);
+  assert(since(c0, 'player:plunge') === 1 && since(c0, 'player:plungeHit') === 1, `one dive, one hit (${since(c0, 'player:plunge')} / ${since(c0, 'player:plungeHit')})`);
+  assert(near(dealt, Math.round(P.damage * TUNING.partMult.head), 1), `the blade hits the head once: ${dealt} (DEFENSE.plunge.damage ${P.damage} × head)`);
+  assert(tr.state !== 'plunge' && tr.frames * DT < 3.2, `the move ends (${(tr.frames * DT).toFixed(2)} s)`);
+  assert(L.y === 0 && Math.hypot(L.x, L.z) <= bound && !inBody(L.x, L.z, p.radius - 0.05), 'lands on the ground, inside the arena, clear of the body');
+  assert(side > 0.3 && ahead > 0 && Math.hypot(toL.x, toL.z) >= P.landMin - 1, `lands in front of the head, toward where he came from (cos ${side.toFixed(2)}, ${ahead.toFixed(1)} m ahead of it)`);
+  assert(p.critTimer > 0, 'the crit window is open after the landing');
+  assert(tr.offscreen === 0, `the camera kept the hero and the head on screen (${tr.offscreen} frames off)`);
+
+  // 2) a hit that forbids the plunge (hazards: plunge:false) → slow-mo + crit, no teleport
+  settle(G);
+  place(G, 6);
+  input.axis = { x: 1, y: 0 };
+  input.tap('Space');
+  G.tick(DT);
+  G.tick(DT);
+  input.axis = { x: 0, y: 0 };
+  const pos = p.position.clone();
+  const c1 = { ...G.counts };
+  const r2 = p.takeHit({ damage: 30, tell: TELL.RED, kind: 'meteor', attack: 'meteor', from: { x: pos.x + 1, z: pos.z }, attacker: d, knockback: 3, plunge: false });
+  out(`   plunge:false: ${r2} → state ${p.state}, moved ${pos.distanceTo(p.position).toFixed(2)} m, crit ${p.critTimer.toFixed(2)}`);
+  assert(r2 === RESULT.PERFECT && p.state === 'ghostep' && pos.distanceTo(p.position) < 0.3 && p.critTimer > 0, 'plunge:false → a perfect dodge without the teleport (slow-mo + crit)');
+  assert(since(c1, 'player:plunge') === 0 && since(c1, 'player:perfectDodge') === 1, 'no plunge, one perfect dodge');
+
+  // 3) out of range (> DEFENSE.plunge.range from the head) → no teleport either
+  settle(G);
+  d.plungePoint(head);
+  {
+    const a = d.yaw + Math.PI;
+    const far = P.range + 3;
+    let x = head.x + Math.sin(a) * far, z = head.z + Math.cos(a) * far;
+    if (Math.hypot(x, z) > bound - 1) { x = head.x - Math.sin(a) * far; z = head.z - Math.cos(a) * far; }
+    p.debug.teleport(x, z);
+  }
+  input.axis = { x: 0, y: 1 };
+  input.tap('Space');
+  G.tick(DT);
+  input.axis = { x: 0, y: 0 };
+  const posF = p.position.clone();
+  const r3 = p.takeHit({ damage: 20, tell: TELL.RED, attack: 'fireball', from: { x: d.position.x, z: d.position.z }, attacker: d, knockback: 3 });
+  out(`   out of range (${Math.hypot(posF.x - head.x, posF.z - head.z).toFixed(1)} m from the head): ${r3} → state ${p.state}`);
+  assert(r3 === RESULT.PERFECT && p.state === 'ghostep' && posF.distanceTo(p.position) < 0.3, 'out of range → a perfect dodge in place');
+
+  // 4) an attacker without the plunge API → the v0.2 Ghostep (blink behind it)
+  settle(G);
+  place(G, 6);
+  const mob = { position: new THREE.Vector3(p.position.x + 3, 0, p.position.z), yaw: -Math.PI / 2 };
+  input.axis = { x: 1, y: 0 };
+  input.tap('Space');
+  G.tick(DT);
+  input.axis = { x: 0, y: 0 };
+  const r4 = p.takeHit({ damage: 20, tell: TELL.RED, attack: 'slash', attacker: mob, knockback: 2 });
+  const behind = (p.position.x - mob.position.x) * Math.sin(mob.yaw) + (p.position.z - mob.position.z) * Math.cos(mob.yaw);
+  out(`   no plunge API: ${r4} → ${behind.toFixed(2)} m along its facing`);
+  assert(r4 === RESULT.PERFECT && p.state === 'ghostep' && behind < -1, 'an attacker without plungePoint / onPlunge: Ghostep behind it');
+
+  // 5) execution: posture broken, attack within execRange of the head → the plunge from the hang
+  run(G, 1.5, { passive: true });
+  settle(G);
+  place(G, 6);
+  assert(d.debug.postureBreak() === true, 'posture break (Lab)');
+  run(G, 0.6, { passive: true });
+  d.plungePoint(head);
+  {
+    const fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
+    p.debug.teleport(head.x + fx * 4, head.z + fz * 4);
+    aimAt(G);
+  }
+  const c5 = { ...G.counts }, hp5 = d.hp;
+  let execEv = null;
+  G.watch = (n, dd) => { if (n === 'player:plunge') execEv = dd; };
+  input.click(0);
+  G.tick(DT);
+  const execStarted = p.state === 'plunge' && p.pl.exec === true;
+  const tr5 = ride();
+  G.watch = null;
+  const dealt5 = hp5 - d.hp;
+  out(`   execution: started ${execStarted} · event ${JSON.stringify(execEv)} · damage ${dealt5} · broken after ${d.broken} · perfectDodge events ${since(c5, 'player:perfectDodge')}`);
+  assert(execStarted && execEv?.execution === true, 'attack near a broken wyrm\'s head → the plunge as an execution (player:plunge {execution: true})');
+  assert(since(c5, 'player:perfectDodge') === 0 && since(c5, 'player:attack') === 0, 'no perfect dodge, no light swing');
+  assert(dealt5 >= P.execDamage, `execution damage ${dealt5} (≥ DEFENSE.plunge.execDamage ${P.execDamage})`);
+  assert(tr5.state !== 'plunge' && p.position.y === 0 && !d.broken, 'the execution lands and consumes the break');
+
+  // 6) onto a wyrm in the air (the leap): the camera keeps both on screen, he lands on the ground
+  settle(G);
+  place(G, 11);
+  game.lab.trigger('leap');
+  run(G, 3, { passive: true }, () => d.state === 'airborne' && d.rig.s.alt > 6);
+  const alt = d.rig.s.alt;
+  const started = p.debug.plunge(false);
+  const tr6 = ride(6);
+  out(`   in the air: wyrm alt ${alt.toFixed(1)} m · plunge ${started} · max y ${tr6.maxY.toFixed(1)} · phases ${[...tr6.phases].join('')} · landed y ${p.position.y} · off-screen ${tr6.offscreen} · wyrm ${d.state}`);
+  assert(started && alt > 6 && tr6.maxY > alt + 5, 'the plunge reaches a flying wyrm\'s head');
+  assert(tr6.state !== 'plunge' && tr6.finite && p.position.y === 0 && Math.hypot(p.position.x, p.position.z) <= bound, 'and lands on the ground inside the arena');
+  assert(tr6.offscreen === 0, `the camera kept the hero and the head on screen in the air (${tr6.offscreen} frames off)`);
+
+  // 7) the flying wyrm alone (no plunge): its head stays framed through the leap
+  settle(G);
+  place(G, 11);
+  game.lab.trigger('leap');
+  let air = 0, airOff = 0;
+  for (let i = 0; i < Math.round(4 / DT); i++) {
+    aimAt(G);
+    G.tick(DT);
+    if (d.state !== 'airborne' || d.rig.s.alt < 4) continue;
+    air++;
+    const hs = d.hurtSpheres.find((h) => h.part === 'head');
+    if (!ndc(G, hs.x, hs.y, hs.z).ok || !ndc(G, p.position.x, 1.1, p.position.z).ok) airOff++;
+  }
+  out(`   the leap: ${air} airborne frames, head or hero off screen in ${airOff}`);
+  assert(air > 20 && airOff <= 2, `the leap keeps the flying head and the hero on screen (${airOff} of ${air} frames off)`);
+  return G;
+}
+
+// ================================================================== scenario: deflect chain (contract 1, player side)
+async function scenarioDeflect() {
+  out('\n== scenario DEFLECT (a string parried in rhythm: tap, release, tap; 0.45 s between impacts) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const d = game.dragon, p = game.player;
+  /**
+   * Blows 0.45 s (game) apart from the dragon; a human taps RMB `lead` s (game) before each impact
+   * and lets go after `hold` s of REAL time (the parry freeze stretches real time).
+   */
+  const string = (n, gap, hold, lead = 0.12) => {
+    settle(G);
+    run(G, TUNE_P.deflectChainGap + 0.2, { passive: true }); // a fresh chain (parries > the gap apart restart it)
+    place(G, 6);
+    const res = [], chains = [];
+    const c0 = { ...G.counts };
+    const T0 = game.time + 0.5;
+    let k = 0, downAt = -1, pressedFor = -1;
+    G.watch = (nm, dd) => { if (nm === 'player:parry') chains.push(dd.chain); };
+    for (let i = 0; i < 600 && k < n; i++) {
+      const impact = T0 + k * gap;
+      // blow k's tap: down `lead` s before its impact (a held button can't be pressed again), up `hold` real s later
+      if (pressedFor !== k && game.time >= impact - lead - 1e-9) {
+        pressedFor = k;
+        if (!input.buttons[2]) {
+          input.press(2);
+          downAt = game.realTime;
+        }
+      }
+      if (input.buttons[2] && game.realTime - downAt >= hold - 1e-9) input.up(2);
+      if (game.time >= impact - 1e-9) {
+        d.posture = 0; // (the meter would break the wyrm mid-string; not under test here)
+        res.push(d.hitPlayer({ damage: 18, attack: 'clawCombo', tell: TELL.NORMAL, knockback: 1, kind: 'claw' }));
+        // (the dragon's onParried emits this once dragon-melee's strings land; stand in for it here)
+        if (res.length >= 2 && res.every((x) => x === RESULT.PARRIED)) game.events.emit('combat:deflectChain', { count: res.length });
+        k++;
+      }
+      aimAt(G);
+      G.tick(DT);
+    }
+    input.up(2);
+    G.watch = null;
+    run(G, 0.3, { passive: true });
+    return { res, chains, parries: (G.counts['player:parry'] || 0) - (c0['player:parry'] || 0), hurt: (G.counts['player:hurt'] || 0) - (c0['player:hurt'] || 0) };
+  };
+  for (const hold of [0.08, 0.15, 0.2]) {
+    const s = string(5, 0.45, hold);
+    out(`   5 blows 0.45 s apart, taps held ${hold} s: ${s.res.join(' ')} · chain ${s.chains.join(',')} · hurt ${s.hurt}`);
+    assert(s.res.length === 5 && s.res.every((x) => x === RESULT.PARRIED) && s.hurt === 0, `every blow of the string deflected (taps of ${hold} s)`);
+    assert(s.chains.join(',') === '1,2,3,4,5', `player:parry counts the chain up (${s.chains.join(',')})`);
+  }
+  // the HUD turns the parry call-out into "DEFLECT ×N"
+  const calls = ui.findAll((e) => e.classList?.contains('ab-call') && e.classList?.contains('on')).map((e) => e.textContent);
+  out('   call-outs:', JSON.stringify(calls));
+  assert(calls.some((t) => /DEFLECT ×5/.test(t)), 'combat:deflectChain → a "DEFLECT ×N" call-out');
+  // mashing is still not a parry: a press without a full re-arm (released < parryRearm before) fails
+  const m = string(2, 0.3, 0.2);
+  out(`   2 blows 0.3 s apart, taps held 0.2 s (no time to re-arm): ${m.res.join(' ')}`);
+  assert(m.res[0] === RESULT.PARRIED && m.res[1] !== RESULT.PARRIED, 'faster than the re-arm allows: the second press does not parry (anti-mash kept)');
+  // between parries in rhythm the guard lingers up, then eases down
+  assert(p.guardHold === 0 || p.guardHold < 1, 'guardHold eases off after the string');
   return G;
 }
 
@@ -1380,7 +1634,7 @@ async function scenarioTouch() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie, touch: scenarioTouch };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, win: scenarioWin, die: scenarioDie, touch: scenarioTouch };
 const runs = [];
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
