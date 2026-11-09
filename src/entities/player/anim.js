@@ -212,47 +212,51 @@ function kv3(p, i, t, k) {
   v3(p, i, k[e + 1], k[e + 2], k[e + 3]);
 }
 
-/** Idle / ready stance (2.4 s loop), the owner's six-view reference sheet (ADR-034): an easy stance,
- *  the feet a little wider than the hips, a slight contrapposto over the right leg. The long sword
- *  hangs one-handed at his RIGHT side, the hand beside the thigh, the blade angled out to the right
- *  and forward-down to the point just above the grass, so it reads from the front, both sides and
- *  the back (round 2's portrait diagonal ran across his front: from behind only its point showed).
- *  The free arm hangs beside the left hip; the head level, turned a touch toward the blade.
- *  Breathing + a slow weight sway; no steps. */
-// blade direction (body axes): out to his right, forward and ~37° below level: the drawn point
+/** Idle / ready stance (2.4 s loop), the owner's single-figure reference (ADR-036), seen from the
+ *  front: the chest square to the viewer, the weight on the LEFT leg under the hips, the armoured
+ *  right leg thrust out straight to his right and forward, toes out. The sword arm hangs nearly
+ *  straight beside the right hip, a little away from the body; the long sword lies in a LOW DIAGONAL
+ *  across his front: from the gauntlet forward and down past both legs to the point just above the
+ *  grass at his left, the pommel standing up-back behind the fist. The free hand hangs relaxed at
+ *  the left hip; the head is bowed and turned to his left, looking down along the blade.
+ *  Breathing + a slow weight sway; no steps.
+ *  (ADR-034 hung the blade straight down his right side for the rear view: a stiff A-pose carrying
+ *  a pole. From the 58° game camera this blade lies forward-left of his body, so most of its
+ *  length still shows from behind.) */
+// blade direction (body axes): to his left, a little forward and ~37° below level: the drawn point
 // (model.js DIM.drawnTip) rests just above the grass through the breathing
-const IDLE_SW = [-0.52, -0.6, 0.6];
+const IDLE_SW = [0.75, -0.58, 0.26];
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
-  p[P.bodyX] = -0.025 + 0.008 * sw; // the hips a little over the right (weight) leg
-  p[P.bodyY] = -0.02 + 0.004 * br;
+  p[P.bodyX] = 0.03 + 0.008 * sw; // the hips over the left (weight) leg
+  p[P.bodyY] = -0.05 + 0.004 * br; // sunk a little into the wide stance
   p[P.bodyZ] = 0.0;
   p[P.pitch] = 0;
   p[P.yaw] = 0;
   p[P.roll] = 0;
   p[P.pelvX] = 0;
-  p[P.pelvY] = 0.08;
-  p[P.pelvZ] = -0.05 - 0.015 * sw; // the weight leg's (right) hip rides a little higher
+  p[P.pelvY] = 0.14; // the hips turn with the forward right foot ...
+  p[P.pelvZ] = 0.04 + 0.015 * sw; // ... and the weight leg's (left) hip rides a little higher
   p[P.spX] = 0.04 + 0.01 * br;
-  p[P.spY] = -0.06;
+  p[P.spY] = -0.12; // ... the chest stays square to the front
   p[P.spZ] = -0.03 - 0.015 * sw;
-  p[P.hdX] = 0.08 - 0.03 * br;
-  p[P.hdY] = -0.12; // a touch toward the blade
-  p[P.hdZ] = 0.03 + 0.01 * sw;
-  v3(p, P.rH, -0.06, -0.52 + 0.006 * br, 0.08); // the sword hand beside the right thigh, the arm near straight
-  v3(p, P.rP, -0.9, -0.1, -0.4); // the elbow out and back
-  v3(p, P.lH, 0.05, -0.52, 0.02); // free arm hangs beside the left hip
+  p[P.hdX] = 0.2 - 0.04 * br; // bowed
+  p[P.hdY] = 0.34; // ... and turned to his left, looking down along the blade
+  p[P.hdZ] = 0.06 + 0.012 * sw;
+  v3(p, P.rH, -0.1, -0.485 + 0.006 * br, 0.08); // the grip beside the right hip, the arm near straight
+  v3(p, P.rP, -0.9, -0.1, -0.45); // the elbow out and back
+  v3(p, P.lH, 0.07, -0.51, 0.03); // the free arm hangs relaxed beside the left hip
   v3(p, P.lP, 0.6, -0.1, -0.8);
   v3(p, P.swD, IDLE_SW[0] + 0.01 * br, IDLE_SW[1], IDLE_SW[2] + 0.015 * sw);
-  v3(p, P.swF, 0.75, 0.0, 0.66); // the flat faces back-left / front-right: broad from behind and his right
-  v3(p, P.rF, -0.2, ANK, 0.06); // weight leg, a little out
-  v3(p, P.lF, 0.18, ANK, -0.06); // free leg, a little back
-  v3(p, P.rK, -0.3, 0.05, 1);
+  v3(p, P.swF, 0.12, 0.25, 0.96); // the flat faces forward-up: broad to a camera in front or above
+  v3(p, P.rF, -0.33, ANK, 0.2); // the right leg straight, out to his right and forward
+  v3(p, P.lF, 0.16, ANK, -0.1); // the weight leg under the hips, a little back
+  v3(p, P.rK, -0.5, 0.1, 1);
   v3(p, P.lK, 0.3, 0.05, 1);
   p[P.footFlat] = 0.95;
-  p[P.rFy] = -0.3; // toes turned out
-  p[P.lFy] = 0.25;
+  p[P.rFy] = -0.6; // toes turned out
+  p[P.lFy] = 0.4;
   p[P.rFf] = 1;
   p[P.lFf] = 1;
   p[P.flask] = 0;
@@ -2848,11 +2852,12 @@ export class HeroAnimator {
       ox /= ol;
       oz /= ol;
       const ph = this.time * (3 + 5 * Math.min(1, sp / 5)) + i * 2.1;
+      const so = S.out ?? STREAM_OUT; // a ribbon's own outward flare (model.js: the cape)
       for (let s = 0; s < 2; s++) {
         const c = st.segs[s], j = S.segs[s];
         const lag = STREAM_LAG[s] * (1 + 0.08 * sp);
         const wob = (0.08 + 0.12 * Math.min(1, sp / 4)) * Math.sin(ph + s * 1.4);
-        _v.set(ox * STREAM_OUT - vel.x * lag - oz * wob, -1 - vel.y * lag * 0.5 + Math.abs(wob) * 0.5, oz * STREAM_OUT - vel.z * lag + ox * wob);
+        _v.set(ox * so - vel.x * lag - oz * wob, -1 - vel.y * lag * 0.5 + Math.abs(wob) * 0.5, oz * so - vel.z * lag + ox * wob);
         _v.normalize().applyQuaternion(_qInv2.copy(_q0).invert());
         const tA = clamp(Math.atan2(-_v.z, -_v.y), -STREAM_A, STREAM_A);
         const tB = clamp(Math.asin(clamp(_v.x, -1, 1)), -STREAM_B, STREAM_B);

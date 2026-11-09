@@ -64,6 +64,13 @@ export function createSharedUniforms() {
     // unbroken: the blade), z = how much light its inner lines keep at the game camera (0 = a dark
     // seam: cloth; 1 = bright: armour), w = its fill gain there
     uHeroPartFill: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 0, 0, 1)) },
+    // ... and each part's SILHOUETTE ink, where it borders the world: rgb tint × a gain (the
+    // reference: a dim blue-lavender dotted outline round the cloth and hair, white round the armour)
+    uHeroPartRim: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },
+    // the hero's cel shading (materials with `heroArt`): the key light steps from shadow to lit
+    // between x and y (the reference's two-tone anime shading), z = how much of the step replaces
+    // the smooth falloff
+    uArtHeroCel: { value: new THREE.Vector3(0.3, 0.42, 0.75) },
   };
 }
 

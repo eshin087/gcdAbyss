@@ -164,6 +164,7 @@ function surfaceFeatures(o, cell) {
     uniforms.uArtSpec = { value: new THREE.Vector2(h.spec ?? 0, h.specPow ?? 20) };
     uniforms.uArtRim = { value: h.rim ?? 1 };
     uniforms.uArtGlowK = { value: h.glow ?? 0 };
+    uniforms.uArtSub = { value: h.sub ?? 0 }; // shade of a fold field's shadow side (model.js foldLines)
     uniforms.uArtPart = { value: part * 2 };
     // cloth folds: [bands per metre across aGUV x (rad), depth 0..1, wander down aGUV y]
     if (h.folds != null) {
@@ -263,7 +264,7 @@ const SHARED = [
 // shared by surface-glyph materials only (declared in their own shader, not COMMON_GLSL)
 const SURFACE_SHARED = ['uArtSolid', 'uArtHeroEdge', 'uArtHeroKey'];
 // ... and by the hero's ink-line art source only (`heroArt`)
-const HERO_ART_SHARED = ['uCamRight', 'uCamUp', 'uArtHeroLight', 'uArtHeroRim', 'uHeroSolid'];
+const HERO_ART_SHARED = ['uCamRight', 'uCamUp', 'uArtHeroLight', 'uArtHeroRim', 'uArtHeroCel', 'uHeroSolid'];
 
 /**
  * Geometry attributes required: position, normal, aCol (vec3 albedo, linear), aFlag (float),
@@ -521,11 +522,13 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec2 uArtSpec;
       uniform float uArtRim;
       uniform float uArtGlowK;
+      uniform float uArtSub;
       uniform float uArtPart;
       uniform vec3 uCamRight;
       uniform vec3 uCamUp;
       uniform vec4 uArtHeroLight;
       uniform vec3 uArtHeroRim;
+      uniform vec3 uArtHeroCel;
       uniform float uHeroSolid;
       varying float vPart;
 #endif
@@ -893,6 +896,8 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         // the part edges this material encodes in alpha (see HERO_ART).
         vec3 kd = normalize(V - uCamRight * 0.55 + uCamUp * 0.8);
         float kn = max(dot(n, kd), 0.0);
+        // cel shading: a lit tone and a shadow tone with a short step between them
+        kn = mix(kn, smoothstep(uArtHeroCel.x, uArtHeroCel.y, kn) * (0.55 + 0.45 * kn), uArtHeroCel.z);
         vec3 fillC = uArtFill * (uArtHeroLight.x + uArtHeroLight.y * kn + L * uArtHeroLight.z);
 #ifdef SG_HERO_FOLDS
         // cloth folds (the reference's coat: dark fold streaks running down it between lit ridges):
@@ -903,6 +908,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float fdk = smoothstep(0.45, 0.9, sin(fph) * 0.5 + 0.5) * (1.0 - smoothstep(8.0, 16.0, length(uCamPos - vW)));
         fillC *= 1.0 - uArtFold.y * fdk;
 #endif
+        // drawn folds (model.js foldLines): the valley side of a fold field's ink line falls in shadow;
+        // a plain sub-piece (aPart exactly 1) is left alone
+        fillC *= 1.0 - uArtSub * smoothstep(0.5, 0.8, vPart) * step(vPart, 0.95);
         // glints from a light well off the view axis (upper left), only where the surface curves
         // (normal change per metre: domes, rims, cylinders): the reference's streaks of white on
         // the armour, never a whole flat plate lit up
