@@ -42,7 +42,9 @@ export class TellEdges {
   }
 
   _onFlash(d) {
-    if (!d || typeof d !== 'object' || d.tell !== TELL.RED) return;
+    // self-announcing fire hazards (meteors, chase pillars: d.hazard) warn with their own ground rings;
+    // flashing the screen edge for each one made a meteor rain pulse the whole HUD
+    if (!d || typeof d !== 'object' || d.tell !== TELL.RED || d.hazard) return;
     this.redAt = num(this.game.time);
     this.rx = num(d.x, NaN);
     this.ry = num(d.y, 2);
