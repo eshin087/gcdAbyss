@@ -165,6 +165,7 @@ export function createPose() {
     twist: 0, // chest yaw toward a side
     bodyRate: 5,
     alt: 0, // altitude of the body (airborne, world m)
+    altRate: 12, // smoothing rate of alt (1/s): a dive sets it high so the body meets the ground on the impact
     airborne: 0, // 0..1 feet tucked
     rear: 0, // 0..1 front feet off the ground (rear-up: stomp windup)
     spread: [0, 0], // per wing (0 = +X/left, 1 = -X/right): 0 FOLD, 0.5 HALF, 1 SPREAD
@@ -231,6 +232,7 @@ export function resetPose(p) {
   p.twist = 0;
   p.bodyRate = 5;
   p.alt = 0;
+  p.altRate = 12;
   p.airborne = 0;
   p.rear = 0;
   p.spread[0] = p.spread[1] = 0;
@@ -500,7 +502,7 @@ export class Rig {
     s.lower = sm(s.lower, pose.lower, pose.bodyRate);
     s.twist = sm(s.twist, pose.twist, pose.bodyRate);
     const alt0 = s.alt;
-    s.alt = sm(s.alt, pose.alt, 12);
+    s.alt = sm(s.alt, pose.alt, pose.altRate);
     // the head goal is smoothed in world space: carry it with the body's climb / drop (leap) so the
     // neck doesn't stretch up behind a landing body
     this._dAlt = snap ? 0 : s.alt - alt0;

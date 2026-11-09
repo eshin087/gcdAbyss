@@ -33,7 +33,7 @@ export const FIRE_ATTACKS = {
   diveBomb: {
     label: 'Sky dive (dive bomb)', tell: TELL.RED, phase: 2,
     windup: 0.8, climb: 1.1, hover: 1.2, dive: 0.5, recovery: 1.4,
-    alt: 14, hoverBack: 8, // hover point: this far back from the target along the approach (m)
+    alt: 13, hoverBack: 9, // hovers this far beside the target (east / west, so it stays on screen)
     track: 2.6, lead: 0.35, // the target ring follows the player (exp rate /s, velocity lead s) until the dive
     radius: 7.5, damage: 34, burn: 1.0, knockback: 7,
     minDist: 9,
@@ -45,7 +45,7 @@ export const FIRE_ATTACKS = {
     label: 'Hover barrage', tell: TELL.RED, phase: 2,
     windup: 0.8, rise: 1.0, aim: 0.4, interval: 0.5, land: 1.2,
     shots: [3, 5], // random count, inclusive
-    alt: 8, standoff: 13, // hovers this far (horizontally) from the player
+    alt: 8, standoff: 13, // hovers this far beside the player (east / west, so it stays on screen)
     lead: 0.55, // aim lead (s of the player's velocity)
     radius: 3.2, damage: 15, burn: 1.2, knockback: 2.5, maxHits: 2,
     minDist: 8,

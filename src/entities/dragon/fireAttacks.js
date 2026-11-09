@@ -319,6 +319,7 @@ const diveBomb = {
     a.target = V().copy(d.sense.pos);
     a.target.y = 0;
     a.p0 = V().copy(d.position);
+    a.side = d.position.x >= d.sense.pos.x ? 1 : -1; // it hovers on the side it came from
     a.hov = V().copy(d.position);
     a.dv0 = V();
     a.flapCos = 1;
@@ -338,19 +339,18 @@ const diveBomb = {
     inBound(a.target, d.bound);
     a.target.y = 0;
   },
-  /** Hover point: DB.hoverBack m short of the target on the approach from the wyrm's start. */
+  /**
+   * Hover point: `hoverBack` m beside the target, on the side it came from. The game camera looks north
+   * from ~58° up, so altitude lifts a flier up-screen (~0.53 m per m up against ~0.85 per m north):
+   * hovering ~14 m up over a point north of the hero put it off the top of the screen, and over a point
+   * on the camera side its raised wings filled the screen and hid the ring. Beside him it hangs up and
+   * to one side of the hero on screen, with the ring in view, and dives diagonally onto him.
+   */
   hoverPoint(d, a, out) {
-    let dx = a.target.x - a.p0.x, dz = a.target.z - a.p0.z;
-    const l = Math.hypot(dx, dz);
-    if (l < 1e-3) {
-      dx = d.fwd.x;
-      dz = d.fwd.z;
-    } else {
-      dx /= l;
-      dz /= l;
-    }
-    const back = Math.min(DB.hoverBack, Math.max(2, l * 0.6));
-    out.set(a.target.x - dx * back, 0, a.target.z - dz * back);
+    out.set(a.target.x + a.side * DB.hoverBack, 0, a.target.z - 1);
+    inBound(out, d.bound);
+    // pinned against the bound on its side: hover on the other side instead
+    if (Math.abs(out.x - a.target.x) < DB.hoverBack * 0.5) out.set(a.target.x - a.side * DB.hoverBack, 0, a.target.z - 1);
     return inBound(out, d.bound);
   },
   enter(d, a, phase) {
@@ -423,6 +423,7 @@ const diveBomb = {
       d.position.z = lerp(a.p0.z, a.hov.z, easeInOutSine(k));
       fly(pose, DB.alt * e, 0.95, 2.2);
       pose.hover = smoothstep(0.3, 1, k);
+      pose.glide = 0.45 * k; // (the beat's span a little lower: the raised sails reached the camera)
       pose.pitch = -0.25 - 0.15 * k;
       pose.head = pose.headTarget.copy(pt.neckBase).addScaledVector(d.fwd, 2.0 * S);
       pose.head.y += 0.6 * S;
@@ -435,6 +436,7 @@ const diveBomb = {
       d.position.z += (_b.z - d.position.z) * kk;
       fly(pose, DB.alt + 0.5 * Math.sin(a.t * 3.1), 0.95, 2.0);
       pose.hover = 1;
+      pose.glide = 0.45;
       pose.pitch = -0.42;
       pose.head = pose.headTarget.copy(pt.neckBase).addScaledVector(d.fwd, 2.3 * S);
       pose.head.y -= 0.3 * S;
@@ -442,11 +444,14 @@ const diveBomb = {
       pose.jaw = 0.5 + 0.3 * k;
       d.throat = 0.6 * k;
     } else {
-      // the dive: wings swept back, nose down, accelerating onto the ring; the legs reach for it
-      const e = easeInCubic(k) * 0.65 + k * 0.35;
+      // the dive: wings swept back, nose down, accelerating onto the ring; the legs reach for it. The
+      // body's altitude follows exactly (altRate) and meets the ground a moment before the impact
+      const kk = Math.min(1, k / 0.9);
+      const e = easeInCubic(kk) * 0.65 + kk * 0.35;
       d.position.x = lerp(a.dv0.x, a.target.x, e);
       d.position.z = lerp(a.dv0.z, a.target.z, e);
       fly(pose, a.alt0 * (1 - e), 0, 2);
+      pose.altRate = 60;
       pose.spread[0] = pose.spread[1] = 0.55;
       pose.spreadRate = 10;
       pose.dive = 1;
@@ -496,15 +501,18 @@ const hoverBarrage = {
     a.flapCos = 1;
     a.hov = V().copy(d.position);
     a.p0 = V().copy(d.position);
+    a.side = d.position.x >= d.sense.pos.x ? 1 : -1;
   },
-  /** Hover spot: `standoff` m from the hero, on the wyrm's side of him. */
+  /**
+   * Hover spot: `standoff` m beside the hero (east or west, the side it came from) and a little toward
+   * the camera, so the hovering wyrm and its shells' arcs stay on screen (see diveBomb.hoverPoint).
+   */
   hoverPoint(d, a, out) {
     const s = d.sense;
-    let dx = d.position.x - s.pos.x, dz = d.position.z - s.pos.z;
-    const l = Math.hypot(dx, dz) || 1;
-    dx /= l;
-    dz /= l;
-    out.set(s.pos.x + dx * HB.standoff, 0, s.pos.z + dz * HB.standoff);
+    out.set(s.pos.x + a.side * HB.standoff, 0, s.pos.z + 1.5);
+    inBound(out, d.bound);
+    // pinned against the bound on its side: hover on the other side instead
+    if (Math.abs(out.x - s.pos.x) < HB.standoff * 0.5) out.set(s.pos.x - a.side * HB.standoff, 0, s.pos.z + 1.5);
     return inBound(out, d.bound);
   },
   enter(d, a, phase) {
@@ -1100,9 +1108,11 @@ const nova = {
       pose.headOffset.x += j;
       d.throat = 1;
       d.glowTarget = a.glow0 + 1.3 * k;
-      d.flash = Math.max(d.flash ?? 0, 0.1 + 0.45 * k * k);
+      d.flash = Math.max(d.flash ?? 0, 0.15 + 0.7 * k * k); // white-hot (the hit-flash white)
       const c = pt.chest;
       d.fx.novaCharge(dt, c.x, c.y, c.z, k);
+      // the blast radius in red, its inner ring closing in on the wyrm: a countdown to the blast
+      d.fx.hzRing(d.fx.holdLife(a, dt), a.cx, a.cz, NV.radius, k, k > 1 - TUNING.flashLead / Math.max(0.5, a.dur));
       if (a.light) {
         a.light.set(c.x, c.y, c.z);
         a.light.intensity = 1 + 7 * k * k;

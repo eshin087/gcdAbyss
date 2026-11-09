@@ -55,7 +55,7 @@ function blank(i) {
     count: 0, done: 0, first: 0, span: 0, warn: 0, warnLed: 0, ledEvery: 0, lo: 0, hi: 0, every: 0, until: 0,
     lead: 0, linkFirst: false,
     // fx scratch (accumulators, held sprites, pillars burst bitmask, lights)
-    hold: 0, acc: 0, acc2: 0, acc3: 0, seed: 0, mask: 0,
+    hold: 0, acc: 0, acc2: 0, acc3: 0, acc4: 0, seed: 0, mask: 0,
     l0: null, l1: null, l2: null,
   };
 }
@@ -521,7 +521,7 @@ export class Hazards {
     const b0 = clamp((run - h.linger) * h.speed, 0, h.len); // start of the part still burning
     const life = fx.holdLife(h, dt);
     // red warning ahead of the front; flames behind it
-    if (f < h.len) fx.stripWarn(life, h, f, clamp(1 - Math.max(0, -run) / Math.max(0.3, h.impact), 0, 1));
+    if (f < h.len) fx.stripWarn(life, h, dt, f, clamp(1 - Math.max(0, -run) / Math.max(0.3, h.impact), 0, 1));
     if (run > 0) fx.stripFire(h, dt, b0, f, run < h.len / h.speed);
     const ex = px - h.ax, ez = pz - h.az;
     const s = ex * h.dx + ez * h.dz;

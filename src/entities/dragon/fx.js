@@ -25,15 +25,16 @@ const PARRY_WHITE = [3.4, 3.2, 2.8];
 const PARRY_GOLD = [3.4, 2.3, 0.75];
 const PARRY_END = [0.8, 0.5, 0.2];
 const PARRY_LIGHT = [1, 0.88, 0.62];
-// red warning ring: '!' marks between dots
+// red warning ring: '!' marks between dots (bullets: a middle dot is ~1 px at the 36 m game camera)
 const RING_MARK = '!';
-const RING_DOT = '·';
+const RING_DOT = '•';
 const rand = (a, b) => a + Math.random() * (b - a);
 // scorch + ground flames along the breath: [distance from the mouth, radius] (v0.1 metres)
 const SCORCH_STEPS = [[4, 1.4], [6.5, 1.7], [9, 2.0], [11.5, 2.2]];
 const tellStyle = (tell) => TELL_STYLE[tell] ?? TELL_STYLE.normal;
 // fire hazards / spells / flight (dragon-fire): atlas glyphs and linear HDR colours
-const HZ_DOT = '·';
+// (the warning dots are bullets: a middle dot is ~1 px at the 36 m game camera)
+const HZ_DOT = '•';
 const HZ_MARK = '!';
 const HZ_CROSS = '+';
 const HZ_RISE = '^';
@@ -51,15 +52,20 @@ const LAVA_DROPS = '.o•';
 const LAVA_SPLASH = '~';
 const EMBER_STAR = ".'*•";
 const SMOKE_GLYPHS = '%&#@';
+const WARN_SPARK = ".'•";
 const RED = TELL_STYLE.red.color;
 const HOT = [4.6, 3.5, 1.5]; // white-yellow fire core
 const HOT_END = [2.2, 0.45, 0.06];
 const FLAME = [3.4, 1.4, 0.28]; // orange
+// dense fire (strips, walls, columns): many glyphs overlap there, so they burn less hot or the
+// additive stack blows out into a white smear with no glyphs left in it
+const SHEET_HOT = [2.7, 1.75, 0.55];
+const SHEET = [2.2, 0.8, 0.14];
 const DARK = [0.8, 0.08, 0.012]; // a dying flame
 const EMBER_COL = [3.0, 1.0, 0.18];
 const WHITE_HOT = [6.0, 5.2, 4.0];
-const LAVA_HOT = [5.4, 3.4, 1.2];
-const LAVA = [3.8, 1.25, 0.2];
+const LAVA_HOT = [3.3, 1.9, 0.55];
+const LAVA = [2.5, 0.8, 0.13];
 const LAVA_END = [1.1, 0.12, 0.02];
 const SMOKE = [0.045, 0.04, 0.036];
 const ROCK_COL = [0.17, 0.14, 0.12];
@@ -474,7 +480,7 @@ export class DragonFx {
         const mark = i % 6 === 0;
         o.x = x + Math.cos(a) * r;
         o.z = z + Math.sin(a) * r;
-        o.size = o.sizeEnd = mark ? 0.62 : 0.4;
+        o.size = o.sizeEnd = mark ? 0.62 : 0.46;
         o.glyph = mark ? RING_MARK : RING_DOT;
         pool.spawn(o);
       }
@@ -755,28 +761,28 @@ export class DragonFx {
     const pool = this.add;
     if (!life || !pool || !Number.isFinite(x + z + r)) return;
     const t = this.game.time ?? 0;
-    const b = (0.5 + 0.55 * k) * (hot ? 1.45 : 1) * (0.85 + 0.15 * Math.sin(t * (hot ? 32 : 10 + 10 * k)));
-    const n = Math.max(14, Math.min(56, Math.round((Math.PI * 2 * r) / 0.8)));
-    const o = this._rec(x, 0.35, z, life, 0.4, 0.4, HZ_DOT);
+    const b = (0.55 + 0.55 * k) * (hot ? 1.45 : 1) * (0.85 + 0.15 * Math.sin(t * (hot ? 32 : 10 + 10 * k)));
+    const n = Math.max(14, Math.min(96, Math.round((Math.PI * 2 * r) / 0.9)));
+    const o = this._rec(x, 0.35, z, life, 0.5, 0.5, HZ_DOT);
     o.alphaEnd = 1;
     this._col(RED, b, RED, b);
     const a0 = t * 0.45;
     for (let i = 0; i < n; i++) {
       const a = a0 + (i / n) * Math.PI * 2;
-      const mark = i % 5 === 0;
+      const mark = i % 4 === 0;
       o.x = x + Math.cos(a) * r;
       o.z = z + Math.sin(a) * r;
-      o.size = o.sizeEnd = mark ? 0.58 : 0.4;
+      o.size = o.sizeEnd = mark ? 0.72 : 0.5;
       o.glyph = mark ? HZ_MARK : HZ_DOT;
       pool.spawn(o);
     }
     const ri = r * (1 - k);
     if (ri > 0.35) {
       const m = Math.max(8, Math.round(n * (ri / r) * 0.7));
-      const kb = b * (style ? 0.35 : 0.7);
+      const kb = b * (style ? 0.45 : 0.6);
       this._col(style ? LAVA : RED, kb, style ? LAVA : RED, kb);
       o.glyph = style ? HZ_RISE : HZ_DOT;
-      o.size = o.sizeEnd = 0.36;
+      o.size = o.sizeEnd = 0.42;
       for (let i = 0; i < m; i++) {
         const a = -a0 * 1.6 + (i / m) * Math.PI * 2;
         o.x = x + Math.cos(a) * ri;
@@ -788,7 +794,7 @@ export class DragonFx {
     o.x = x;
     o.z = z;
     o.glyph = HZ_CROSS;
-    o.size = o.sizeEnd = 0.55 + 0.3 * k;
+    o.size = o.sizeEnd = 0.65 + 0.35 * k;
     pool.spawn(o);
   }
 
@@ -976,17 +982,18 @@ export class DragonFx {
     if (!Number.isFinite(x + z + r)) return;
     const add = this.add, g = this.game;
     let o;
-    for (let i = 0; i < 34; i++) {
+    // the column: glyphs shot up at spread speeds, so they string out along it instead of stacking
+    for (let i = 0; i < 18; i++) {
       const a = Math.random() * Math.PI * 2, rr = r * 0.5 * Math.sqrt(Math.random());
-      o = this._rec(x + Math.cos(a) * rr, rand(0.2, 1.5), z + Math.sin(a) * rr, rand(0.45, 0.8), rand(1.0, 1.6), rand(0.3, 0.6), LAVA_COLUMN);
+      o = this._rec(x + Math.cos(a) * rr, rand(0.2, 1.2), z + Math.sin(a) * rr, rand(0.5, 0.85), rand(0.95, 1.35), rand(0.3, 0.6), LAVA_COLUMN);
       o.vx = Math.cos(a) * rand(0, 1.5);
-      o.vy = rand(13, 24);
+      o.vy = rand(9, 26);
       o.vz = Math.sin(a) * rand(0, 1.5);
       o.gravity = -16;
       o.drag = 0.6;
-      o.stretch = 1.3;
+      o.stretch = 0.8;
       o.flicker = 0.25;
-      this._col(Math.random() < 0.45 ? LAVA_HOT : LAVA, 1.1, LAVA_END, 1);
+      this._col(Math.random() < 0.35 ? LAVA_HOT : LAVA, 1, LAVA_END, 1);
       this._spawn(add, o);
     }
     for (let i = 0; i < 14; i++) {
@@ -1018,17 +1025,17 @@ export class DragonFx {
   /** The erupting column (k 1 -> 0 as it dies down). */
   pillarBurn(h, dt, x, z, r, k) {
     if (k <= 0) return;
-    h.acc3 += dt * 150 * k;
-    let m = Math.min(12, Math.floor(h.acc3));
+    h.acc3 += dt * 55 * k;
+    let m = Math.min(6, Math.floor(h.acc3));
     h.acc3 -= m;
     while (m-- > 0) {
       const a = Math.random() * Math.PI * 2, rr = r * 0.45 * Math.sqrt(Math.random());
-      const o = this._rec(x + Math.cos(a) * rr, rand(0.1, 0.8), z + Math.sin(a) * rr, rand(0.3, 0.55), rand(0.9, 1.4), rand(0.25, 0.5), LAVA_COLUMN);
-      o.vy = rand(8, 18) * (0.5 + 0.5 * k);
+      const o = this._rec(x + Math.cos(a) * rr, rand(0.1, 0.8), z + Math.sin(a) * rr, rand(0.35, 0.6), rand(0.85, 1.25), rand(0.25, 0.5), LAVA_COLUMN);
+      o.vy = rand(7, 19) * (0.5 + 0.5 * k);
       o.gravity = -10;
-      o.stretch = 1.1;
+      o.stretch = 0.7;
       o.flicker = 0.3;
-      this._col(Math.random() < 0.4 ? LAVA_HOT : LAVA, 0.8 + 0.4 * k, LAVA_END, 0.8);
+      this._col(Math.random() < 0.3 ? LAVA_HOT : LAVA, 0.75 + 0.3 * k, LAVA_END, 0.8);
       this._spawn(this.add, o);
     }
   }
@@ -1039,37 +1046,54 @@ export class DragonFx {
   }
 
   /** Red warning ahead of a strip's fire front: dotted edges and '>' chevrons from f to its end. */
-  stripWarn(life, h, f, k) {
+  stripWarn(life, h, dt, f, k) {
     const pool = this.add;
     if (!life || !pool) return;
     const t = this.game.time ?? 0;
     const hw = h.w / 2, dx = h.dx, dz = h.dz, qx = -dz, qz = dx;
-    const o = this._rec(0, 0.35, 0, life, 0.4, 0.4, HZ_DOT);
+    const o = this._rec(0, 0.35, 0, life, 0.5, 0.5, HZ_DOT);
     o.alphaEnd = 1;
     const rot = this._screenRot(dx, 0, dz);
-    const step = 1.1;
+    const step = 0.9;
     for (let i = Math.ceil(f / step); i * step <= h.len; i++) {
       const s = i * step;
       const near = clamp01(1 - (s - f) / 7);
-      const b = (0.45 + 0.45 * k + 0.6 * near) * (0.85 + 0.15 * Math.sin(t * 12 - s * 0.6));
+      const b = (0.55 + 0.45 * k + 0.6 * near) * (0.85 + 0.15 * Math.sin(t * 12 - s * 0.6));
       this._col(RED, b, RED, b);
       const cx = h.ax + dx * s, cz = h.az + dz * s;
-      o.glyph = HZ_DOT;
+      o.glyph = i % 4 === 0 ? HZ_MARK : HZ_DOT;
       o.rot = 0;
-      o.size = o.sizeEnd = 0.4;
+      o.size = o.sizeEnd = i % 4 === 0 ? 0.7 : 0.5;
       o.x = cx + qx * hw;
       o.z = cz + qz * hw;
       pool.spawn(o);
       o.x = cx - qx * hw;
       o.z = cz - qz * hw;
       pool.spawn(o);
-      if (i % 3 === 0) {
+      if (i % 2 === 0) {
+        // the stream's path: chevrons down the middle, pointing where the fire will run
         o.glyph = CHEVRON;
         o.rot = rot;
-        o.size = o.sizeEnd = 0.62;
+        o.size = o.sizeEnd = 0.85;
         o.x = cx;
         o.z = cz;
         pool.spawn(o);
+      }
+    }
+    // faint red sparks over the strip ahead of the front: the whole lane reads as dangerous
+    const L = h.len - f;
+    if (L > 0.5) {
+      h.acc4 += dt * Math.min(60, L * h.w * 0.5) * (0.6 + 0.8 * k);
+      let m = Math.min(10, Math.floor(h.acc4));
+      h.acc4 -= m;
+      while (m-- > 0) {
+        const s = f + Math.random() * L, l = (Math.random() * 2 - 1) * hw;
+        const p = this._rec(h.ax + dx * s + qx * l, 0.25, h.az + dz * s + qz * l, rand(0.25, 0.45), 0.32, 0.12, WARN_SPARK);
+        p.vy = rand(0.4, 1.2);
+        p.flicker = 0.4;
+        const bb = 0.35 + 0.5 * k;
+        this._col(RED, bb, RED, bb);
+        this._spawn(pool, p);
       }
     }
   }
@@ -1080,20 +1104,20 @@ export class DragonFx {
     const L = f - b0;
     if (!(L > 0.01)) return;
     const hw = h.w / 2, dx = h.dx, dz = h.dz, qx = -dz, qz = dx;
-    h.acc += dt * Math.min(520, L * h.w * 3.2);
+    h.acc += dt * Math.min(480, L * h.w * 3.4);
     let m = Math.min(16, Math.floor(h.acc));
     h.acc -= m;
     while (m-- > 0) {
       const s = b0 + Math.random() * L, l = (Math.random() * 2 - 1) * hw;
       const young = clamp01(1 - (f - s) / 6);
-      const o = this._rec(h.ax + dx * s + qx * l, 0.2, h.az + dz * s + qz * l, rand(0.35, 0.65), rand(0.55, 0.95) * (1 + 0.5 * young), 0.12, FIRE_TALL);
+      const o = this._rec(h.ax + dx * s + qx * l, 0.2, h.az + dz * s + qz * l, rand(0.35, 0.65), rand(0.6, 1.0) * (1 + 0.35 * young), 0.12, FIRE_TALL);
       o.vy = rand(1.5, 3.5) * (1 + young);
       o.vx = rand(-0.4, 0.4);
       o.vz = rand(-0.4, 0.4);
       o.drag = 1.2;
       o.flicker = 0.4;
       o.spin = rand(-2, 2);
-      this._col(Math.random() < 0.3 + 0.4 * young ? HOT : FLAME, 1, DARK, 1);
+      this._col(Math.random() < 0.25 + 0.35 * young ? SHEET_HOT : SHEET, 1, DARK, 1);
       this._spawn(add, o);
     }
     if (front) {
@@ -1102,15 +1126,15 @@ export class DragonFx {
       if (h.acc2 <= 0) {
         h.acc2 = 0.07;
         this.game.world?.scorch?.burnCircle?.(fx, fz, hw * 1.1, 0.16, 1);
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 3; i++) {
           const l = (Math.random() * 2 - 1) * hw;
-          const o = this._rec(fx + qx * l, 0.3, fz + qz * l, rand(0.4, 0.7), rand(1.1, 1.7), 0.2, FIRE);
+          const o = this._rec(fx + qx * l, 0.3, fz + qz * l, rand(0.4, 0.7), rand(1.0, 1.5), 0.2, FIRE);
           o.vx = dx * rand(1, 4);
           o.vy = rand(3, 7);
           o.vz = dz * rand(1, 4);
           o.drag = 1.6;
           o.flicker = 0.3;
-          this._col(HOT, 1.15, DARK, 1);
+          this._col(SHEET_HOT, 1.1, DARK, 1);
           this._spawn(add, o);
         }
       }
@@ -1134,24 +1158,26 @@ export class DragonFx {
     const pool = this.add;
     if (!life || !pool) return;
     const t = this.game.time ?? 0;
-    const o = this._rec(0, 0.35, 0, life, 0.45, 0.45, HZ_DOT);
+    const o = this._rec(0, 0.35, 0, life, 0.5, 0.5, HZ_DOT);
     o.alphaEnd = 1;
-    const b = (0.55 + 0.6 * k) * (0.85 + 0.15 * Math.sin(t * (10 + 14 * k)));
+    const b = (0.6 + 0.6 * k) * (0.85 + 0.15 * Math.sin(t * (10 + 14 * k)));
     this._col(RED, b, RED, b);
-    let n = Math.max(16, Math.min(48, Math.round((Math.PI * 2 * h.r0) / 0.55)));
+    // where it ignites: drawn round the body's footprint (r0 itself lies under the belly)
+    const rw = Math.max(h.r0, 6.5);
+    let n = Math.max(16, Math.min(64, Math.round((Math.PI * 2 * rw) / 0.8)));
     for (let i = 0; i < n; i++) {
       const a = t * 0.8 + (i / n) * Math.PI * 2;
-      o.x = h.x + Math.cos(a) * h.r0;
-      o.z = h.z + Math.sin(a) * h.r0;
+      o.x = h.x + Math.cos(a) * rw;
+      o.z = h.z + Math.sin(a) * rw;
       o.glyph = i % 4 === 0 ? HZ_MARK : HZ_DOT;
-      o.size = o.sizeEnd = i % 4 === 0 ? 0.6 : 0.45;
+      o.size = o.sizeEnd = i % 4 === 0 ? 0.72 : 0.5;
       pool.spawn(o);
     }
-    const kb = 0.35 + 0.35 * k;
+    const kb = 0.4 + 0.4 * k;
     this._col(RED, kb, RED, kb);
-    n = Math.max(24, Math.min(72, Math.round((Math.PI * 2 * h.r1) / 1.6)));
+    n = Math.max(24, Math.min(110, Math.round((Math.PI * 2 * h.r1) / 1.2)));
     o.glyph = HZ_DOT;
-    o.size = o.sizeEnd = 0.38;
+    o.size = o.sizeEnd = 0.45;
     for (let i = 0; i < n; i++) {
       const a = -t * 0.15 + (i / n) * Math.PI * 2;
       o.x = h.x + Math.cos(a) * h.r1;
@@ -1165,7 +1191,7 @@ export class DragonFx {
     const add = this.add;
     if (!add || !(k > 0)) return;
     const hw = h.w / 2;
-    h.acc += dt * Math.min(1100, Math.PI * 2 * r * 9) * k;
+    h.acc += dt * Math.min(1300, Math.PI * 2 * r * 11) * k;
     let m = Math.min(30, Math.floor(h.acc));
     h.acc -= m;
     while (m-- > 0) {
@@ -1178,13 +1204,13 @@ export class DragonFx {
       o.drag = 2.2;
       o.flicker = 0.4;
       o.spin = rand(-2, 2);
-      this._col(Math.random() < 0.45 ? HOT : FLAME, k, DARK, 1);
+      this._col(Math.random() < 0.4 ? SHEET_HOT : SHEET, k, DARK, 1);
       this._spawn(add, o);
     }
     if (life && k > 0.5) {
       const re = r + hw + 0.7;
-      const n = Math.max(24, Math.min(72, Math.round((Math.PI * 2 * re) / 1.1)));
-      const o = this._rec(0, 0.3, 0, life, 0.42, 0.42, HZ_DOT);
+      const n = Math.max(24, Math.min(110, Math.round((Math.PI * 2 * re) / 1.1)));
+      const o = this._rec(0, 0.3, 0, life, 0.45, 0.45, HZ_DOT);
       o.alphaEnd = 1;
       this._col(RED, 1.1, RED, 1.1);
       for (let i = 0; i < n; i++) {
@@ -1211,22 +1237,22 @@ export class DragonFx {
     if (!life || !pool) return;
     const t = this.game.time ?? 0;
     const qx = -h.dz, qz = h.dx, half = h.len / 2;
-    const o = this._rec(0, 0.35, 0, life, 0.45, 0.45, HZ_DOT);
+    const o = this._rec(0, 0.35, 0, life, 0.5, 0.5, HZ_DOT);
     o.alphaEnd = 1;
-    const b = (0.55 + 0.6 * k) * (0.85 + 0.15 * Math.sin(t * (10 + 14 * k)));
+    const b = (0.6 + 0.6 * k) * (0.85 + 0.15 * Math.sin(t * (10 + 14 * k)));
     this._col(RED, b, RED, b);
     let i = 0;
-    for (let l = -half; l <= half; l += 1.0, i++) {
+    for (let l = -half; l <= half; l += 0.9, i++) {
       o.x = h.x + qx * l;
       o.z = h.z + qz * l;
       o.glyph = i % 4 === 0 ? HZ_MARK : HZ_DOT;
-      o.size = o.sizeEnd = i % 4 === 0 ? 0.62 : 0.45;
+      o.size = o.sizeEnd = i % 4 === 0 ? 0.75 : 0.5;
       pool.spawn(o);
     }
     o.rot = this._screenRot(h.dx, 0, h.dz);
     o.glyph = CHEVRON;
-    o.size = o.sizeEnd = 0.6;
-    const bb = 0.3 + 0.4 * k;
+    o.size = o.sizeEnd = 0.8;
+    const bb = 0.35 + 0.45 * k;
     for (let s = 3; s <= h.dist; s += 4) {
       const w = bb * (0.6 + 0.4 * Math.sin(t * 6 - s * 0.35));
       this._col(RED, w, RED, w);
@@ -1243,7 +1269,7 @@ export class DragonFx {
     const add = this.add;
     if (!add || !(k > 0)) return;
     const qx = -h.dz, qz = h.dx, half = h.len / 2, hw = h.w / 2;
-    h.acc += dt * Math.min(900, h.len * 18) * k;
+    h.acc += dt * Math.min(640, h.len * 14) * k;
     let m = Math.min(26, Math.floor(h.acc));
     h.acc -= m;
     while (m-- > 0) {
@@ -1256,11 +1282,11 @@ export class DragonFx {
       o.flicker = 0.35;
       o.stretch = 0.5;
       o.spin = rand(-1.5, 1.5);
-      this._col(Math.random() < 0.5 ? HOT : FLAME, k, DARK, 1);
+      this._col(Math.random() < 0.35 ? SHEET_HOT : SHEET, k, DARK, 1);
       this._spawn(add, o);
     }
     if (life && k > 0.5) {
-      const o = this._rec(0, 0.3, 0, life, 0.42, 0.42, HZ_DOT);
+      const o = this._rec(0, 0.3, 0, life, 0.45, 0.45, HZ_DOT);
       o.alphaEnd = 1;
       this._col(RED, 1.1, RED, 1.1);
       const ex = cx + h.dx * (hw + 0.8), ez = cz + h.dz * (hw + 0.8);
@@ -1274,7 +1300,10 @@ export class DragonFx {
     if (h.acc2 <= 0 && k > 0.5) {
       h.acc2 = 0.12;
       const sc = this.game.world?.scorch;
-      for (let l = -half + 2; l <= half; l += 5) sc?.burnCircle?.(cx + qx * l, cz + qz * l, hw * 1.5, 0.15, 0.9);
+      for (let i = 0; i < 9; i++) {
+        const l = (Math.random() * 2 - 1) * half;
+        sc?.burnCircle?.(cx + qx * l, cz + qz * l, hw * 1.6, 0.15, 0.9);
+      }
     }
   }
 
@@ -1300,12 +1329,12 @@ export class DragonFx {
     const L = Math.hypot(dx, dy, dz) || 1;
     const ux = dx / L, uy = dy / L, uz = dz / L;
     const sp = 34;
-    this.skyAcc += dt * 190;
-    let n = Math.min(12, Math.floor(this.skyAcc));
+    this.skyAcc += dt * 130;
+    let n = Math.min(10, Math.floor(this.skyAcc));
     this.skyAcc -= n;
     while (n-- > 0) {
-      const j = 0.09;
-      const o = this._rec(mouth.x + rand(-0.15, 0.15), mouth.y + rand(-0.15, 0.15), mouth.z + rand(-0.15, 0.15), (L / sp) * rand(0.9, 1.12), rand(0.5, 0.75), rand(2.2, 3.0), FIRE);
+      const j = 0.08;
+      const o = this._rec(mouth.x + rand(-0.15, 0.15), mouth.y + rand(-0.15, 0.15), mouth.z + rand(-0.15, 0.15), (L / sp) * rand(0.85, 1.1), rand(0.5, 0.7), rand(1.5, 2.1), FIRE);
       o.vx = (ux + rand(-j, j)) * sp;
       o.vy = (uy + rand(-j, j)) * sp;
       o.vz = (uz + rand(-j, j)) * sp;
@@ -1314,8 +1343,8 @@ export class DragonFx {
       o.rot = rand(0, 6.28);
       o.flicker = 0.25;
       o.stretch = 0.25;
-      if (Math.random() < 0.5) this._col(HOT, 1, HOT_END, 1);
-      else this._col(FLAME, 1, DARK, 1);
+      if (Math.random() < 0.4) this._col(HOT, 0.85, HOT_END, 1);
+      else this._col(FLAME, 0.9, DARK, 1);
       this._spawn(this.add, o);
     }
     const L0 = this.skyLights;
@@ -1386,7 +1415,7 @@ export class DragonFx {
       const a = Math.random() * Math.PI * 2, rr = rand(9, 18);
       const x = cx + Math.cos(a) * rr, z = cz + Math.sin(a) * rr, y = rand(0.3, 10);
       const T = rand(0.5, 0.75);
-      const o = this._rec(x, y, z, T * 0.97, rand(0.3, 0.5), 0.12, EMBER_STAR);
+      const o = this._rec(x, y, z, T * 0.97, rand(0.45, 0.75), 0.15, EMBER_STAR);
       o.vx = (cx - x) / T;
       o.vy = (cy - y) / T;
       o.vz = (cz - z) / T;
@@ -1424,13 +1453,13 @@ export class DragonFx {
   novaBlast(x, y, z, r) {
     if (!Number.isFinite(x + y + z + r)) return;
     const add = this.add, g = this.game;
-    let o = this._rec(x, y, z, 0.3, 9, 2.5, METEOR_CORE);
-    this._col(WHITE_HOT, 1.4, HOT, 0.8);
+    let o = this._rec(x, y, z, 0.24, 5.5, 2.0, METEOR_CORE);
+    this._col(WHITE_HOT, 1.1, HOT, 0.6);
     this._spawn(add, o);
     this._shock(x, z, 2, r, 0.3, 56, 0.6, WHITE_HOT, 1);
     this._shock(x, z, 2, r, 0.4, 56, 1.8, FLAME, 1.1);
     this._shock(x, z, 2, r, 0.52, 56, 3.2, RED, 1);
-    for (let i = 0; i < 150; i++) {
+    for (let i = 0; i < 130; i++) {
       const a = Math.random() * Math.PI * 2, sp = rand(10, 36);
       o = this._rec(x + Math.cos(a) * 2, rand(0.4, 3), z + Math.sin(a) * 2, rand(0.45, 0.95), rand(0.7, 1.3), 0.2, FIRE);
       o.vx = Math.cos(a) * sp;
@@ -1440,7 +1469,7 @@ export class DragonFx {
       o.gravity = -2;
       o.spin = rand(-5, 5);
       o.flicker = 0.3;
-      this._col(Math.random() < 0.5 ? HOT : FLAME, 1.1, DARK, 1);
+      this._col(Math.random() < 0.4 ? HOT : FLAME, 0.95, DARK, 1);
       this._spawn(add, o);
     }
     for (let i = 0; i < 60; i++) {
@@ -1455,7 +1484,7 @@ export class DragonFx {
       this._spawn(add, o);
     }
     this.dustRing(x, z, 3 * S, 48, 1.6);
-    g.world?.scorch?.burnCircle?.(x, z, r * 0.85, 0.32, 1);
+    g.world?.scorch?.burnCircle?.(x, z, r * 0.85, 0.32, 0.6);
     g.world?.gust?.(x, z, 2, r * 1.4);
     this._light({ x, y: 4, z, color: [1, 0.85, 0.6], intensity: 14, radius: 34, life: 0.55, fade: 0.45 });
     this._light({ x, y: 2, z, color: [1, 0.45, 0.12], intensity: 4, radius: 22, life: 1.8, fade: 1.4, flicker: 0.4 });
