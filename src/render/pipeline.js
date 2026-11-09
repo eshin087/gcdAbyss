@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
 import { FS_VERT } from './shaderLib.js';
 import { createGridAtlas, createArtAtlas, createPixelArtAtlas, pixelArtCell, GRID_COLS, GRID_ROW } from './glyphs.js';
+import { createWyrmArtAtlas, wyrmArtCell } from './wyrmGlyphs.js';
 
 // Frame pipeline:
 //   1. moon shadow map  (casters = objects on LAYER_CASTER)
@@ -119,6 +120,20 @@ export class Pipeline {
         // such cells go black, the reference images' dark gaps between parts (0 = off). The hero's is
         // low (0.004 = 0.14 m at the 36 m camera, ~1 letter of depth), or no gap ever opens in game.
         uArtEdge: { value: new THREE.Vector2(0.004, 0.0) },
+        // ---- the wyrm's letters (wyrmCell; thin pixel font from wyrmGlyphs.js). Its .y uniforms above
+        // map the source: black point, 1 - exp(-luma * k), min brightness, dither, part-gap depth.
+        // x = brightest letter, y = brightness gamma (dim charcoal body, bright rims), z = v below
+        // which a cell prints nothing (the black gaps between scales), w = how much each stroke
+        // pixel takes its own source pixel instead of the cell average (crisp shapes through text)
+        uWyrmTone: { value: new THREE.Vector4(0.95, 1.3, 0.022, 0.85) },
+        // glyph pick: x / y = cell value v where the letter set steps dim -> mid -> bright (the cell's
+        // hash picks the letter inside its set, so letters hold still while the wyrm moves), z = per-
+        // cell dither of those steps (no contour lines), w = samples (of 4) a stroke code needs to
+        // turn the cell into a stroke glyph
+        uWyrmGlyph: { value: new THREE.Vector4(0.12, 0.42, 0.08, 1) },
+        // atlas columns (wyrmGlyphs.js): mid set start, bright set start, stroke start, glyphs in the row
+        uWyrmAtlas: { value: new THREE.Vector4(10, 20, 28, 32) },
+        uWyrmOutline: { value: 1 }, // 1: silhouette cells draw their edge as a stroke glyph
       },
       vertexShader: FS_VERT,
       fragmentShader: /* glsl */ `
@@ -150,6 +165,10 @@ export class Pipeline {
         uniform float uArtMax;
         uniform vec2 uArtDither;
         uniform vec2 uArtEdge;
+        uniform vec4 uWyrmTone;
+        uniform vec4 uWyrmGlyph;
+        uniform vec4 uWyrmAtlas;
+        uniform float uWyrmOutline;
         varying vec2 vUv;
 
         float hash12(vec2 p) {
@@ -244,6 +263,37 @@ export class Pipeline {
           return fg * m;
         }
 
+        // ---- the wyrm (FLAG.ART): thin one-pixel letters on black (wyrmGlyphs.js atlas in tArt).
+        // The letter is picked per cell: its average source picks a letter SET (a dark cell prints
+        // nothing; dim / mid / bright sets, the steps dithered per cell), the cell's own hash picks the
+        // letter inside it, so the letters hold still while the wyrm moves under them (the owner's
+        // reference prints whole digits even in the dark parts). Its strokes take brightness and hue
+        // from their OWN pixel of the source (cp, blended by uWyrmTone.w): in the reference a bright
+        // scale edge cuts crisply through the letters, so the shapes survive the text. Brightness
+        // goes through a black point and a gamma (dim charcoal hide, bright rims); saturated HDR
+        // sources (lava, eyes) bloom.
+        // stroke >= 0: the material marked this cell as a scale rim / thin part running in that screen
+        // direction (0 '-', 1 '/', 2 '|', 3 '\\'): draw the stroke glyph, the reference's edge-shaped
+        // letters that outline every scale
+        vec3 wyrmCell(vec3 c, vec3 cp, vec2 acell, vec2 local, float stroke) {
+          float v = 1.0 - exp(-max(luma(c) - uArtBlack.y, 0.0) * uArtLum.y);
+          float h = hash12(acell * 1.37 + 11.0);
+          float d = (hash12(acell * 0.71 + 3.7) - 0.5) * uWyrmGlyph.z;
+          float s0 = v < uWyrmGlyph.x + d ? 1.0 : v < uWyrmGlyph.y + d ? uWyrmAtlas.x : uWyrmAtlas.y;
+          float s1 = v < uWyrmGlyph.x + d ? uWyrmAtlas.x : v < uWyrmGlyph.y + d ? uWyrmAtlas.y : uWyrmAtlas.z;
+          float idx = s0 + min(floor(h * (s1 - s0)), s1 - s0 - 1.0);
+          if (stroke >= 0.0) idx = uWyrmAtlas.z + stroke;
+          if (v < uWyrmTone.z) idx = 0.0;
+          float m = texture2D(tArt, vec2((idx + local.x) / uWyrmAtlas.w, local.y)).a;
+          vec3 s = mix(c, cp, uWyrmTone.w);
+          float vp = 1.0 - exp(-max(luma(s) - uArtBlack.y, 0.0) * uArtLum.y);
+          float mx = max(max(s.r, s.g), s.b);
+          vec3 hue = s / max(mx, 1e-4);
+          float sat = (mx - min(min(s.r, s.g), s.b)) / max(mx, 1e-4);
+          float b = mix(uArtMin.y, uWyrmTone.x, pow(vp, uWyrmTone.y));
+          return hue * b * mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat)) * m;
+        }
+
         void main() {
           vec2 px = gl_FragCoord.xy;
           // the hero first: his own pixel-font grid
@@ -276,24 +326,56 @@ export class Pipeline {
           vec2 abase = acell * uArtCell;
           vec3 asum = vec3(0.0);
           float ahits = 0.0, dmin = 1e9, dmax = 0.0;
+          vec4 votes = vec4(0.0); // wyrm stroke codes (alpha 0.51 .. 0.54, materials.js wyrmMain)
+          vec3 arim = vec3(0.0); // brightest stroke-coded sample: a stroke glyph's colour
+          vec4 amask = vec4(0.0); // which samples hit the wyrm: x BL, y BR, z TL, w TR
           for (int i = 0; i < 4; i++) {
             vec2 o = vec2(i == 1 || i == 3 ? 0.75 : 0.25, i >= 2 ? 0.75 : 0.25);
             vec2 suv = (abase + o * uArtCell) / uRes;
             vec4 sa = texture2D(tScene, suv);
             if (isArt(sa.a) && !isHero(sa.a)) {
+              if (i == 0) amask.x = 1.0; else if (i == 1) amask.y = 1.0; else if (i == 2) amask.z = 1.0; else amask.w = 1.0;
               asum += sa.rgb;
               ahits += 1.0;
               float dz = linDepth(suv);
               dmin = min(dmin, dz);
               dmax = max(dmax, dz);
+              float code = floor((sa.a - 0.5) * 100.0 + 0.5);
+              votes += vec4(equal(vec4(code), vec4(1.0, 2.0, 3.0, 4.0)));
+              if (code > 0.5 && luma(sa.rgb) > luma(arim)) arim = sa.rgb;
             }
           }
-          if (ahits >= 2.0) {
+          // silhouette cells (1-3 of the 4 samples on the wyrm) draw their edge as a stroke glyph along
+          // it (marching squares on the samples): the reference's character-drawn outlines, so spikes,
+          // claws and torn wing edges keep their shape instead of dissolving into digits
+          float edgeS = -1.0;
+          if (uWyrmOutline > 0.5 && ahits >= 1.0 && ahits <= 3.0) {
+            if (ahits == 2.0 && amask.x == amask.w) edgeS = amask.x > 0.5 ? 1.0 : 3.0; // diagonal pair
+            else {
+              float gx = (amask.y + amask.w) - (amask.x + amask.z);
+              float gy = (amask.z + amask.w) - (amask.x + amask.y);
+              edgeS = mod(floor(mod(atan(gx, -gy), 3.14159265) / 0.7853982 + 0.5), 4.0);
+            }
+            // a horizontal edge prints a letter, not '-': long dash runs along the wing tops, the
+            // tail and the toes read as ruled lines, not as the reference's lettered outlines
+            if (edgeS == 0.0) edgeS = -1.0;
+          }
+          // a cell needs 2 of 4 samples on the wyrm, or 1 when it draws a stroke (an outline, or a
+          // stroke-coded spike / claw / horn tip that would otherwise vanish between the samples)
+          float strokeHits = max(max(votes.x, votes.y), max(votes.z, votes.w));
+          if (ahits >= 2.0 || (ahits >= 1.0 && (strokeHits >= 1.0 || edgeS >= 0.0))) {
             if (uArtEdge.y > 0.0 && (dmax - dmin) > uArtEdge.y * dmin) {
               gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
               return;
             }
-            gl_FragColor = vec4(artCell(asum / ahits, acell, (px - abase) / uArtCell, 0.0), 1.0);
+            vec4 sp = texture2D(tScene, px / uRes);
+            vec3 cp = isArt(sp.a) && !isHero(sp.a) ? sp.rgb : asum / ahits;
+            float best = max(max(votes.x, votes.y), max(votes.z, votes.w));
+            float stroke = best < uWyrmGlyph.w ? -1.0 : votes.x == best ? 0.0 : votes.y == best ? 1.0 : votes.z == best ? 2.0 : 3.0;
+            vec3 ca = asum / ahits;
+            if (stroke >= 0.0) { ca = arim; cp = arim; } // an outline glyph is drawn whole in the rim's colour
+            if (edgeS >= 0.0) { stroke = edgeS; ca = max(asum / ahits, arim); cp = ca; }
+            gl_FragColor = vec4(wyrmCell(ca, cp, acell, (px - abase) / uArtCell, stroke), 1.0);
             return;
           }
           if (isArt(texture2D(tScene, px / uRes).a)) {
@@ -326,6 +408,14 @@ export class Pipeline {
       depthTest: false,
       depthWrite: false,
     });
+    {
+      // the wyrm's (.y) art-pass numbers, read by wyrmCell: its source (materials.js wyrmMain) is a
+      // dark hide with bright scale rims, so a steep curve + low floor keeps most letters charcoal
+      const u = this.asciiMat.uniforms;
+      u.uArtLum.value.y = 2.2;
+      u.uArtBlack.value.y = 0.004;
+      u.uArtMin.value.y = 0.012;
+    }
 
     // --- bloom
     this.brightMat = new THREE.ShaderMaterial({
@@ -474,15 +564,17 @@ export class Pipeline {
       this.grid = createGridAtlas(cellW, cellH);
       this.asciiMat.uniforms.tGrid.value = this.grid.texture;
     }
-    // creature ASCII art: ~2/3 of the world cell (owner: "smaller letters" so the hero gets rows)
-    const artH = Math.max(7, Math.round(H / 135));
-    const artW = Math.max(4, Math.round(artH * 0.6));
+    // the wyrm's ASCII art: thin 4x6 pixel letters in 5x8 cells (x2 from 1620 px tall), the owner's
+    // reference grid (~5 x 7.5 px letters on its 1024 px image)
+    const ws = Math.max(1, Math.round(H / 1080));
+    const [artW, artH] = wyrmArtCell(ws);
     if (!this.art || artW !== this.artCell.x || artH !== this.artCell.y) {
       this.art?.texture.dispose();
       this.artCell.set(artW, artH);
-      this.art = createArtAtlas(artW, artH);
+      this.art = createWyrmArtAtlas(ws);
       this.asciiMat.uniforms.tArt.value = this.art.texture;
-      this.asciiMat.uniforms.uArtCount.value = this.art.count;
+      this.asciiMat.uniforms.uArtCount.value = this.art.sets[2];
+      this.asciiMat.uniforms.uWyrmAtlas.value.set(...this.art.sets, this.art.total);
     }
     const hs = Math.max(1, Math.floor(H / 1080));
     const [heroW, heroH] = pixelArtCell(hs);

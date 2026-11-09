@@ -376,9 +376,11 @@ export class DragonFx {
         const l = Math.hypot(dx, dy, dz) || 1;
         x += (dx / l) * 0.45 * S; y += (dy / l) * 0.45 * S; z += (dz / l) * 0.45 * S;
       }
+      // a small hot-orange glint (the reference's eye glows orange with a small halo; a 0.64 m
+      // yellow-white dot bloomed into a ball over the ASCII head)
       this._spawn(this.add, {
-        x, y, z, life, size: 0.34 * S, sizeEnd: 0.3 * S, glyph: '•',
-        color: [3.2 * glow, 0.75 * glow, 0.12 * glow], alpha: 1, alphaEnd: 1,
+        x, y, z, life, size: 0.2 * S, sizeEnd: 0.18 * S, glyph: '•',
+        color: [2.0 * glow, 0.38 * glow, 0.05 * glow], alpha: 1, alphaEnd: 1,
       });
     }
   }
