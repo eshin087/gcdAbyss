@@ -95,34 +95,89 @@ const LAVA = {
  * Crack-glow (uGlow) per material, applied by Dragon._applyMaterials every frame:
  * [phase-1 ember baseline, x this.glow (phase 2 0.5, dying 0.85), x throat charge (breath / roar)].
  * The eye material is driven separately (eye glow follows rig.s.eyes). docs/art/dragon.md §2.9.
+ * The ASCII-art source (WYRM_ART) multiplies its vein / gap glow by these: the owner's reference
+ * shows the molten fissures from the start (chest, throat, undersides strongest, sparse on the back).
  */
 export const GLOW = {
-  scales: [0.015, 0.45, 0], // barely-there embers in the fissures; phase 2: the cracks wake up
-  limbs: [0.015, 0.45, 0], // legs, tail, wing arm: as scales (fissures run along the limb)
-  neck: [0.015, 0.45, 0.12], // the throat strip carries the molten S and its charge
-  belly: [0.45, 1.0, 0.3],
+  scales: [0.3, 0.7, 0], // sparse embers in the hide's fissures; phase 2: the cracks wake up
+  limbs: [0.32, 0.7, 0], // legs, tail, wing arm: as scales (fissures run along the limb)
+  neck: [0.32, 0.7, 0.3], // the throat strip carries the molten S and its charge
+  belly: [0.5, 1.0, 0.3],
   throat: [0.65, 0.9, 1.2],
-  lava: [0.45, 1.0, 0],
-  membrane: [0.04, 0.8, 0.3], // faint seams (brighter ones striped the backlit side orange)
-  wingBone: [0, 0.35, 0],
+  lava: [0.5, 1.0, 0],
+  membrane: [0.3, 0.8, 0.3], // embers along the bones and in specks
+  wingBone: [0.15, 0.35, 0],
   spine: [0.3, 0.8, 0],
-  bone: [0.04, 0.5, 0],
+  bone: [0.08, 0.5, 0],
   claw: [0, 0, 0],
   teeth: [0, 0, 0.5],
   maw: [0.55, 0.6, 1.3],
+};
+
+/**
+ * ASCII-art source per material (createSurfaceGlyphMaterial `wyrm`, render/materials.js): the image
+ * the art pass turns into letters, matched to the owner's red-black reference. The hide is dark
+ * charcoal shingle scales (aGUV units, tips toward -y: tailward on the body, down the limbs) whose
+ * free edges catch a camera key light; molten plates glow in their gaps; the membrane is crimson.
+ *   scale [w, h] · tone [gap, body, rim, rimW] · ink · light [gain, key, fresnel, floor]
+ *   vein [strength, share, width, plate] · glow [gaps, all] · under [r, g, b, k] · membrane
+ */
+const UNDER = [1.0, 0.3, 0.06, 0.55]; // lava light from below: the orange spill under jaw and belly
+const HIDE_ART = {
+  scale: [0.42, 0.32],
+  tone: [0.0, 0.17, 1.7, 0.24],
+  ink: [0.34, 0.31, 0.29],
+  light: [1.0, 0.55, 0.25, 0.03],
+  vein: [1.6, 0.32, 0.06, 1.1],
+  under: UNDER,
+};
+const LAVA_ART = {
+  scale: [0.36, 0.27],
+  tone: [0.0, 0.26, 1.6, 0.22],
+  ink: [0.42, 0.3, 0.24],
+  light: [1.0, 0.55, 0.25, 0.04],
+  vein: [3.0, 0.55, 0.07, 0.8],
+  glow: [3.2, 0.1],
+  under: UNDER,
+};
+export const WYRM_ART = {
+  // barrel (torso, ribcage, rump, haunches, shoulders: aGUV around the body axis, bodyGUV below):
+  // roof-tile scales hanging from the dorsal line, [along the body, around it]
+  scales: { ...HIDE_ART, scaleDir: 'down', scale: [0.48, 0.34] },
+  limbs: { ...HIDE_ART, scale: [0.3, 0.23], vein: [1.6, 0.3, 0.055, 0.9] },
+  neck: { ...HIDE_ART, scale: [0.28, 0.21], vein: [1.8, 0.35, 0.055, 0.85] },
+  belly: { ...LAVA_ART, scale: [0.56, 0.4] },
+  throat: { ...LAVA_ART, scale: [0.4, 0.3], glow: [3.4, 0.16] },
+  lava: LAVA_ART,
+  membrane: { ink: [0.75, 0.07, 0.045], light: [1.0, 0.4, 0.2, 0.03], membrane: [0.6, 0.03, 2.2, 0.5], under: UNDER },
+  // finger bones: grey scaled lines, a little ember along them
+  wingBone: { ink: [0.3, 0.29, 0.28], light: [1.0, 0.5, 0.35, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', under: UNDER },
+  // dorsal / tail blades: charcoal with pale tips, molten at the root (the reference's orange-lit
+  // tail spikes)
+  spine: { ink: [0.3, 0.27, 0.25], light: [1.0, 0.5, 0.5, 0.02], tip: [0.05, 0.4, 0.35, 1.2], strokes: 'axis', under: UNDER },
+  // horns, head / limb spikes: dark obsidian, bright edges and tips
+  bone: { ink: [0.32, 0.3, 0.29], light: [1.0, 0.5, 0.6, 0.02], tip: [0.0, 0.45, 0.3, 0], strokes: 'axis', under: UNDER },
+  // talons: dark roots curving into bright ivory tips
+  claw: { ink: [0.5, 0.47, 0.43], light: [1.0, 0.5, 0.5, 0.03], tip: [0.05, 0.45, 0.25, 0], strokes: 'axis', under: UNDER },
+  teeth: { ink: [0.85, 0.83, 0.78], light: [1.0, 0.6, 0.3, 0.12], strokes: 'axis', under: UNDER },
+  // fire inside the mouth: deep red-orange, so the white fangs read against it
+  maw: { ink: [1.0, 0.25, 0.04], light: [0.4, 0.2, 0, 0.05], glow: [0, 0.75], emit: [1.0, 0.2, 0.03] },
+  eye: { ink: [1.0, 0.4, 0.06], light: [0.3, 0, 0, 0.05], glow: [0, 1.0], emit: [1.5, 0.38, 0.05] },
 };
 
 /** Brightness of the smooth source the creature ASCII-art pass converts (see FLAG.ART). */
 export const ART_GAIN = 0.28;
 
 export function createDragonMaterials(U) {
+  // every part also carries its ASCII-art source (WYRM_ART): what the letters are made from
+  const mat = (key, o) => createSurfaceGlyphMaterial(U, { ...o, wyrm: WYRM_ART[key] });
   const mats = {
     // back / flanks / shoulders / haunches: mixed blocky glyphs over obsidian
-    scales: createSurfaceGlyphMaterial(U, { ...OBSIDIAN, seed: 11.3 }),
+    scales: mat('scales', { ...OBSIDIAN, seed: 11.3 }),
     // legs, tail and the wing arm: the same hide, its fissures stretched along the limb
-    limbs: createSurfaceGlyphMaterial(U, { ...OBSIDIAN, seamAxis: 'y', seed: 47.3 }),
+    limbs: mat('limbs', { ...OBSIDIAN, seamAxis: 'y', seed: 47.3 }),
     // neck + head + neck shingles get their own instance (finer cells, the 'O' in the lit set)
-    neck: createSurfaceGlyphMaterial(U, {
+    neck: mat('neck', {
       ...OBSIDIAN,
       levels: NECK_LEVELS,
       cell: [0.17, 0.21],
@@ -131,13 +186,13 @@ export function createDragonMaterials(U) {
       seed: 23.7,
     }),
     // sternum plate + belly strip: molten plates, fissures running down the keel
-    belly: createSurfaceGlyphMaterial(U, { ...LAVA, levels: BELLY_LEVELS, cell: [0.24, 0.22], seamAxis: 'y', gain: 1.1, inkGlow: 0.6, seed: 5.1 }),
+    belly: mat('belly', { ...LAVA, levels: BELLY_LEVELS, cell: [0.24, 0.22], seamAxis: 'y', gain: 1.1, inkGlow: 0.6, seed: 5.1 }),
     // throat strip under the neck: lava that charges before the breath / roar
-    throat: createSurfaceGlyphMaterial(U, { ...LAVA, cell: [0.16, 0.2], seed: 17.9 }),
+    throat: mat('throat', { ...LAVA, cell: [0.16, 0.2], seed: 17.9 }),
     // inner thighs, armpits, leg back-edge strips, tail underside
-    lava: createSurfaceGlyphMaterial(U, { ...LAVA, altChance: 0.15, inkGlow: 0.5, seed: 29.4 }),
+    lava: mat('lava', { ...LAVA, altChance: 0.15, inkGlow: 0.5, seed: 29.4 }),
     // wing membranes: a straight grid of round red glyphs, seams running out along the fingers
-    membrane: createSurfaceGlyphMaterial(U, {
+    membrane: mat('membrane', {
       levels: MEMBRANE_LEVELS,
       cell: [0.22, 0.26],
       rowShift: 0,
@@ -158,7 +213,7 @@ export function createDragonMaterials(U) {
       seed: 41.9,
     }),
     // wing forearm + finger bones: single bright white glyph lines
-    wingBone: createSurfaceGlyphMaterial(U, {
+    wingBone: mat('wingBone', {
       levels: WINGBONE_LEVELS,
       cell: [0.13, 0.2],
       base: [0.045, 0.043, 0.048],
@@ -173,7 +228,7 @@ export function createDragonMaterials(U) {
       seed: 37.1,
     }),
     // dorsal blade row nape -> tail tip, tail blades, wrist spikes: the orange "spine line"
-    spine: createSurfaceGlyphMaterial(U, {
+    spine: mat('spine', {
       levels: SPINE_LEVELS,
       cell: [0.1, 0.15],
       base: [0.05, 0.02, 0.012],
@@ -190,7 +245,7 @@ export function createDragonMaterials(U) {
       seed: 31.3,
     }),
     // horns, head spikes, limb / shoulder shards, neck shingles: dark obsidian, silver edges
-    bone: createSurfaceGlyphMaterial(U, {
+    bone: mat('bone', {
       levels: BONE_LEVELS,
       cell: [0.1, 0.16],
       base: [0.07, 0.068, 0.075],
@@ -207,7 +262,7 @@ export function createDragonMaterials(U) {
       seed: 7.7,
     }),
     // claws, thumb hooks, finger-tip claws: heavy ivory
-    claw: createSurfaceGlyphMaterial(U, {
+    claw: mat('claw', {
       levels: CLAW_LEVELS,
       cell: [0.09, 0.15],
       base: [0.14, 0.12, 0.1],
@@ -221,7 +276,7 @@ export function createDragonMaterials(U) {
       seed: 13.9,
     }),
     // teeth: bright white even inside the dark mouth
-    teeth: createSurfaceGlyphMaterial(U, {
+    teeth: mat('teeth', {
       ascii: 'strands',
       glyphs: ".'|!",
       cell: [0.06, 0.09],
@@ -237,7 +292,7 @@ export function createDragonMaterials(U) {
       seed: 19.3,
     }),
     // the maw: fire inside the mouth (the jaw rests a little open, so it glows at idle)
-    maw: createSurfaceGlyphMaterial(U, {
+    maw: mat('maw', {
       ascii: 'smooth',
       glyphs: '.*%#',
       cell: [0.08, 0.1],
@@ -253,7 +308,7 @@ export function createDragonMaterials(U) {
       seed: 2.7,
     }),
     // eyes: small almond slits, self-lit through uInkGlow / uGlow while awake
-    eye: createSurfaceGlyphMaterial(U, {
+    eye: mat('eye', {
       ascii: 'smooth',
       glyphs: '%@#@',
       cell: [0.1, 0.1],
@@ -345,6 +400,26 @@ function capsule(parent, mat, a, b, opts) {
   return m;
 }
 
+/**
+ * Re-map a barrel part's aGUV around the BODY axis (a line along its joint frame's +Z at height y0)
+ * instead of the part's own axis: x = angle from the dorsal line x radius, y = z. The hide's 'down'
+ * scales then hang from the spine on the ribcage, loins, rump, haunches and shoulders alike (a haunch
+ * mapped around its own lateral axis radiated scales from its pole). Visual only.
+ */
+function bodyGUV(m, y0 = 0) {
+  m.updateMatrix();
+  const pos = m.geometry.attributes.position;
+  const arr = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    _p.fromBufferAttribute(pos, i).applyMatrix4(m.matrix);
+    const y = _p.y - y0;
+    arr[i * 2] = Math.atan2(_p.x, y) * Math.max(0.05, Math.hypot(_p.x, y));
+    arr[i * 2 + 1] = _p.z;
+  }
+  m.geometry.setAttribute('aGUV', new THREE.BufferAttribute(arr, 2));
+  return m;
+}
+
 /** Linear interpolation over a sorted table of [x, y] pairs (clamped at the ends). */
 function table(rows, x) {
   if (x <= rows[0][0]) return rows[0][1];
@@ -417,14 +492,16 @@ export function buildDrake(U) {
   hips.rotation.order = 'YXZ';
   // waist (loins): poles buried in the ribcage and the rump
   const torso = mesh(hips, ellipsoidGeometry(0.95, 0.8, 1.45, { widthSegs: 20, heightSegs: 12 }), mats.scales, ...inHips(0, 2.55, -0.2));
+  bodyGUV(torso, 0.05);
   // molten belly strip under the loins
   mesh(hips, ellipsoidGeometry(0.8, 0.45, 1.4, { widthSegs: 16, heightSegs: 8 }), mats.belly, ...inHips(0, 2.05, -0.1));
   // rump / pelvis (back pole inside the tail root)
-  mesh(hips, ellipsoidGeometry(0.95, 0.62, 1.05, { widthSegs: 18, heightSegs: 10 }), mats.scales, ...inHips(0, 2.35, -1.65));
+  bodyGUV(mesh(hips, ellipsoidGeometry(0.95, 0.62, 1.05, { widthSegs: 18, heightSegs: 10 }), mats.scales, ...inHips(0, 2.35, -1.65)), 0.05);
   // haunches: lateral-axis ellipsoids, poles buried in the rump and the thigh's hip cap
   for (const s of [1, -1]) {
     const h = mesh(hips, ellipsoidGeometry(0.85, 0.72, 0.5, { widthSegs: 14, heightSegs: 8 }), mats.scales, ...inHips(s * 0.82, 2.42, -1.35));
     h.rotation.y = (s * Math.PI) / 2;
+    bodyGUV(h, 0.05);
   }
 
   const chest = joint(hips, ...A.chest, 'chest');
@@ -432,6 +509,7 @@ export function buildDrake(U) {
   // ribcage: deeper than wide, tilted chest-up so its front pole runs into the neck base
   const chestMesh = mesh(chest, ellipsoidGeometry(1.05, 1.25, 1.5, { widthSegs: 22, heightSegs: 14 }), mats.scales, 0, 0, 0);
   chestMesh.rotation.x = -0.28;
+  bodyGUV(chestMesh, 0);
   // molten sternum / keel plate: a capsule along the throat-to-belly line (no pole faces a camera);
   // its lowest point is the 1.4 keel
   capsule(chest, mats.belly, inChest(0, 2.02, 0.85), inChest(0, 2.95, 2.1), { r0: 0.62, r1: 0.7, bulge: 0.16, sx: 1.08 });
@@ -439,7 +517,7 @@ export function buildDrake(U) {
   capsule(chest, mats.throat, inChest(0, 1.86, 1.05), inChest(0, 3.3, 2.32), { r0: 0.72, r1: 0.78, bulge: 0.2, sx: 0.25, radial: 10, rings: 6 });
   // shoulder masses (scapulae): slabs sloping down-forward to the shoulder joints
   for (const s of [1, -1]) {
-    capsule(chest, mats.scales, inChest(s * 0.88, 3.62, 1.08), inChest(s * 1.0, 2.72, 1.82), { r0: 0.4, r1: 0.47, bulge: 0.06, sx: 0.78 });
+    bodyGUV(capsule(chest, mats.scales, inChest(s * 0.88, 3.62, 1.08), inChest(s * 1.0, 2.72, 1.82), { r0: 0.4, r1: 0.47, bulge: 0.06, sx: 0.78 }), 0);
   }
 
   // dorsal blade row (orange spine line): over the withers + between the wing roots 0.6-0.75,
@@ -672,7 +750,7 @@ export function buildDrake(U) {
     // armpit lava patch on the inner side
     mesh(humerus, limbGeometry({ length: 0.6, r0: 0.34, r1: 0.26, sx: 0.7, radial: 10, rings: 2, flip: true }), mats.lava, -s * 0.22, 0, 0.05);
     const forearm = joint(humerus, 0, 0, A.humerus, 'forearm');
-    mesh(forearm, ellipsoidGeometry(0.3, 0.3, 0.32, { widthSegs: 10, heightSegs: 6 }), mats.scales, 0, -0.04, 0);
+    mesh(forearm, ellipsoidGeometry(0.3, 0.3, 0.32, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, -0.04, 0);
     mesh(forearm, limbGeometry({ length: A.forearm + 0.06, r0: 0.4, r1: 0.29, bulge: 0.04, radial: 12, rings: 4, flip: true }), mats.limbs);
     // posterior lava rim down the back of the forearm (the ASCII panel's orange back edge)
     mesh(forearm, limbGeometry({ length: A.forearm - 0.2, r0: 0.2, r1: 0.14, sx: 0.55, radial: 8, rings: 3, flip: true }), mats.lava, 0, -0.2, 0.15);
@@ -712,7 +790,7 @@ export function buildDrake(U) {
   for (const s of [1, -1]) {
     const wroot = joint(chest, s * A.wingRoot[0], A.wingRoot[1], A.wingRoot[2], s > 0 ? 'wingRootL' : 'wingRootR');
     // a boss of hide where the wing grows out of the withers
-    mesh(chest, ellipsoidGeometry(0.42, 0.34, 0.5, { widthSegs: 10, heightSegs: 6 }), mats.scales, s * (A.wingRoot[0] + 0.05), A.wingRoot[1] - 0.25, A.wingRoot[2] + 0.05);
+    mesh(chest, ellipsoidGeometry(0.42, 0.34, 0.5, { widthSegs: 10, heightSegs: 6 }), mats.limbs, s * (A.wingRoot[0] + 0.05), A.wingRoot[1] - 0.25, A.wingRoot[2] + 0.05);
     // the wing arm is a thick dark scaled column with a spiked trailing edge (the painting), not a
     // glowing bone tube: hide on both segments, tapering 0.30 -> 0.22; only the fingers are bone lines
     const humerus = joint(wroot, 0, 0, 0, 'wingHumerus');
@@ -727,7 +805,7 @@ export function buildDrake(U) {
     for (let k = 0; k < 5; k++) ser.push(horn(0.12, 0.04, 0, -0.2, 0.3 + k * 0.5, 1.4, 0, 0, 4)); // leading serrations
     batch(forearm, mats.bone, ser);
     const wrist = joint(forearm, 0, 0, A.wingForearm, 'wrist');
-    mesh(wrist, ellipsoidGeometry(0.24, 0.22, 0.28, { widthSegs: 8, heightSegs: 6 }), mats.scales);
+    mesh(wrist, ellipsoidGeometry(0.24, 0.22, 0.28, { widthSegs: 8, heightSegs: 6 }), mats.limbs);
     batch(wrist, mats.spine, [horn(0.45, 0.09, 0, 0.12, 0.05, -2.2, 0, 0.1, 5, 0.5), horn(0.3, 0.07, s * 0.15, 0.05, 0.1, -0.6, s * 1.2, 0, 5, 0.5)]);
     const fingers = [], distal = [];
     A.fingers.forEach((len, k) => {

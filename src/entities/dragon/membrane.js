@@ -157,6 +157,7 @@ export class WingMembrane {
       set(4 + k, kx + dir.x * l1, ky + dir.y * l1, kz + dir.z * l1);
     }
     const gv = new Float32Array(this.count * 2);
+    const bone = new Float32Array(this.count);
     const grid = new Float32Array(NU * NV * 3);
     for (let k = 0; k < PANELS; k++) {
       for (let i = 0; i < NU; i++) {
@@ -181,10 +182,17 @@ export class WingMembrane {
           if (j > 0) x += dist((i * NV + j) * 3, (i * NV + j - 1) * 3);
           const vi = k * NU * NV + i * NV + j;
           gv[vi * 2] = x * this.side + k * 17.3; // separate glyph fields per panel
+          bone[vi] = x; // across-panel distance from the leading bone (finished below)
+        }
+        // aBone: distance (model units) to the nearer edge bone of the panel across this row
+        for (let j = 0; j < NV; j++) {
+          const vi = k * NU * NV + i * NV + j;
+          bone[vi] = Math.min(bone[vi], x - bone[vi]);
         }
       }
     }
     this.geometry.setAttribute('aGUV', new THREE.BufferAttribute(gv, 2));
+    this.geometry.setAttribute('aBone', new THREE.BufferAttribute(bone, 1));
     // free trailing edge (u = 1, away from the bone / body edges at v = 0 / 1)
     const edge = new Float32Array(this.count);
     for (let k = 0; k < PANELS; k++) {
