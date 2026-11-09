@@ -176,6 +176,7 @@ export function createPose() {
     tailCurl: 0, // extra lateral curl per tail segment (rad)
     tailWave: 0.07,
     tailStiff: 1, // spring stiffness multiplier (tail sweep keeps the tail extended)
+    tailLift: 1, // 1 = the arched resting tail (REST_POSE.tail), 0 = dragged low (tail sweep, stomp tripod)
     eyes: 1,
     idle: 0, // 1 = no attack running (the AI's idle / walk): the rig's idle life plays
     speed: 0, // ground speed for the gait
@@ -221,6 +222,7 @@ export function resetPose(p) {
   p.tailCurl = 0;
   p.tailWave = 0.07;
   p.tailStiff = 1;
+  p.tailLift = 1;
   p.eyes = 1;
   p.idle = 0;
   return p;
@@ -250,6 +252,12 @@ export const REST_POSE = {
   headDip: 0.12,
   stance: { frontOut: 0.15, frontFwd: 0.22, hindOut: 0.12, hindBack: -0.15 },
   sweep: { bias: 0, look: 0.5, max: 0.5, arm: 0.4 },
+  // the painting's tail: carried off the rump about level for a third of its length, then arching
+  // down (steepest ~60° around segment 7) and levelling out to land almost tangent on the ground
+  // around segment 11, where the end lies and hooks round (tail-base frame, Chain.buildRest's dip;
+  // see _updateTail; pose.tailLift blends it in). A plain quadratic dive met the ground at ~70° and
+  // the ground clamp folded the chain there (kinks, and on the stomp's slam a 180° roll flip)
+  tail: { pitch0: 0.12, pitchStep: -0.01, pitchCurve: 0, dipAmp: 1.1, dipAt: 7.0, dipWidth: 3.1 },
 };
 
 // neck / tail rest-shape presets (angles in the chest / tail-base frame); blended per frame
@@ -293,14 +301,14 @@ export class Rig {
     this._br = 0; // breath (-1..1), shared with the neck / wings
     this._lookT = V();
     const tailMin = [0, ...model.tailRadii.map((r) => (r * 0.8 + 0.05) * S)];
-    this.tail = new Chain(model.tail, A.tailLen * S, { minY: tailMin, maxBend: 0.56, baseBend: 0.8 });
+    this.tail = new Chain(model.tail, A.tailLen * S, { minY: tailMin, maxBend: 0.56, baseBend: 0.8, groundGlide: true, stableTwist: true });
     this.gait = new Gait((limb) => dragon.onStep?.(limb), S);
     this.s = {
       pitch: 0, roll: 0, lower: 0, twist: 0, alt: 0, airborne: 0, rear: 0, sleep: 0, dead: 0, stagger: 0,
       jaw: 0, spread: [0, 0], pawW: [0, 0], flapAmp: 0, flapPhase: 0, eyes: 0, tailCurl: 0, tailWave: 0.07,
       lookDown: 0.14, gaitRoll: 0, frontDip: 0,
       droop: 0, mantle: 0, stanceF: 0, stanceH: 0, strideF: 0, strideH: 0, restep: 0, elbowsOut: 0, swell: 0, airReach: 0,
-      rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0, still: 0,
+      rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0, tailLift: 0, still: 0,
     };
     this.time = 0;
     this.breathPhase = 0;
@@ -433,6 +441,12 @@ export class Rig {
     s.eyes = sm(s.eyes, pose.eyes, 3);
     s.tailCurl = sm(s.tailCurl, pose.tailCurl, 4);
     s.tailWave = sm(s.tailWave, pose.tailWave, 2);
+    // the arched resting tail: lifts slowly, drops quickly (a tail sweep's windup lays it down within
+    // ~0.4 s, so its spin starts from the measured low tail); stunned / asleep / dead it lies flat
+    {
+      const tl = pose.tailLift * (1 - pose.stagger) * (1 - pose.sleep) * (1 - pose.dead);
+      s.tailLift = sm(s.tailLift, tl, tl > s.tailLift ? 1.6 : 7);
+    }
     s.lookDown = sm(s.lookDown, pose.lookDown, 6);
     // resting (nothing drives the head and it keeps the default look-down): the combat stance's head
     // dip and the wings' resting sweep fade in; any attack that aims the head fades them out
@@ -739,15 +753,22 @@ export class Rig {
       return o;
     };
     // standing: leaves the rump ~20° down, lies on the ground from ~40 %, hooks to model-right;
-    // a big tailCurl (tail sweep) straightens the hook
+    // a big tailCurl (tail sweep) straightens the hook. Resting (s.tailLift) it arches instead: carried
+    // off the rump about level and sweeping down to the ground in a long curve (REST_POSE.tail)
     const hook = TAIL_HOOK * clamp(1 - Math.abs(s.tailCurl) * 8, 0, 1);
-    const base = set(this._tb[0], -0.8, 0.07, 0, s.tailCurl + 0.035 * hook / TAIL_HOOK, hook, s.tailWave, this.time * 1.4);
+    const R = REST_POSE.tail, lw = s.tailLift;
+    const base = set(this._tb[0], lerp(-0.8, R.pitch0, lw), lerp(0.07, R.pitchStep, lw), 0, s.tailCurl + 0.035 * hook / TAIL_HOOK, hook, s.tailWave, this.time * 1.4);
+    base.pitchCurve = R.pitchCurve * lw;
+    base.dipAmp = R.dipAmp * lw;
     const air = set(this._tb[1], -0.6, -0.005, 0, s.tailCurl * 0.5, 0.002, 0.04, this.time * 2.0);
     // asleep: curls around toward the head (model-right, where the neck lies)
     const sleep = set(this._tb[2], -0.5, 0.06, 0.25, 0.14, 0.006, 0.02, this.time * 0.6);
     const p = mixParams(base, air, s.airborne, this._tp);
     mixParams(p, sleep, s.sleep, p);
     mixParams(p, TAIL_DEAD, s.dead, p);
+    // where the dip sits is not blended (only its depth: the other shapes have none)
+    p.dipAt = R.dipAt;
+    p.dipWidth = R.dipWidth;
     tail.buildRest(this._pTailBase, qTailBase, p);
     if (snap) tail.snap();
     else {

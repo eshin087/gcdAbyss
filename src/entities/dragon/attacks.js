@@ -507,6 +507,8 @@ const tail = {
     // wings folded tight through the whole sweep so the membranes stay clear of the tail
     pose.spread[0] = pose.spread[1] = a.phase === 'recovery' && a.k > 0.4 ? REST_SPREAD : 0;
     pose.spreadRate = 5;
+    // the arched resting tail drops low for the sweep (the measured v0.4 tail) and lifts back after
+    pose.tailLift = a.phase === 'recovery' && a.k > 0.3 ? 1 : 0;
     if (a.phase === 'windup') {
       // looks over its shoulder at the player (pose.look = the player's chest), crouches, the hind
       // feet brace wide, the tail coils to the opposite side (away from the player, with the body's
@@ -644,6 +646,7 @@ const stomp = {
       pose.restep = 1;
       pose.swell = a.k;
       pose.tailWave = 0;
+      pose.tailLift = 0; // pressed flat behind: the tripod's third leg
     } else if (a.phase === 'active') {
       // both forefeet slam down together on their landing spots, accelerating all the way so they
       // strike exactly on the impact (the end of the active, when the ring and the dust go off: they
@@ -668,6 +671,7 @@ const stomp = {
       pose.headRate = 10;
       pose.jaw = 0.8;
       pose.tailWave = 0;
+      pose.tailLift = 0;
     } else {
       // settle: the forefeet stay pressed into the slam spots for a beat (held by the override, so
       // the gait can't lift them), then plant there as contacts and step back home
@@ -695,6 +699,9 @@ const stomp = {
       pose.spread[0] = pose.spread[1] = REST_SPREAD - 0.18 * ease;
       pose.spreadRate = a.k < 0.3 ? 10 : 3;
       pose.tailWave = 0.07 + 0.08 * ease;
+      // the tail stays down through the slam's squash and lifts back to its arch once the body settles
+      // (lifting while the slam whipped the chain into the ground folded it)
+      pose.tailLift = a.k < 0.5 ? 0 : 1;
       pose.restep = hold ? 0 : 1;
       pose.jaw = 0.1 + 0.25 * ease;
     }
