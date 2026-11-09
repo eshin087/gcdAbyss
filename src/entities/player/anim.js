@@ -67,8 +67,8 @@ function blend(out, a, b, t) {
 // round under the body in 2-3 frames (a whip through the legs on every run start / stop, roll and
 // recovery). Now a low blade sweeps round the side at its own height, and never through the
 // back-left (from the right hand that path runs between the legs): it goes round the outside.
-const DIR_AVOID = 2.35; // azimuth a LOW blade never sweeps through (back-left, between the legs)
-const DIR_LOW = -0.3; // "low": either end's elevation below this (rad)
+const DIR_AVOID = 2.35; // azimuth a blade below shoulder height never sweeps through (back-left)
+const DIR_HIGH = 0.45; // elevation (rad) above which the blade clears the shoulder there
 const _ae = [0, 0, 0];
 function azEl(x, y, z, o) {
   const h = Math.hypot(x, z);
@@ -94,10 +94,11 @@ function dirLerp(out, i, ax, ay, az, bx, by, bz, t) {
   if (h0 < 0.06) a0 = a1; // a vertical end has no heading: borrow the other's
   if (h1 < 0.06) a1 = a0;
   let d = wrapAngle(a1 - a0);
-  if (Math.min(e0, e1) < DIR_LOW) {
-    // only a path that is still LOW where it crosses the back-left goes round the other way
+  if (Math.min(e0, e1) < DIR_HIGH) {
+    // a path that crosses the back-left below shoulder height (behind / through the body from the
+    // right hand) goes round the other way; one still high there passes over the shoulder
     const f = wrapAngle(DIR_AVOID - a0);
-    if (((d > 0 && f > 0 && f < d) || (d < 0 && f < 0 && f > d)) && e0 + ((e1 - e0) * f) / d < DIR_LOW) d -= Math.sign(d) * TAU;
+    if (((d > 0 && f > 0 && f < d) || (d < 0 && f < 0 && f > d)) && e0 + ((e1 - e0) * f) / d < DIR_HIGH) d -= Math.sign(d) * TAU;
   }
   const a = a0 + d * t, e = e0 + (e1 - e0) * t;
   const c = Math.cos(e);
@@ -546,7 +547,7 @@ function attackPose(p, A) {
     blend(p, p, SCRATCH, b);
     for (let j = 0; j < FOOT_CH.length; j++) p[FOOT_CH[j]] = FOOT_KEEP[j];
     p[P.rH + 2] += 0.24 * Math.sin(Math.PI * b);
-    const u = smoothstep(0.5, 1, rec);
+    const u = smoothstep(0.42, 0.9, rec); // home a beat before the blade crosses back in front of the legs
     p[P.lF] = lerp(p[P.lF], SCRATCH[P.lF], u);
     p[P.lF + 2] = lerp(p[P.lF + 2], SCRATCH[P.lF + 2], u);
     p[P.lF + 1] = lerp(p[P.lF + 1], ANK, u) + 0.07 * Math.sin(Math.PI * u);
