@@ -170,7 +170,8 @@ export const WYRM_ART = {
   scales: { ...HIDE_ART, scaleDir: 'down', scale: [0.48, 0.34] },
   // limbs and neck: scales big enough to read as shapes at the reference view (~3-4 letters across;
   // smaller ones printed as letter noise)
-  limbs: { ...HIDE_ART, scale: [0.3, 0.23] },
+  // (legs and tail: cooler cracks than the barrel, or the tail's underside read orange again)
+  limbs: { ...HIDE_ART, scale: [0.3, 0.23], crack: [14, 0.1, -0.4, 0.6] },
   neck: { ...HIDE_ART, scale: [0.4, 0.3] },
   // the head keeps fine scales (the neck's big plates turned the skull into a few flat tiles)
   head: { ...HIDE_ART, scale: [0.2, 0.15], crack: [12, 0.06, -0.3, 0.7] },
