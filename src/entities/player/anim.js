@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, damp, easeOutCubic, easeInOutSine, wrapAngle, TAU } from '../../core/math.js';
-import { DIM, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
+import { DIM, BODY, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
 
 // Procedural animation for the Wanderer, keyed to the owner's concept sheets ("Movement" / "Combat
 // key poses"). Every frame a target POSE (a flat Float32Array) is built for the current clip as a
@@ -11,7 +11,8 @@ import { DIM, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
 //
 // Pose spaces:
 //   body space  — origin at the waist pivot, axes of the `body` joint (rolls and falls with it).
-//   hand targets (rH/lH) are OFFSETS from each shoulder, in body axes (|offset| <= reach 0.55).
+//   hand targets (rH/lH) are OFFSETS from each shoulder, in body axes (|offset| <= reach 0.55); the
+//   sword hand's from its round-2 shoulder spot (rig.arms.R.anchor, model.js DIM.gripShoulder).
 //   foot targets (rF/lF) are MODEL space (ground-relative); poses that need feet to follow the
 //   body (roll tuck, lying down) map body-space points through their own body transform.
 
@@ -1426,9 +1427,9 @@ const _G = new THREE.Vector3(), _TL = new THREE.Vector3(), _qId = new THREE.Quat
 const _qInv2 = new THREE.Quaternion(), _qB = new THREE.Quaternion();
 
 const TIP_FLOOR = 0.012; // the steel point rests ON the ground (its outer corners included), never in it
-// blade vs the legs (outside attacks): thigh / shin clearance radii (limb + knee guard + margin) and
-// how far from the grip the steel starts to count
-const BLADE_CLEAR = [0.1, 0.085, 0.15];
+// blade vs the legs (outside attacks): thigh / shin clearance radii (limb + knee guard + margin,
+// model.js BODY: they grew with the round-3 legs) and how far from the grip the steel starts to count
+const BLADE_CLEAR = [BODY.thigh[0] + 0.025, BODY.shin[0] + 0.028, 0.15];
 const _mB = new THREE.Matrix4();
 const LEG_PTS = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()); // R hip, knee, ankle; L hip, knee, ankle
 const _cD = new THREE.Vector3();
@@ -1446,7 +1447,7 @@ const COAT_FLOOR = 0.04; // panel ends stay this far above the ground
 const COAT_JUMP = 0.2; // rad per frame: the most a lying-down floor fix may swing a panel at once
 const COAT_A = [[-1.5, 0.3], [-1.0, 0.6]]; // outward (−) / inward (+) swing limits per segment
 const COAT_B = [0.7, 0.55]; // sideways swing limit per segment
-const LEG_R = 0.08; // thigh / knee radius used to push the panels out
+const LEG_R = BODY.thigh[0] + 0.004; // thigh / knee radius used to push the panels out
 // torn strips (one spring each, so every tip sways on its own and lags its panel ~0.1 s)
 const STRIP_K = 75, STRIP_C = 7.5, STRIP_LAG = 0.08, STRIP_FLARE = 0.42;
 const STRIP_A = [-1.5, 0.8], STRIP_B = 0.8, STRIP_FLOOR = 0.03;
@@ -1554,12 +1555,13 @@ export class HeroAnimator {
     }));
     this.hairInit = false;
     this.legPts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-    // sphere proxies (joint-local centre + radius) kept above the ground by apply()
+    // sphere proxies (joint-local centre + radius) kept above the ground by apply(); the torso ones
+    // follow the round-3 chest / hip depth (model.js BODY: +0.02 over round 2)
     this.proxies = [
       { joint: rig.head, x: 0, y: 0.13, z: 0, r: 0.14 },
-      { joint: rig.chest, x: 0, y: 0.09, z: 0, r: 0.15 },
-      { joint: rig.spine, x: 0, y: 0.06, z: 0, r: 0.12 },
-      { joint: rig.pelvis, x: 0, y: -0.02, z: 0, r: 0.14 },
+      { joint: rig.chest, x: 0, y: 0.09, z: 0, r: 0.17 },
+      { joint: rig.spine, x: 0, y: 0.06, z: 0, r: 0.135 },
+      { joint: rig.pelvis, x: 0, y: -0.02, z: 0, r: 0.16 },
     ];
     this.reset();
   }
@@ -2156,9 +2158,11 @@ export class HeroAnimator {
     if (l > 1e-4) _bz.copy(_cP).multiplyScalar(1 / l);
   }
 
-  /** Hand target in chest space (into _T): the pose's shoulder offset (body axes). */
+  /** Hand target in chest space (into _T): the pose's shoulder offset (body axes). The sword hand's
+   *  offsets start from `arm.anchor` (model.js DIM.gripShoulder: the round-2 shoulder), so the
+   *  broader round-3 shoulders leave every grip the arm reaches, and the blade's hit segment, as it was. */
   _handTarget(arm, p, hi) {
-    _T.set(p[hi], p[hi + 1], p[hi + 2]).applyQuaternion(_qBC).add(arm.upper.position);
+    _T.set(p[hi], p[hi + 1], p[hi + 2]).applyQuaternion(_qBC).add(arm.anchor ?? arm.upper.position);
     return _T;
   }
 
