@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { createSurfaceGlyphMaterial, FLAG } from '../../render/materials.js';
 import { limbGeometry, ellipsoidGeometry, hornGeometry, planarGUV } from '../../render/glyphGeometry.js';
 
-// The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md): a slim
-// 1.80 m anime swordsman, 7.8 heads tall. A small head under a messy black mop whose heavy fringe
+// The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md): an
+// athletic, broad-shouldered 1.80 m anime swordsman (BODY, round 3), 7.8 heads tall. A small head
+// under a messy black mop whose heavy fringe
 // falls over the eyes; a tall flared stand collar up to the jaw; a long OPEN black greatcoat over
 // a buttoned black shirt, a belt stack at the natural waist, the skirt flaring into an A-line of
 // 22 claw-like torn strips with grey-lavender edges; a stepped, spiked pauldron on the RIGHT
