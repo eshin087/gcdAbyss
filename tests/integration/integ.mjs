@@ -1244,6 +1244,33 @@ async function scenarioPlunge() {
   }
   out(`   the leap: ${air} airborne frames, head or hero off screen in ${airOff}`);
   assert(air > 20 && airOff <= 2, `the leap keeps the flying head and the hero on screen (${airOff} of ${air} frames off)`);
+  // shooting fire while flying: a perfect dodge of the burning pass's stream (a hazard spawned with
+  // plunge: true) sends the hero onto the flying wyrm's head; it crashes out of the air
+  settle(G);
+  d.hazards.clear();
+  d.position.set(0, 0, -8); // the arena's middle, facing south: the pass has room to run over him
+  d.yaw = 0;
+  d.rig.snap();
+  run(G, 0.3, { passive: true });
+  place(G, 18);
+  const hpF = d.hp, cF = { ...G.counts };
+  let airAtDodge = false;
+  const hF0 = G.hits.length;
+  const rF = forceAttack(G, 'skyStrafe', { answer: 'dodge', settle: 1, max: 7 });
+  if (process.env.ABYSS_TRACE) out('     strafe hits', JSON.stringify(G.hits.slice(hF0)), 'pressLead', rF.pressLead, 'flashT', rF.flashT, 'impactT', rF.impactT, 'hero', p.position.x.toFixed(1), p.position.z.toFixed(1), 'hz', d.hazards.count());
+  airAtDodge = d.state === 'airborne' || d.rig.s.alt > 1;
+  const plungedF = p.state === 'plunge';
+  const trF = ride(6);
+  let crashed = false, landedF = false;
+  for (let i = 0; i < Math.round(5 / DT); i++) {
+    G.tick(DT);
+    if (d.brain.action?.name === 'plunged' && d.rig.s.alt < 0.2) crashed = true;
+    if (crashed && !d.brain.action && d.state === 'combat') { landedF = true; break; }
+  }
+  out(`   burning pass dodged: ${rF.res} · wyrm in the air at the dodge ${airAtDodge} · plunge ${plungedF} · phases ${[...trF.phases].join('')} · head damage ${hpF - d.hp} · crashed ${crashed} · back in combat ${landedF} (alt ${d.rig.s.alt.toFixed(2)}, ${d.state})`);
+  assert(rF.res === RESULT.PERFECT && airAtDodge && plungedF, `a perfect dodge of the flying wyrm's fire stream → the plunge onto it in the air (${rF.res}, air ${airAtDodge}, ${plungedF})`);
+  assert(since(cF, 'player:plungeHit') === 1 && since(cF, 'dragon:plunged') === 1 && hpF - d.hp === P.damage, `one head hit on the flying wyrm (${hpF - d.hp})`);
+  assert(crashed && landedF && trF.finite && Number.isFinite(d.position.x + d.position.z), 'the flying wyrm crashes out of the air and fights on');
   return G;
 }
 
