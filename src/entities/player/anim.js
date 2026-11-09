@@ -30,7 +30,7 @@ export const P = {
   rFf: 50, lFf: 51, // per-foot flat factor (× footFlat): heel peel / toe-off / swing
 };
 const N = 52;
-const ENTRY_EASE = 0.7; // an easeOut cross-fade (attack entries) arrives at this fraction of its time
+const ENTRY_EASE = 0.85; // an easeOut cross-fade (attack entries) arrives at this fraction of its time
 const TURN_LAG_MAX = 1.4; // rad: how far the drawn heading may trail the gameplay yaw in a fast turn
 const ANGLES = [P.pitch, P.yaw, P.roll];
 const ANK = DIM.ankle;
@@ -55,11 +55,11 @@ const setLen = (p, i, x, y, z, len) => {
   const l = Math.hypot(x, y, z) || 1;
   v3(p, i, (x / l) * len, (y / l) * len, (z / l) * len);
 };
-function blend(out, a, b, t) {
+function blend(out, a, b, t, mem = null) {
   const ax = a[P.swD], ay = a[P.swD + 1], az = a[P.swD + 2];
   const bx = b[P.swD], by = b[P.swD + 1], bz = b[P.swD + 2];
   for (let i = 0; i < N; i++) out[i] = a[i] + (b[i] - a[i]) * t;
-  dirLerp(out, P.swD, ax, ay, az, bx, by, bz, t);
+  dirLerp(out, P.swD, ax, ay, az, bx, by, bz, t, mem);
 }
 
 // ---------------------------------------------------------------- blade direction blending
@@ -71,6 +71,7 @@ function blend(out, a, b, t) {
 // back-left (from the right hand that path runs between the legs): it goes round the outside.
 const DIR_AVOID = 2.35; // azimuth a blade below shoulder height never sweeps through (back-left)
 const DIR_HIGH = 0.45; // elevation (rad) above which the blade clears the shoulder there
+const DIR_LOCAL = 0.8; // rad of azimuth below which a move is local (never sent the long way round)
 const _ae = [0, 0, 0];
 function azEl(x, y, z, o) {
   const h = Math.hypot(x, z);
@@ -78,7 +79,10 @@ function azEl(x, y, z, o) {
   o[1] = Math.atan2(y, h);
   o[2] = h / (Math.hypot(x, y, z) || 1); // how horizontal (0 = vertical: no heading)
 }
-function dirLerp(out, i, ax, ay, az, bx, by, bz, t) {
+/** mem (optional, a cross-fade's): { d, ok } — the sweep keeps the way round it took last frame
+ *  (the nearest 2π branch to it): the target moves during a fade, and re-deciding the way every
+ *  frame flipped the blade to the other side of the body mid-fade. */
+function dirLerp(out, i, ax, ay, az, bx, by, bz, t, mem = null) {
   if (!(t > 0)) {
     v3(out, i, ax, ay, az);
     return;
@@ -93,18 +97,44 @@ function dirLerp(out, i, ax, ay, az, bx, by, bz, t) {
   azEl(bx, by, bz, _ae);
   let a1 = _ae[0];
   const e1 = _ae[1], h1 = _ae[2];
-  if (h0 < 0.06) a0 = a1; // a vertical end has no heading: borrow the other's
-  if (h1 < 0.06) a1 = a0;
+  // a (nearly) vertical end has little heading, and it flips 180° as the blade passes vertical (the
+  // slam's raise): lean on the other end's heading as an end nears vertical, so the path stays
+  // continuous; the end correction below keeps both ends exact
+  const k0 = smoothstep(0.03, 0.3, h0), k1 = smoothstep(0.03, 0.3, h1);
+  a1 = a0 + wrapAngle(a1 - a0) * k1;
+  a0 = a1 + wrapAngle(a0 - a1) * k0;
   let d = wrapAngle(a1 - a0);
-  if (Math.min(e0, e1) < DIR_HIGH) {
+  if (Math.min(e0, e1) < DIR_HIGH && Math.abs(d) > DIR_LOCAL) {
     // a path that crosses the back-left below shoulder height (behind / through the body from the
-    // right hand) goes round the other way; one still high there passes over the shoulder
+    // right hand) goes round the other way; one still high there passes over the shoulder. A short
+    // move of a blade already AT the back-left (light 1's rising finish → light 2's coil) stays
+    // local: flipping it sent the blade 350° round the body in two frames
     const f = wrapAngle(DIR_AVOID - a0);
     if (((d > 0 && f > 0 && f < d) || (d < 0 && f < 0 && f > d)) && e0 + ((e1 - e0) * f) / d < DIR_HIGH) d -= Math.sign(d) * TAU;
   }
+  if (mem) {
+    if (mem.ok) d += TAU * Math.round((mem.d - d) / TAU);
+    mem.d = d;
+    mem.ok = true;
+  }
   const a = a0 + d * t, e = e0 + (e1 - e0) * t;
   const c = Math.cos(e);
-  v3(out, i, c * Math.sin(a), Math.sin(e), c * Math.cos(a));
+  let x = c * Math.sin(a), y = Math.sin(e), z = c * Math.cos(a);
+  if (k0 < 1 || k1 < 1) {
+    // the borrowed headings moved the path's ends: fade in the difference to the true ends
+    const la = Math.hypot(ax, ay, az) || 1, lb = Math.hypot(bx, by, bz) || 1;
+    const c0 = Math.cos(e0), c1 = Math.cos(e1), s = 1 - t;
+    x += s * (ax / la - c0 * Math.sin(a0)) + t * (bx / lb - c1 * Math.sin(a0 + d));
+    y += s * (ay / la - Math.sin(e0)) + t * (by / lb - Math.sin(e1));
+    z += s * (az / la - c0 * Math.cos(a0)) + t * (bz / lb - c1 * Math.cos(a0 + d));
+    const l = Math.hypot(x, y, z);
+    if (l > 1e-6) {
+      x /= l;
+      y /= l;
+      z /= l;
+    }
+  }
+  v3(out, i, x, y, z);
 }
 /** Turn the blade direction p[i..i+2] toward (x, y, z) by t, round the outside (see dirLerp). */
 function dirTo(p, i, x, y, z, t) {
@@ -890,9 +920,8 @@ function healPose(p, A) {
   p[P.hdX] = lerp(p[P.hdX], -0.38, drink);
   p[P.spX] = lerp(p[P.spX], 0.0, drink);
   p[P.hdY] = lerp(p[P.hdY], 0, raise);
-  // sword arm rests low at the side
-  to3(p, P.rH, 0.03, -0.46, 0.14, raise);
-  dirTo(p, P.swD, 0.1, -0.6, 0.75, raise);
+  // the sword arm keeps what the legs are doing (the low ready guard standing, trailing walking):
+  // swinging it forward-down for the drink only added two blade swings to a sip
   p[P.flask] = smoothstep(0.0, 0.1, t) * (1 - smoothstep(0.74, 0.85, t));
 }
 
@@ -1154,6 +1183,7 @@ export class HeroAnimator {
     this.speedSV = 0;
     this.backW = 0; // 0..1 eased: moving backward relative to the facing (the blade guards forward)
     this.wantOK = false; // FEET_WANT holds this frame's wanted feet (the planner ran)
+    this.fadeMem = { d: 0, ok: false }; // the cross-fade's blade sweep (see dirLerp)
     this.accF = 0;
     this.accS = 0;
     this.bank = 0;
@@ -1237,6 +1267,7 @@ export class HeroAnimator {
       F[P.lFy] = W[7];
     }
     this.key = key;
+    this.fadeMem.ok = false; // the new fade picks its own way round
     this.blendT = 0;
     this.blendDur = Math.max(1e-3, blend);
     this.easeOut = easeOut;
@@ -1434,7 +1465,7 @@ export class HeroAnimator {
       const u = clamp(this.blendT / this.blendDur, 0, 1);
       // attack entries (easeOut) get there early and hold the coil, but start from rest: an
       // ease-out cubic jumped the blade a third of the way (~80° round the body) in its first frame
-      blend(this.cur, this.from, this.target, this.easeOut ? smoothstep(0, ENTRY_EASE, u) : u * u * (3 - 2 * u));
+      blend(this.cur, this.from, this.target, this.easeOut ? smoothstep(0, ENTRY_EASE, u) : u * u * (3 - 2 * u), this.fadeMem);
     } else {
       this.cur.set(this.target);
     }
