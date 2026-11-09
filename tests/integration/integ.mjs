@@ -1145,6 +1145,7 @@ async function scenarioFire() {
   const { game, input } = G;
   fightSetup(G);
   const d = game.dragon, p = game.player, H = d.hazards, lead = TUNING.flashLead;
+  const ER_MAX_CHASE_HITS = TUNING.attacks.eruptions.chase.maxHits;
   const FIRE_NAMES = ['skyStrafe', 'diveBomb', 'hoverBarrage', 'meteorRain', 'eruptions', 'flameRing', 'flameWall', 'nova'];
   const AIR = new Set(['skyStrafe', 'diveBomb', 'hoverBarrage']);
   const HIGH = { skyStrafe: ['pass'], diveBomb: ['hover'], hoverBarrage: ['barrage'] };
@@ -1298,6 +1299,45 @@ async function scenarioFire() {
   assert(front1 === 1 && standTicks >= 3, 'the strip front hits once, then its fire ticks a hero standing in it');
   assert(rollTicks === 0, 'its fire never ticks a rolling hero');
   assert(H.get(strip) !== null, 'the strip still burns (lingers)');
+
+  // ---- phase 3's eruptions variant: pillars chase the hero for ~3 s (each one rings, tells, flashes)
+  settle(G);
+  H.clear();
+  d.phase = 3;
+  G.tick(DT);
+  front(14);
+  p.debug.god = true;
+  const ct = [], cf = [], ch0 = G.hits.length;
+  let maxPillars = 0;
+  G.watch = (n, dd) => {
+    if (dd?.attack !== 'eruptions') return;
+    if (n === 'combat:tell') ct.push(game.time);
+    if (n === 'combat:flash') cf.push(game.time);
+  };
+  const rnd = Math.random;
+  Math.random = () => 0.1; // (picks the chase: ER.chase.chance)
+  game.lab.trigger('eruptions');
+  Math.random = rnd;
+  const isChase = d.brain.action?.chase === true;
+  for (let i = 0; i < Math.round(6 / DT); i++) {
+    input.axis = { x: i % 120 < 60 ? 1 : -1, y: 0 }; // the hero keeps moving (side to side)
+    G.tick(DT);
+    maxPillars = Math.max(maxPillars, H.count('pillar'));
+  }
+  G.watch = null;
+  input.axis = { x: 0, y: 0 };
+  const chits = G.hits.slice(ch0).filter((h) => h.attack === 'eruptions');
+  let cworst = 0;
+  for (const h of chits) {
+    const f = cf.filter((t) => t <= h.t + 1e-6).pop();
+    const err = f === undefined ? Infinity : h.t - (f + lead);
+    if (Math.abs(err) > Math.abs(cworst)) cworst = err;
+  }
+  out(`   P3 eruption chase: ${isChase}, pillars alive at once ${maxPillars}, tells ${ct.length} flashes ${cf.length}, blows ${chits.length} (worst ${(cworst * 1000).toFixed(0)} ms after flash+lead)`);
+  assert(isChase && maxPillars >= 2 && ct.length >= 6 && ct.length === cf.length, 'phase 3: the eruptions chase the hero with announced pillars (one flash per tell)');
+  assert(chits.length <= ER_MAX_CHASE_HITS && Math.abs(cworst) <= 2.5 * DT, 'the chase deals at most its hit cap, each blow on its flash');
+  d.phase = 1;
+  run(G, 1, { passive: true });
 
   // ---- clear(): by hand, on a phase change, on death, on reset
   settle(G);
