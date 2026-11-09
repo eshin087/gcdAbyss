@@ -114,7 +114,7 @@ export class Pipeline {
         // runs, over a dim, dense letter fill.
         // ink: x / y = line brightness in dark / lit cells, z = how much of the part's hue a line keeps
         // (0 = white), w = fill left on the far side of a depth step (the dark gap beside a line)
-        uHeroInk: { value: new THREE.Vector4(0.5, 0.72, 0.55, 0.3) },
+        uHeroInk: { value: new THREE.Vector4(0.5, 0.72, 0.65, 0.3) },
         // fill: x / y = letter brightness at the dark / lit end, z / w = letter-ramp position there
         uHeroFill: { value: new THREE.Vector4(0.024, 0.46, 0.28, 1.0) },
         // inner lines are dimmer than the silhouette: brightness × x at a depth step, × y at a part edge,
@@ -129,8 +129,8 @@ export class Pipeline {
         uHeroDebug: { value: 0 },
         // each hero part's ink-line tint (rgb) × gain (a), from HERO_INK (player/model.js)
         uHeroPartInk: U.uHeroPartInk ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },
-        // ... and each part's letter-fill brightness (x) and heavy-silhouette flag (y)
-        uHeroPartFill: U.uHeroPartFill ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector2(1, 1)) },
+        // ... and each part's letter-fill brightness (x), heavy-silhouette flag (y), dotted-edge flag (z)
+        uHeroPartFill: U.uHeroPartFill ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector3(1, 1, 0)) },
         // per creature kind: x = hero (FLAG.ART_HERO), y = wyrm / other (FLAG.ART)
         // hero: his source (key-lit, U.uArtHeroKey) sits around luma 0.15–0.45 in moonlight and by the
         // fire alike; black point + gentle curve spread it over the whole ramp, dim to dense
@@ -176,7 +176,7 @@ export class Pipeline {
         uniform float uHeroHeavy;
         uniform float uHeroDebug;
         uniform vec4 uHeroPartInk[${HERO_PARTS}];
-        uniform vec2 uHeroPartFill[${HERO_PARTS}];
+        uniform vec3 uHeroPartFill[${HERO_PARTS}];
         uniform vec2 uArtLum;
         uniform vec2 uArtBlack;
         uniform vec2 uArtMin;
@@ -379,7 +379,12 @@ export class Pipeline {
               float k = outer ? 1.0 : (line > 0.7 ? uHeroLine.x : line > 0.5 ? uHeroLine.y : uHeroLine.z) * (far ? 0.7 : 1.0);
               vec4 pInk = uHeroPartInk[pid];
               vec3 ink = mix(vec3(1.0), hue, uHeroInk.z * (0.35 + 0.65 * sat)) * pInk.rgb;
-              col = ink * mix(uHeroInk.x, uHeroInk.y, v) * k * pInk.a * hdr * heroGlyph(j, local, 1.0);
+              // torn tails and hair: their outer edges are rows of bright specks (sparse letters), the
+              // reference's dotted rags and wisps, not a drawn stroke
+              float g = uHeroPartFill[pid].z > 0.5 && line > 0.7
+                ? heroGlyph(2.0 + floor(hash12(hcell + 3.7) * 4.0), local, 0.0)
+                : heroGlyph(j, local, 1.0);
+              col = ink * mix(uHeroInk.x, uHeroInk.y, v) * k * pInk.a * hdr * g;
             } else if (uHeroDebug > 1.5) {
               col = vec3(0.0);
             } else {

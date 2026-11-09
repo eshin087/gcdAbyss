@@ -757,8 +757,9 @@ export const ART_GAIN = 1.1;
  * part emits (`glow`: the blade, the gem, the flask). `line` = that part's ink-line tint [r, g, b]
  * and gain (> 1 glows under bloom: the cyan blade edges, the violet gem); default white × 1.
  * `fillGain` scales the brightness of its letter fill (default 1); `heavy: false` keeps its
- * silhouette a fine stroke at the game camera (the hair: a heavy ring reads as a helmet). Materials
- * sharing a part must share these. See HERO_ART in render/materials.js.
+ * silhouette a fine stroke at the game camera (the hair: a heavy ring reads as a helmet); `dotted`
+ * prints its outer edges as bright specks instead of strokes (the reference's dotted rags and hair
+ * wisps). Materials sharing a part must share these. See HERO_ART in render/materials.js.
  */
 export const HERO_INK = {
   skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8 },
@@ -770,12 +771,12 @@ export const HERO_INK = {
   coat: { part: 6, fill: [0.175, 0.165, 0.155] },
   collar: { part: 6, fill: [0.175, 0.165, 0.155] },
   facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1] },
-  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1] },
+  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true },
   piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1] },
   leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9] },
   // the reference's hair is a blue-violet dotted mass, lighter at the top and the strand ends
-  hair: { part: 11, fill: [0.1, 0.085, 0.24], rim: 0.9, line: [0.7, 0.64, 1.0, 0.85], fillGain: 2.6, heavy: false },
-  hairTip: { part: 11, fill: [0.15, 0.12, 0.36], rim: 0.9, line: [0.7, 0.64, 1.0, 0.85], fillGain: 2.6, heavy: false },
+  hair: { part: 11, fill: [0.1, 0.085, 0.24], rim: 0.9, line: [0.7, 0.64, 1.0, 1.0], fillGain: 2.6, heavy: false, dotted: true },
+  hairTip: { part: 11, fill: [0.15, 0.12, 0.36], rim: 0.9, line: [0.7, 0.64, 1.0, 1.0], fillGain: 2.6, heavy: false, dotted: true },
   // the reference's armour is the brightest mass on him: grey plates with white glints
   armor: { part: 12, fill: [0.25, 0.25, 0.28], spec: 1.0, specPow: 20, line: [1, 1, 1, 1.15], fillGain: 1.8 },
   spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.2], fillGain: 1.8 },
@@ -937,7 +938,7 @@ export function createHeroMaterials(U) {
   for (const h of Object.values(HERO_INK)) {
     const l = h.line ?? [1, 1, 1, 1];
     partInk?.[h.part]?.set(l[0], l[1], l[2], l[3]);
-    partFill?.[h.part]?.set(h.fillGain ?? 1, h.heavy === false ? 0 : 1);
+    partFill?.[h.part]?.set(h.fillGain ?? 1, h.heavy === false ? 0 : 1, h.dotted ? 1 : 0);
   }
   return Object.fromEntries(Object.entries(specs).map(([name, s]) => [name, make(name, s.o, s.opts)]));
 }
