@@ -9,6 +9,7 @@ import { Rig, createPose, resetPose } from './rig/anim.js';
 import { Brain, SEQ } from './ai.js';
 import { ATTACKS, MELEE } from './attacks.js';
 import { DragonFx } from './fx.js';
+import { Hazards } from './hazards.js';
 
 // VAELGRIM, THE CINDER WYRM — the boss. Public contract: see docs/ARCHITECTURE.md (Dragon).
 // Wiring: Brain (ai.js) writes pose targets + root motion and runs the attack tell beats, Rig
@@ -102,6 +103,7 @@ export class Dragon {
     this.pose = createPose();
     this.rig = new Rig(this.model, this);
     this.fx = new DragonFx(this);
+    this.hazards = new Hazards(this); // fire hazards (hazards.js): cleared by fx.reset(), death, phase changes
     this.brain = new Brain(this);
     this.debug = createDebug(this);
 
@@ -386,6 +388,7 @@ export class Dragon {
         blockable,
         attack,
         attacker: this,
+        plunge: o.plunge ?? cur?.plunge, // false: a perfect dodge never plunges (fire hazards)
       });
     } catch (err) {
       console.error('[dragon] player.takeHit failed', err);
@@ -590,6 +593,7 @@ export class Dragon {
     this._refreshHurt();
     this._refreshPushers();
     this.fx.update(dt);
+    this.hazards.update(dt); // (guarded inside: never throws)
     if (this.state !== 'dying') {
       this.fx.eyeGlints(dt, this.rig.pt.eyes, this.rig.s.eyes);
       if (this.phase === 2) this.fx.bodyEmbers(dt, this.hurtSpheres, 22, false);

@@ -681,7 +681,12 @@ Dragon (any attacker) → hud/audio/flow:
   `dragon:breathStart`, `dragon:breathEnd`, `dragon:fireball {x, y, z}`, `dragon:explosion {x, z, radius}`,
   `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell}`,
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
-  `dragon:death`, `dragon:dead`
+  `dragon:death`, `dragon:dead`,
+  `dragon:spell {name, x, z}` (a fire attack's signature moment: the strafe's pass, the dive, the barrage's
+  rise, a spell's cast / the nova's charge start), `dragon:hazard {kind, stage, x, z, radius}` (a fire hazard:
+  stage 'fall' = a meteor starts its visible fall, 'hit' = a meteor / pillar / the dive's crash / the nova goes off)
+- Hazard tells: a self-announcing hazard (meteors, chase pillars) emits combat:tell / combat:flash with
+  source 'dragon', its spell as the attack, tell 'red' and hazard: true (audio plays a lighter cue)
 Flow → hud/audio:
 - `state {from, to}`, `bonfire:rest`, `game:retry`, `game:victory`, `area {name}`
 
