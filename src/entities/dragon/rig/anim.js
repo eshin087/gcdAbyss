@@ -116,6 +116,25 @@ export const WING_KEYS = {
     kink: [-10 * DEG, -22 * DEG, -8 * DEG, 0],
     thumb: nrm([0.25, -0.75, 0.6]),
   },
+  // flight (dragon-fire): blended over the spread key by pose.glide / pose.dive.
+  // GLIDE: the arms reach out nearly level (a ~27° dihedral) and the four fingers fan the sail out
+  // flat behind them, so from the 58° game camera the whole membrane faces up (the strafe pass, the
+  // landing glide). Span ~ SPREAD's (~34 m): wider filled the screen.
+  GLIDE: {
+    wrist: ck(3.3, 5.3, 1.15),
+    pole: [0.15, 0.5, -1],
+    fingers: [[0.94, 0.12, 0.32], [0.86, -0.06, -0.5], [0.66, -0.1, -0.74], [0.3, -0.12, -0.95]].map(nrm),
+    kink: [-3 * DEG, -6 * DEG, -3 * DEG, 0],
+    thumb: nrm([0.12, 0.55, 0.83]),
+  },
+  // DIVE: the stoop: arms tucked back and up, the fingers swept back along the body (a narrow delta)
+  DIVE: {
+    wrist: ck(2.2, 5.5, -0.3),
+    pole: [0.35, 0.4, -1],
+    fingers: [[0.42, 0.12, -0.9], [0.4, -0.04, -0.92], [0.3, -0.16, -0.94], [0.14, -0.3, -0.94]].map(nrm),
+    kink: [-2 * DEG, -4 * DEG, -2 * DEG, 0],
+    thumb: nrm([0.25, 0.6, 0.76]),
+  },
   // lying down (asleep / dead): folded flat onto the back and flanks
   FOLD_LYING: {
     wrist: ck(1.5, 4.1, 1.9),
@@ -174,6 +193,12 @@ export function createPose() {
     elbowsOut: 0, // 0..1 forelegs bow outward (braced / buckled)
     swell: 0, // 0..1 chest swells (+6 % height: breath / roar charge)
     airReach: 0, // 0..1 airborne legs reach down and forward (dive / landing) instead of tucking
+    // flight (dragon-fire; all 0..1, used with alt / airborne / flap): hover = hanging hind legs,
+    // forelegs reaching down, the tail hanging, the wingbeat sweeping fore / aft (a hovering stroke);
+    // glide = wings toward the GLIDE key (flat sails); dive = wings toward DIVE (swept back), tail streaming
+    hover: 0,
+    glide: 0,
+    dive: 0,
     sleep: 0,
     dead: 0,
     stagger: 0,
@@ -224,6 +249,7 @@ export function resetPose(p) {
   p.elbowsOut = 0;
   p.swell = 0;
   p.airReach = 0;
+  p.hover = p.glide = p.dive = 0;
   p.sleep = 0;
   p.dead = 0;
   p.stagger = 0;
@@ -348,6 +374,7 @@ export class Rig {
       lookDown: 0.14, gaitRoll: 0, frontDip: 0,
       droop: 0, mantle: 0, stanceF: 0, stanceH: 0, strideF: 0, strideH: 0, restep: 0, elbowsOut: 0, swell: 0, airReach: 0,
       rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0, tailLift: 0, still: 0,
+      hover: 0, glide: 0, dive: 0,
     };
     this.s.tailNew = 1; // 0..1 the round-2 tail limits (0 = the v0.4 solve: pose.tailLegacy)
     this.s.drape = [0, 0];
@@ -518,6 +545,9 @@ export class Rig {
     s.elbowsOut = sm(s.elbowsOut, pose.elbowsOut, 5);
     s.swell = sm(s.swell, pose.swell, 3);
     s.airReach = sm(s.airReach, pose.airReach, 5);
+    s.hover = sm(s.hover, pose.hover, 4);
+    s.glide = sm(s.glide, pose.glide, 3.5);
+    s.dive = sm(s.dive, pose.dive, 7);
     s.flapAmp = sm(s.flapAmp, pose.flap, 5);
     if (s.flapAmp > 0.02) {
       s.flapPhase += dt * pose.flapHz * TAU;
@@ -577,7 +607,9 @@ export class Rig {
     this._stalk = s.still * iw * (1 - lying);
     lower += REST_POSE.stance.crouch * this._stalk;
 
-    const bob = -0.07 * hindLift + br * 0.03 - 0.025 * (0.5 + 0.5 * Math.sin(t * 0.53)) * iw;
+    // in the air every downstroke heaves the body up (it peaks as the wings reach the bottom)
+    const heave = s.airborne * s.flapAmp * 0.24 * -Math.sin(s.flapPhase);
+    const bob = -0.07 * hindLift + br * 0.03 - 0.025 * (0.5 + 0.5 * Math.sin(t * 0.53)) * iw + heave;
     m.hips.position.set(0, A.hipY - lower + bob + s.alt / S, A.hipZ);
     m.hips.rotation.set(s.pitch + s.sleep * 0.08, s.twist * 0.3 + 0.025 * turnSway, s.roll + s.gaitRoll + s.dead * 0.75 + 0.02 * sway);
     m.chest.rotation.set(-br * 0.02 + s.stagger * 0.12 + s.frontDip * 0.022, s.twist * 0.7 + 0.035 * Math.sin(t * 0.43 - 0.2) * iw, -0.012 * sway);
@@ -847,7 +879,8 @@ export class Rig {
     const base = set(this._tb[0], lerp(-0.8, R.pitch0, lw), lerp(0.07, R.pitchStep, lw), 0, s.tailCurl + 0.035 * hook / TAIL_HOOK, hook, s.tailWave, this.time * 1.4);
     base.pitchCurve = R.pitchCurve * lw;
     base.dipAmp = R.dipAmp * lw;
-    const air = set(this._tb[1], -0.6, -0.005, 0, s.tailCurl * 0.5, 0.002, 0.04, this.time * 2.0);
+    // in the air it streams back as a rudder; hovering it hangs and sways; diving it streams straight
+    const air = set(this._tb[1], -0.6 - 0.55 * s.hover + 0.3 * s.dive, -0.005 - 0.01 * s.hover, 0, s.tailCurl * 0.5, 0.002, 0.04 + 0.1 * s.hover, this.time * (2.0 - 0.7 * s.hover));
     // asleep: curls around toward the head (model-right, where the neck lies)
     const sleep = set(this._tb[2], -0.5, 0.06, 0.25, 0.14, 0.006, 0.02, this.time * 0.6);
     const p = mixParams(base, air, s.airborne, this._tp);
@@ -969,8 +1002,11 @@ export class Rig {
       this._wp(leg.hip, out.hip);
       const toeT = v[5].copy(limb.pos);
       if (s.airborne > 0.001) {
-        // trail back, extended; the dive reaches them down and forward, claws spread, for the landing
-        const tuck = v[6].set(side * lerp(1.0, 1.2, s.airReach), lerp(-1.6, -2.55, s.airReach), lerp(-1.9, 0.1, s.airReach)).applyMatrix4(m.hips.matrixWorld);
+        // trail back, extended; hovering they hang straight down (swaying a little); the dive reaches
+        // them down and forward, claws spread, for the landing
+        const hv = s.hover, rch = s.airReach;
+        const bx = lerp(1.0, 1.15, hv), by = lerp(-1.6, -2.45, hv), bz = lerp(-1.9, -0.55, hv) + 0.12 * hv * Math.sin(this.time * 2.3 + side);
+        const tuck = v[6].set(side * lerp(bx, 1.2, rch), lerp(by, -2.55, rch), lerp(bz, 0.1, rch)).applyMatrix4(m.hips.matrixWorld);
         toeT.lerp(tuck, s.airborne);
       }
       const ankleT = v[7].copy(toeT);
@@ -1019,8 +1055,11 @@ export class Rig {
         freeW = Math.max(freeW, s.rear);
       }
       if (s.airborne > 0.001) {
-        // folded under the chest, paws back; the dive reaches them down and forward for the landing
-        const tuck = v[6].set(side * lerp(0.9, 1.2, s.airReach), lerp(-1.55, -2.6, s.airReach), lerp(0.2, 1.0, s.airReach)).applyMatrix4(m.chest.matrixWorld);
+        // folded under the chest, paws back; hovering they hang down, claws ready; the dive reaches
+        // them down and forward for the landing
+        const hv = s.hover, rch = s.airReach;
+        const bx = lerp(0.9, 1.0, hv), by = lerp(-1.55, -2.1, hv), bz = lerp(0.2, 0.75, hv);
+        const tuck = v[6].set(side * lerp(bx, 1.2, rch), lerp(by, -2.6, rch), lerp(bz, 1.0, rch)).applyMatrix4(m.chest.matrixWorld);
         toeT.lerp(tuck, s.airborne);
         freeW = Math.max(freeW, s.airborne);
       }
@@ -1121,6 +1160,11 @@ export class Rig {
     for (let k = 0; k < 2; k++) {
       const w = m.wings[k], side = w.side, out = pt.wings[k];
       const K = this._wingKey(s.spread[k] + 0.14 * ro, lying, s.droop, s.mantle);
+      // flight keys (dragon-fire): the glide's flat sails, the dive's swept-back stoop; hovering, the
+      // stroke sweeps (the wrists come forward on the downstroke and go back on the upstroke)
+      if (s.glide > 1e-3) this._toKey(K, WING_KEYS.GLIDE, s.glide * (1 - lying));
+      if (s.dive > 1e-3) this._toKey(K, WING_KEYS.DIVE, s.dive * (1 - lying));
+      if (s.hover > 1e-3 && s.flapAmp > 0.05) K.wrist[2] -= Math.cos(s.flapPhase) * 1.1 * s.hover;
       if (iw > 1e-3 || ro > 1e-3) {
         K.wrist[1] += 0.07 * br * iw + 0.25 * ro;
         K.wrist[0] += 0.12 * ro;
