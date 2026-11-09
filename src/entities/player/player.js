@@ -1438,6 +1438,7 @@ export class Player {
     const x = this._tip.x, z = this._tip.z;
     if (!Number.isFinite(x + z)) return;
     this.fx.slamShards(x, z, this.critTimer > 0);
+    this.anim.kickCoat(0.6, this.anim.noise); // the impact's blast throws the coat tails out
     g.world?.gust?.(x, z, 1.1, 4.5);
     g.shake?.(d.shake * 0.6);
     this._emit('player:slam', { x, z });
