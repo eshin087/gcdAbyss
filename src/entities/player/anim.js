@@ -174,12 +174,12 @@ function kv3(p, i, t, k) {
  *  down-left across the front of the legs (down-right on screen) with the point just off the grass
  *  outside the left boot; the free hand hangs relaxed beside the left thigh; the head tips down and
  *  turns a little toward the blade. Breathing + a slow weight sway; no steps. */
-const IDLE_SW = [0.68, -0.68, 0.27]; // blade direction (body axes): ~43° below level, toward the left foot
+const IDLE_SW = [0.66, -0.72, 0.26]; // blade direction (body axes): ~46° below level, past the left foot
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
   p[P.bodyX] = 0.045 + 0.01 * sw; // over the left (weight) foot
-  p[P.bodyY] = 0.02 + 0.004 * br; // the weight leg nearly straight
+  p[P.bodyY] = -0.008 + 0.004 * br; // the weight leg nearly straight
   p[P.bodyZ] = 0.0;
   p[P.pitch] = 0;
   p[P.yaw] = 0;
@@ -193,13 +193,13 @@ function guard(p, A) {
   p[P.hdX] = 0.2 - 0.04 * br;
   p[P.hdY] = 0.22;
   p[P.hdZ] = 0.07 + 0.015 * sw;
-  v3(p, P.rH, -0.04, -0.5 + 0.006 * br, 0.1); // grip at the right thigh, a hand ahead of the hip
-  v3(p, P.rP, -0.8, -0.2, -0.7);
+  v3(p, P.rH, -0.1, -0.49 + 0.006 * br, 0.11); // grip low and out at the right thigh, ahead of the hip
+  v3(p, P.rP, -0.9, -0.1, -0.5); // the elbow out
   v3(p, P.lH, 0.11, -0.49, 0.03); // free hand hangs loose beside the left thigh
   v3(p, P.lP, 0.7, -0.1, -1);
   v3(p, P.swD, IDLE_SW[0] + 0.03 * br, IDLE_SW[1], IDLE_SW[2] + 0.02 * sw);
   v3(p, P.swF, -0.15, 0.2, 0.95); // the flat faces the viewer
-  v3(p, P.rF, -0.25, ANK, 0.15); // relaxed leg: out to the side, a little forward
+  v3(p, P.rF, -0.28, ANK, 0.16); // relaxed leg: out to the side, a little forward
   v3(p, P.lF, 0.13, ANK, -0.03); // weight leg: under the body
   v3(p, P.rK, -0.55, 0.1, 1);
   v3(p, P.lK, 0.25, 0, 1);
@@ -326,12 +326,14 @@ function loco(p, A) {
   p[P.hdZ] = lerp(p[P.hdZ], 0.4 * A.bank, w);
 
   // sword arm trailing: low behind the hip, blade back-down beside the right leg (run) → swept
-  // back, blade nearly level (sprint); it bobs and swings a little with the stride
-  const amp = 0.05 * cs * mz;
-  to3(p, P.rH, lerp(-0.02, -0.06, s), lerp(-0.49, -0.38, s) + 0.012 * st, lerp(-0.12 + amp, -0.3, s), w);
-  to3(p, P.rP, -0.6, lerp(-0.3, 0.2, s), -1, w);
-  dirTo(p, P.swD, lerp(-0.2, -0.14, s), lerp(-0.6, -0.22, s) - 0.03 * st * (1 - s), lerp(-0.77, -0.96, s), w);
-  to3(p, P.swF, -0.3, 1, 0, w);
+  // back, blade nearly level (sprint); it bobs and swings a little with the stride. The sword
+  // follows the body with its own lag (A.swordW): setting off, the blade swings back round the
+  // right side over ~0.3 s instead of whipping; stopping, it swings forward to the ready stance.
+  const amp = 0.05 * cs * mz, ws = A.swordW;
+  to3(p, P.rH, lerp(-0.02, -0.06, s), lerp(-0.49, -0.38, s) + 0.012 * st, lerp(-0.12 + amp, -0.3, s), ws);
+  to3(p, P.rP, -0.6, lerp(-0.3, 0.2, s), -1, ws);
+  dirTo(p, P.swD, lerp(-0.2, -0.14, s), lerp(-0.6, -0.22, s) - 0.03 * st * (1 - s), lerp(-0.77, -0.96, s), ws);
+  to3(p, P.swF, -0.3, 1, 0, ws);
   // free arm swings opposite the legs: ahead of the belt (run) → a pumping fist chin ↔ hip (sprint)
   const k = 0.5 - 0.5 * cs * mz; // 1 = fist forward
   to3(p, P.lH, lerp(-0.02, -0.08, s) * k + 0.06 * (1 - k), lerp(lerp(-0.44, -0.3, k), lerp(-0.38, -0.04, k), s), lerp(lerp(-0.1, 0.24, k), lerp(-0.14, 0.32, k), s), w);
@@ -1070,7 +1072,7 @@ const BREEZE = [0.02, 0.03, 0.05, 0.04, 0.1, 0.05, 0.0];
 // standing still, the skirt FLARES like the reference portrait's (a wide A of torn tails either
 // side of the legs, the sword side widest): extra outward swing per panel, faded out by speed
 // (front-left, front-right, left, right, back-left, back-right, flap)
-const IDLE_FLARE = [0.1, 0.16, 0.34, 0.42, 0.26, 0.32, 0];
+const IDLE_FLARE = [0.1, 0.18, 0.36, 0.5, 0.26, 0.38, 0];
 
 export class HeroAnimator {
   /** player must expose: yaw, state, stateT, animT, atk ({def}), groundVel {x, z}, chargeK,
@@ -1089,6 +1091,7 @@ export class HeroAnimator {
     this.t = 0;
     this.moveW = 0;
     this.sprintW = 0;
+    this.swordW = 0;
     this.speed = 0;
     this.phase = 0;
     this.mx = 0;
@@ -1179,6 +1182,7 @@ export class HeroAnimator {
     this.t = 0;
     this.moveW = 0;
     this.sprintW = 0;
+    this.swordW = 0;
     this.speed = 0;
     this.phase = 0;
     this.mx = 0;
@@ -1285,6 +1289,7 @@ export class HeroAnimator {
     this.speed = sp;
     this.moveW = damp(this.moveW, clamp(sp / 3, 0, 1), 10, dt);
     this.sprintW = damp(this.sprintW, pl.state === 'sprint' ? 1 : 0, 6, dt);
+    this.swordW = damp(this.swordW, this.moveW, 7, dt);
     // acceleration (model space) for the lean into starts / the sit-back on stops, and the turn rate
     // of the velocity heading for banking into curves
     const P0 = this._pv;
@@ -1956,6 +1961,7 @@ export class HeroAnimator {
     const r = this.rig;
     const steps = dt > 0 ? Math.min(6, Math.ceil(dt / (1 / 120))) : 0;
     const h = steps ? dt / steps : 0;
+    const still = 1 - clamp(this.speed / 2.5, 0, 1);
     r.head.getWorldQuaternion(_q1);
     _qInv.copy(_q1).invert();
     _g.set(0, -1, 0).applyQuaternion(_qInv); // gravity in head space
@@ -1978,7 +1984,10 @@ export class HeroAnimator {
       const wz = -_v.z * 0.03 + _g.z * 0.25;
       // rotation vector moving the tip by w: d × w
       _axis.set(_d.y * wz - _d.z * wy, _d.z * wx - _d.x * wz, _d.x * wy - _d.y * wx);
-      _axis.x += Math.sin(this.time * 1.7 + i * 2.1) * 0.015;
+      // a breeze through the locks (stronger standing still): two slow sways per cluster
+      const bz = 0.012 + 0.03 * still;
+      _axis.x += (Math.sin(this.time * 1.3 + i * 2.1) + 0.5 * Math.sin(this.time * 3.1 + i * 1.3)) * bz;
+      _axis.z += Math.sin(this.time * 1.7 + i * 0.9) * bz * 0.6;
       const al = _axis.length();
       if (al > HAIR_MAX) _axis.multiplyScalar(HAIR_MAX / al);
       for (let k = 0; k < steps; k++) {
