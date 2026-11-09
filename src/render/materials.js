@@ -165,6 +165,13 @@ function surfaceFeatures(o, cell) {
     uniforms.uArtRim = { value: h.rim ?? 1 };
     uniforms.uArtGlowK = { value: h.glow ?? 0 };
     uniforms.uArtPart = { value: part * 2 };
+    // depth pull (the blade): its depth moves `uArtPull` metres toward the camera along each view ray
+    // (the same pixels on screen), so it is drawn over the grass and his own legs it lies just
+    // behind; player/model.js sets it per frame (0 in close-ups)
+    if (h.pull) {
+      defines.SG_HERO_PULL = '';
+      uniforms.uArtPull = { value: 0 };
+    }
     // cloth folds: [bands per metre across aGUV x (rad), depth 0..1, wander down aGUV y]
     if (h.folds != null) {
       const [fq, fd, fw] = h.folds;
@@ -448,6 +455,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       attribute float aPart;
       varying float vPart;
 #endif
+#ifdef SG_HERO_PULL
+      uniform float uArtPull;
+#endif
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vW = wp.xyz;
@@ -463,7 +473,15 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
 #ifdef SG_HERO_ART
         vPart = aPart;
 #endif
+#ifdef SG_HERO_PULL
+        // scaled along its view ray: the same screen position, a nearer depth
+        vec4 vp = viewMatrix * wp;
+        float dv = length(vp.xyz);
+        vp.xyz *= max(dv - uArtPull, dv * 0.5) / max(dv, 1e-4);
+        gl_Position = projectionMatrix * vp;
+#else
         gl_Position = projectionMatrix * viewMatrix * wp;
+#endif
       }
     `,
     fragmentShader: /* glsl */ `

@@ -49,10 +49,16 @@ export const DIM = {
   gripBack: 0.08, // grip runs from −gripBack …
   guard: 0.1, // … to the crossguard
   gem: 0.17, // the violet gem on the forte, inside its cage
-  forte: 0.35, // end of the dark gunmetal forte under the gem cage (glyph blade from here on)
-  steelTip: 1.17, // the visible steel point (1.36 m of steel, pommel tip at −0.19)
+  forte: 0.25, // end of the dark gunmetal forte under the gem cage (the cyan glyph blade from here on)
+  // the steel length the animator poses with (anim.js keeps this point on the grass and out of the
+  // legs; the integration test checks it): unchanged, so every attack's hit segment stays the same
+  steelTip: 1.17,
+  // the DRAWN point: 1.64 m of steel (pommel tip at −0.19). The owner's reference draws the blade
+  // from the gem to the point ≈ 70 % of his height. Visual only (the hit segment below is unchanged
+  // and the point stays inside it); the idle stance (anim.js IDLE_SW) rests this point on the grass
+  drawnTip: 1.45,
   bladeBase: 0.16, // hit segment along +Z (hilt side) …
-  bladeTip: 1.5, // … to here (+ REACH.tipExt): the cyan glow, not steel, covers the last 0.33 m
+  bladeTip: 1.5, // … to here (+ REACH.tipExt 0.4): gameplay reach, independent of the drawn steel
 };
 
 /** Idle-stance reference heights (m) of the joints the meshes hang on. */
@@ -72,13 +78,15 @@ const REST = (() => {
 // The owner's reference flares the coat WIDE on both sides into long ragged strips (to mid-calf, the
 // side tails out past the hands): wide hems, long strips, and a per-panel resting `flare` (the
 // animator's outward pull, see COAT_FLARE in anim.js: 0.3 ≈ 17°; 0.62 ≈ 32° on the sides).
+// (round 2: the front panels hang nearly straight, the coat's open front edges; the side and back
+// drapes are wider at the hem with soft folds, so the flare reads as cloth, not planks)
 export const COAT_PANELS = [
-  { az: 0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.36 }, // front-left
-  { az: -0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.36 }, // front-right
-  { az: 1.6, w: [0.18, 0.29, 0.42], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.62 }, // left
-  { az: -1.6, w: [0.18, 0.29, 0.42], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.62 }, // right
-  { az: 2.55, w: [0.17, 0.28, 0.4], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
-  { az: -2.55, w: [0.17, 0.28, 0.4], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
+  { az: 0.75, w: [0.14, 0.22, 0.3], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.22, folds: 1 }, // front-left
+  { az: -0.75, w: [0.14, 0.22, 0.3], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.22, folds: 1 }, // front-right
+  { az: 1.6, w: [0.21, 0.38, 0.6], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.5 }, // left
+  { az: -1.6, w: [0.21, 0.38, 0.6], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.5 }, // right
+  { az: 2.55, w: [0.2, 0.36, 0.55], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
+  { az: -2.55, w: [0.2, 0.36, 0.55], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
   // the front flap: hangs between the legs from 1.05 m to a point at 0.55 m (seen in wide stances)
   { az: 0, w: [0.12, 0.12, 0.11], len: [0.28, 0.22], strips: [], fork: [], out: 0, flap: true, y: -0.085, r: 0.112 },
 ];
@@ -189,19 +197,25 @@ function shellGeometry(rings, { sub = 2, cols = 24, span = 0 } = {}) {
 /** A coat-skirt sheet hanging −Y from its joint: width wTop → wBot over `len`, curved around the
  *  hips with a radius that grows down the panel (R0 + flare × depth) so neighbours form a cone.
  *  Local +Z = outward; the front face points out (the lining is the back face). */
-function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1) {
+function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, fold = [0, 0, 0], t0 = 0, t1 = 1) {
   const r = rng(seed);
-  const cols = 6, rows = 5;
+  const cols = 12, rows = Math.max(2, Math.round(5 * (t1 - t0)));
   const jitter = Array.from({ length: cols + 1 }, () => (r() - 0.5) * jag);
-  return gridGeometry(cols, rows, (s, t, o) => {
+  // `fold` [amplitude at the top, at the bottom (m), waves across, phase]: the reference's coat
+  // drapes in soft vertical folds that deepen toward the hem (a flat sheet read as a plank).
+  // t0 … t1: build only that stretch of the sheet (the dark coat above, the lavender torn zone below)
+  const ph = fold[3] ?? r() * Math.PI * 2;
+  return gridGeometry(cols, rows, (s, tt, o) => {
+    const t = lerp(t0, t1, tt);
     const w = lerp(wTop, wBot, t);
     const u = (s - 0.5) * w;
     const R = R0 + flare * t * len;
     const a = u / R;
-    const y = -t * (len + 0.02) + (t === 1 ? jitter[Math.round(s * cols)] : 0);
-    o[0] = Math.sin(a) * R;
+    const y = -t * (len + 0.02) + (tt === 1 && t1 === 1 ? jitter[Math.round(s * cols)] : 0);
+    const f = lerp(fold[0], fold[1], t) * Math.sin(s * Math.PI * 2 * fold[2] + ph) * Math.sin(Math.PI * Math.min(1, s * 6) * 0.5) * Math.sin(Math.PI * Math.min(1, (1 - s) * 6) * 0.5);
+    o[0] = Math.sin(a) * (R + f);
     o[1] = y;
-    o[2] = (Math.cos(a) - 1) * R;
+    o[2] = (Math.cos(a) - 1) * R + Math.cos(a) * f;
     o[3] = u;
     o[4] = y;
   }, true);
@@ -299,8 +313,10 @@ function kiteGeometry(x, y, z, { zNeg = 1, yPos = 1, guv = 'xy' } = {}) {
  * half of the blade is exactly one glyph column (chevrons pointing to the tip), with cell seams
  * on the edges and the centre ridge (the material draws column seams only: seamAxis 'y').
  */
-function bladeGeometry(len, hw0, hw1, tipFrac, th, cellW) {
-  const g = new THREE.BoxGeometry(1, 1, 1, 2, 2, 18);
+function bladeGeometry(len, hw0, hw1, tipFrac, th, cellW, half = 0) {
+  // half −1 / +1: only that side of the centre ridge (the two halves get different ink-line sub-ids,
+  // so the art pass draws the reference's bright ridge line between them)
+  const g = half ? new THREE.BoxGeometry(0.5, 1, 1, 1, 2, 18).translate(half * 0.25, 0, 0) : new THREE.BoxGeometry(1, 1, 1, 2, 2, 18);
   const pos = g.attributes.position;
   const guv = new Float32Array(pos.count * 2);
   for (let i = 0; i < pos.count; i++) {
@@ -494,7 +510,7 @@ function place(g, x, y, z, rx = 0, ry = 0, rz = 0) {
 
 /** Scalp-cap radii (hero.md §2.1, widened for the game read: the head with its hair reads ≈1.25×
  *  the skull), centred 1 cm behind the skull centre. The clumps root on this surface. */
-const CAP = { rx: 0.11, ry: 0.126, rz: 0.118, y: 0.012, z: -0.01 };
+const CAP = { rx: 0.12, ry: 0.132, rz: 0.126, y: 0.014, z: -0.012 };
 
 /** A point on the scalp cap (head space): azimuth from +Z toward +X (the hero's left), elevation
  *  above the cap's equator, `f` < 1 sinks it under the surface so a clump's root is hidden. */
@@ -540,7 +556,8 @@ function hairGeometries() {
   // shows between the strands as in the reference (the right eye stays covered)
   for (let i = 0; i < 9; i++) {
     const u = (i / 8) * 2 - 1 + j(0.07);
-    const L = (0.075 + 0.06 * (1 - u * u) + j(0.025)) * (i === 5 || i === 6 ? 0.55 : 1);
+    // (round 2: a little shorter, so the pale face shows under the fringe as in the reference)
+    const L = (0.065 + 0.045 * (1 - u * u) + j(0.02)) * (i === 5 || i === 6 ? 0.55 : 1);
     const base = capPoint(u * 0.72, 0.72 - 0.1 * u * u + j(0.05), 0.99);
     clump('fringe', L, 0.02 + 0.007 * r() - 0.003 * Math.abs(u), 0.008, base, [u * 0.5 + j(0.25), -0.9, 0.44 - 0.12 * Math.abs(u)], [u * 0.3, 0.25, -1], 0.08 + j(0.05), 0.9);
   }
@@ -556,12 +573,16 @@ function hairGeometries() {
   // the messy mop: thick locks rooted round the crown whorl lie down over the scalp (each one
   // outlined by the art pass: the reference's strand lines) and lift off it at their pointed ends,
   // so the dome is hidden and the outline is a jagged ring of tips outside the cap
-  for (const [n, el0, a0, L0, curl] of [[14, 1.12, 0.6, 0.16, 0.17], [12, 0.72, 0.85, 0.13, 0.1]]) {
+  // (round 2: a bigger cap and longer locks that hang down round it, lifting a little at the tips:
+  // the reference's big, round, messy volume instead of a tight cap)
+  // (the locks lie over the bigger cap and lift only a little at their ends: lifting them further
+  // turned the mop into a brim of horizontal spikes)
+  for (const [n, el0, a0, L0, curl, lift] of [[14, 1.12, 0.6, 0.17, 0.14, 0.06], [12, 0.72, 0.85, 0.14, 0.1, 0.0]]) {
     for (let i = 0; i < n; i++) {
       const az = a0 + ((i + (el0 < 1 ? 0.5 : 0)) / n) * (Math.PI * 2 - 2 * a0) + j(0.12); // all round but the fringe's front
       const el = el0 + j(0.1);
       const rad = radial(az, el), m = merid(az, el);
-      clump(side(az), L0 + j(0.025), 0.026, 0.012, capPoint(az, el, 0.95), [m[0], m[1] * 1.15, m[2]], [-rad[0], -rad[1], -rad[2]], curl + j(0.05), 0.6);
+      clump(side(az), L0 + j(0.03), 0.028, 0.012, capPoint(az, el, 0.95), [m[0] + rad[0] * lift, m[1] * 1.15 + rad[1] * lift, m[2] + rad[2] * lift], [-rad[0], -rad[1], -rad[2]], curl + j(0.06), 0.6);
     }
   }
   // ragged flicks out sideways and back at temple / ear height (the jagged side edges), drooping;
@@ -569,13 +590,14 @@ function hairGeometries() {
   for (const az of [1.45, 1.8, 2.15, 2.5, -1.5, -1.85, -2.2, -2.55, 2.85, -2.9]) {
     const el = 0.22 + j(0.12);
     const rad = radial(az, el);
-    clump(side(az), 0.075 + j(0.015), 0.012, 0.008, capPoint(az + j(0.06), el, 0.9), [rad[0] * 0.75, -0.6 + j(0.12), rad[2] * 0.75 - 0.15], [0, 1, 0], 0.3, 0.8);
+    clump(side(az), 0.06 + j(0.015), 0.012, 0.008, capPoint(az + j(0.06), el, 0.9), [rad[0] * 0.55, -0.8 + j(0.12), rad[2] * 0.55 - 0.15], [0, 1, 0], 0.3, 0.8);
   }
   // crown: thin strands standing up and out at 30–60° and curling back (the reference's wispy,
   // bed-head top edge, not a crown of broad spikes), longest toward the hero's right
-  for (const [az, el, L] of [[0.45, 1.25, 0.07], [-0.55, 1.2, 0.085], [2.8, 1.3, 0.06], [1.4, 1.1, 0.065], [-1.35, 1.05, 0.08], [-0.1, 1.38, 0.07], [2.1, 1.2, 0.06]]) {
+  for (const [az, el, L] of [[0.45, 1.25, 0.08], [-0.55, 1.2, 0.095], [2.8, 1.3, 0.07], [1.4, 1.1, 0.075], [-1.35, 1.05, 0.09], [-0.1, 1.38, 0.08], [2.1, 1.2, 0.07]]) {
     const ox = Math.sin(az), oz = Math.cos(az);
-    clump('crown', L + j(0.012), 0.009, 0.006, capPoint(az, el, 0.88), [ox * 0.85 + j(0.2), 0.55, oz * 0.3 - 0.5], [ox * 0.4, -0.4, -1], 0.6, 0.85);
+    // wisps out and back, curling over (not straight spikes standing up)
+    clump('crown', L + j(0.012), 0.009, 0.006, capPoint(az, el, 0.88), [ox * 0.9 + j(0.2), 0.45, oz * 0.3 - 0.6], [ox * 0.4, -0.6, -1], 0.75, 0.85);
   }
   // nape locks down to the collar top, tips flicking out
   for (let i = 0; i < 7; i++) {
@@ -673,12 +695,23 @@ const LEATHER_LEVELS = [":'", "=:", ":=", "=#="];
  */
 export const GLYPH_SCALE = { refDist: 12, min: 0.15, farZoom: 0.45 };
 
+/**
+ * The sword's depth pull at the game camera (m, `pull` parts: the blade, its point, the gem): seen
+ * from the 36 m camera his low guard puts the steel just behind his own legs when he faces away,
+ * and the grass covers its point; drawn this much nearer (along each view ray: the same pixels),
+ * it shows through both. Fades in from `near` to `far` m of view distance (none in close-ups).
+ */
+export const BLADE_PULL = { m: 0.65, near: 10, far: 24 };
+
 /** Set every hero material's glyph cell (and glyph zoom) for a camera `dist` metres away. Returns
  *  the scale k (1 = the game camera). No allocation. */
 export function setHeroGlyphScale(mats, dist) {
   const k = Math.min(1, Math.max(GLYPH_SCALE.min, (Number.isFinite(dist) ? dist : GLYPH_SCALE.refDist) / GLYPH_SCALE.refDist));
   const near = (1 - k) / (1 - GLYPH_SCALE.min); // 0 at the game camera … 1 in a close-up
+  const pf = Math.min(1, Math.max(0, ((Number.isFinite(dist) ? dist : 0) - BLADE_PULL.near) / (BLADE_PULL.far - BLADE_PULL.near)));
+  const pull = BLADE_PULL.m * pf * pf * (3 - 2 * pf);
   for (const m of mats) {
+    if (m.uniforms.uArtPull) m.uniforms.uArtPull.value = pull;
     const ud = m.userData;
     const b = ud?.cell;
     if (!b) continue;
@@ -765,34 +798,43 @@ export const ART_GAIN = 1.1;
  * darkens fold streaks into the fill up close (the coat), per material. See HERO_ART in
  * render/materials.js.
  */
+// `farFill` = the part's letter-fill gain at the game camera (× the pass's uHeroLod.z): there the
+// reference scaled down is a DARK figure (black coat, dark pants and hair) with bright silver
+// armour, pale lavender tails, a pale face and the cyan blade, so cloth drops and metal rises.
+// `farLine` = how much light its inner lines keep there (0: a dark seam, the cloth; 1: the armour).
+// `solid` = unbroken ink lines (the blade, the gem); `pull` = drawn nearer at the game camera
+// (BLADE_PULL); `open` = its letters stay lit beside an edge (no dark channel or depth-step gap:
+// the face, a small pale patch walled in by the fringe and the collar, would print dim).
 export const HERO_INK = {
-  skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8 },
+  skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 2.2, farFill: 0.8, open: true },
   eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
-  shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85] },
-  lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85] },
-  collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85] },
-  pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9] },
-  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1] },
-  collar: { part: 6, fill: [0.175, 0.165, 0.155] },
-  facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1] },
-  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true },
-  piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1] },
-  leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9] },
+  shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85], farFill: 0.35 },
+  lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
+  collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
+  pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9], farFill: 0.35 },
+  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1], farFill: 0.35 },
+  collar: { part: 6, fill: [0.175, 0.165, 0.155], farFill: 0.35 },
+  facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1], farFill: 0.5 },
+  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true, farFill: 0.4 },
+  piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1], farFill: 0.6 },
+  leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9], farFill: 0.8 },
   // the reference's hair: near-neutral dark letters (lit mean ≈ rgb 103 99 113) with violet-white
   // strands on the outer edges and tips, not a navy cap; the tips carry the violet
-  hair: { part: 11, fill: [0.085, 0.08, 0.12], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true },
-  hairTip: { part: 11, fill: [0.2, 0.16, 0.4], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true },
+  hair: { part: 11, fill: [0.085, 0.08, 0.12], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true, farFill: 0.5 },
+  hairTip: { part: 11, fill: [0.2, 0.16, 0.4], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true, farFill: 0.5 },
   // the reference's armour: dark steel plates whose bright white edges and glints make it the
   // brightest thing on him (a light grey fill read as flat paper cut-outs up close)
-  armor: { part: 12, fill: [0.25, 0.25, 0.28], spec: 1.0, specPow: 20, line: [1, 1, 1, 1.3], fillGain: 1.2 },
-  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05 },
-  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6 },
+  armor: { part: 12, fill: [0.3, 0.3, 0.34], spec: 1.35, specPow: 18, line: [1, 1, 1, 1.3], fillGain: 1.35, farLine: 0.55, farFill: 1.05 },
+  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05, farLine: 0.7, farFill: 1.2 },
+  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6, farLine: 0.6, farFill: 1.1 },
   welt: { part: 15, fill: [0.3, 0.31, 0.36] },
-  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3 },
-  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 2.2] },
-  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 2.2] },
-  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0] },
-  flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5] },
+  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.7, farFill: 1.2 },
+  // the reference's blade: dark steel between two glowing cyan edges and a bright ridge line (the
+  // fill letters stay dim up close; far away the whole blade reads as one bright cyan line)
+  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
+  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
+  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1, pull: true },
+  flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
 
 export function createHeroMaterials(U) {
@@ -944,7 +986,7 @@ export function createHeroMaterials(U) {
   for (const h of Object.values(HERO_INK)) {
     const l = h.line ?? [1, 1, 1, 1];
     partInk?.[h.part]?.set(l[0], l[1], l[2], l[3]);
-    partFill?.[h.part]?.set(h.fillGain ?? 1, h.dotted ? 1 : 0);
+    partFill?.[h.part]?.set(h.fillGain ?? 1, (h.dotted ? 1 : h.solid ? 2 : 0) + (h.open ? 4 : 0), h.farLine ?? 0, h.farFill ?? 1);
   }
   return Object.fromEntries(Object.entries(specs).map(([name, s]) => [name, make(name, s.o, s.opts)]));
 }
@@ -1174,9 +1216,10 @@ export function buildHero(U) {
     const out = side; // the outer side of this arm is x = side (right arm: −X)
     const upper = joint(chest, side * DIM.shoulder[0], DIM.shoulder[1], DIM.shoulder[2]);
     // sleeves: sub-id 1 against the torso shell's 0, so the arm is outlined where it meets the body
-    mesh(upper, sub(limb({ length: DIM.upperArm, r0: 0.056, r1: 0.049 }), 1), M.coat);
+    // (round 2: fuller coat sleeves, the reference's arms are not thin tubes)
+    mesh(upper, sub(limb({ length: DIM.upperArm, r0: 0.064, r1: 0.056 }), 1), M.coat);
     const fore = joint(upper, 0, -DIM.upperArm, 0);
-    mesh(fore, sub(limb({ length: 0.09, r0: 0.05, r1: 0.048 }), 1), M.coat);
+    mesh(fore, sub(limb({ length: 0.09, r0: 0.056, r1: 0.054 }), 1), M.coat);
     if (R) {
       // P3 / P4: lower pauldron lames riding on the arm itself, standing 0.03 m off the sleeve,
       // a silver bevel along each lower edge and a small down-back blade each
@@ -1193,7 +1236,7 @@ export function buildHero(U) {
         wedge(0.07, 0.017, [-0.088, -0.17, -0.03], [-0.6, -0.65, -0.45], [0, -1, 0], 0.15),
       ]), M.spike);
       // A1 strap just below the pauldron
-      mesh(upper, bandGeometry(0.06, 0.06, 0.02, 12), M.leather, 0, -0.19, 0);
+      mesh(upper, bandGeometry(0.065, 0.065, 0.02, 12), M.leather, 0, -0.19, 0);
       // plate vambrace: 3 overlapping lames with silver bevels, an elbow point and a wrist barb
       mesh(fore, mergeGeometries([
         limb({ length: 0.085, r0: 0.06, r1: 0.056, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.035, 0),
@@ -1217,8 +1260,8 @@ export function buildHero(U) {
     } else {
       // left: plain coat shoulder, A2 strap above the elbow, a leather bracer with two silver
       // bands, a silver cuff ring, a fingerless glove with skin fingertips
-      mesh(upper, bandGeometry(0.055, 0.055, 0.02, 12), M.leather, 0, -0.19, 0);
-      mesh(fore, limb({ length: 0.18, r0: 0.054, r1: 0.047, radial: 10, rings: 3 }), M.leather, 0, -0.05, 0);
+      mesh(upper, bandGeometry(0.065, 0.065, 0.02, 12), M.leather, 0, -0.19, 0);
+      mesh(fore, limb({ length: 0.18, r0: 0.06, r1: 0.049, radial: 10, rings: 3 }), M.leather, 0, -0.05, 0);
       mesh(fore, mergeGeometries([
         bandGeometry(0.0565, 0.0565, 0.012, 14).translate(0, -0.1, 0),
         bandGeometry(0.0525, 0.0525, 0.012, 14).translate(0, -0.17, 0),
@@ -1267,19 +1310,29 @@ export function buildHero(U) {
       mesh(thigh, ring(0.016, 0.016, 0.005, 8).rotateX(Math.PI / 2).translate(-0.076, -0.065, 0.02), M.trim);
     }
     const shin = joint(thigh, 0, -DIM.thigh, 0);
-    // knee-high armoured boot: shell, 3 shin lames narrowing to the ankle, a silver bevel along
-    // each lame's lower edge
+    // knee-high armoured boot: the shell, a cuff lame under the knee and one at the ankle, and the
+    // reference's KITE GREAVE down the shin: a faceted diamond plate pointed at the knee and the
+    // ankle with a raised centre ridge, silver bevels on its edges and the ridge (stacked ring lames
+    // read as a stack of tyres)
     mesh(shin, limb({ length: DIM.shin - 0.02, r0: 0.058, r1: 0.045 }), M.armor, 0, -0.02, 0);
     mesh(shin, mergeGeometries([
-      sub(arcPlate(-0.06, -0.135, 0.068, 0.064, 0, 1.25, 5), 1),
-      arcPlate(-0.125, -0.2, 0.062, 0.058, 0, 1.2, 5),
-      sub(arcPlate(-0.19, -0.265, 0.056, 0.052, 0, 1.15, 5), 1),
+      sub(arcPlate(-0.045, -0.09, 0.067, 0.065, 0, 1.4, 6), 1),
+      sub(arcPlate(-0.33, -0.375, 0.054, 0.052, 0, 1.5, 6), 1),
     ]), M.armor);
-    mesh(shin, mergeGeometries([
-      arcPlate(-0.126, -0.137, 0.0665, 0.0665, 0, 1.25, 5),
-      arcPlate(-0.191, -0.202, 0.0605, 0.0605, 0, 1.2, 5),
-      arcPlate(-0.256, -0.267, 0.0545, 0.0545, 0, 1.15, 5),
-    ]), M.bevel);
+    {
+      const T = [0, -0.06, 0.069], Rt = [0.058, -0.16, 0.058], B = [0, -0.355, 0.051], Lf = [-0.058, -0.16, 0.058], C = [0, -0.16, 0.08];
+      const kg = new THREE.BufferGeometry();
+      kg.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...T, ...C, ...Rt, ...T, ...Lf, ...C, ...C, ...Lf, ...B, ...C, ...B, ...Rt]), 3));
+      kg.computeVertexNormals();
+      planarGUV(kg, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
+      mesh(shin, kg, M.armor);
+      const e = (a, b) => strapGeometry([a[0], a[1], a[2] + 0.003], [b[0], b[1], b[2] + 0.003], 0.009, 0.004, [-(b[1] - a[1]), b[0] - a[0], 0]);
+      mesh(shin, mergeGeometries([
+        e(T, Rt), e(Rt, B), e(B, Lf), e(Lf, T), e(T, C), e(C, B),
+        arcPlate(-0.083, -0.092, 0.0675, 0.0675, 0, 1.4, 6),
+        arcPlate(-0.366, -0.375, 0.0535, 0.0535, 0, 1.5, 6),
+      ]), M.bevel);
+    }
     // kite knee guard (poleyn): 0.10 W × 0.13 H standing 0.02 m off the knee, a ridge down the
     // middle, silver bevels on all four edges, wings wrapping the sides; its point leans 15° out
     // and a short spike carries it to 0.60 m
@@ -1321,8 +1374,10 @@ export function buildHero(U) {
     const anchor = joint(pelvis, sa * R0, ay, ca * R0);
     anchor.rotation.y = P.az; // local +Z = outward, +X = tangent
     const s0 = joint(anchor);
-    // neighbouring panels alternate ink-line sub-ids: their overlapping edges are outlined
-    const g0 = sub(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i), i % 2);
+    // neighbouring panels alternate ink-line sub-ids: their overlapping edges are outlined. Soft
+    // folds deepen down each panel (the same phase across the join, so the two segments meet)
+    const fph = i * 2.1 + 0.7, fw = P.flap ? 0 : P.folds ?? 1.5;
+    const g0 = sub(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i, [0, 0.014, fw, fph]), i % 2);
     mesh(s0, g0, M.coat);
     mesh(s0, g0, M.lining);
     const s1 = joint(s0, 0, -P.len[0], 0);
@@ -1333,9 +1388,15 @@ export function buildHero(U) {
       g1 = tatterStrip(P.len[1], P.w[1], { curl: 0.05, seed: 900 });
       mesh(s1, g1, M.hem);
     } else {
-      g1 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i), i % 2);
+      // the lower segment lightens into the dusty lavender torn zone over its last 55 % (the
+      // reference's tails: black at the hips, grey-lavender toward the ragged hem)
+      const fold = [0.014, 0.034, fw, fph];
+      g1 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i, fold, 0, 0.45), i % 2);
       mesh(s1, g1, M.coat);
       mesh(s1, g1, M.lining);
+      const g2 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i, fold, 0.45, 1), i % 2);
+      mesh(s1, g2, M.hem);
+      mesh(s1, g2, M.lining);
     }
     // torn strips along the tear line (0.06–0.12 m wide at the root, overlapping a little)
     const strips = [];
@@ -1359,21 +1420,26 @@ export function buildHero(U) {
   // rails; the glyph blade starts above it, and its last 0.15 m (the point) is the brightest steel.
   const sword = joint(body);
   {
-    const z0 = 0.125, L = DIM.steelTip - z0, hw0 = 0.0475, hw1 = 0.04, tipF = 0.14;
+    const tipZ = DIM.drawnTip;
+    const z0 = 0.125, L = tipZ - z0, hw0 = 0.0475, hw1 = 0.04, tipF = 0.14;
     const hwAt = (z) => hw0 + (hw1 - hw0) * Math.min(1, (z - z0) / (L * (1 - tipF)));
-    const zT = DIM.steelTip - L * tipF; // where the point's taper starts
-    mesh(sword, bladeGeometry(DIM.forte - z0 + 0.004, hw0, hwAt(DIM.forte), 0, 0.012, 0.045), M.armor, 0, 0, z0);
-    mesh(sword, bladeGeometry(zT - DIM.forte + 0.002, hwAt(DIM.forte), hw1, 0, 0.012, 0.045), M.blade, 0, 0, DIM.forte);
-    const tip = bladeGeometry(DIM.steelTip - zT, hw1, hw1, 0.999, 0.012, 0.045);
-    mesh(sword, tip, M.bladeTip, 0, 0, zT);
+    const zT = tipZ - L * tipF; // where the point's taper starts
+    for (const h of [-1, 1]) {
+      const k = h > 0 ? 1 : 0;
+      mesh(sword, sub(bladeGeometry(DIM.forte - z0 + 0.004, hw0, hwAt(DIM.forte), 0, 0.012, 0.045, h), k), M.armor, 0, 0, z0);
+      mesh(sword, sub(bladeGeometry(zT - DIM.forte + 0.002, hwAt(DIM.forte), hw1, 0, 0.012, 0.045, h), k), M.blade, 0, 0, DIM.forte);
+      mesh(sword, sub(bladeGeometry(tipZ - zT, hw1, hw1, 0.999, 0.012, 0.045, h), k), M.bladeTip, 0, 0, zT);
+    }
     // the reference's jagged edge: flat saw teeth along both edges, raking toward the point and
-    // growing toward it (the art pass outlines them in the blade's cyan)
+    // growing toward it, the biggest (lightning-like notches) on the last third (the art pass
+    // outlines them in the blade's cyan)
     const teeth = [];
     for (const s of [-1, 1]) {
-      for (let t = 0; t < 4; t++) {
-        const z = 0.5 + t * 0.165 + (s > 0 ? 0.07 : 0);
+      for (let t = 0; t < 6; t++) {
+        const z = 0.52 + t * 0.15 + (s > 0 ? 0.075 : 0);
         if (z > zT - 0.02) continue;
-        teeth.push(spike(0.03 + t * 0.006, 0.014, [s * (hwAt(z) - 0.006), 0, z], [s * 0.78, 0, 0.62], [0, 0, 1], 0.25, 4, 0.3));
+        const k = t / 5;
+        teeth.push(spike(0.026 + 0.03 * k * k, 0.013 + 0.004 * k, [s * (hwAt(z) - 0.006), 0, z], [s * 0.74, 0, 0.67], [0, 0, 1], 0.25, 4, 0.3));
       }
     }
     mesh(sword, mergeGeometries(teeth), M.blade);
@@ -1401,7 +1467,7 @@ export function buildHero(U) {
       ring(0.019, 0.019, 0.007, 8).rotateX(Math.PI / 2).translate(0, 0, -0.095),
       kiteGeometry(0.038, 0.016, 0.062, { guv: 'xz' }).translate(0, 0, DIM.gem),
     ];
-    for (const s of [-1, 1]) sv.push(place(limbGeometry({ length: 0.25, r0: 0.008, r1: 0.005, radial: 5, rings: 2, capSegs: 1 }), s * 0.054, 0, DIM.guard + 0.01, 0, s * -0.035, 0));
+    for (const s of [-1, 1]) sv.push(place(limbGeometry({ length: 0.2, r0: 0.008, r1: 0.005, radial: 5, rings: 2, capSegs: 1 }), s * 0.054, 0, DIM.guard + 0.01, 0, s * -0.045, 0));
     mesh(sword, mergeGeometries(sv), M.trim);
   }
   // the gem: two half-gems proud of both flats by 0.018 m (0.07 m long so it stays a cell) on the
