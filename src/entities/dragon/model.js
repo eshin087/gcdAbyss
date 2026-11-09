@@ -579,7 +579,7 @@ export function buildDrake(U) {
     const r1 = r0 - 0.035;
     mesh(j, limbGeometry({ length: A.neckLen + 0.12, r0, r1, sy: 0.92, radial: 14, rings: 4 }), mats.neck, 0, 0, -0.06);
     // lava throat: under the neck only (narrower, set low; overlapping segments make it continuous)
-    mesh(j, limbGeometry({ length: A.neckLen + 0.14, r0: r0 * 0.78, r1: r1 * 0.78, sx: 0.7, sy: 0.7, radial: 12, rings: 3 }), mats.throat, 0, -r0 * 0.45, -0.07);
+    mesh(j, limbGeometry({ length: A.neckLen + 0.14, r0: r0 * 0.8, r1: r1 * 0.8, sx: 0.86, sy: 0.72, radial: 12, rings: 3 }), mats.throat, 0, -r0 * 0.4, -0.07);
     // dorsal crest: two tall back-swept spines per segment (the reference's spiky mane) and a
     // splayed pair beside them, one batch per segment
     const crest = [];

@@ -11,21 +11,23 @@ import { solveTwoBone } from './rig/ik.js';
 // kinks. aGUV is computed ONCE from the HALF (mantled) layout, the pose seen most, so the glyph
 // grid is square and even there (a SPREAD wing stretches it into bigger round glyphs; parametrizing
 // from a flat SPREAD layout crushed the rows into stripes at HALF). Glyph +y runs from the wrist out
-// along the fingers. aEdge (0 inside -> 1 on the free trailing edge) is there for a per-cell
-// ragged-edge discard in the shader (docs/art/dragon.md §3.3 item 2; not read by the material yet).
+// along the fingers. aEdge (0 inside -> 1 on the free trailing edge) drives the material's tears and
+// ragged trailing edge, aBone (distance to the panel's nearer bone) its embers along the fingers
+// (render/materials.js, wyrm `membrane`).
 
 const NU = 10; // samples along the fingers
 const NV = 13; // samples across a panel (enough for the tears of the trailing edge)
 const PANELS = 4;
 /** Trailing-edge scallop per panel (fraction pulled toward the wrist / elbow): one deep arc each. */
 export const SAG = [0.42, 0.4, 0.34, 0.22];
-// extra pull toward the wrist / elbow per trailing-edge sample: mostly a smooth scallop with one or
-// two irregular rips per panel (never periodic: a regular sawtooth read as feathers / a saw blade)
+// extra pull toward the wrist / elbow per trailing-edge sample: mostly a smooth scallop with two or
+// three irregular rips per panel (never periodic: a regular sawtooth read as feathers / a saw blade);
+// deep enough to notch the silhouette like the reference's torn sails (the shader adds holes)
 const RAG = [
-  [0, 0.02, 0, 0.03, 0.16, 0.02, 0, 0.01, 0.04, 0, 0.12, 0.02, 0],
-  [0, 0.01, 0.03, 0, 0.02, 0, 0.04, 0.18, 0.03, 0, 0.01, 0.02, 0],
-  [0, 0.03, 0.14, 0.02, 0, 0.01, 0.02, 0, 0.03, 0.01, 0.17, 0.02, 0],
-  [0, 0.02, 0, 0.01, 0.04, 0.02, 0.15, 0.01, 0, 0.03, 0.02, 0.01, 0],
+  [0, 0.03, 0, 0.05, 0.26, 0.03, 0, 0.02, 0.07, 0, 0.21, 0.03, 0],
+  [0, 0.02, 0.05, 0, 0.12, 0, 0.06, 0.29, 0.04, 0, 0.02, 0.16, 0],
+  [0, 0.04, 0.23, 0.03, 0, 0.02, 0.03, 0.13, 0.04, 0.01, 0.27, 0.03, 0],
+  [0, 0.03, 0, 0.02, 0.07, 0.03, 0.22, 0.02, 0, 0.12, 0.03, 0.01, 0],
 ];
 
 // scratch point slots: 0 wrist, 1 elbow, 2 wing root, 3 hip attach, 4..7 finger tips, 8..11 knuckles
