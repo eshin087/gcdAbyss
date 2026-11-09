@@ -42,8 +42,19 @@ const TRAIL_NONE = [];
 const LATTICE = 0.12;
 // screen axes of the fixed camera (pitch 58°): right = +X, up ≈ (0, cos 58°, −sin 58°)
 const UP_Y = 0.53, UP_Z = -0.85;
+// the rendering camera's matrixWorld elements (columns: right, up): glyph particles are screen
+// billboards, so a stroke laid along a world direction needs the real camera's axes. The game
+// camera is the fixed 58° one, but the Lab's model views look from any angle (there the fixed
+// basis turned the tip streak and the sweep strokes into stray bars across the blade).
+let CAM = null;
 /** Screen-space rotation that lays a '|' glyph along world direction (dx, dy, dz). */
-const alongRot = (dx, dy, dz) => Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
+const alongRot = (dx, dy, dz) => {
+  if (CAM) {
+    const sx = dx * CAM[0] + dy * CAM[1] + dz * CAM[2], sy = dx * CAM[4] + dy * CAM[5] + dz * CAM[6];
+    if (sx * sx + sy * sy > 1e-12 && Number.isFinite(sx + sy)) return Math.atan2(sy, sx) - Math.PI / 2;
+  }
+  return Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
+};
 
 export class PlayerFx {
   constructor(game, rig) {
@@ -61,6 +72,7 @@ export class PlayerFx {
   }
 
   get add() {
+    CAM = this.game.camera?.matrixWorld?.elements ?? null; // every spawner starts here (alongRot)
     return this.game.fx?.add ?? null;
   }
   get alpha() {
@@ -197,7 +209,7 @@ export class PlayerFx {
           x: x + Math.sin(ph) * 0.15, y: R(0.05, 0.2), z: z + R(-0.15, 0.15),
           vx, vy, vz: R(-0.6, 0.6),
           life: R(0.4, 0.6), size: R(0.14, 0.34), sizeEnd: 0.06, stretch: 0.6,
-          glyph: 'A^V', rot: -Math.atan2(vx, vy * UP_Y), spin: R(-2, 2),
+          glyph: 'A^V', rot: alongRot(vx, vy, 0), spin: R(-2, 2),
           color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -11, drag: 1.2,
         });
       }
@@ -398,7 +410,7 @@ export class PlayerFx {
       const dx = segs[k + 3] - ax, dy = segs[k + 4] - ay, dz = segs[k + 5] - az;
       const len = Math.hypot(dx, dy, dz);
       if (!(len > 1e-3) || !Number.isFinite(len)) continue;
-      const rot = Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
+      const rot = alongRot(dx, dy, dz);
       const n = Math.max(1, Math.round(len / 0.11));
       for (let i = 0; i <= n; i++) {
         const f = i / n;
@@ -415,7 +427,7 @@ export class PlayerFx {
     const sx = nx - ox, sz = nz - oz;
     const dist = Math.hypot(sx, sz);
     if (dist > 0.3 && Number.isFinite(dist)) {
-      const rot = Math.atan2(sz * UP_Z, sx);
+      const rot = alongRot(sx, 0, sz) + Math.PI / 2; // '-' laid along the ground path
       const n = Math.min(60, Math.round(dist / 0.18));
       for (let i = 0; i <= n; i++) {
         const f = i / n;
