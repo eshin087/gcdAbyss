@@ -65,18 +65,19 @@ export const WING_KEYS = {
     thumb: nrm([0.1, -0.55, 0.85]),
   },
   // the combat stance (the owner's reference painting): both wings raised high and spread wide to the
-  // sides, the arm rising out and up (elbow ~140°) to a wrist ~1.85 H up and 2.5 out; the fingers fan
-  // from the leading edge (out, a little up and back: a slight dihedral) down to the inner finger (down
-  // the flank), so each sail faces forward-out: from the painting's angle the near wing fills the
-  // upper left and the far one shows behind the head; from the 58° game camera both faces read.
-  // (v0.4 held the sails back along the body: a narrow fin from the front, the far wing hidden from the
+  // sides, the arm rising out and up (elbow ~140°) to a wrist ~1.85 H up and 2.2 out: the peak of
+  // the wing. From there the fingers fan out and down, the leading one drooping a little toward its
+  // tip, so each wing reads as the painting's bat 'M' (the wrist a peak, the outer edge falling away)
+  // and each sail faces forward-out: from the painting's angle the near wing spreads over the upper
+  // left and the far one shows past the head; from the 58° game camera both faces read. (v0.4 held
+  // the sails back along the body: a narrow fin from the front, the far wing hidden from the
   // three-quarter view.) Thumb: up and forward, its tip hooking down in front (the top-most accent).
   // The membrane's glyph grid is laid out on this key (membrane.js), so it is square at rest.
   HALF: {
-    wrist: ck(2.5, 7.3, 1.1),
+    wrist: ck(2.2, 7.45, 1.1),
     pole: [0.35, -0.1, -1],
-    fingers: [[0.86, 0.32, 0.02], [0.86, -0.3, -0.22], [0.62, -0.7, -0.28], [0.28, -0.95, -0.12]].map(nrm),
-    kink: [-10 * DEG, -26 * DEG, -10 * DEG, 0],
+    fingers: [[0.86, -0.14, 0.06], [0.76, -0.56, -0.2], [0.5, -0.83, -0.24], [0.25, -0.96, -0.1]].map(nrm),
+    kink: [-6 * DEG, -18 * DEG, -8 * DEG, 0],
     thumb: nrm([0.12, 0.8, 0.58]),
   },
   // roar / leap: the arms out and up, the leading finger rising ~20° above the wrist (a dihedral,
