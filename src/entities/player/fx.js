@@ -36,8 +36,41 @@ const COL = {
 };
 
 // points along the hit segment (0 = hilt … 1 = the edge-wave tip past the steel) that leave a trail
-const TRAIL_ALONG = [0.66, 0.84, 1.0];
-const TRAIL_ALONG_HEAVY = [0.5, 0.68, 0.84, 1.0];
+const TRAIL_ALONG = [0.62, 0.76, 0.89, 1.0];
+const TRAIL_ALONG_HEAVY = [0.5, 0.64, 0.77, 0.89, 1.0];
+const TRAIL_SUB_LEN = 0.24; // m of outer-point travel per trail sub-step …
+const TRAIL_SUB_MAX = 8; // … up to this many sub-steps a frame
+// the swept blade between two frames: hilt lerped, direction slerped round it, length lerped
+const ARC = { ax: 0, ay: 0, az: 0, dx: 0, dy: 0, dz: 0, n0: [0, 0, 1], n1: [0, 0, 1], l0: 1, l1: 1, th: 0, s: 1 };
+const ARC_P = [0, 0, 0], ARC_Q = [0, 0, 0];
+function arcSetup(pa, pb, a, b) {
+  ARC.ax = pa.x; ARC.ay = pa.y; ARC.az = pa.z;
+  ARC.dx = a.x - pa.x; ARC.dy = a.y - pa.y; ARC.dz = a.z - pa.z;
+  const ux = pb.x - pa.x, uy = pb.y - pa.y, uz = pb.z - pa.z, vx = b.x - a.x, vy = b.y - a.y, vz = b.z - a.z;
+  ARC.l0 = Math.hypot(ux, uy, uz) || 1e-6;
+  ARC.l1 = Math.hypot(vx, vy, vz) || 1e-6;
+  const n0 = ARC.n0, n1 = ARC.n1;
+  n0[0] = ux / ARC.l0; n0[1] = uy / ARC.l0; n0[2] = uz / ARC.l0;
+  n1[0] = vx / ARC.l1; n1[1] = vy / ARC.l1; n1[2] = vz / ARC.l1;
+  const c = Math.max(-1, Math.min(1, n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2]));
+  ARC.th = Math.acos(c);
+  ARC.s = Math.sin(ARC.th);
+}
+/** Point f (0 hilt … 1 tip) of the swept blade at sub-step t (0 last frame … 1 now) → o. */
+function arcPoint(t, f, o) {
+  let w0 = 1 - t, w1 = t;
+  if (ARC.th > 0.02 && ARC.th < 2.8) {
+    w0 = Math.sin((1 - t) * ARC.th) / ARC.s;
+    w1 = Math.sin(t * ARC.th) / ARC.s;
+  }
+  const n0 = ARC.n0, n1 = ARC.n1;
+  let x = n0[0] * w0 + n1[0] * w1, y = n0[1] * w0 + n1[1] * w1, z = n0[2] * w0 + n1[2] * w1;
+  const l = Math.hypot(x, y, z) || 1;
+  const len = (ARC.l0 + (ARC.l1 - ARC.l0) * t) * f / l;
+  o[0] = ARC.ax + ARC.dx * t + x * len;
+  o[1] = ARC.ay + ARC.dy * t + y * len;
+  o[2] = ARC.az + ARC.dz * t + z * len;
+}
 const TRAIL_NONE = [];
 // the halftone dot fields sit on a world lattice so their dots line up like the panel's grid
 const LATTICE = 0.12;
@@ -118,29 +151,38 @@ export class PlayerFx {
     const thrust = kind === 'thrust';
     const along = heavy ? TRAIL_ALONG_HEAVY : thrust ? TRAIL_NONE : TRAIL_ALONG;
     const col = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
-    for (let s = 1; s <= 3; s++) {
-      const t = s / 3, t0 = (s - 1) / 3;
+    // sub-steps follow the outer point's travel (a fast frame sweeps 1.5 m): with three fixed
+    // ones the strokes left gaps and the arc read as scattered dashes at the game camera; now
+    // each stroke covers its sub-step, so the band is one continuous crescent at any speed
+    const tipStep = Math.hypot(b.x - pb.x, b.y - pb.y, b.z - pb.z);
+    const nSub = Math.min(TRAIL_SUB_MAX, Math.max(3, Math.ceil(tipStep / TRAIL_SUB_LEN)));
+    arcSetup(pa, pb, a, b);
+    for (let s = 1; s <= nSub; s++) {
+      const t = s / nSub, t0 = (s - 1) / nSub;
       for (let k = 0; k < along.length; k++) {
-        const f = along[k];
-        // this point now, and a sub-step earlier: the stroke lies along its path
-        const ax = pa.x + (a.x - pa.x) * t, ay = pa.y + (a.y - pa.y) * t, az = pa.z + (a.z - pa.z) * t;
-        const bx = pb.x + (b.x - pb.x) * t, by = pb.y + (b.y - pb.y) * t, bz = pb.z + (b.z - pb.z) * t;
-        const x = ax + (bx - ax) * f, y = ay + (by - ay) * f, z = az + (bz - az) * f;
-        const ax0 = pa.x + (a.x - pa.x) * t0, ay0 = pa.y + (a.y - pa.y) * t0, az0 = pa.z + (a.z - pa.z) * t0;
-        const bx0 = pb.x + (b.x - pb.x) * t0, by0 = pb.y + (b.y - pb.y) * t0, bz0 = pb.z + (b.z - pb.z) * t0;
-        const dx = x - (ax0 + (bx0 - ax0) * f), dy = y - (ay0 + (by0 - ay0) * f), dz = z - (az0 + (bz0 - az0) * f);
+        // this point now, and a sub-step earlier: the stroke lies along its path. The blade turns
+        // round the hilt between frames (slerped), so the band is a curved crescent, not a polygon
+        // of straight chords; the inner rows wander a little so the band fills like a smear
+        const f = along[k] < 0.95 ? along[k] + R(-0.04, 0.04) : along[k];
+        arcPoint(t, f, ARC_P);
+        arcPoint(t0, f, ARC_Q);
+        const x = ARC_P[0], y = ARC_P[1], z = ARC_P[2];
+        const dx = x - ARC_Q[0], dy = y - ARC_Q[1], dz = z - ARC_Q[2];
         const step = Math.hypot(dx, dy, dz);
         const moving = step > 0.02;
         const outer = f > 0.95;
         const size = (heavy ? 0.26 : 0.2) * (0.65 + 0.35 * f);
+        // the edge glyph sits on every other sub-step (a bright dotted rim), the body strokes cover
+        // their sub-step end to end
+        if (outer && (s & 1) && nSub > 3) continue;
         fx.spawn({
           x, y, z,
           vx: R(-0.1, 0.1), vy: R(0, 0.15), vz: R(-0.1, 0.1),
-          life: (outer ? R(0.1, 0.14) : R(0.14, 0.22)) * (heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
+          life: (outer ? R(0.1, 0.14) : R(0.12, 0.2)) * (heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
           glyph: outer ? 'A8' : moving ? ')|' : '-~', rot: moving ? alongRot(dx, dy, dz) : R(-0.4, 0.4),
-          stretch: moving && !outer ? Math.min(1.2, (step / size) * 1.1) : 0,
+          stretch: moving && !outer ? Math.min(3, (step / size) * 1.1) : 0,
           color: outer && !crit ? COL.trailCore : col, colorEnd: COL.trailEnd,
-          alpha: outer ? 1 : 0.8, alphaEnd: 0, drag: 2.5,
+          alpha: outer ? 1 : 0.8 + 0.15 * f, alphaEnd: 0, drag: 2.5,
         });
       }
     }
