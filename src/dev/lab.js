@@ -4,7 +4,7 @@ import { el, setText, setClass, button, slider, section } from './labDom.js';
 import { injectLabStyle } from './labStyle.js';
 import { HitboxOverlay } from './hitboxOverlay.js';
 import { TimingTrainer, tellName } from './timingTrainer.js';
-import { ModelViewer, VIEW_ANGLES } from './modelView.js';
+import { ModelViewer, VIEW_ANGLES, VIEW_LOOKS } from './modelView.js';
 
 // The Lab — a debug panel to test the boss without playing the fight (contract: docs/ARCHITECTURE.md
 // → Lab; usage: src/dev/README.md). It talks only to the actors' `debug` APIs (dragon.debug,
@@ -80,7 +80,9 @@ export class Lab {
     this.loop = { on: false, every: Math.min(8, Math.max(2, finite(this.prefs.loopEvery, 4))), t: 0, count: 0, prevAI: null };
     this.trainer = new TimingTrainer(game);
     this.viewer = new ModelViewer(game, this);
-    this.mvPick = { target: 'hero', angle: 'front', dark: false }; // model-view buttons' selection
+    // model-view buttons' selection: mode 'view' (one angle) | 'spin' (turntable) | 'sheet' (every
+    // angle in tiles); look = the hero's look-dev render (VIEW_LOOKS)
+    this.mvPick = { target: 'hero', angle: 'front', dark: false, mode: 'view', look: 'ascii' };
 
     this._abilities = [];
     this._abButtons = [];
@@ -240,6 +242,16 @@ export class Lab {
       this.overlay?.update(this.target);
     } catch (err) {
       this._fail('overlay', err);
+    }
+  }
+
+  /** main.js calls this right after the frame is drawn (same task, the canvas still holds it): the
+   *  model viewer's sheet copies the tile on screen into its overlay. */
+  postRender() {
+    try {
+      this.viewer.postRender();
+    } catch (err) {
+      this._fail('model view', err);
     }
   }
 
@@ -469,9 +481,12 @@ export class Lab {
     if (r && typeof r === 'object') {
       this.mvPick.target = r.target;
       this.mvPick.dark = r.dark;
-      const hit = VIEW_ANGLES.find(([, , p]) => (p.game ? r.game : !r.game && p.yaw === r.yaw && p.pitch === r.pitch));
-      this.mvPick.angle = hit ? hit[0] : null;
-      this._status(`view ${r.target}${this.mvPick.angle ? ` ${this.mvPick.angle}` : ''} · yaw ${r.yaw} · pitch ${r.pitch} · d ${r.dist} m · h ${r.height} m${r.dark ? ' · dark' : ''}`, 'ok');
+      this.mvPick.mode = r.sheet ? 'sheet' : r.spin ? 'spin' : 'view';
+      this.mvPick.look = r.look ?? 'ascii';
+      const hit = r.sheet || r.spin ? null : VIEW_ANGLES.find(([, , p]) => (p.game ? r.game : !r.game && p.yaw === r.yaw && p.pitch === r.pitch));
+      if (!r.sheet && !r.spin) this.mvPick.angle = hit ? hit[0] : null;
+      const what = r.sheet ? ' sheet' : r.spin ? ' spin' : this.mvPick.angle ? ` ${this.mvPick.angle}` : '';
+      this._status(`view ${r.target}${what} · yaw ${r.yaw} · pitch ${r.pitch} · d ${r.dist} m · h ${r.height} m${r.dark ? ' · dark' : ''}${r.look !== 'ascii' ? ` · ${r.look}` : ''}`, 'ok');
     } else if (r === 'off') {
       this._status('view off: game camera', 'ok');
     } else {
@@ -491,9 +506,17 @@ export class Lab {
       return;
     }
     const k = this.mvPick;
+    if (k.mode === 'sheet') {
+      this.modelView({ target: k.target, dark: k.dark, look: k.look, sheet: true });
+      return;
+    }
     const preset = VIEW_ANGLES.find(([key]) => key === k.angle)?.[2] ?? VIEW_ANGLES[0][2];
-    const opts = { target: k.target, dark: k.dark, ...preset };
-    if (preset.game) {
+    const opts = { target: k.target, dark: k.dark, look: k.look, ...preset };
+    if (k.mode === 'spin') {
+      // the turntable starts from the angle on screen (sheet eye level from the gameplay camera)
+      const y0 = this.viewer.state && !this.viewer.state.game ? this.viewer.state.yaw : preset.yaw;
+      Object.assign(opts, { game: false, spin: true, yaw: finite(y0, 0), pitch: preset.game ? 8 : preset.pitch });
+    } else if (preset.game) {
       // the gameplay camera: world-fixed yaw, 58° pitch, the rig's current distance, root on the ground
       Object.assign(opts, { yaw: 0, pitch: (this.game.CONFIG ?? CONFIG).camera.pitch / DEG, dist: finite(this.game.cameraRig?.targetDistance, CONFIG.camera.distance), height: 0, forward: 0 });
     }
@@ -505,11 +528,14 @@ export class Lab {
     if (!u.mvTargets) return;
     const on = this.viewer.active, k = this.mvPick;
     for (const t of u.mvTargets) setClass(t.el, 'on', k.target === t.key);
-    for (const a of u.mvAngles) setClass(a.el, 'on', on && k.angle === a.key);
+    for (const a of u.mvAngles) setClass(a.el, 'on', on && k.mode === 'view' && k.angle === a.key);
+    setClass(u.mvSpin, 'on', on && k.mode === 'spin');
+    setClass(u.mvSheet, 'on', on && k.mode === 'sheet');
+    for (const l of u.mvLooks ?? []) setClass(l.el, 'on', k.look === l.key);
     setClass(u.mvDark, 'on', !!k.dark);
     setClass(u.mvExit, 'na', !on);
     const d = this.viewer.describe();
-    setText(u.mvInfo, d ? `${d.target} · d ${d.dist} m${d.auto.dist ? ' (fit)' : ''} · h ${d.height} m · AI off, god, HUD hidden` : 'off · console: __game.lab.modelView({ target, yaw, pitch, dist, height, dark })');
+    setText(u.mvInfo, d ? `${d.target} · d ${d.dist} m${d.auto.dist ? ' (fit)' : ''} · h ${d.height} m · ${d.look} · AI off, god, HUD hidden` : 'off · console: __game.lab.modelView({ target, yaw, pitch, dist, height, dark, spin, sheet, look })');
   }
 
   _toggleTouch() {
@@ -785,8 +811,20 @@ export class Lab {
     const ag = el('div', 'lab-grid c5', null, body);
     ag.style.marginTop = '3px';
     this.ui.mvAngles = VIEW_ANGLES.map(([key, label, p]) => {
-      const b = button(ag, label, () => this._mvPick({ angle: key }, true));
-      b.title = p.game ? 'gameplay camera: 58° pitch, world-fixed yaw, current rig distance' : `yaw ${p.yaw}° around its facing, pitch ${p.pitch}°`;
+      const b = button(ag, label, () => this._mvPick({ angle: key, mode: 'view' }, true));
+      b.title = p.game ? 'gameplay camera: 58° pitch, world-fixed yaw, current rig distance (normal play size)' : `yaw ${p.yaw}° around its facing (0 front, 90 its left, 180 back, 270 its right), pitch ${p.pitch}°`;
+      return { key, el: b };
+    });
+    this.ui.mvSpin = button(ag, 'Spin', () => this._mvPick({ mode: this.mvPick.mode === 'spin' ? 'view' : 'spin' }, true));
+    this.ui.mvSpin.title = 'turntable: the camera circles the actor at eye level, one turn in 10 s';
+    const lk = el('div', 'lab-grid c5', null, body);
+    lk.style.marginTop = '3px';
+    this.ui.mvSheet = button(lk, 'Sheet', () => this._mvPick({ mode: this.mvPick.mode === 'sheet' ? 'view' : 'sheet' }, true));
+    this.ui.mvSheet.title = 'every angle at once: front, front 3/4, both sides, back, both rear 3/4 and the gameplay camera (×2), live';
+    const LOOK = { ascii: ['ASCII', 'the game render: the hero as ASCII art'], solid: ['Solid', 'the bare geometry, plain-lit, no ASCII pass: geometry vs renderer problems'], source: ['Source', 'the ASCII pass input (flat part fills), no letters'], lines: ['Lines', 'only the ASCII pass ink lines'] };
+    this.ui.mvLooks = VIEW_LOOKS.map((key) => {
+      const b = button(lk, LOOK[key][0], () => this._mvPick({ look: key }, false));
+      b.title = `hero look: ${LOOK[key][1]}`;
       return { key, el: b };
     });
     this.ui.mvInfo = el('div', 'lab-note', '', body);

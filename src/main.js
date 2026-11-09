@@ -243,6 +243,7 @@ async function boot() {
 
     pipeline.updateShadowCamera(viewAt ?? game.cameraRig.focus);
     pipeline.render();
+    safe('lab', () => game.lab.postRender?.()); // the model viewer's sheet reads the frame back
     if (inspect.rect) inspect.draw();
     game.input.endFrame();
   };
