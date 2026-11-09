@@ -95,8 +95,9 @@ function dirLerp(out, i, ax, ay, az, bx, by, bz, t) {
   if (h1 < 0.06) a1 = a0;
   let d = wrapAngle(a1 - a0);
   if (Math.min(e0, e1) < DIR_LOW) {
+    // only a path that is still LOW where it crosses the back-left goes round the other way
     const f = wrapAngle(DIR_AVOID - a0);
-    if ((d > 0 && f > 0 && f < d) || (d < 0 && f < 0 && f > d)) d -= Math.sign(d) * TAU;
+    if (((d > 0 && f > 0 && f < d) || (d < 0 && f < 0 && f > d)) && e0 + ((e1 - e0) * f) / d < DIR_LOW) d -= Math.sign(d) * TAU;
   }
   const a = a0 + d * t, e = e0 + (e1 - e0) * t;
   const c = Math.cos(e);
@@ -240,6 +241,19 @@ function footCycle(p, i, side, u, A, w, fi) {
   to3(p, i, side + A.mx * (along + off) * 0.85, ANK + up, A.mz * (along + off), w);
 }
 
+/** A fast turn (the gameplay yaw snaps to the aim) reads as a body turn: the head and eyes lead,
+ *  the chest follows, the hips trail behind (A.turnLag = how far the visual heading lags the
+ *  root, ≤ 0 when turning left) while the planted feet catch up with steps. */
+function turnTwist(p, A) {
+  const L = A.turnLag;
+  if (Math.abs(L) < 1e-4) return;
+  p[P.yaw] += L * 0.35; // the whole body trails a little …
+  p[P.pelvY] += L * 0.45; // … the hips most
+  p[P.spY] -= L * 0.4; // the chest less
+  p[P.hdY] -= L * 0.38; // the head already on the new heading
+  p[P.spZ] += L * 0.06;
+}
+
 /** Gait parameters from the ground speed (m/s): stance fraction, half stance length (model m),
  *  stance-centre offset, swing lift / heel kick, and the cycle length that makes the stance foot
  *  travel back at exactly the drawn ground speed. Walk ≈ 0.8 s cycles with double support; run
@@ -266,7 +280,10 @@ function gaitParams(G, sp, sprintW) {
 function loco(p, A) {
   guard(p, A);
   const w = A.moveW;
-  if (w < 0.002) return;
+  if (w < 0.002) {
+    turnTwist(p, A);
+    return;
+  }
   const s = A.sprintW, sp = A.speed, mx = A.mx, mz = A.mz;
   const G = A.gait;
   const ph = A.phase;
@@ -319,6 +336,7 @@ function loco(p, A) {
   const k = 0.5 - 0.5 * cs * mz; // 1 = fist forward
   to3(p, P.lH, lerp(-0.02, -0.08, s) * k + 0.06 * (1 - k), lerp(lerp(-0.44, -0.3, k), lerp(-0.38, -0.04, k), s), lerp(lerp(-0.1, 0.24, k), lerp(-0.14, 0.32, k), s), w);
   to3(p, P.lP, 0.6, -0.6, -0.6, w);
+  turnTwist(p, A);
 }
 /** Blend only the legs toward the walking gait (block / charge can move). */
 function walkLegs(p, A) {
@@ -511,11 +529,63 @@ function attackPose(p, A) {
     if (slam) slamPose(p, A, ang, lunge);
     else slashH(p, A, ang, el, lunge);
   }
+  // footwork: the lunge is a real step (feet never skate with the root)
+  if (k.kind === 'thrust') lungeFeet(p, A, W - 0.02, W + 0.08, 0.5, false); // the dash skids on
+  else if (k.kind === 'slam') lungeFeet(p, A, W - 0.16, W + Ac * 0.5, 0.25, true);
+  else lungeFeet(p, A, 0.03, W + Ac * 0.45, 0.22, true);
   const rec = (t - W - Ac) / R;
   if (rec > 0.45) {
+    // back toward the ready stance: the rear foot stays planted, the front foot draws back home in
+    // a recovery step (the foot planner settles the rest), and the sword hand comes round in FRONT
+    // of the chest (a straight blend of the shoulder offsets ran it through the torso)
+    for (let j = 0; j < FOOT_CH.length; j++) FOOT_KEEP[j] = p[FOOT_CH[j]];
     guard(SCRATCH, A);
-    blend(p, p, SCRATCH, smoothstep(0.45, 1, rec));
+    const b = smoothstep(0.45, 1, rec);
+    blend(p, p, SCRATCH, b);
+    for (let j = 0; j < FOOT_CH.length; j++) p[FOOT_CH[j]] = FOOT_KEEP[j];
+    p[P.rH + 2] += 0.24 * Math.sin(Math.PI * b);
+    const u = smoothstep(0.5, 1, rec);
+    p[P.lF] = lerp(p[P.lF], SCRATCH[P.lF], u);
+    p[P.lF + 2] = lerp(p[P.lF + 2], SCRATCH[P.lF + 2], u);
+    p[P.lF + 1] = lerp(p[P.lF + 1], ANK, u) + 0.07 * Math.sin(Math.PI * u);
+    p[P.lFy] = lerp(p[P.lFy], SCRATCH[P.lFy], u);
   }
+}
+const FOOT_CH = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rFy, P.lFy];
+const FOOT_KEEP = new Float32Array(FOOT_CH.length);
+
+/** Attack footwork. The rear (right) foot stays on its spot while the root lunges, dragged along
+ *  only once the leg is stretched `drag` m past its stance spot; the front (left) foot steps from
+ *  its spot onto the stance's front spot between t0 and t1 (a lunge step: lift, reach, plant) and
+ *  then stays planted while the body carries on over it. Uses the clip's entry feet and the root
+ *  travel (A.entry, A.trav), so the cross-fade into the swing starts from where the feet really are. */
+function lungeFeet(p, A, t0, t1, drag, plant) {
+  const t = A.t, E = A.entry, tr = A.trav;
+  // rear foot: planted, dragged once stretched; settles sideways onto the stance line
+  const sx = p[P.rF], sz = p[P.rF + 2];
+  let hz = E[2] - tr.z;
+  if (hz < sz - drag) hz = sz - drag;
+  const side = smoothstep(t0, t1 + 0.15, t);
+  p[P.rF] = lerp(E[0] - tr.x, sx, side);
+  p[P.rF + 1] = lerp(Math.max(ANK, E[1]), ANK, smoothstep(0, 0.05, t));
+  p[P.rF + 2] = lerp(hz, Math.max(hz, sz - drag), side);
+  p[P.rFy] = lerp(E[6], p[P.rFy], side);
+  // front foot: held → the step → planted on its spot while the root carries on
+  const m0 = A.mark(0, t0), m1 = A.mark(1, t1);
+  const lx = E[3] - (t < t0 ? tr.x : m0.x), lz = E[5] - (t < t0 ? tr.z : m0.z);
+  const tx = p[P.lF], tz = p[P.lF + 2];
+  const u = clamp((t - t0) / Math.max(0.02, t1 - t0), 0, 1);
+  const e = u * u * (3 - 2 * u);
+  let fx = lerp(lx, tx, e), fz = lerp(lz, tz, e);
+  if (plant && t > t1) {
+    // planted: the root's further travel moves the body over the foot
+    fx -= tr.x - m1.x;
+    fz -= tr.z - m1.z;
+  }
+  p[P.lF] = fx;
+  p[P.lF + 1] = Math.max(ANK, lerp(E[4], p[P.lF + 1], e)) + 0.11 * Math.sin(Math.PI * u);
+  p[P.lF + 2] = fz;
+  p[P.lFy] = lerp(E[7], p[P.lFy], e);
 }
 /** Charge: sink into the low coiled stance, blade drawn back and level; deepens with the charge,
  *  trembles when full. The legs can still walk (slowly). */
@@ -635,12 +705,14 @@ const ROLL = {
   y: [0, -0.24, 0.05, -0.27, 0.09, -0.16, 0.2, -0.36, 0.32, -0.5, 0.44, -0.4, 0.6, -0.15],
   sp: [0, 0.55, 0.09, 0.42, 0.2, 0.95, 0.33, 0.95, 0.44, 0.3, 0.6, 0.42],
   hd: [0, 0.05, 0.09, -0.1, 0.2, 0.75, 0.33, 0.75, 0.44, 0.0, 0.6, -0.25],
-  rH: [0, -0.02, -0.42, -0.12, 0.09, -0.05, -0.35, -0.22, 0.2, 0.12, -0.36, 0.15, 0.33, 0.12, -0.36, 0.15, 0.44, 0.05, -0.42, 0.2, 0.6, -0.04, -0.45, -0.08],
-  lH: [0, 0.0, -0.42, 0.35, 0.09, 0.0, -0.3, 0.45, 0.2, 0.06, -0.3, 0.2, 0.33, 0.06, -0.3, 0.2, 0.44, 0.1, -0.4, 0.25, 0.6, 0.02, -0.14, 0.36],
-  // the blade in ROOT axes (un-pitched; rollPose turns it into body axes): trailing → low ahead of
-  // the ball → (down, as the body turns over it) → flat along the ground pointing back → the
-  // kneel's forward-down point on the grass → trailing back-down in the low guard
-  sw: [0, -0.15, -0.35, -0.92, 0.09, -0.1, -0.15, -0.98, 0.2, 0.05, -0.15, 0.99, 0.32, 0.05, -0.04, -1, 0.44, 0.1, -0.55, 0.83, 0.6, -0.2, -0.55, -0.8],
+  rH: [0, -0.04, -0.42, -0.1, 0.09, -0.1, -0.36, -0.14, 0.2, -0.08, -0.38, 0.06, 0.33, -0.08, -0.38, 0.06, 0.44, 0.03, -0.42, 0.2, 0.6, -0.02, -0.46, 0.08],
+  lH: [0, 0.0, -0.42, 0.35, 0.09, 0.0, -0.3, 0.45, 0.2, 0.06, -0.3, 0.2, 0.33, 0.06, -0.3, 0.2, 0.44, 0.1, -0.4, 0.25, 0.6, 0.06, -0.3, 0.3],
+  // the blade in BODY axes, so it turns over with him: trailing back-down at the hip → swung out
+  // to his right side as he launches → held out there, flat (an axle the ball rolls round: the
+  // point circles beside him instead of flipping through the ground) → swept forward-down for the
+  // kneel, the point on the grass ahead → easing toward the ready stance (dirLerp: round the
+  // outside, never through the legs)
+  sw: [0, -0.2, -0.4, -0.89, 0.09, -0.72, -0.28, -0.63, 0.2, -0.86, -0.14, -0.49, 0.32, -0.86, -0.14, -0.49, 0.44, 0.12, -0.55, 0.83, 0.6, 0.42, -0.66, 0.62],
   // body pitch (rad, piecewise linear so the turn never stalls): crouch, the 65° launch, the
   // 110° ball, 220° over the shoulder (blade flat along the ground behind), upright at the kneel
   pitch: [0, 0, 0.09, 0.45, 0.2, 1.9, 0.32, 3.85, 0.44, TAU, 0.6, TAU],
@@ -648,11 +720,33 @@ const ROLL = {
   lF: [0, 0.12, ANK, 0.3, 0.36, 0.13, ANK + 0.05, 0.32, 0.44, 0.13, ANK, 0.35, 0.6, 0.14, ANK, 0.32],
   rK: [0, -0.3, 0, 1, 0.36, -0.2, 0.3, 1, 0.44, -0.1, -0.4, 1, 0.6, -0.35, 0, 1],
 };
-/** Dodge (0.6 s): crouch → a launch with the body ~65° and the blade trailing level → a balled
- *  tuck with the blade brought in ALONG the body → over the right shoulder (blade flat along the
- *  ground pointing back) → a kneel on the right knee, blade forward-down, the tip touching the
- *  grass ahead → up into a low guard with the free fist raised (the coat is flung over the back
- *  by the turn; player.js also kicks it out). */
+/** Direction keys k = [t0, x, y, z, ...] → p[i..i+2], each span eased and blended by dirLerp. */
+function kdir(p, i, t, k) {
+  const n = k.length / 4;
+  if (t <= k[0]) {
+    v3(p, i, k[1], k[2], k[3]);
+    return;
+  }
+  for (let j = 1; j < n; j++) {
+    const b = j * 4;
+    if (t <= k[b]) {
+      const a = b - 4;
+      let u = (t - k[a]) / Math.max(1e-6, k[b] - k[a]);
+      u = u * u * (3 - 2 * u);
+      dirLerp(p, i, k[a + 1], k[a + 2], k[a + 3], k[b + 1], k[b + 2], k[b + 3], u);
+      return;
+    }
+  }
+  const e = (n - 1) * 4;
+  v3(p, i, k[e + 1], k[e + 2], k[e + 3]);
+}
+
+/** Dodge (0.6 s): crouch and push off (the feet stay planted on the grass as the body springs
+ *  away) → a launch with the body ~65° → a balled tuck → over the right shoulder → a kneel on the
+ *  right knee, skidding, blade forward-down with the point on the grass ahead → up into a low
+ *  guard with the free fist raised. The blade is held in BODY axes and carried out at his right
+ *  side through the turn, so it circles with him instead of flipping through the ground (the coat
+ *  is flung over the back by the turn; player.js also kicks it out). */
 function rollPose(p, A) {
   const t = A.t;
   guard(p, A);
@@ -660,6 +754,7 @@ function rollPose(p, A) {
   p[P.bodyX] = 0;
   p[P.bodyZ] = 0;
   p[P.bodyY] = kf(t, ROLL.y); // the ground clamp in apply() lifts the ball as it turns
+  p[P.pelvX] = 0;
   p[P.pelvY] = 0;
   p[P.pelvZ] = 0;
   p[P.spY] = 0;
@@ -667,48 +762,78 @@ function rollPose(p, A) {
   p[P.spX] = kf(t, ROLL.sp);
   p[P.hdX] = kf(t, ROLL.hd);
   p[P.hdY] = 0;
+  p[P.hdZ] = 0;
   kv3(p, P.rH, t, ROLL.rH);
   kv3(p, P.lH, t, ROLL.lH);
-  kv3(p, P.swD, t, ROLL.sw);
-  {
-    // root axes → body axes: undo the body pitch (yaw / roll are 0 through the dodge)
-    const cp = Math.cos(p[P.pitch]), sp = Math.sin(p[P.pitch]);
-    const y = p[P.swD + 1], z = p[P.swD + 2];
-    p[P.swD + 1] = y * cp + z * sp;
-    p[P.swD + 2] = -y * sp + z * cp;
-    p[P.swF] = 0;
-    p[P.swF + 1] = cp;
-    p[P.swF + 2] = -sp; // the flat faces the sky
-  }
-  v3(p, P.rP, -0.5, -0.6, -0.6);
+  kdir(p, P.swD, t, ROLL.sw);
+  v3(p, P.swF, 0.2, 1, 0.2); // the flat faces his back / the sky through the turn
+  v3(p, P.rP, -0.7, -0.5, -0.5);
   v3(p, P.lP, 0.6, -0.6, -0.5);
   kv3(p, P.rF, t, ROLL.rF);
   kv3(p, P.lF, t, ROLL.lF);
   kv3(p, P.rK, t, ROLL.rK);
   v3(p, P.lK, 0.25, 0, 1);
+  p[P.rFy] = p[P.lFy] = 0;
+  p[P.rFf] = p[P.lFf] = 1;
+  // push-off: for the first frames the feet stay on their entry spots while the root springs away,
+  // then trail from where they left the grass into the tuck
+  const push = 1 - smoothstep(0.04, 0.15, t);
+  if (push > 0) {
+    const E = A.entry, m0 = A.mark(0, 0.04);
+    const tx = t < 0.04 ? A.trav.x : m0.x, tz = t < 0.04 ? A.trav.z : m0.z;
+    const up = 0.1 * smoothstep(0.04, 0.1, t);
+    to3(p, P.rF, E[0] - tx, ANK + up, E[2] - tz, push);
+    to3(p, P.lF, E[3] - tx, ANK + up, E[5] - tz, push);
+  }
   // knees to the chest through the tuck and the roll
   const tuck = smoothstep(0.06, 0.15, t) * (1 - smoothstep(0.34, 0.42, t));
   bodyPointTo(p, P.rF, -0.12, -0.42, 0.2, tuck);
-  bodyPointTo(p, P.lF, 0.12, -0.4, 0.22, Math.max(tuck, 0.8 * smoothstep(0.02, 0.09, t) * (1 - smoothstep(0.34, 0.42, t))));
+  bodyPointTo(p, P.lF, 0.12, -0.4, 0.22, Math.max(tuck, 0.8 * smoothstep(0.04, 0.1, t) * (1 - smoothstep(0.34, 0.42, t))));
   to3(p, P.rK, -0.2, 0.5, 1, tuck);
   to3(p, P.lK, 0.2, 0.5, 1, tuck);
   p[P.footFlat] = lerp(0.9, 0, tuck);
 }
-/** Backstep: short hop backward, blade forward. */
+/** Backstep (0.4 s): a short crouched hop backward. The feet push off the grass (held on their
+ *  spots for the first frames while the root moves), fly with the knees up, and land a little
+ *  ahead of the body, braking (held on their landing spots while the body settles back over
+ *  them); the blade comes up forward, the free hand guards. */
 function backstepPose(p, A) {
   const t = A.t;
   guard(p, A);
-  const hop = Math.sin(Math.PI * clamp((t - 0.02) / 0.3, 0, 1));
-  const k = smoothstep(0, 0.06, t) * (1 - smoothstep(0.3, 0.4, t));
-  p[P.bodyY] += 0.06 * hop - 0.06 * k;
-  p[P.spX] = lerp(p[P.spX], -0.12, k);
-  p[P.hdX] = lerp(p[P.hdX], 0.06, k);
-  p[P.rF + 1] += 0.1 * hop;
-  p[P.lF + 1] += 0.12 * hop;
-  p[P.rF + 2] += 0.12 * k; // feet trail forward as the body hops back
-  p[P.lF + 2] += 0.18 * k;
-  dirTo(p, P.swD, -0.1, -0.15, 1, k);
-  to3(p, P.lH, -0.06, -0.3, 0.3, k);
+  const crouch = smoothstep(0, 0.05, t) * (1 - smoothstep(0.32, 0.4, t));
+  const air = smoothstep(0.03, 0.08, t) * (1 - smoothstep(0.26, 0.31, t));
+  const hop = Math.sin(Math.PI * clamp((t - 0.04) / 0.27, 0, 1));
+  p[P.bodyX] = lerp(p[P.bodyX], 0, crouch);
+  p[P.bodyY] = lerp(p[P.bodyY], -0.07, crouch) + 0.07 * hop - 0.04 * smoothstep(0.27, 0.33, t) * (1 - smoothstep(0.33, 0.4, t));
+  p[P.pelvZ] = lerp(p[P.pelvZ], 0, crouch);
+  p[P.spZ] = lerp(p[P.spZ], 0, crouch);
+  p[P.spX] = lerp(p[P.spX], 0.12, crouch) - 0.18 * hop;
+  p[P.hdX] = lerp(p[P.hdX], 0.04, crouch) + 0.1 * hop;
+  p[P.hdZ] = lerp(p[P.hdZ], 0, crouch);
+  // feet: held on their entry spots while he pushes off → carried through the air (knees up) →
+  // set down on landing spots a little ahead of the hips, held while the body settles back
+  const tr = A.trav, E = A.entry;
+  const m0 = A.mark(1, 0.045); // travel at the push-off
+  const carry = smoothstep(0.05, 0.27, t);
+  const land = smoothstep(0.28, 0.31, t);
+  const m1 = A.mark(0, 0.3); // travel at touchdown
+  for (let k = 0; k < 2; k++) {
+    const i = k ? P.lF : P.rF, o = k * 3;
+    const hx = E[o] - (t < 0.045 ? tr.x : m0.x), hz = E[o + 2] - (t < 0.045 ? tr.z : m0.z);
+    const lx = k ? 0.15 : -0.16, lz = k ? 0.16 : -0.02; // landing spots (model)
+    v3(p, i, lerp(hx, lx, carry), ANK + air * (0.1 + (k ? 0.14 : 0.1) * hop), lerp(hz, lz, carry));
+    if (land > 0) {
+      p[i] -= (tr.x - m1.x) * land;
+      p[i + 2] -= (tr.z - m1.z) * land;
+    }
+  }
+  to3(p, P.rK, -0.3, 0.2, 1, air);
+  to3(p, P.lK, 0.3, 0.2, 1, air);
+  p[P.rFy] = lerp(E[6], -0.2, carry);
+  p[P.lFy] = lerp(E[7], 0.1, carry);
+  dirTo(p, P.swD, -0.15, -0.22, 1, crouch);
+  to3(p, P.rH, 0.02, -0.4, 0.22, crouch);
+  to3(p, P.lH, -0.04, -0.3, 0.3, crouch);
 }
 
 /** Drink: legs keep walking (slowly), the free hand raises the flask, head tips back. */
@@ -978,6 +1103,13 @@ export class HeroAnimator {
     this._pv = { x: 0, z: 0, h: 0, init: false };
     // foot planner (see _feet): per foot { init, lock, wx, wz, wyaw, mode, s, dur, lx, ly, lz, lyaw, cx, cz, cyaw, prevU }
     this.feet = [0, 1].map(() => ({ init: false, lock: false, hold: false, wx: 0, wz: 0, wyaw: 0, mode: 0, s: 1, dur: 0.2, lift: 0, lx: 0, ly: ANK, lz: 0, lyaw: 0, cx: 0, cz: 0, cyaw: 0, prevU: 0, ox: 0, oy: ANK, oz: 0, oyaw: 0 }));
+    // root travel since the current clip started (model space, drawn scale) and per-clip marks of
+    // it (poses that hold feet on their spots while the root moves: push-offs, landings)
+    this.clipX = 0;
+    this.clipZ = 0;
+    this.trav = { x: 0, z: 0 };
+    this.marks = [{ set: false, x: 0, z: 0 }, { set: false, x: 0, z: 0 }];
+    this.entry = new Float32Array([-0.25, ANK, 0.15, 0.13, ANK, -0.03, -0.4, 0.22]);
     this.leanF = 0; // acceleration lean (rad), a critically damped spring on the smoothed acceleration
     this.leanFV = 0;
     this.leanS = 0;
@@ -1010,6 +1142,21 @@ export class HeroAnimator {
   /** Start a clip, cross-fading from the current pose over `blend` seconds. */
   play(key, blend = 0.12, easeOut = false) {
     if (!POSES[key]) key = 'loco';
+    const pp = this.player.position;
+    this.clipX = fin(pp?.x);
+    this.clipZ = fin(pp?.z);
+    this.trav.x = this.trav.z = 0;
+    for (const M of this.marks) M.set = false;
+    // where the feet are as the clip starts (model space): push-offs keep them on these spots
+    const E = this.entry, c0 = this.cur;
+    E[0] = c0[P.rF];
+    E[1] = c0[P.rF + 1];
+    E[2] = c0[P.rF + 2];
+    E[3] = c0[P.lF];
+    E[4] = c0[P.lF + 1];
+    E[5] = c0[P.lF + 2];
+    E[6] = c0[P.rFy];
+    E[7] = c0[P.lFy];
     this.from.set(this.cur);
     for (const i of ANGLES) this.from[i] = wrapAngle(this.from[i]); // a finished roll is 2π ≡ 0
     this.key = key;
@@ -1177,6 +1324,11 @@ export class HeroAnimator {
     this.phase += (sp / HERO_SCALE) * dt / this.gait.len;
     if (this.phase > 1e4) this.phase -= 1e4;
 
+    {
+      const tx = (fin(pl.position?.x) - this.clipX) / HERO_SCALE, tz = (fin(pl.position?.z) - this.clipZ) / HERO_SCALE;
+      this.trav.x = tx * c - tz * s;
+      this.trav.z = tx * s + tz * c;
+    }
     POSES[this.key](this.target, this);
     if (this.blendT < this.blendDur) {
       this.blendT += dt;
@@ -1200,6 +1352,18 @@ export class HeroAnimator {
     this._hair(dt);
     this._streamers(dt);
     this.rig.root.updateMatrixWorld(true);
+  }
+
+  /** The root travel recorded the first frame this clip reached time t0 (slot 0/1); before that,
+   *  the current travel (so "travel since the mark" is 0 until then). */
+  mark(slot, t0) {
+    const M = this.marks[slot];
+    if (!M.set) {
+      M.x = this.trav.x;
+      M.z = this.trav.z;
+      if (this.t >= t0) M.set = true;
+    }
+    return M;
   }
 
   /**
