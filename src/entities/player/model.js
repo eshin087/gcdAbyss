@@ -78,13 +78,15 @@ const REST = (() => {
 // The owner's reference flares the coat WIDE on both sides into long ragged strips (to mid-calf, the
 // side tails out past the hands): wide hems, long strips, and a per-panel resting `flare` (the
 // animator's outward pull, see COAT_FLARE in anim.js: 0.3 ≈ 17°; 0.62 ≈ 32° on the sides).
+// (round 2: the front panels hang nearly straight, the coat's open front edges; the side and back
+// drapes are wider at the hem with soft folds, so the flare reads as cloth, not planks)
 export const COAT_PANELS = [
-  { az: 0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.36 }, // front-left
-  { az: -0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.36 }, // front-right
-  { az: 1.6, w: [0.18, 0.29, 0.42], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.62 }, // left
-  { az: -1.6, w: [0.18, 0.29, 0.42], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.62 }, // right
-  { az: 2.55, w: [0.17, 0.28, 0.4], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
-  { az: -2.55, w: [0.17, 0.28, 0.4], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
+  { az: 0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.22, folds: 1 }, // front-left
+  { az: -0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.22, folds: 1 }, // front-right
+  { az: 1.6, w: [0.19, 0.32, 0.5], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.5 }, // left
+  { az: -1.6, w: [0.19, 0.32, 0.5], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.5 }, // right
+  { az: 2.55, w: [0.18, 0.31, 0.46], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
+  { az: -2.55, w: [0.18, 0.31, 0.46], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
   // the front flap: hangs between the legs from 1.05 m to a point at 0.55 m (seen in wide stances)
   { az: 0, w: [0.12, 0.12, 0.11], len: [0.28, 0.22], strips: [], fork: [], out: 0, flap: true, y: -0.085, r: 0.112 },
 ];
@@ -195,19 +197,25 @@ function shellGeometry(rings, { sub = 2, cols = 24, span = 0 } = {}) {
 /** A coat-skirt sheet hanging −Y from its joint: width wTop → wBot over `len`, curved around the
  *  hips with a radius that grows down the panel (R0 + flare × depth) so neighbours form a cone.
  *  Local +Z = outward; the front face points out (the lining is the back face). */
-function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1) {
+function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, fold = [0, 0, 0], t0 = 0, t1 = 1) {
   const r = rng(seed);
-  const cols = 6, rows = 5;
+  const cols = 12, rows = Math.max(2, Math.round(5 * (t1 - t0)));
   const jitter = Array.from({ length: cols + 1 }, () => (r() - 0.5) * jag);
-  return gridGeometry(cols, rows, (s, t, o) => {
+  // `fold` [amplitude at the top, at the bottom (m), waves across, phase]: the reference's coat
+  // drapes in soft vertical folds that deepen toward the hem (a flat sheet read as a plank).
+  // t0 … t1: build only that stretch of the sheet (the dark coat above, the lavender torn zone below)
+  const ph = fold[3] ?? r() * Math.PI * 2;
+  return gridGeometry(cols, rows, (s, tt, o) => {
+    const t = lerp(t0, t1, tt);
     const w = lerp(wTop, wBot, t);
     const u = (s - 0.5) * w;
     const R = R0 + flare * t * len;
     const a = u / R;
-    const y = -t * (len + 0.02) + (t === 1 ? jitter[Math.round(s * cols)] : 0);
-    o[0] = Math.sin(a) * R;
+    const y = -t * (len + 0.02) + (tt === 1 && t1 === 1 ? jitter[Math.round(s * cols)] : 0);
+    const f = lerp(fold[0], fold[1], t) * Math.sin(s * Math.PI * 2 * fold[2] + ph) * Math.sin(Math.PI * Math.min(1, s * 6) * 0.5) * Math.sin(Math.PI * Math.min(1, (1 - s) * 6) * 0.5);
+    o[0] = Math.sin(a) * (R + f);
     o[1] = y;
-    o[2] = (Math.cos(a) - 1) * R;
+    o[2] = (Math.cos(a) - 1) * R + Math.cos(a) * f;
     o[3] = u;
     o[4] = y;
   }, true);
@@ -502,7 +510,7 @@ function place(g, x, y, z, rx = 0, ry = 0, rz = 0) {
 
 /** Scalp-cap radii (hero.md §2.1, widened for the game read: the head with its hair reads ≈1.25×
  *  the skull), centred 1 cm behind the skull centre. The clumps root on this surface. */
-const CAP = { rx: 0.11, ry: 0.126, rz: 0.118, y: 0.012, z: -0.01 };
+const CAP = { rx: 0.12, ry: 0.132, rz: 0.126, y: 0.014, z: -0.012 };
 
 /** A point on the scalp cap (head space): azimuth from +Z toward +X (the hero's left), elevation
  *  above the cap's equator, `f` < 1 sinks it under the surface so a clump's root is hidden. */
@@ -564,12 +572,14 @@ function hairGeometries() {
   // the messy mop: thick locks rooted round the crown whorl lie down over the scalp (each one
   // outlined by the art pass: the reference's strand lines) and lift off it at their pointed ends,
   // so the dome is hidden and the outline is a jagged ring of tips outside the cap
-  for (const [n, el0, a0, L0, curl] of [[14, 1.12, 0.6, 0.16, 0.17], [12, 0.72, 0.85, 0.13, 0.1]]) {
+  // (round 2: a bigger cap and longer locks that hang down round it, lifting a little at the tips:
+  // the reference's big, round, messy volume instead of a tight cap)
+  for (const [n, el0, a0, L0, curl, lift] of [[14, 1.12, 0.6, 0.18, 0.03, 0.22], [12, 0.72, 0.85, 0.155, 0.02, 0.12]]) {
     for (let i = 0; i < n; i++) {
       const az = a0 + ((i + (el0 < 1 ? 0.5 : 0)) / n) * (Math.PI * 2 - 2 * a0) + j(0.12); // all round but the fringe's front
       const el = el0 + j(0.1);
       const rad = radial(az, el), m = merid(az, el);
-      clump(side(az), L0 + j(0.025), 0.026, 0.012, capPoint(az, el, 0.95), [m[0], m[1] * 1.15, m[2]], [-rad[0], -rad[1], -rad[2]], curl + j(0.05), 0.6);
+      clump(side(az), L0 + j(0.03), 0.028, 0.012, capPoint(az, el, 0.95), [m[0] + rad[0] * lift, m[1] * 1.15 + rad[1] * lift, m[2] + rad[2] * lift], [-rad[0], -rad[1], -rad[2]], curl + j(0.06), 0.6);
     }
   }
   // ragged flicks out sideways and back at temple / ear height (the jagged side edges), drooping;
@@ -581,9 +591,10 @@ function hairGeometries() {
   }
   // crown: thin strands standing up and out at 30–60° and curling back (the reference's wispy,
   // bed-head top edge, not a crown of broad spikes), longest toward the hero's right
-  for (const [az, el, L] of [[0.45, 1.25, 0.07], [-0.55, 1.2, 0.085], [2.8, 1.3, 0.06], [1.4, 1.1, 0.065], [-1.35, 1.05, 0.08], [-0.1, 1.38, 0.07], [2.1, 1.2, 0.06]]) {
+  for (const [az, el, L] of [[0.45, 1.25, 0.08], [-0.55, 1.2, 0.095], [2.8, 1.3, 0.07], [1.4, 1.1, 0.075], [-1.35, 1.05, 0.09], [-0.1, 1.38, 0.08], [2.1, 1.2, 0.07]]) {
     const ox = Math.sin(az), oz = Math.cos(az);
-    clump('crown', L + j(0.012), 0.009, 0.006, capPoint(az, el, 0.88), [ox * 0.85 + j(0.2), 0.55, oz * 0.3 - 0.5], [ox * 0.4, -0.4, -1], 0.6, 0.85);
+    // wisps out and back, curling over (not straight spikes standing up)
+    clump('crown', L + j(0.012), 0.009, 0.006, capPoint(az, el, 0.88), [ox * 0.9 + j(0.2), 0.45, oz * 0.3 - 0.6], [ox * 0.4, -0.6, -1], 0.75, 0.85);
   }
   // nape locks down to the collar top, tips flicking out
   for (let i = 0; i < 7; i++) {
@@ -1295,19 +1306,29 @@ export function buildHero(U) {
       mesh(thigh, ring(0.016, 0.016, 0.005, 8).rotateX(Math.PI / 2).translate(-0.076, -0.065, 0.02), M.trim);
     }
     const shin = joint(thigh, 0, -DIM.thigh, 0);
-    // knee-high armoured boot: shell, 3 shin lames narrowing to the ankle, a silver bevel along
-    // each lame's lower edge
+    // knee-high armoured boot: the shell, a cuff lame under the knee and one at the ankle, and the
+    // reference's KITE GREAVE down the shin: a faceted diamond plate pointed at the knee and the
+    // ankle with a raised centre ridge, silver bevels on its edges and the ridge (stacked ring lames
+    // read as a stack of tyres)
     mesh(shin, limb({ length: DIM.shin - 0.02, r0: 0.058, r1: 0.045 }), M.armor, 0, -0.02, 0);
     mesh(shin, mergeGeometries([
-      sub(arcPlate(-0.06, -0.135, 0.068, 0.064, 0, 1.25, 5), 1),
-      arcPlate(-0.125, -0.2, 0.062, 0.058, 0, 1.2, 5),
-      sub(arcPlate(-0.19, -0.265, 0.056, 0.052, 0, 1.15, 5), 1),
+      sub(arcPlate(-0.045, -0.09, 0.067, 0.065, 0, 1.4, 6), 1),
+      sub(arcPlate(-0.33, -0.375, 0.054, 0.052, 0, 1.5, 6), 1),
     ]), M.armor);
-    mesh(shin, mergeGeometries([
-      arcPlate(-0.126, -0.137, 0.0665, 0.0665, 0, 1.25, 5),
-      arcPlate(-0.191, -0.202, 0.0605, 0.0605, 0, 1.2, 5),
-      arcPlate(-0.256, -0.267, 0.0545, 0.0545, 0, 1.15, 5),
-    ]), M.bevel);
+    {
+      const T = [0, -0.06, 0.069], Rt = [0.058, -0.16, 0.058], B = [0, -0.355, 0.051], Lf = [-0.058, -0.16, 0.058], C = [0, -0.16, 0.08];
+      const kg = new THREE.BufferGeometry();
+      kg.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...T, ...C, ...Rt, ...T, ...Lf, ...C, ...C, ...Lf, ...B, ...C, ...B, ...Rt]), 3));
+      kg.computeVertexNormals();
+      planarGUV(kg, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
+      mesh(shin, kg, M.armor);
+      const e = (a, b) => strapGeometry([a[0], a[1], a[2] + 0.003], [b[0], b[1], b[2] + 0.003], 0.009, 0.004, [-(b[1] - a[1]), b[0] - a[0], 0]);
+      mesh(shin, mergeGeometries([
+        e(T, Rt), e(Rt, B), e(B, Lf), e(Lf, T), e(T, C), e(C, B),
+        arcPlate(-0.083, -0.092, 0.0675, 0.0675, 0, 1.4, 6),
+        arcPlate(-0.366, -0.375, 0.0535, 0.0535, 0, 1.5, 6),
+      ]), M.bevel);
+    }
     // kite knee guard (poleyn): 0.10 W × 0.13 H standing 0.02 m off the knee, a ridge down the
     // middle, silver bevels on all four edges, wings wrapping the sides; its point leans 15° out
     // and a short spike carries it to 0.60 m
@@ -1349,8 +1370,10 @@ export function buildHero(U) {
     const anchor = joint(pelvis, sa * R0, ay, ca * R0);
     anchor.rotation.y = P.az; // local +Z = outward, +X = tangent
     const s0 = joint(anchor);
-    // neighbouring panels alternate ink-line sub-ids: their overlapping edges are outlined
-    const g0 = sub(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i), i % 2);
+    // neighbouring panels alternate ink-line sub-ids: their overlapping edges are outlined. Soft
+    // folds deepen down each panel (the same phase across the join, so the two segments meet)
+    const fph = i * 2.1 + 0.7, fw = P.flap ? 0 : P.folds ?? 1.5;
+    const g0 = sub(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i, [0, 0.014, fw, fph]), i % 2);
     mesh(s0, g0, M.coat);
     mesh(s0, g0, M.lining);
     const s1 = joint(s0, 0, -P.len[0], 0);
@@ -1361,9 +1384,15 @@ export function buildHero(U) {
       g1 = tatterStrip(P.len[1], P.w[1], { curl: 0.05, seed: 900 });
       mesh(s1, g1, M.hem);
     } else {
-      g1 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i), i % 2);
+      // the lower segment lightens into the dusty lavender torn zone over its last 55 % (the
+      // reference's tails: black at the hips, grey-lavender toward the ragged hem)
+      const fold = [0.014, 0.034, fw, fph];
+      g1 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i, fold, 0, 0.45), i % 2);
       mesh(s1, g1, M.coat);
       mesh(s1, g1, M.lining);
+      const g2 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i, fold, 0.45, 1), i % 2);
+      mesh(s1, g2, M.hem);
+      mesh(s1, g2, M.lining);
     }
     // torn strips along the tear line (0.06–0.12 m wide at the root, overlapping a little)
     const strips = [];
