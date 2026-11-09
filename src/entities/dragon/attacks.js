@@ -1351,6 +1351,7 @@ const OVERHEAD = {
   init(d, a, h) {
     h.w = swipeCurve((h.spec.side ?? 1) * a.side0);
     h.wi = h.w.wi;
+    h.p0 = V();
     h.slam = V();
     h.p1 = V();
     h.lungeV = 0;
@@ -1389,7 +1390,6 @@ const OVERHEAD = {
     d.rootPt(h.slam, lx, 0.3, lz);
     // the arc's top: above the raised paw, a third of the way to the smash point
     d.rootPt(h.p1, lerp(side * OVH_RAISE[0], lx, 0.35), OVH_RAISE[1] + 0.9, lerp(OVH_RAISE[2], lz, 0.35));
-    h.p0 = h.p0 || V();
     h.p0.copy(d.rig.pt.arms[h.wi].toe);
     h.lungeV = (travel * S) / Math.max(0.05, a.dur);
   },
