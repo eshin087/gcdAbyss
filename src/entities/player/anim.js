@@ -394,10 +394,12 @@ function loco(p, A) {
   // forward and low in front of him (A.backW, eased, so turning from a backpedal into a run swings
   // it round the right side over ~0.3 s): trailed "behind" it swung into the direction of travel,
   // and the low ready guard lies across the legs, which swing through it when walking backward.
+  // (round 3: the hand trails OUT beside the coat, not under it, and the blade angles out past the
+  // tails: the grip used to ride inside the skirt and the steel came out through the cloth)
   const amp = 0.05 * cs * mz, ws = A.swordW, bw = A.backW;
-  to3(p, P.rH, lerp(lerp(-0.02, -0.06, s), -0.02, bw), lerp(lerp(-0.49, -0.38, s) + 0.012 * st, -0.38, bw), lerp(lerp(-0.12 + amp, -0.3, s), 0.3, bw), ws);
-  to3(p, P.rP, lerp(-0.6, -0.8, bw), lerp(lerp(-0.3, 0.2, s), -0.3, bw), lerp(-1, -0.5, bw), ws);
-  dirLerp(SW_T, 0, lerp(-0.2, -0.14, s), lerp(-0.6, -0.22, s) - 0.03 * st * (1 - s), lerp(-0.77, -0.96, s), -0.15, -0.22, 1, bw);
+  to3(p, P.rH, lerp(lerp(-0.12, -0.15, s), -0.02, bw), lerp(lerp(-0.48, -0.37, s) + 0.012 * st, -0.38, bw), lerp(lerp(-0.1 + amp, -0.28, s), 0.3, bw), ws);
+  to3(p, P.rP, lerp(-0.75, -0.85, bw), lerp(lerp(-0.3, 0.2, s), -0.3, bw), lerp(-0.85, -0.5, bw), ws);
+  dirLerp(SW_T, 0, lerp(-0.42, -0.36, s), lerp(-0.56, -0.2, s) - 0.03 * st * (1 - s), lerp(-0.71, -0.91, s), -0.15, -0.22, 1, bw);
   dirTo(p, P.swD, SW_T[0], SW_T[1], SW_T[2], ws);
   to3(p, P.swF, lerp(-0.3, 0, bw), 1, lerp(0, 0.2, bw), ws);
   // free arm swings opposite the legs: ahead of the belt (run) → a pumping fist chin ↔ hip (sprint)
@@ -1448,6 +1450,35 @@ const COAT_JUMP = 0.2; // rad per frame: the most a lying-down floor fix may swi
 const COAT_A = [[-1.5, 0.3], [-1.0, 0.6]]; // outward (−) / inward (+) swing limits per segment
 const COAT_B = [0.7, 0.55]; // sideways swing limit per segment
 const LEG_R = BODY.thigh[0] + 0.004; // thigh / knee radius used to push the panels out
+// the blade vs the coat (round 3): the cloth never passes through the steel (it used to come out
+// through the tails behind a run). Every frame the grip and points along the drawn blade (BLADE_PTS,
+// pelvis space) are tested against each panel segment's sheet: with the sword hand outside the cloth
+// the panel hangs INSIDE the hand and the blade (they cap how far it flares; the legs still win), with
+// the hand under the cloth it drapes OVER the blade (they push it out). The side is latched while any
+// steel is over the panel. COAT_BLADE_R / COAT_HAND_R = the blade's half-width / the gauntlet, + the
+// cloth's margin.
+const COAT_BLADE_R = 0.07, COAT_HAND_R = 0.06;
+const COAT_STEEL_JUMP = 0.12; // rad per 60 fps frame: the most the steel moves a coat segment at once
+const BLADE_PTS = Array.from({ length: 13 }, () => new THREE.Vector3()); // [0] = the grip
+const _mC = new THREE.Matrix4();
+// the steel in a panel's anchor frame (QA) and in its lower segment's parent frame (QB): x along the
+// hips, y up, z out, from the segment's pivot; SEG = segLocal's output
+const QA = new Float32Array(39), QB = new Float32Array(39), SEG = new Float32Array(3);
+/** Point k of Q (a coat segment's parent frame, its pivot at the origin) in the frame of that
+ *  segment swung (a, b) (rotation order YXZ: Rx(a)·Rz(b)): SEG = [x along it, y down it (≤ 0),
+ *  height above the sheet's curve round the hips (radius R)]. Returns whether the point lies over
+ *  the sheet (its length L, half-width hw0 → hw1 down it; + 3 cm). */
+function segLocal(Q, k, a, b, L, hw0, hw1, R) {
+  const qx = Q[k * 3], qy = Q[k * 3 + 1], qz = Q[k * 3 + 2];
+  const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+  const y1 = qy * ca + qz * sa, z1 = -qy * sa + qz * ca;
+  const x2 = qx * cb + y1 * sb, y2 = -qx * sb + y1 * cb;
+  const t = -y2 / L, Rt = R + 0.25 * clamp(t, 0, 1) * L;
+  SEG[0] = x2;
+  SEG[1] = y2;
+  SEG[2] = z1 + Rt - Math.sqrt(Math.max(0, Rt * Rt - x2 * x2));
+  return t > 0.03 / L && t <= 1 && Math.abs(x2) <= lerp(hw0, hw1, clamp(t, 0, 1)) + 0.03;
+}
 // torn strips (one spring each, so every tip sways on its own and lags its panel ~0.1 s)
 const STRIP_K = 75, STRIP_C = 7.5, STRIP_LAG = 0.08, STRIP_FLARE = 0.42;
 const STRIP_A = [-1.5, 0.8], STRIP_B = 0.8, STRIP_FLOOR = 0.03;
@@ -1542,6 +1573,7 @@ export class HeroAnimator {
     this.leanSV = 0;
     this.stepCool = 0;
     this.coatState = rig.coat.map(() => [{ x: 0, vx: 0, z: 0, vz: 0 }, { x: 0, vx: 0, z: 0, vz: 0 }]);
+    this.coatSide = new Uint8Array(rig.coat.length).fill(1); // per panel: the steel 1 outside it, 2 under it
     this.stripState = rig.coat.map((C) => C.strips.map(() => ({ x: 0, vx: 0, z: 0, vz: 0 })));
     this.streamState = (rig.streamers ?? []).map(() => ({
       segs: [{ x: 0, vx: 0, z: 0, vz: 0 }, { x: 0, vx: 0, z: 0, vz: 0 }], prev: new THREE.Vector3(), vel: new THREE.Vector3(),
@@ -1642,6 +1674,7 @@ export class HeroAnimator {
     for (const st of this.coatState) {
       for (const c of st) c.x = c.vx = c.z = c.vz = 0;
     }
+    this.coatSide.fill(1);
     for (const st of this.stripState) {
       for (const c of st) c.x = c.vx = c.z = c.vz = 0;
     }
@@ -2215,10 +2248,37 @@ export class HeroAnimator {
     return Math.min(_e0.y, _e1.y);
   }
 
+  /** QB = the steel (QA, a panel's anchor frame) in its lower segment's parent frame: the upper
+   *  segment swung (a0, b0), the pivot at its end (0, −len0, 0). */
+  _lowerFrame(nb, a0, b0, len0) {
+    const ca = Math.cos(a0), sa = Math.sin(a0), cb = Math.cos(b0), sb = Math.sin(b0);
+    for (let k = 0; k < nb; k++) {
+      const qx = QA[k * 3], qy = QA[k * 3 + 1], qz = QA[k * 3 + 2];
+      const y1 = qy * ca + qz * sa;
+      QB[k * 3] = qx * cb + y1 * sb;
+      QB[k * 3 + 1] = -qx * sb + y1 * cb + len0;
+      QB[k * 3 + 2] = -qy * sa + qz * ca;
+    }
+  }
+
+  /** The grip and the drawn blade (DIM.forte → DIM.drawnTip) as BLADE_PTS in pelvis space (this
+   *  frame's pose; [0] = the grip); returns how many (0 on a bad frame). */
+  _bladePts() {
+    const r = this.rig;
+    r.sword.updateWorldMatrix(true, false);
+    _mC.copy(r.pelvis.matrixWorld).invert().multiply(r.sword.matrixWorld);
+    const n = BLADE_PTS.length, z0 = DIM.forte, z1 = DIM.drawnTip ?? DIM.steelTip;
+    BLADE_PTS[0].set(0, 0, 0).applyMatrix4(_mC);
+    for (let k = 1; k < n; k++) BLADE_PTS[k].set(0, 0, z0 + ((z1 - z0) * (k - 1)) / (n - 2)).applyMatrix4(_mC);
+    const e = BLADE_PTS[n - 1];
+    return Number.isFinite(e.x + e.y + e.z + BLADE_PTS[0].x) ? n : 0;
+  }
+
   /** Coat skirt: each panel segment springs toward gravity-hang + hip flare − its anchor's
-   *  velocity (so it lags turns, runs and rolls). The knees and thighs push the panels out, and
-   *  the hem never sinks into the ground. Angles: x = swing (− outward), z = sideways. Then the
-   *  torn strips of each panel follow on their own springs (_strips). */
+   *  velocity (so it lags turns, runs and rolls). The knees and thighs push the panels out, the
+   *  blade caps how far they flare (they hang inside it), and the hem never sinks into the
+   *  ground. Angles: x = swing (− outward), z = sideways. Then the torn strips of each panel follow
+   *  on their own springs (_strips). */
   _coat(dt) {
     const r = this.rig;
     const steps = dt > 0 ? Math.min(8, Math.ceil(dt / (1 / 120))) : 0;
@@ -2237,6 +2297,7 @@ export class HeroAnimator {
       r.pelvis.worldToLocal(lp[li * 2 + 1].copy(_T));
     }
     const still = 1 - clamp(this.speed / 2.5, 0, 1); // the idle breeze fades out once moving
+    const nb = this._bladePts();
 
     for (let i = 0; i < r.coat.length; i++) {
       const C = r.coat[i], D = C.def, st = this.coatState[i], LEN = C.len;
@@ -2254,6 +2315,35 @@ export class HeroAnimator {
       const flut = Math.min(1, Math.hypot(_v.x, _v.z) / 5);
       const breeze = (BREEZE[i] ?? 0.03) + 0.1 * Math.sin(this.time * 2.618 + i * 1.3) * (0.5 + 0.5 * Math.sin(this.time * 0.9 + i));
       const ap = C.anchor.position;
+      // the steel in this panel's anchor frame, and which side of the panel it is on (latched while
+      // any of it is over the panel, so the cloth never jumps through it): the sword hand under the
+      // cloth (inside a segment's current sheet) → the panel drapes OVER the blade (it swings out
+      // clear of it); otherwise it hangs INSIDE the hand and the blade (they cap its flare)
+      const steel = nb > 0 && !D.flap && C.r0 > 0;
+      const L1 = D.len[1] + 0.08, R1 = C.r0 + 0.25 * D.len[0]; // the lower segment (+ the strip roots)
+      if (steel) {
+        for (let k = 0; k < nb; k++) {
+          const B = BLADE_PTS[k], dx = B.x - ap.x, dz = B.z - ap.z;
+          QA[k * 3] = dx * tx + dz * tz;
+          QA[k * 3 + 1] = B.y - ap.y;
+          QA[k * 3 + 2] = dx * nx + dz * nz;
+        }
+        let gh = Infinity, near = false; // the grip's height over the sheet; any steel over it
+        this._lowerFrame(nb, st[0].x, st[0].z, D.len[0]);
+        for (let s = 0; s < 2; s++) {
+          const Q = s ? QB : QA, L = s ? L1 : D.len[0], R = s ? R1 : C.r0;
+          for (let k = 0; k < nb; k++) {
+            if (!segLocal(Q, k, st[s].x, st[s].z, L, D.w[s] / 2, D.w[s + 1] / 2, R)) continue;
+            near = true;
+            if (k === 0 && SEG[2] < gh) gh = SEG[2];
+          }
+        }
+        const side = this.coatSide;
+        if (gh < -0.01) side[i] = 2;
+        else if (gh > 0.05 || !near) side[i] = 1;
+      }
+      const over = steel && this.coatSide[i] === 2;
+      const J = COAT_STEEL_JUMP * dtk; // the most the steel moves a segment in one frame
       let parentA = 0, parentB = 0;
       for (let s = 0; s < 2; s++) {
         const c = st[s];
@@ -2281,6 +2371,35 @@ export class HeroAnimator {
           }
           absA = Math.min(absA, lim);
         }
+        // the steel, from this segment's parent frame (the anchor's, or the swung upper segment's for
+        // the lower one): inside it, the grip and every blade point over the sheet cap the swing out
+        // (bl, the legs win a conflict); over it, they push it out (bo). The swing that puts a point
+        // at height h over the sheet: a = asin(h / ρ) − φ (ρ, φ = the point's distance and angle
+        // out from straight down); absolute = + parentA
+        let bl = -Infinity, bo = Infinity;
+        if (steel) {
+          if (s === 1) this._lowerFrame(nb, st[0].x, st[0].z, D.len[0]);
+          const Q = s ? QB : QA, L = s ? L1 : D.len[0], R = s ? R1 : C.r0;
+          for (let k = 0; k < nb; k++) {
+            if (!segLocal(Q, k, c.x, c.z, L, D.w[s] / 2, D.w[s + 1] / 2, R)) continue;
+            const d = -Q[k * 3 + 1], qz = Q[k * 3 + 2];
+            if (d < 0.03) continue;
+            const rho = Math.hypot(d, qz), phi = Math.atan2(qz, d);
+            const curv = SEG[2] - (d * Math.sin(c.x) + qz * Math.cos(c.x)); // the sheet's curve here
+            const m = k ? COAT_BLADE_R : COAT_HAND_R;
+            if (over) {
+              const need = Math.asin(clamp((-m - curv) / rho, -1, 1)) - phi + parentA;
+              if (need < bo) bo = need;
+            } else if (qz - m > 0.005) {
+              // (steel inside the pivot's line: no clear way round it)
+              const need = Math.asin(clamp((m - curv) / rho, -1, 1)) - phi + parentA;
+              if (need > bl) bl = need;
+            }
+          }
+          if (bo < absA) absA = bo;
+          if (s === 0 && bl > lim) bl = lim; // the legs win
+          if (bl > absA) absA = bl;
+        }
         const [aMin, aMax] = COAT_A[s];
         const tA = clamp(absA - parentA, aMin, aMax);
         const tB = clamp(absB - parentB, -COAT_B[s], COAT_B[s]);
@@ -2300,6 +2419,15 @@ export class HeroAnimator {
         if (s === 0 && c.x > lim) {
           c.x = Math.max(aMin, lim);
           if (c.vx > 0) c.vx = 0;
+        }
+        // the steel is rigid: a segment the spring would carry through it is held at it, eased in
+        // at J per frame (a blade sweeping into the cloth pushes it aside over 2-3 frames, no pop)
+        if (bo < Infinity && c.x > bo - parentA) {
+          c.x = Math.max(aMin, c.x - Math.min(J, c.x - (bo - parentA)));
+          if (c.vx > 0) c.vx = 0;
+        } else if (bl > -Infinity && c.x < bl - parentA) {
+          c.x = Math.min(aMax, c.x + Math.min(J, bl - parentA - c.x));
+          if (c.vx < 0) c.vx = 0;
         }
         parentA += c.x;
         parentB += c.z;

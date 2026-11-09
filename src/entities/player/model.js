@@ -1464,7 +1464,8 @@ export function buildHero(U) {
       mesh(sj, sub(tatterStrip(P.strips[k], Math.max(0.065, wr * 1.3), { fork: !!P.fork[k], curl: 0.4, seed: 1000 + i * 31 + k * 7 }), (i + k) % 2), M.hem);
       strips.push({ joint: sj, len: P.strips[k], rest: a, phase: (i * 1.7 + k * 2.3) % (Math.PI * 2) });
     }
-    coat.push({ anchor, segs: [s0, s1], def: P, strips, len: [P.len[0], P.len[1] + (n ? Math.max(...P.strips) * 0.8 : 0)] });
+    // r0 = the sheet's radius round the hips at the anchor (the lower segment's is r0 + 0.25 × len[0])
+    coat.push({ anchor, segs: [s0, s1], def: P, strips, len: [P.len[0], P.len[1] + (n ? Math.max(...P.strips) * 0.8 : 0)], r0: R0 });
   });
 
   // ---------------------------------------------------------------- the longsword
