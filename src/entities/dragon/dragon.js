@@ -214,6 +214,28 @@ export class Dragon {
     this.addPosture(POSTURE.parry[tell] ?? POSTURE.parry.normal);
   }
 
+  // PLUNGE STUB (plunge agent) — replaced by dragon-melee's version at merge
+  // Contract 2, minimal: the head-top point the hero dives onto / rides, and the hit itself (head
+  // damage through takeHit, then a simple reaction: on the ground the short stagger (its head drops,
+  // the nearest stock reaction to 'plunged'), in the air the parry recoil (it ends the leap). No
+  // 'plunged' reaction, no crash from the air, no dragon:plunged.
+  plungePoint(out) {
+    const h = this.rig.pt.head;
+    if (!out || !Number.isFinite(h.x + h.y + h.z)) return null;
+    return out.set(h.x, h.y + 0.6 * S, h.z);
+  }
+  onPlunge(o = {}) {
+    if (this.state === 'dying' || this.state === 'dead' || this.state === 'sleeping') return 0;
+    const pt = o?.point ?? this.rig.pt.head;
+    const dealt = this.takeHit({ damage: o?.damage, part: 'head', point: pt, heavy: true, poise: o?.posture });
+    const a = this.brain.action;
+    if (this.state === 'dying' || this.state === 'dead' || (a && /^(intro|phase2|death|taunt)$/.test(a.name))) return dealt;
+    if (this.state === 'airborne') this.brain.recoil();
+    else this.brain.stagger();
+    return dealt;
+  }
+  // END PLUNGE STUB
+
   reset() {
     this.resetting = true; // interrupted actions skip their gameplay side effects (landing slam...)
     try {
