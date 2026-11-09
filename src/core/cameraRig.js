@@ -10,17 +10,20 @@ import { CONFIG } from './config.js';
 //
 // Keep-in-view (`keep`): modules may ask, every frame, for world spheres to stay on screen — the
 // hero riding the wyrm's head through the plunge, a wyrm flying 16 m up. After the usual focus /
-// distance damping the rig projects them with the real camera and eases a ground-plane pan (and,
-// for `must` subjects only, a little extra distance) until they fit inside FIT.box; with nothing
-// asked it eases back to the plain framing. `must` subjects (the hero) are never cropped to fit
-// the others. The pan / zoom are damped (FIT.lambda), never snapped, and reset by snap().
+// distance damping the rig projects them with the real camera and eases a ground-plane pan (and a
+// little extra distance: FIT.wantZoom for any subjects, FIT.maxZoom for `must` ones) until they fit
+// inside FIT.box; with nothing asked it eases back to the plain framing. `must` subjects (the
+// hero) are never cropped to fit the others. The pan / zoom are damped (FIT.lambda), never
+// snapped, and reset by snap().
 const FIT = {
   box: [0.9, 0.86, 0.78], // NDC limits: |x|, top, bottom (the boss bar sits at the bottom)
   lambda: 5, // 1/s: how fast the fit pans / zooms (and eases back) …
   mustLambda: 12, // … and how fast it pans while a must subject is off the box (a blink up into the air)
   maxPan: 30, // m
-  maxZoom: 12, // m of extra distance (must subjects only) …
+  maxZoom: 12, // m of extra distance to fit the must subjects …
   mobileMaxZoom: 3, // … on a phone (the close camera stays close: it pans instead)
+  wantZoom: 6, // m of extra distance at most to fit the other subjects too (a flying wyrm) …
+  mobileWantZoom: 1.5, // … on a phone
   max: 16, // subjects per frame
   near: 2, // m: a subject closer to the camera plane than this is clamped (never divides by ~0)
 };
@@ -185,11 +188,14 @@ export class CameraRig {
       // subjects shift by δ (NDC) when the focus moves by Δz = δ·k / sp (south +), Δx = −δ·k·asp
       tz = this.fitZ + (dy * k) / sp;
       tx = this.fitX - dx * k * asp;
+      // extra distance when the subjects span more than the box: up to wantZoom for all of them,
+      // up to maxZoom for the must ones (the hero stays readable: the rest pans or crops first)
+      const spanAll = Math.max((y1 - y0) / (LT + LB), (x1 - x0) / (2 * LX));
+      tzoom = clamp(this.fitZoom + dAvg * (spanAll - 0.92), 0, this.mobile ? FIT.mobileWantZoom : FIT.wantZoom);
       if (nm) {
-        // extra distance only when the must subjects themselves span more than the box
         const span = Math.max((my1 - my0) / (LT + LB), (mx1 - mx0) / (2 * LX));
         const zoomMax = this.mobile ? FIT.mobileMaxZoom : FIT.maxZoom;
-        tzoom = clamp(this.fitZoom + (mDepth / nm) * (span - 0.92), 0, zoomMax);
+        tzoom = Math.max(tzoom, clamp(this.fitZoom + (mDepth / nm) * (span - 0.92), 0, zoomMax));
         if (my1 > LT || my0 < -LB || mx1 > LX || mx0 < -LX) lambda = FIT.mustLambda;
       }
     }
