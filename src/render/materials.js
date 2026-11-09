@@ -263,7 +263,7 @@ const SHARED = [
 // shared by surface-glyph materials only (declared in their own shader, not COMMON_GLSL)
 const SURFACE_SHARED = ['uArtSolid', 'uArtHeroEdge', 'uArtHeroKey'];
 // ... and by the hero's ink-line art source only (`heroArt`)
-const HERO_ART_SHARED = ['uCamRight', 'uCamUp', 'uArtHeroLight', 'uArtHeroRim'];
+const HERO_ART_SHARED = ['uCamRight', 'uCamUp', 'uArtHeroLight', 'uArtHeroRim', 'uHeroSolid'];
 
 /**
  * Geometry attributes required: position, normal, aCol (vec3 albedo, linear), aFlag (float),
@@ -526,6 +526,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec3 uCamUp;
       uniform vec4 uArtHeroLight;
       uniform vec3 uArtHeroRim;
+      uniform float uHeroSolid;
       varying float vPart;
 #endif
 #ifdef SG_HERO_FOLDS
@@ -911,6 +912,23 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         fillC += uArtHeroRim * (pow(1.0 - facing, 2.0) * smoothstep(0.05, 0.75, dot(n, -uCamRight)) * uArtRim);
         fillC = fillC * uTint + inkC * uInkGlow * uArtGlowK;
         col = mix(col, fillC, heroArt);
+        if (uHeroSolid > 0.5) {
+          // look-dev (Lab model viewer → Solid, U.uHeroSolid): the bare geometry, plain-lit and
+          // untagged (alpha 0), so the ASCII pass passes it through and geometry problems show apart
+          // from renderer ones. Clay grey tinted toward the part's hue; the two sub-pieces of a part
+          // (aPart: panels, locks, lames) shade apart so they stay distinct; glowing parts keep a hint
+          // (stays under the bloom threshold after the final pass's exposure: geometry, not glow)
+          float mxF = max(max(uArtFill.r, uArtFill.g), uArtFill.b);
+          vec3 albS = mix(vec3(0.3), uArtFill / max(mxF, 1e-3) * 0.3, 0.45) * (floor(vPart + 0.5) > 0.5 ? 0.72 : 1.0);
+          vec3 kdS = normalize(V - uCamRight * 0.55 + uCamUp * 0.8);
+          float dS = max(dot(n, kdS), 0.0);
+          vec3 cS = albS * (0.1 + 0.05 * n.y + 0.85 * dS);
+          cS += vec3(0.12) * pow(max(dot(n, normalize(kdS + V)), 0.0), 30.0) * min(uArtSpec.x, 1.0);
+          cS += uArtHeroRim * pow(1.0 - facing, 3.0) * 0.12;
+          cS += inkC * uInkGlow * uArtGlowK * 0.08;
+          gl_FragColor = vec4(cS, 0.0);
+          return;
+        }
 #endif
 
         // molten seams: thin hot cracks between scale rows/columns, the glyphs stay readable

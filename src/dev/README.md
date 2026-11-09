@@ -35,7 +35,7 @@ nothing is needed, as the flow follows the dragon into `boss` on its own.
 | **PLAYER** | God mode · Infinite flasks (toggle `player.debug.god` / `.infiniteFlasks`) · Full heal · Teleport 8 m in front of the dragon or 8 m behind it (facing it, clamped inside the clearing), or to the bonfire spawn. |
 | **TIME** | `game.debugTimeScale` = 0 (freeze) / 0.1 / 0.25 / 0.5 / 1 / 2. Game time only: the panel, camera and HUD keep running on real time. |
 | **STATE** | Explore · Boss · Dead · Victory via `flow.debug.toState(name)`. Jumping anywhere but Boss ends Loop. |
-| **VIEW** | Hitbox overlay: `dragon.debug.hitboxes()` as wireframe spheres (cyan = hurt, red = active attack, falling back to `hurtSpheres`), plus the player's radius ring, facing line and parry arc. The ring turns blue when blocking, gold in the crit window and violet during i-frames. The overlay is one `THREE.LineSegments` in `game.fxScene` with `depthTest: false`. Its fixed buffers are rewritten in place each frame, and it is removed from the scene when toggled off or when the Lab closes. **Showroom** (look-dev preset) and **Camera default**. **MODEL VIEW** (see below): Hero / Dragon pick the target and enter the viewer, Dark toggles the world, Exit returns to the game camera; Front / 3/4 / Side / Back = yaw 0 / 35 / 90 / 180 at pitch 8, Game = the gameplay camera (58°, world-fixed yaw, the rig's current distance, centred on the actor's root). The line under the buttons shows the framing. |
+| **VIEW** | Hitbox overlay: `dragon.debug.hitboxes()` as wireframe spheres (cyan = hurt, red = active attack, falling back to `hurtSpheres`), plus the player's radius ring, facing line and parry arc. The ring turns blue when blocking, gold in the crit window and violet during i-frames. The overlay is one `THREE.LineSegments` in `game.fxScene` with `depthTest: false`. Its fixed buffers are rewritten in place each frame, and it is removed from the scene when toggled off or when the Lab closes. **Showroom** (look-dev preset) and **Camera default**. **MODEL VIEW** (see below): Hero / Dragon pick the target and enter the viewer, Dark toggles the world, Exit returns to the game camera; Front / 3/4 L / 3/4 R / Left / Right / Back / Rear R / Rear L = yaw 0 / 35 / 325 / 90 / 270 / 180 / 215 / 145 at pitch 8 (R = the hero's right side, his pauldron and sword side: the reference sheet's 3/4 and rear 3/4), Game = the gameplay camera (58°, world-fixed yaw, the rig's current distance: normal play size, centred on the actor's root), **Spin** = a turntable at eye level. **Sheet** = every angle at once (below). Looks: **ASCII** (the game render), **Solid** (the bare geometry plain-lit, no ASCII pass: geometry vs renderer problems), **Source** (the pass input), **Lines** (only the ink lines). The line under the buttons shows the framing. |
 | **READOUT** | Dragon state / current action (name · phase · t/dur) / hp / posture / phase / broken / AI. Player state / hp / flasks / crit window / blocking / cheats. Game state and clock. Then the **timing trainer** and the **event list** (below). |
 
 ## Model viewer
@@ -46,8 +46,21 @@ concept art (the game camera is a fixed 58° top-down view). Console API (exact 
 __game.lab.modelView({ target: 'dragon', yaw: 90, pitch: 8, dark: true })  // left side, eye level, world hidden
 __game.lab.modelView({ target: 'hero', yaw: 35, dark: true, dist: 4 })     // 3/4, fixed distance
 __game.lab.modelView({ target: 'dragon', yaw: 30, dark: true, dist: 9, height: 8.4, forward: 11.5 }) // head study*
+__game.lab.modelView({ target: 'hero', yaw: 215, dark: true, look: 'solid' }) // rear 3/4 (his right), bare geometry
+__game.lab.modelView({ target: 'hero', dark: true, spin: true })             // turntable
+__game.lab.modelView({ target: 'hero', dark: true, sheet: true })            // every angle, live tiles
 __game.lab.modelView(null)                                                  // back to the game camera
 ```
+- **Sheet:** ten live tiles right of the Lab panel: front, front 3/4, right side, left side, back,
+  rear 3/4, rear-left 3/4 at eye level (one fit for the whole turn, the body centred), and the
+  gameplay camera (its 58° pitch and the rig's distance, drawn ×2 nearest-neighbour) on the hero's
+  back, front and right side. Each tile refreshes every 20 frames (each angle is held two frames and
+  read back after the render, `lab.postRender`). The tiles are crops of the frame's centre, so a long
+  reach (the sword) may run past a narrow tile's side.
+- **Looks** (`look`): `solid` sets `U.uHeroSolid` (the hero's materials draw a clay render with alpha
+  0, passed through by the ASCII pass), `source` / `lines` set the pass's `uHeroDebug` 1 / 2; exit
+  restores the ASCII look. Compare the same pose in Solid and ASCII to tell a geometry problem from a
+  renderer one.
 \* the current wyrm's `head` joint sits ≈ 11.5 m forward, 8.4 m up from its root in the idle pose;
 re-measure for a new model (`head.getWorldPosition()` relative to `dragon.position`, rotated by −yaw).
 - `yaw` is measured around the actor's own facing (0 = its front faces you, 90 = its left side,
@@ -97,10 +110,10 @@ windows, so the numbers stay true at any time scale.
 ## Files
 | File | Role |
 |---|---|
-| `lab.js` | `class Lab`: the contract surface (`constructor(game)`, `update(realDt)`, `open`), keys, actions, panel build + refresh. Optional extras: `postUpdate()` (see below), `dispose()`. |
+| `lab.js` | `class Lab`: the contract surface (`constructor(game)`, `update(realDt)`, `open`), keys, actions, panel build + refresh. Optional extras: `postUpdate()` (see below), `postRender()` (after the frame is drawn: the sheet's read-back), `dispose()`. |
 | `timingTrainer.js` | `class TimingTrainer`: event + input bookkeeping, pure data (no DOM), testable headless. |
 | `hitboxOverlay.js` | `class HitboxOverlay`: the wireframe overlay in `fxScene`. |
-| `modelView.js` | `class ModelViewer` + `VIEW_ANGLES`: the model viewer (framing, auto-fit, dark / solo / HUD / AI / god handling). |
+| `modelView.js` | `class ModelViewer` + `VIEW_ANGLES`, `VIEW_LOOKS`, `SHEET_VIEWS`: the model viewer (framing, auto-fit, dark / solo / HUD / AI / god handling, turntable, the live sheet overlay, the hero's look-dev renders). |
 | `labDom.js` | Tiny DOM helpers (`el`, `setText`, `setClass`, `button`, `slider`, `section`). |
 | `labStyle.js` | The injected `<style>`, matching the HUD (JetBrains Mono 11 px, dark panel, ember / blue / red accents from `TELL_STYLE`). |
 

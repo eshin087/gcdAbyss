@@ -22,6 +22,7 @@ wheel zoom → mouse ray (mouseGround) → touch.update(realDt) → lab.update(r
 → flow.update(dt, realDt) → player.update(dt) → dragon.update(dt)
 → lab.postUpdate() → camera (rig) → view override → shared uniforms → world.update(dt)
 → lights.update → fx.update → hud.update(realDt) → audio.update(realDt) → render
+→ lab.postRender()   (same task: the Lab model viewer's sheet reads the drawn frame back)
 ```
 **View override** (`game.viewOverride`, Lab model viewer only): when it is
 `{ pos, target, focus? }` (Vector3-likes, world metres), main.js places the camera at `pos` looking
@@ -137,8 +138,9 @@ Render helpers for creature modules:
   finite). Defines `SG_HERO_ART` (with `HERO_A0`, `HERO_AS`), `SG_HERO_FOLDS`; uniforms `uArtFill`,
   `uArtSpec`, `uArtRim`, `uArtGlowK`, `uArtPart` (= part × 2), `uArtFold`; shared `U.uCamRight`,
   `U.uCamUp`, `U.uArtHeroLight` (vec4: flat fill, camera key light from the upper left, scene-light
-  share, glint gain; (0.2, 0.95, 0.2, 1.4)) and `U.uArtHeroRim` (the cool screen-left rim colour).
-  The fill is flat per part (no glyph gaps); glints only where the surface curves. Every hero
+  share, glint gain; (0.2, 0.95, 0.2, 1.4)), `U.uArtHeroRim` (the cool screen-left rim colour) and
+  `U.uHeroSolid` (look-dev: 1 = a plain-lit clay render with alpha 0, passed through by the ASCII
+  pass; ADR-035). The fill is flat per part (no glyph gaps); glints only where the surface curves. Every hero
   material, the blade included, is depth-tested like any mesh: the depth pull (`heroArt.pull`,
   `SG_HERO_PULL`, `uArtPull`, ADR-022) was removed on 2026-11-09 (ADR-031).
   - `aPart` (float vertex attribute, 0 / 1): `sub(geometry, k)` in `player/model.js`, carried through
@@ -172,9 +174,13 @@ Render helpers for creature modules:
     letter cell.
   - Distance LOD by view depth: `uHeroLod` (x / y far look starts / complete 6 / 20 m, z far fill
     gain 1.3, w the silhouette's light floor 0.25) and `uHeroFar` (x / y far letter ramp 0.45 / 0.85,
-    z far jitter 1, w HDR cap 1.8 for the blade and gem). Far away piece edges drop out (dithered per
+    z far jitter 1, w HDR cap 1.3 for the blade and gem; 1.8 until ADR-034). Far away piece edges drop out (dithered per
     cell), inner lines keep `farLine`, the fill takes `farFill`.
   - `uHeroDebug` (look-dev): 1 the raw source, 2 lines only, 3 lines coloured by class.
+  - `U.uHeroSolid` (look-dev, shared, hero materials only; ADR-035): 1 = the hero's materials write
+    a plain-lit clay render of the geometry (tinted per part, the two sub-pieces of a part shaded
+    apart) with alpha 0, so this pass passes it through untouched; 0 in play. The Lab model viewer's
+    `look` sets it (and `uHeroDebug`) and restores both on exit.
   - Halo: `uHeroHalo` (xy his screen uv, z radius px, w strength), set per frame in
     `_updateAsciiCamera` from `U.uPlayerScreen` (radius `HERO_HALO_R` 2.1 m; strength fades in from
     0.4 × to 1 × `uHeroHaloShape.w` = 20 m view depth, so none in close-ups), and `uHeroHaloShape`
@@ -350,27 +356,45 @@ Three sword lengths (sword space, m from the grip centre):
   (`PlayerFx.bladeHalo`'s dots and tip streak); the cyan dot halo past the point carries the rest of
   the reach.
 
-**Build (round 3, 2026-11-09, ADR-031):** a broad-shouldered build on the same bones. `model.js`
-exports `BODY`, the girth table (metres): `shell` (torso rings: height `y`, half-width `rx`,
-half-depth `rz`, forward offset `cz`, the open coat front's `gap`), `hips` and `head` ellipsoids,
-`deltoid`, `upperArm`, `foreArm`, `thigh`, `shin` (radii along the limb + bulge) and `foot`. The
-meshes are built from it; `anim.js` sizes the blade's leg clearance (`BLADE_CLEAR`), the coat's leg
-push (`LEG_R`) and the ground-clamp spheres from it; the `herolook` test measures blade-in-body
-against it. No bone length changed (IK, the foot planner and the hit segment run on bones). Joints:
-`DIM.shoulder` ±0.21 (was ±0.17), `DIM.hip` ±0.1 (was ±0.09), `DIM.coatR` 0.163 (was 0.139). The sword
-hand's pose targets are offsets from `DIM.gripShoulder` [0.17, 0.215, 0], the old shoulder spot
-(`rig.arms.R.anchor`; `_handTarget` uses `arm.anchor ?? arm.upper.position`), so every grip the arm
-reaches is unchanged by the wider frame. Coat records carry `r0` (the sheet's radius round the hips
-at the anchor).
+**Build (the lean reference match, 2026-11-09, ADR-034; supersedes round 3's broad build, ADR-031):**
+the lean anime swordsman of the owner's six-view sheet on the same bones. `model.js` exports `BODY`,
+the girth table (metres): `shell` (torso rings: height `y`, half-width `rx`, half-depth `rz`, forward
+offset `cz`, the open coat front's `gap`; chest 0.34 m over a 0.23 m waist), `hips` and `head`
+ellipsoids, `deltoid`, `upperArm`, `foreArm`, `thigh`, `shin` (radii along the limb + bulge) and
+`foot`. The meshes are built from it; `anim.js` sizes the blade's leg clearance (`BLADE_CLEAR`), the
+coat's leg push (`LEG_R`) and the ground-clamp spheres from it; the `herolook` test checks the lean
+proportions and measures blade-in-body against it. No bone length changed (IK, the foot planner and
+the hit segment run on bones). Joints: `DIM.shoulder` ±0.16 (round 3 ±0.21), `DIM.hip` ±0.1,
+`DIM.coatR` 0.132 (round 3 0.163). The sword hand's pose targets are offsets from `DIM.gripShoulder`
+[0.17, 0.215, 0] (`rig.arms.R.anchor`; `_handTarget` uses `arm.anchor ?? arm.upper.position`), so
+every grip the arm reaches is unchanged by the narrower frame. The sword: `DIM.gem` 0.116 (the
+violet star gem at the guard's heart), `DIM.forte` 0.2 (the cyan glyph blade from here; the coat-vs-
+steel test and the blade halo start here); the three lengths above are unchanged.
+**Coat** (`COAT_PANELS`, six panels; no front flap since ADR-034): two back tails split by a vent
+(az ±2.5), narrow side panels (±1.66), two front panels (±0.86). Per panel: `az`, widths `w` [top,
+join, tear line], segment lengths `len`, torn `strips` (lengths; 12 in all), `fork`, `out`, the
+resting `flare`, `folds`, and optionally `edge` (±1: piping down its +X / −X edge), `skew` (the width
+it gains below `w[0]` goes to one side, so the vent / front edge hangs straight or drifts out:
+`skew` ±1 … ±1.35) and `slant` (m: the hem runs that much longer at the outer edge). `model.js`
+exports `sheetOffset(w, w0, skew)` (where a skewed sheet of width w is centred along its tangent);
+the animator's cloth-vs-steel coverage treats a skewed sheet as covering `|x| ≤ w/2 + |offset|`
+(`coatHW`), and `herolook` uses the same offset. Coat records carry `r0` (the sheet's radius round
+the hips at the anchor) and `len[1]` includes the slant.
 
-The animator (`player/anim.js`) drives: `coat` = 7 skirt panels (`COAT_PANELS`: six + the front
-flap, each with a resting `flare` and optional `folds`), each two spring segments (the lower one is
-two meshes: `coat` above, the lavender torn zone `hem` over its last 55 %) plus `strips` (22 torn
-strips, one spring each, kept above the grass); `streamers` (two two-segment sleeve strips on the
-arms); `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a
-dark-root mesh (`hair`) and a sheened-tip mesh (`hairTip`). Static meshes that share a joint and a
-material are merged at build time (fewer draw calls; 128 meshes, ~20.5k triangles since the broad
-build); only the flask stays separate.
+The animator (`player/anim.js`) drives: `coat` = 6 panels (`COAT_PANELS`, above), each two spring
+segments (the lower one is two meshes: `coat` above, the lavender torn zone `hem` over its last
+60 %) plus `strips` (12 torn strips, one spring each, kept above the grass; per-panel `BREEZE` /
+`IDLE_FLARE` follow the panel order); `streamers` (two two-segment sleeve strips on the arms);
+`hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root
+mesh (`hair`) and a sheened-tip mesh (`hairTip`); since ADR-034 the locks are layered pointed
+blades (crown spikes, top, two back layers, nape, sides, a jagged fringe, cowlicks). Static meshes
+that share a joint and a material are merged at build time (fewer draw calls; 123 meshes, ~19.7k
+triangles since the lean build); only the flask stays separate.
+**Idle** (`guard`, ADR-034): the sheet's easy stance, the sword hung one-handed at his right side,
+the blade (`IDLE_SW`) out to the right and forward ~37° below level, the drawn point just above the
+grass. Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
+(`DIR_FLIP` 2.75 rad, below `DIR_FLIP_HIGH` 0.9 rad of elevation) goes round the front, never behind
+the shoulders (the light combo's finish → this idle).
 **Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every
 frame `Player._updateMaterials` measures the camera → hero distance (`player.viewDist`) and rescales
 the hero materials' glyph cells, k = clamp(dist / 12, 0.15, 1): in-game cells at the 36 m camera
@@ -859,6 +883,7 @@ Every sound is procedural (no samples). 2026-11-09 additions:
 constructor(game)          // hidden unless URL has ?lab or the user presses F1 / backquote / the LAB button
 update(realDt)             // panel refresh + hitbox overlay (runs before flow)
 postUpdate()               // main.js calls it after the actors update so the overlay matches this frame
+postRender()               // main.js calls it right after the frame is drawn (same task): the model viewer's sheet reads it back
 open: boolean
 showroom()                 // look-dev preset: fight on, AI off, god mode, hero 7 m in front, camera close
 modelView(opts | null)     // model viewer (below)
@@ -894,9 +919,22 @@ __game.lab.modelView({
   forward,  // m along its facing for the look point (omit = auto); with `height`, aims e.g. at a head
   lockYaw,  // true: sample its facing once at the call; default: the camera follows its facing every frame
   game,     // true: `yaw` is world-fixed like the gameplay camera (0 = from the south) — the Game button
-})          // → { target, yaw, pitch, dist, height, forward, dark, solo, game, lockYaw, auto: {dist, height} }
-__game.lab.modelView(null)   // → 'off': game camera, HUD, world, AI and god mode restored
+  spin,     // true: turntable, the yaw turns 36°/s of real time (one fit for the whole turn)
+  sheet,    // true: every SHEET_VIEWS angle at once in live tiles (below)
+  look,     // hero look-dev render: 'ascii' (play) | 'solid' (U.uHeroSolid) | 'source' | 'lines' (uHeroDebug 1 / 2)
+})          // → { target, yaw, pitch, dist, height, forward, dark, solo, game, lockYaw, spin, sheet, look, auto: {dist, height} }
+__game.lab.modelView(null)   // → 'off': game camera, HUD, world, AI, god mode and the ascii look restored
 ```
+Angles (`VIEW_ANGLES`, the Lab buttons): Front 0, 3/4 L 35, 3/4 R 325, Left 90, Right 270, Back 180,
+Rear R 215, Rear L 145, Game (the gameplay camera at the rig's distance: normal play size), plus Spin,
+Sheet and the four looks (ADR-035). **Sheet** (`SHEET_VIEWS`): ten tiles on a full-window 2D canvas
+(`canvas.lab-sheet`, z 1: over the game canvas, under `#ui`, so the Lab panel stays usable), laid out
+right of the panel: the reference sheet's front, front 3/4, right side, back, rear 3/4 and the left
+side and rear-left 3/4 at eye level (one auto-fit for the whole turn, the body centred on its root),
+and the gameplay camera's pitch and distance on his back, front and right side (yaw around his
+facing: the same picture as the real camera with him turned so), drawn ×2 nearest-neighbour. Each
+angle is held for two frames and copied out of the WebGL canvas in `postRender` on the second (the
+hero's materials read the camera one frame late), so a tile refreshes every 20 frames.
 While viewing: dragon AI off and player god mode on (each restored on exit only if the viewer
 changed it), every HUD layer in `#ui` is faded out (class `lab-mv`; the Lab panel stays), the hero's
 mouse aim is pinned along its facing (it never chases the cursor through a side camera), and the

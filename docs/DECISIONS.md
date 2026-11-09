@@ -543,3 +543,66 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     decides.
   - `probe` is not part of `npm test`'s `all` run.
 
+
+## ADR-034 — The hero is the lean swordsman of the reference sheet; the coat is two tails and panels (2026-11-09)
+- **Context:** the owner attached a six-view ASCII turnaround and a single-figure image of the hero
+  and asked for the character to match them, "especially from the back and rear three-quarter
+  gameplay views". Measured on the sheet's silhouettes (fractions of his height H): shoulders ≈ 0.24 H
+  across, the chest ≈ 0.18 H, the belted waist ≈ 0.12 H, thighs ≈ 0.06 H. Round 3's broad build
+  (ADR-031: a 0.50 m chest, 0.62 m across the deltoids, heavy limbs) and its closed A-line skirt read,
+  from behind at the game camera, as a cloaked trapezoid with no legs; the hair was a round helmet,
+  and the portrait idle's blade lay across his front, so from behind only its point showed.
+- **Decision:**
+  - A lean V on the same bones (`BODY`): chest 0.34 m over a 0.23 m waist, shoulder joints ±0.16,
+    slim limbs. The sword hand still aims from `DIM.gripShoulder`, so no grip target moved.
+  - The coat (`COAT_PANELS`) is six panels: two back TAILS split by a vent from just under the belts,
+    narrow side panels, two front panels. A panel's vent / front edge hangs straight or drifts out
+    (`skew`: the width it gains goes to its outer side, `sheetOffset`), its hem slopes down to the
+    outer point (`slant`), and piping runs down the vent and front edges (`edge`). The legs show in
+    the vent and the open front in every view. No front flap; 12 torn strips (was 22).
+  - Hair of distinct pointed locks in layers (crown spikes, top, two back layers hanging down with
+    their points lifting, nape flicks, side locks, a jagged fringe) on a closer scalp cap.
+  - A taller-at-the-front, flared collar with a turned-over rim; a shaped upper back (a yoke whose
+    seams dip to a four-point star, a centre seam); a baldric from the right shoulder to the left hip;
+    a stack of spiked lames on the right shoulder; banded calves.
+  - The sword after the single-figure image: broad at the guard, one long taper to a sharp point,
+    barbs at the base, lightning notches, a guard swept up toward the blade round a violet
+    four-point star gem (`DIM.gem` 0.116 at the guard, `DIM.forte` 0.2).
+  - The idle (`guard`) hangs the sword at his right side, angled out and forward-down, as on the
+    sheet; a near half-turn of the blade (from the light combo's finish over his left shoulder) goes
+    round the FRONT below head height (`DIR_FLIP`): the way behind cut through the sword arm.
+  - At the game camera the blade self-lights about half as much (`player.js`) under a lower HDR cap
+    (`uHeroFar.w` 1.8 → 1.3), the armour's far fill and lines come down ~25 %, the lavender torn
+    zone's far fill doubles.
+- **Consequences:**
+  - Supersedes ADR-031's broad build (its depth-tested blade and coat-vs-steel rules stay).
+  - Gameplay unchanged: no bone length, grip target, attack timing or hit segment changed; the hurt
+    cylinder is the same. The slam / light poses are untouched; only the idle and the way a near
+    half-turn blends changed. The cosmetic blade halo spawns fewer particles, which shifts the shared
+    `Math.random` stream the seeded wyrm AI rolls on (the DIE scenario's pause check now snapshots the
+    wyrm after the Esc frame).
+  - `herolook` (831 frames): the drawn blade never enters his body (closest 2.9 cm, was ≤ 2 cm deep);
+    the blade crosses a coat panel on 1 of 509 locomotion frames.
+  - At the game camera facing away, his lit area matches the reference's at the same height (4357 vs
+    4374 px; the broad build covered 6462); he is still brighter (mean luma 74 vs 55), mostly the
+    one-pixel silhouette line, kept for legibility against the grass.
+
+## ADR-035 — Look-dev: a solid render through the ASCII pass and a live multi-angle sheet (2026-11-09)
+- **Context:** matching a turnaround needs every angle at once, the gameplay camera next to the
+  close-ups, and a way to tell a geometry problem from a renderer problem. The model viewer showed one
+  angle at a time, ASCII only.
+- **Decision:**
+  - `U.uHeroSolid` (shared uniform, hero materials only): 1 = a plain-lit clay render of the geometry,
+    tinted per part, the two sub-pieces of a part shaded apart, written with alpha 0 so the ASCII pass
+    passes it through untouched. The pipeline's existing `uHeroDebug` gives the art source and the ink
+    lines. The model viewer's `look` ('ascii' | 'solid' | 'source' | 'lines') sets them and restores
+    'ascii' on exit.
+  - More angles (3/4 right, right side, both rear 3/4s), `spin` (a turntable at 36°/s) and `sheet`:
+    ten live tiles (the reference sheet's six angles, the left side, the gameplay camera on his back,
+    front and right side at ×2 nearest-neighbour). Each view is held two frames and read back in a new
+    `lab.postRender()` hook, which main.js calls right after the frame is drawn (same task).
+- **Consequences:**
+  - In play the cost is one uniform test per hero fragment and an empty `postRender` call.
+  - The sheet re-renders the scene from a new camera every other frame, so each tile updates at
+    1/20 of the frame rate; the canvas underneath flickers, covered by the overlay.
+  - Every capture in this session used it (and a headless DevTools harness that drives `__tick`).

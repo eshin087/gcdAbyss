@@ -4,7 +4,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Two pieces of work since 0.4.0:
+Three pieces of work since 0.4.0:
+- **The lean reference match** (2026-11-09): the hero matches the owner's six-view ASCII turnaround
+  and single-figure image, from the back and rear three-quarter views as much as the front: a lean
+  swordsman with spiky pointed hair, a flared collar, a shaped back, a spiked shoulder stack, two
+  coat tails split by a vent instead of a skirt, and the sword hanging at his right side. The Lab's
+  model viewer gained every reference angle at once, a turntable and a solid (no-ASCII) render.
 - **The epic wyrm fight** (2026-11-09): a longer, harder battle in three phases, with combos you
   parry blow by blow, fire spells, short flights, and a perfect dodge that drives the hero's blade
   into the wyrm's head. The hero is broad-shouldered, and his sword no longer shows through his body.
@@ -13,6 +18,12 @@ Two pieces of work since 0.4.0:
   That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **Lab model viewer, look-dev tools:** the reference sheet's angles (3/4 and rear 3/4 on the hero's
+  right, both sides), a **Spin** turntable, a live **Sheet** of ten tiles (six reference angles, the
+  left side, and the gameplay camera on his back, front and right side at ×2), and the hero looks
+  **ASCII / Solid / Source / Lines**: Solid draws the bare geometry plain-lit without the ASCII pass,
+  so a shape problem can be told from a renderer one. Console: `__game.lab.modelView({ target:
+  'hero', dark: true, sheet: true, look: 'solid' })`.
 - **A three-phase wyrm fight:** the wyrm changes at 66 % and 33 % of its health with a roar that
   clears the field; phase 3 burns white-hot and opens with the Inferno nova. The boss bar shows where
   the phases begin.
@@ -41,6 +52,23 @@ Two pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **The hero, after the owner's six-view turnaround and single-figure image** (lean reference match):
+  - a lean anime swordsman: a V from the shoulders (0.46 m across) to a narrow belted waist, slim
+    arms and long legs (the broad build's 0.50 m chest is gone)
+  - spiky hair of distinct, asymmetric pointed locks: crown spikes, layered back locks hanging
+    toward the nape with their points lifting, nape flicks, a jagged fringe over the eyes
+  - a flared stand collar with a turned-over rim, rising to points beside the jaw in front
+  - a shaped upper back: a yoke whose seams dip to a four-point star, a centre seam, the baldric
+    from the right shoulder to the left hip, two belts
+  - a stack of spiked plates on the right shoulder and down the upper arm; banded calves
+  - the coat: two tails split by a vent from just under the belts, each flaring to a ragged hem that
+    slopes down to its outer point, narrow side panels and two front panels; the legs show between
+    them from every side (the closed A-line skirt is gone)
+  - the sword after the single-figure image: broad at the guard, one long taper to a sharp point,
+    hooked barbs at the base, lightning notches, a guard swept up round a violet four-point star gem
+  - the idle hangs the sword at his right side, angled out and down, so it reads from behind
+  - at the game camera the blade is a crisp cyan line with a tight glow (its halo used to cover his
+    body), the armour is less glaring and the lavender coat tails read against the black coat
 - **A longer, harder fight:** the wyrm has 4500 HP (was 1500) and hits harder (most blows 15–24,
   heavy ones 26–40, the nova 70; you have 160 HP); its posture meter is larger; each phase is faster,
   with shorter pauses. It favours its combos and fire attacks, and a new phase's abilities arrive one
@@ -74,6 +102,8 @@ Two pieces of work since 0.4.0:
   its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
 
 ### Fixed
+- Hero: returning from the light combo's finish to the idle, the blade cut through the sword arm's
+  shoulder for a frame (a near half-turn now goes round the front).
 - The hero's sword no longer shows through his back or legs, and his coat rarely passes through the
   blade any more (it drapes over it or hangs inside it).
 - Wyrm: wings and limbs flipping round in one frame, feet sliding or floating, the stomp's paws

@@ -51,6 +51,11 @@ History matters here:
   depth-tested again (the 2026-11-08 depth pull drew the sword through his back and legs). The wyrm
   flies (glide and dive wing keys, a hover pose), burns white-hot in phase 3 and casts fire spells
   whose FX are glyph particles from the world atlas, like every other effect.
+- **Lean reference match (2026-11-09, ADR-034):** the owner's six-view ASCII turnaround and
+  single-figure image. The hero is the lean swordsman of the sheet (a V to a narrow belted waist,
+  slim limbs), with spiky pointed hair, a flared collar, a shaped upper back, a spiked lame stack
+  on the right shoulder, two back tails split by a vent instead of the skirt, and the sword hung at
+  his right side; the look-dev tools got a solid render and a live multi-angle sheet (ADR-035).
 
 | Thing | Technique | Where |
 |---|---|---|
@@ -239,16 +244,30 @@ Rules of thumb:
   tight line. A dark halo (two rings round his screen position, fading in from 8 to 20 m) darkens
   the world grid next to him, so he cuts out of the grass. The outline is one letter thick: a
   two-cell band turned the ~12-letter-wide figure into a wireframe.
-- **Blade:** drawn 1.64 m (gem to point ≈ 70 % of his height, the portrait) with a ridge line and
-  serrations. It is depth-tested like the rest of him (2026-11-09, ADR-031): from behind only the
+- **Blade:** drawn 1.64 m (gem to point ≈ 70 % of his height, the portrait), the single-figure
+  image's sword since ADR-034: broad at the guard, one long taper to a sharp point (the last 17 %), a
+  ridge line between cyan edges, hooked barbs at the dark base, lightning notches up the lower half,
+  a guard swept up toward the blade round a violet four-point star gem. At the game camera it is a
+  crisp cyan line with a tight glow (half the far self-light, HDR cap 1.3): the old halo spread over
+  his body and the grass. It is depth-tested like the rest of him (2026-11-09, ADR-031): from behind only the
   steel beside his silhouette shows (the low idle guard shows just its point), it no longer shows
   through his back or legs, and the coat hangs inside or drapes over it instead of passing through
   (a few run frames still cross a panel). *Superseded:* the 2026-11-08 depth pull that drew it up to
   0.65 m nearer the camera (ADR-022) put the sword through his back from behind.
-- **Build:** broad-shouldered and athletic (2026-11-09): a deep chest over a V to a fuller waist
-  (chest 0.50 × 0.27 m, waist 0.31, hips 0.34), thick arms and legs, bigger boots, on the same
-  skeleton (`BODY` in `player/model.js`). At the game camera the mass reads only modestly; the wide
-  coat skirt still dominates his outline.
+- **Build (lean reference match, ADR-034):** the six-view sheet's lean anime swordsman, measured
+  on its silhouettes (fractions of his height H): shoulders ≈ 0.24 H across, the chest ≈ 0.18 H, the
+  belted waist ≈ 0.12 H. On the same skeleton (`BODY` in `player/model.js`): chest 0.34 m over a 0.23 m
+  waist, shoulder joints ±0.16, slim arms and legs in armoured boots. *Superseded:* round 3's broad
+  build (a 0.50 m chest) and its closed A-line skirt, a cloaked trapezoid with no legs from behind.
+- **The silhouette from behind** (the usual fight view): spiky hair of pointed locks hanging toward
+  the nape, a flared stand collar, the yoke seams dipping to a four-point star between the shoulder
+  blades, the baldric from the right shoulder to the left hip, two belts, then two tails split by a
+  vent from just under the belts, each flaring out to a ragged hem that runs down to its outer point
+  (the legs show in the vent), banded calves, and the sword beside him on the right.
+- **Coat panels:** taper and flare per panel, never a closed bell: a panel's vent / front edge hangs
+  straight (`skew`), its hem slopes to the outer point (`slant`), piping lines the vent and the open
+  front. The lavender torn zone is the lower 60 % of each panel plus its claw points, and at the
+  game camera it reads lighter than the black coat (far fill 0.8).
 - **Scale:** at the 36 m game camera ~25 rows of 4x6 px letters (~15 on a phone at LOW); drawn 1.2×
   and leaned toward the camera (ADR-017). Close-ups (Lab model viewer) show the full reference look.
 

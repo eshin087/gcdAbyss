@@ -137,7 +137,9 @@ export class Pipeline {
         // (dense letters: a body of solid dark texture, not a scatter of digits), z = their per-cell
         // ramp jitter there, w = the most HDR a glowing part keeps there (the blade's bloom stays a
         // tight glow round a crisp cyan line, not a blur over half the figure)
-        uHeroFar: { value: new THREE.Vector4(0.45, 0.85, 1.0, 1.8) },
+        // (lean reference match: w 1.8 → 1.3, the blade's halo at the game camera was a wide blur
+        // over his body and the grass; the reference's blade is a crisp cyan line with a tight glow)
+        uHeroFar: { value: new THREE.Vector4(0.45, 0.85, 1.0, 1.3) },
         // look-dev: 1 = show the hero's raw art source (fill) instead of letters, 2 = only the ink
         // lines, 3 = the ink lines coloured by class (silhouette, depth step, part edge, piece)
         uHeroDebug: { value: 0 },

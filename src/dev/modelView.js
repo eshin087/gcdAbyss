@@ -13,6 +13,8 @@ import { injectLabStyle } from './labStyle.js';
 //   game.mouseGround                             pinned ahead of the hero (see pinAim)
 //   <other actor>.object3d.visible               `solo`: false for the render only (see _soloHide)
 //   #ui.lab-mv                                   hides every HUD layer except the Lab panel
+//   U.uHeroSolid, pipeline uHeroDebug             `look`: the hero's look-dev renders (restored on exit)
+//   renderer.domElement                           `sheet`: read back after each render (lab.postRender)
 
 const DEG = Math.PI / 180;
 const MARGIN = 1.1; // auto-fit: ~10% breathing room around the bounding box
@@ -35,14 +37,46 @@ const num = (v) => typeof v === 'number' && Number.isFinite(v);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const r2 = (v) => +v.toFixed(2);
 
-/** Named angles used by the Lab buttons (yaw / pitch in degrees; `game` = the gameplay camera). */
+/** Named angles used by the Lab buttons (yaw / pitch in degrees; `game` = the gameplay camera). yaw
+ *  0 = its front faces you, 90 = its left side, 180 = its back, 270 = its right side: "3/4 R" and
+ *  "Rear R" show its right side (the hero's pauldron and sword side, the reference sheet's angles). */
 export const VIEW_ANGLES = [
   ['front', 'Front', { yaw: 0, pitch: 8 }],
-  ['3-4', '3/4', { yaw: 35, pitch: 8 }],
-  ['side', 'Side', { yaw: 90, pitch: 8 }],
+  ['3-4', '3/4 L', { yaw: 35, pitch: 8 }],
+  ['3-4r', '3/4 R', { yaw: 325, pitch: 8 }],
+  ['side', 'Left', { yaw: 90, pitch: 8 }],
+  ['right', 'Right', { yaw: 270, pitch: 8 }],
   ['back', 'Back', { yaw: 180, pitch: 8 }],
+  ['rear', 'Rear R', { yaw: 215, pitch: 8 }],
+  ['rear-l', 'Rear L', { yaw: 145, pitch: 8 }],
   ['game', 'Game', { game: true }],
 ];
+/** Look-dev renders of the hero: the game's ASCII art, the bare geometry plain-lit with no ASCII
+ *  pass (`solid`), the art pass's flat source (`source`) or only its ink lines (`lines`). */
+export const VIEW_LOOKS = ['ascii', 'solid', 'source', 'lines'];
+/** The sheet (`sheet: true`): the reference sheet's six angles and the left side at eye level, and
+ *  the gameplay camera (its 58° pitch and the rig's distance, drawn ×2 with nearest-neighbour pixels)
+ *  on his back (the usual fight view), front and right side, one live tile each. A `game` tile's yaw
+ *  is around his facing too: the same picture as the real world-fixed camera with him turned so. */
+export const SHEET_VIEWS = [
+  { label: 'FRONT', yaw: 0 },
+  { label: 'FRONT 3/4', yaw: 325 },
+  { label: 'RIGHT SIDE', yaw: 270 },
+  { label: 'LEFT SIDE', yaw: 90 },
+  { label: 'GAME BACK', yaw: 180, game: true },
+  { label: 'BACK', yaw: 180 },
+  { label: 'REAR 3/4', yaw: 215 },
+  { label: 'REAR 3/4 L', yaw: 145 },
+  { label: 'GAME FRONT', yaw: 0, game: true },
+  { label: 'GAME RIGHT', yaw: 270, game: true },
+];
+const SPIN_DEG_S = 36; // turntable: one turn in 10 s of real time
+const GAME_LOOK = Object.freeze({ x: 0, y: 1, z: 0 }); // the sheet's gameplay tiles aim 1 m above the root
+const SHEET_COLS = 5;
+const SHEET_PITCH = 8;
+const SHEET_GAME_ZOOM = 2; // the gameplay tile: its pixels ×2, nearest-neighbour (the glyphs stay crisp)
+/** yaws an auto-fit encloses while spinning or in the sheet (the whole turn fits one distance) */
+const FIT_YAWS = [0, 45, 90, 135, 180, 225, 270, 315];
 
 export class ModelViewer {
   constructor(game, lab) {
@@ -56,6 +90,9 @@ export class ModelViewer {
     this._dark = false; // world hidden by us
     this._aimYaw = null;
     this._solo = null; // { obj, vis }: the other actor, hidden between postUpdate and the next update
+    // sheet: the tile being shown (i) and how many renders it has been on screen (each view is held
+    // for 2 frames and read back on the 2nd: the hero's materials read the camera one frame late)
+    this._sheet = { i: 0, held: 0, canvas: null, ctx: null, w: 0, h: 0, x0: 0 };
   }
 
   get active() {
@@ -68,8 +105,8 @@ export class ModelViewer {
 
   /**
    * Enter / update the view. opts: { target: 'hero'|'dragon', yaw, pitch, dist, height, dark,
-   * solo?, forward?, lockYaw?, game? } (degrees / metres; see ARCHITECTURE.md). null / false = exit.
-   * Returns a summary of the framing (with the fitted dist / height), or null if n/a.
+   * solo?, forward?, lockYaw?, game?, spin?, sheet?, look? } (degrees / metres; see ARCHITECTURE.md).
+   * null / false = exit. Returns a summary of the framing (with the fitted dist / height), or null.
    */
   set(opts) {
     if (opts === null || opts === undefined || opts === false) return this.exit();
@@ -81,6 +118,7 @@ export class ModelViewer {
     const game = o.game === true;
     const pitch0 = num(o.pitch) ? o.pitch : game ? CONFIG.camera.pitch / DEG : 8;
     const enter = !this.state;
+    const sheet = o.sheet === true;
     this.state = {
       target,
       yaw: num(o.yaw) ? o.yaw : 0,
@@ -90,9 +128,13 @@ export class ModelViewer {
       forward: num(o.forward) ? o.forward : null,
       dark: !!o.dark,
       solo: typeof o.solo === 'boolean' ? o.solo : !!o.dark, // hide the other actor (default: with dark)
-      game,
+      game: game && !sheet,
       lockYaw: !!o.lockYaw,
       yaw0: num(a.yaw) ? a.yaw : 0,
+      spin: o.spin === true && !sheet && !game, // turntable: the yaw turns SPIN_DEG_S per real second
+      sheet, // every SHEET_VIEWS angle at once, in tiles on an overlay (lab.postRender reads them back)
+      // the hero's look-dev render: kept across calls until set, restored to 'ascii' on exit
+      lookMode: VIEW_LOOKS.includes(o.look) ? o.look : (this.state?.lookMode ?? 'ascii'),
       // filled by _fit()
       look: { x: 0, y: 1, z: 0 },
       fitDist: 10,
@@ -105,6 +147,9 @@ export class ModelViewer {
     const py = this.game.player?.yaw;
     if (num(py)) this._aimYaw = py;
     this._setDark(this.state.dark);
+    this._applyLook(this.state.lookMode);
+    if (sheet) this._sheetOn();
+    else this._sheetOff();
     this._fit();
     this.frame();
     this.game.viewOverride = this._ov;
@@ -117,6 +162,8 @@ export class ModelViewer {
     this.game.viewOverride = null;
     this._soloRestore();
     this._setDark(false);
+    this._applyLook('ascii');
+    this._sheetOff();
     this._hud(false);
     const d = this.game.dragon, pd = this.game.player?.debug;
     if (this._restoreAI && typeof d?.debug?.setAI === 'function') {
@@ -138,7 +185,7 @@ export class ModelViewer {
     if (!s) return null;
     return {
       target: s.target,
-      yaw: s.yaw,
+      yaw: r2(s.yaw),
       pitch: r2(s.pitch),
       dist: r2(s.dist ?? s.fitDist),
       height: r2(s.look.y),
@@ -147,8 +194,18 @@ export class ModelViewer {
       solo: s.solo,
       game: s.game,
       lockYaw: s.lockYaw,
+      spin: s.spin,
+      sheet: s.sheet,
+      look: s.lookMode,
       auto: { dist: s.dist === null, height: s.height === null },
     };
+  }
+
+  /** The hero's look-dev render (VIEW_LOOKS): 'ascii' (play), 'solid', 'source', 'lines'. */
+  _applyLook(mode) {
+    const U = this.game.U, am = this.game.pipeline?.asciiMat?.uniforms;
+    if (U?.uHeroSolid) U.uHeroSolid.value = mode === 'solid' ? 1 : 0;
+    if (am?.uHeroDebug) am.uHeroDebug.value = mode === 'source' ? 1 : mode === 'lines' ? 2 : 0;
   }
 
   /** Re-fit (auto dist / centre) to the current pose, aspect and Lab panel width. */
@@ -180,25 +237,128 @@ export class ModelViewer {
     const cam = this.game.camera;
     // re-fit on resize or when the Lab panel opens / closes (cheap checks: no layout read per frame)
     if ((num(cam?.aspect) && Math.abs(cam.aspect - s.aspect) > 1e-3) || !!this.lab?.open !== s.panelOpen) this._fit();
+    if (s.spin) s.yaw = (s.yaw + SPIN_DEG_S * clamp(num(this.game.realDt) ? this.game.realDt : 0, 0, 0.1)) % 360;
+
+    // this frame's view: the state's, or the sheet tile on screen (each one held for two renders)
+    let yawD = s.yaw, pitchD = s.pitch, isGame = s.game, dist = s.dist ?? s.fitDist, L = s.look, shift = s.shift;
+    if (s.sheet) {
+      const v = SHEET_VIEWS[this._sheet.i] ?? SHEET_VIEWS[0];
+      shift = 0;
+      isGame = false; // sheet yaws are all around his facing
+      yawD = v.yaw;
+      if (v.game) {
+        // the gameplay camera's pitch at the rig's distance, aimed at the body 1 m up
+        pitchD = CONFIG.camera.pitch / DEG;
+        const td = this.game.cameraRig?.targetDistance;
+        dist = num(td) && td > 0 ? td : CONFIG.camera.distance;
+        L = GAME_LOOK;
+      } else pitchD = SHEET_PITCH;
+    }
 
     const ref = s.lockYaw ? s.yaw0 : num(a.yaw) ? a.yaw : s.yaw0;
     const c = Math.cos(ref), sn = Math.sin(ref);
-    const L = s.look;
     const lx = P.x + L.x * c + L.z * sn;
     const lz = P.z - L.x * sn + L.z * c;
     const ly = P.y + L.y;
-    const h = s.game ? s.yaw * DEG : ref + s.yaw * DEG;
-    const cp = Math.cos(s.pitch * DEG), sp = Math.sin(s.pitch * DEG);
-    const dist = s.dist ?? s.fitDist;
+    const h = isGame ? yawD * DEG : ref + yawD * DEG;
+    const cp = Math.cos(pitchD * DEG), sp = Math.sin(pitchD * DEG);
     const dx = cp * Math.sin(h), dz = cp * Math.cos(h);
     const rx = Math.cos(h), rz = -Math.sin(h);
-    const sx = -rx * s.shift, sz = -rz * s.shift; // slide left so the actor centres right of the panel
+    const sx = -rx * shift, sz = -rz * shift; // slide left so the actor centres right of the panel
     const ov = this._ov;
     ov.target.set(lx + sx, ly, lz + sz);
     ov.pos.set(lx + sx + dx * dist, ly + sp * dist, lz + sz + dz * dist);
     ov.focus.set(lx, ly, lz);
     if (s.solo) this._soloHide();
     else this._soloRestore();
+  }
+
+  /**
+   * lab.postRender (main.js, right after the frame is drawn, same task): in the sheet, copy the tile
+   * on screen out of the WebGL canvas into its slot on the overlay, then move to the next angle. A
+   * view is read back on its second render: the hero's materials (glyph scale, blade light) measure
+   * the camera one frame late, so the first render of a new angle still shows the last one's.
+   */
+  postRender() {
+    const s = this.state, sh = this._sheet;
+    if (!s?.sheet || !sh.ctx) return;
+    if (sh.held < 1) {
+      sh.held++;
+      return;
+    }
+    const src = this.game.renderer?.domElement;
+    const W = src?.width, H = src?.height;
+    if (num(W) && num(H) && W > 0 && H > 0) {
+      this._sheetLayout(W, H);
+      const v = SHEET_VIEWS[sh.i] ?? SHEET_VIEWS[0];
+      const ctx = sh.ctx, tw = sh.tw, th = sh.th;
+      const dx = sh.x0 + (sh.i % SHEET_COLS) * tw, dy = Math.floor(sh.i / SHEET_COLS) * th;
+      // close tiles: the full frame height, centred (the fit centres the root); the gameplay tile:
+      // its own pixels ×2, nearest-neighbour, so the letters and ink lines read as they do in play
+      const ch = v.game ? th / SHEET_GAME_ZOOM : H, cw = v.game ? tw / SHEET_GAME_ZOOM : (H * tw) / th;
+      ctx.imageSmoothingEnabled = !v.game;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(dx, dy, tw, th);
+      ctx.drawImage(src, (W - cw) / 2, (H - ch) / 2, cw, ch, dx, dy, tw, th);
+      ctx.strokeStyle = 'rgba(160,170,190,0.25)';
+      ctx.strokeRect(dx + 0.5, dy + 0.5, tw - 1, th - 1);
+      ctx.fillStyle = 'rgba(220,226,236,0.9)';
+      ctx.font = `${Math.max(10, Math.round(H / 80))}px monospace`;
+      const td = this.game.cameraRig?.targetDistance;
+      const lbl = v.game ? `${v.label} ${Math.round(num(td) ? td : CONFIG.camera.distance)} m ×${SHEET_GAME_ZOOM}` : v.label;
+      ctx.fillText(`${lbl} · ${s.lookMode.toUpperCase()}`, dx + 8, dy + Math.max(14, Math.round(H / 60)));
+    }
+    sh.held = 0;
+    sh.i = (sh.i + 1) % SHEET_VIEWS.length;
+  }
+
+  /** The sheet's overlay: a full-window 2D canvas over the game canvas and under the HUD layer
+   *  (#ui, z 2, whose Lab panel stays on top and usable; the viewer fades the rest of it), tiles
+   *  right of the Lab panel. */
+  _sheetOn() {
+    const sh = this._sheet;
+    sh.i = 0;
+    sh.held = 0;
+    if (sh.canvas || typeof document === 'undefined' || typeof document.createElement !== 'function') return;
+    try {
+      const c = document.createElement('canvas');
+      c.className = 'lab-sheet';
+      c.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none;background:#000';
+      (document.body ?? document.documentElement)?.appendChild?.(c);
+      sh.canvas = c;
+      sh.ctx = c.getContext?.('2d') ?? null;
+      sh.w = sh.h = 0;
+    } catch (err) {
+      console.error('[lab] model view: sheet overlay failed', err);
+      sh.canvas = sh.ctx = null;
+    }
+  }
+
+  _sheetOff() {
+    const sh = this._sheet;
+    try {
+      sh.canvas?.remove?.();
+    } catch {
+      /* already gone */
+    }
+    sh.canvas = sh.ctx = null;
+    sh.w = sh.h = 0;
+  }
+
+  /** Size the overlay to the drawing buffer and lay the tiles out right of the Lab panel. */
+  _sheetLayout(W, H) {
+    const sh = this._sheet;
+    const x0 = Math.round(this._panelFrac() * W);
+    if (sh.w === W && sh.h === H && sh.x0 === x0) return;
+    sh.canvas.width = W;
+    sh.canvas.height = H;
+    sh.w = W;
+    sh.h = H;
+    sh.x0 = x0;
+    sh.tw = Math.floor((W - x0) / SHEET_COLS);
+    sh.th = Math.floor(H / Math.ceil(SHEET_VIEWS.length / SHEET_COLS));
+    sh.ctx.fillStyle = '#000';
+    sh.ctx.fillRect(0, 0, W, H);
   }
 
   /** Hide the non-target actor for this frame's render; pinAim() / exit() give its flag back. */
@@ -333,8 +493,10 @@ export class ModelViewer {
     }
     const { min, max, pts } = box;
     const L = s.look;
-    L.x = s.forward !== null ? 0 : (min[0] + max[0]) / 2;
-    L.z = s.forward !== null ? s.forward : (min[2] + max[2]) / 2;
+    // turning (spin, the sheet): the camera circles the root, so every angle centres the body
+    const turn = s.spin || s.sheet;
+    L.x = s.forward !== null || turn ? 0 : (min[0] + max[0]) / 2;
+    L.z = s.forward !== null ? s.forward : turn ? 0 : (min[2] + max[2]) / 2;
     L.y = s.height !== null ? s.height : (min[1] + max[1]) / 2;
 
     const cam = this.game.camera;
@@ -343,15 +505,27 @@ export class ModelViewer {
     const near = num(cam?.near) ? cam.near : CONFIG.camera.near;
     const panel = this._panelFrac();
     const tv = Math.tan(vfov / 2), th = tv * aspect;
-    const tx = (th * (1 - panel)) / MARGIN, ty = tv / MARGIN;
-
-    // camera basis in the reference frame (game view: world-fixed yaw, relative to that frame)
-    const t = s.game ? s.yaw * DEG - ref : s.yaw * DEG;
-    const cp = Math.cos(s.pitch * DEG), sp = Math.sin(s.pitch * DEG);
-    const dir = [cp * Math.sin(t), sp, cp * Math.cos(t)];
-    const right = [Math.cos(t), 0, -Math.sin(t)];
-    const up = [-sp * Math.sin(t), cp, -sp * Math.cos(t)];
+    // the sheet's close tiles are crops of the frame: as wide as a tile is for the frame's height
+    const rows = Math.ceil(SHEET_VIEWS.length / SHEET_COLS);
+    const tx = s.sheet ? (tv * ((aspect * (1 - panel) * rows) / SHEET_COLS)) / MARGIN : (th * (1 - panel)) / MARGIN;
+    const ty = tv / MARGIN;
+    const pitch = s.sheet ? SHEET_PITCH : s.pitch;
+    const cp = Math.cos(pitch * DEG), sp = Math.sin(pitch * DEG);
+    const dir = [0, sp, 0], right = [0, 0, 0], up = [0, cp, 0];
+    // camera basis in the reference frame for yaw t (game view: world-fixed yaw, relative to it)
+    const basis = (t) => {
+      dir[0] = cp * Math.sin(t);
+      dir[2] = cp * Math.cos(t);
+      right[0] = Math.cos(t);
+      right[2] = -Math.sin(t);
+      up[0] = -sp * Math.sin(t);
+      up[2] = -sp * Math.cos(t);
+    };
+    basis(s.game ? s.yaw * DEG - ref : s.yaw * DEG);
     const n = pts.length;
+    // the sheet's tiles are narrow: fit his height and let a long reach (the sword) run a little past
+    // the tile's sides instead of shrinking the figure
+    const wide = s.sheet ? 1.45 : 1;
     const fit = () => {
       let need = 0;
       for (let i = 0; i < n; i += 3) {
@@ -359,12 +533,18 @@ export class ModelViewer {
         const along = qx * dir[0] + qy * dir[1] + qz * dir[2];
         const x = Math.abs(qx * right[0] + qz * right[2]);
         const y = Math.abs(qx * up[0] + qy * up[1] + qz * up[2]);
-        need = Math.max(need, along + x / tx, along + y / ty, along + near * 1.5);
+        need = Math.max(need, along + x / (tx * wide), along + y / ty, along + near * 1.5);
       }
       return clamp(num(need) ? need : 10, DIST_MIN, DIST_MAX);
     };
     let d = fit();
-    if (s.forward === null || s.height === null) {
+    if (turn) {
+      // one distance for the whole turn (the sword swings round into the widest views)
+      for (const yw of FIT_YAWS) {
+        basis(yw * DEG);
+        d = Math.max(d, fit());
+      }
+    } else if (s.forward === null || s.height === null) {
       // re-centre on the projected silhouette at that distance (one pass is plenty)
       const dist0 = s.dist ?? d;
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
@@ -390,7 +570,8 @@ export class ModelViewer {
     }
     s.fitDist = d;
     const dist = s.dist ?? s.fitDist;
-    s.shift = panel * th * dist; // the actor's centre lands in the middle of the free area
+    // the actor's centre lands in the middle of the free area (the sheet crops the frame's centre)
+    s.shift = s.sheet ? 0 : panel * th * dist;
     s.aspect = aspect;
     s.panelOpen = !!this.lab?.open;
   }

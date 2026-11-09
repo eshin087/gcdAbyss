@@ -52,6 +52,10 @@ export function createSharedUniforms() {
     uArtHeroLight: { value: new THREE.Vector4(0.2, 0.95, 0.2, 1.4) },
     // ... and its cool rim from the screen's left (the reference's blue-lavender silhouette side)
     uArtHeroRim: { value: new THREE.Color(0.14, 0.19, 0.72) },
+    // look-dev (Lab model viewer → Solid): 1 = the hero's materials draw a plain lit clay render of
+    // his geometry, untagged (alpha 0), so the ASCII pass passes it through: compare the same pose
+    // with and without the ASCII art to tell geometry problems from renderer problems. 0 in play
+    uHeroSolid: { value: 0 },
     // the art pass's ink lines per hero part (filled from HERO_INK by player/model.js): rgb tint × a
     // gain (> 1 glows under bloom: the cyan blade edges, the violet gem)
     uHeroPartInk: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },

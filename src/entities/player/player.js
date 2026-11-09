@@ -2070,7 +2070,8 @@ export class Player {
     // follow-through) and pulsing in the crit window. At the game camera the 0.09 m blade is ~4 px
     // wide and its seams are sub-pixel, so the flats self-light more with distance: the sword stays
     // the brightest thing on the hero there, while close-ups keep dark steel with glowing edges.
-    let ink = 0.16 + 2.3 * far + 0.06 * Math.sin(this.time * 2.6), glow = 1.0 + 0.12 * Math.sin(this.time * 3.7);
+    // (lean reference match: 2.3 → 1.25 × far: the self-lit blade bloomed into a halo that hid his body)
+    let ink = 0.16 + 1.25 * far + 0.06 * Math.sin(this.time * 2.6), glow = 1.0 + 0.12 * Math.sin(this.time * 3.7);
     const a = this.atk, st = this.state;
     if (st === 'charge') {
       const k = this.chargeK;
@@ -2114,7 +2115,7 @@ export class Player {
     // far away the chevrons grow to fill their cells, so the ~4 px blade reads as a solid cyan line
     bu.uGlyphZoom.value = tu.uGlyphZoom.value = 0.72 - 0.26 * far;
     // … and the dark steel between them lights up too (gaps are base × light)
-    bu.uBase.value.setRGB(0.02 + 0.33 * far, 0.03 + 0.67 * far, 0.05 + 1.05 * far);
+    bu.uBase.value.setRGB(0.02 + 0.19 * far, 0.03 + 0.4 * far, 0.05 + 0.62 * far);
     this.bladeFar = far;
     // the violet gem breathes; burns brighter while charging and through heavy swings
     const heavyNow = st === 'charge' || (plunging && this.pl.phase <= PL.RIDE) || (!!a && !!a.def?.heavy && (st === 'attack' || st === 'heavy'));

@@ -276,6 +276,7 @@ function build(opts = {}) {
     game.fx.add.update(dt, game.time);
     safe('hud', () => game.hud.update(realDt));
     safe('audio', () => game.audio.update(realDt));
+    safe('lab', () => game.lab.postRender?.()); // (main.js: after pipeline.render; nothing is drawn here)
     game.input.endFrame();
     // NaN sentinels
     const p = game.player, d = game.dragon;
@@ -647,10 +648,13 @@ async function scenarioDie() {
   assert(game.state === 'boss', 'reached boss');
   // pause / resume
   run(G, 3, { attack: false });
-  const dPos = game.dragon.position.clone(), dHp = game.dragon.hp;
   input.tap('Escape');
   G.tick(DT);
   assert(game.state === 'paused', 'Esc → paused');
+  // (snapshot after the Esc frame: that frame still runs on the pre-pause dt, so a wyrm walking at
+  // that moment moves once; whether it walks depends on the seeded AI's rolls, which share
+  // Math.random with cosmetic FX)
+  const dPos = game.dragon.position.clone(), dHp = game.dragon.hp;
   run(G, 2, { attack: false });
   assert(game.timeScale === 0, 'timeScale 0 while paused');
   assert(game.dragon.position.distanceTo(dPos) < 1e-6 && game.dragon.hp === dHp, 'dragon frozen while paused');
@@ -1468,6 +1472,20 @@ async function scenarioLab() {
   assert(flow.debug.toState('boss') === true, 'toState(boss) from victory');
   run(G, 0.5, { passive: true });
   assert(game.state === 'boss' && d.state === 'combat' && d.hp === d.maxHp, `boss after victory: dragon reset and fighting (${d.state}, hp ${d.hp})`);
+  // model viewer (look-dev): the reference sheet's rear 3/4, the solid render, the turntable, the
+  // live sheet overlay, and a clean exit (camera, look and overlay restored)
+  const sheetEl = () => document.body.find?.((e) => e.classList?.contains('lab-sheet'));
+  const mv = lab.modelView({ target: 'hero', yaw: 215, dark: true, look: 'solid' });
+  assert(mv?.yaw === 215 && mv.look === 'solid' && game.U.uHeroSolid.value === 1 && !!game.viewOverride, `model view: rear 3/4 (yaw ${mv?.yaw}), the solid look sets U.uHeroSolid`);
+  lab.modelView({ target: 'hero', spin: true, yaw: 0, dark: true, look: 'ascii' });
+  run(G, 0.5, { passive: true });
+  const spun = lab.viewer.describe();
+  assert(spun?.spin && spun.yaw > 10 && spun.yaw < 30 && game.U.uHeroSolid.value === 0, `model view: the turntable turns (yaw ${spun?.yaw} after 0.5 s), the ascii look clears U.uHeroSolid`);
+  lab.modelView({ target: 'hero', sheet: true, dark: true });
+  run(G, 0.6, { passive: true });
+  assert(lab.viewer.describe()?.sheet && !!sheetEl() && errors.length === 0, 'model view: the live sheet overlay is up and cycles its angles without errors');
+  lab.modelView(null);
+  assert(game.viewOverride === null && game.U.uHeroSolid.value === 0 && !sheetEl(), 'model view exit: game camera, ascii look, no sheet overlay');
   // pause → Lab reset path, then close the panel: cheats show on the badge
   G.input.tap('Escape'); G.tick(DT);
   assert(game.state === 'paused', 'Esc → paused');
@@ -1747,7 +1765,10 @@ async function scenarioHero() {
   const p = game.player, r = p.rig, d = game.dragon;
   p.debug.god = true;
   const strips = r.coat.reduce((n, c) => n + c.strips.length, 0);
-  assert(r.coat.length === 7 && strips === 22, `coat skirt: 6 panels + the front flap, ${strips} torn strips`);
+  // the coat (ADR-034): two back tails split by a vent, narrow side panels, two front panels
+  const tails = r.coat.filter((C) => Math.abs(C.def.az) > 2.2);
+  assert(r.coat.length === 6 && tails.length === 2 && strips === 12 && r.coat.every((C) => !C.def.flap),
+    `coat: 6 panels (2 back tails split by a vent, 2 side, 2 front), ${strips} torn strips`);
   assert(r.streamers?.length === 2 && Object.keys(r.hair).length === 5, 'two sleeve streamers, five hair clusters');
   // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
@@ -1793,25 +1814,27 @@ async function scenarioHero() {
   return G;
 }
 
-// ================================================================== scenario: hero look (round 3)
-// The broad build (model.js BODY) and the steel kept out of his body and his coat. Through a run, a
+// ================================================================== scenario: hero look (lean build)
+// The lean build (model.js BODY, ADR-034) and the steel kept out of his body and his coat. Through a run, a
 // sprint, strafes and a backpedal, stops, a roll, the light combo + slam, a charged thrust and a
 // block, the DRAWN blade (to DIM.drawnTip) never sinks > 2 cm into a body part (BODY's primitives
 // in each joint's frame) and passes through a coat panel's sheet on only a few of the moving frames
 // (round 2: ~14 % of the run / sprint / strafe / turn frames). The game-camera depth pull
 // (heroArt.pull) is gone, so the blade is depth-tested like his body.
 async function scenarioHeroLook() {
-  out('\n== scenario HEROLOOK (broad build; the blade stays out of his body and his coat; no depth pull) ==');
-  const { BODY } = await imp('src/entities/player/model.js');
+  out('\n== scenario HEROLOOK (lean build; the blade stays out of his body and his coat; no depth pull) ==');
+  const { BODY, sheetOffset } = await imp('src/entities/player/model.js');
   const G = build();
   const { game, input } = G;
   fightSetup(G);
   const p = game.player, r = p.rig, d = game.dragon, D = HERO_DIM;
   p.debug.god = true;
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
+  // the lean build (ADR-034, the reference sheet's silhouette: shoulders ≈ 0.24 of his height, the
+  // waist ≈ 0.12): a V to a narrow belted waist, slim limbs (round 3's broad build had a 0.50 m chest)
   const chest = Math.max(...BODY.shell.map((s) => s.rx)) * 2, waist = BODY.shell[1].rx * 2;
-  assert(chest >= 0.46 && chest / waist >= 1.45 && D.shoulder[0] >= 0.2 && BODY.upperArm[0] >= 0.085 && BODY.thigh[0] >= 0.095,
-    `broad build: chest ${chest.toFixed(2)} m over a ${waist.toFixed(2)} m waist, shoulders ±${D.shoulder[0]} m, upper arm r ${BODY.upperArm[0]}, thigh r ${BODY.thigh[0]}`);
+  assert(chest >= 0.3 && chest <= 0.38 && waist <= 0.25 && chest / waist >= 1.4 && D.shoulder[0] >= 0.14 && D.shoulder[0] <= 0.18 && BODY.upperArm[0] <= 0.065 && BODY.thigh[0] <= 0.08,
+    `lean build: chest ${chest.toFixed(2)} m over a ${waist.toFixed(2)} m waist, shoulders ±${D.shoulder[0]} m, upper arm r ${BODY.upperArm[0]}, thigh r ${BODY.thigh[0]}`);
   assert(r.mats.every((m) => m.defines?.SG_HERO_PULL === undefined && !m.uniforms.uArtPull), 'no hero material is drawn nearer the camera than it is (the blade is depth-tested)');
   const v = new THREE.Vector3(), w = new THREE.Vector3();
   const restSpine = D.pivot + 0.015 + D.pelvis[1] + D.spine[1];
@@ -1858,7 +1881,7 @@ async function scenarioHeroLook() {
         const pen = f(J.worldToLocal(w.copy(v)));
         if (pen > worst) {
           worst = pen;
-          worstAt = `${name}, ${p.state}`;
+          worstAt = `${name}, ${p.state}${p.atk?.def ? ' ' + p.atk.def.kind + (p.atk.def.combo ?? '') : ''} t ${(p.atk?.t ?? p.stateT ?? 0).toFixed(2)}`;
         }
       }
     }
@@ -1877,7 +1900,8 @@ async function scenarioHeroLook() {
           const t = -w.y / len, R = Rt + 0.25 * clamp(t, 0, 1) * len;
           const u = Math.asin(clamp(w.x / R, -1, 1)) * R;
           const f = w.z - (Math.cos(u / R) - 1) * R;
-          const inside = t >= 0 && t <= 1 && Math.abs(u) <= 0.5 * (P.w[s] + (P.w[s + 1] - P.w[s]) * t);
+          const wt = P.w[s] + (P.w[s + 1] - P.w[s]) * clamp(t, 0, 1);
+          const inside = t >= 0 && t <= 1 && Math.abs(u - sheetOffset(wt, P.w[0], P.skew ?? 0)) <= 0.5 * wt;
           if (inside && pin && Math.sign(f) !== Math.sign(pf)) return true;
           pf = f;
           pin = inside;

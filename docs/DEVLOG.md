@@ -5,6 +5,87 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-09 — Session 7: the lean reference match (the hero from every side)
+**Owner:** improve the hero to closely match two new ASCII references (a single-figure image for
+appearance, detail and the sword; a six-view turnaround for construction), "especially from the back
+and rear three-quarter gameplay views". Priorities: a lean anime swordsman silhouette; distinct,
+asymmetric pointed hair with crown and nape layers; a raised collar and a layered right pauldron with
+depth; an intentional back (shaped upper panels, a diagonal strap, restrained seams, a narrow belted
+waist); two tapered coat tails and narrow side panels instead of the broad skirt, legs visible; the
+reference's sword; ASCII shading with dark planes, readable midtones, selective bright edges and
+restrained bloom. Plus an inspection view (dark background, front / both sides / back / rear 3/4, the
+real gameplay camera at play size, a turntable, solid and ASCII toggles). Branch `look/lean-hero`.
+
+**How:**
+- Measured the references first: the six views' silhouettes per height (closed masks), in fractions
+  of his height H: shoulders ≈ 0.24 H, chest ≈ 0.18 H, belted waist ≈ 0.12 H, thighs ≈ 0.06 H, the
+  coat tails to ≈ 0.8 H, flaring to ≈ ±0.24 H. Diagnosis of the baseline: round 3's broad build and
+  closed A-line skirt (from behind at the game camera a lettered trapezoid with no legs), a round mop,
+  a tall tube of a collar, the portrait idle's blade across his front (hidden from behind), a blade
+  halo over his body.
+- Built the look-dev tools before touching geometry (ADR-035), then iterated: geometry first in the
+  Solid look, then the ASCII shading; each round compared side by side with the reference panels at
+  matched height (headless Chrome on the RTX 4090 over DevTools, the sim stepped with `__tick`).
+
+**Done — look-dev (ADR-035):** model viewer angles 3/4 R, Right, Rear R / L; Spin (a turntable);
+Sheet (ten live tiles: front, front 3/4, right, left, back, rear 3/4 ×2 at eye level and the gameplay
+camera on his back / front / right side at ×2, read back in the new `lab.postRender` hook); looks
+ASCII / Solid / Source / Lines (`U.uHeroSolid`: a clay render with alpha 0 that the ASCII pass passes
+through).
+
+**Done — the hero (ADR-034):**
+- Lean `BODY` (chest 0.34 over a 0.23 m waist, shoulders ±0.16, slim limbs) on the same bones.
+- Hair: layered pointed locks (crown spikes, top, two back layers hanging down with lifted points,
+  nape flicks, side locks, a jagged fringe; the scalp cap's hairline under the fringe roots).
+- Collar: lower and flared behind, points beside the jaw in front, a turned-over rim.
+- Back: a yoke whose seams dip to a four-point star, a centre seam, the baldric (a strap round the
+  torso in a tilted plane, right shoulder → left hip, buckle and ring), two belts.
+- Pauldron: a ×1.3 stack (cap, band, two arm lames standing off the sleeve, claw blades).
+- Coat: six panels: two back tails split by a vent, narrow side panels, front panels; `skew` keeps
+  the vent / front edges straight while the outer edges flare, `slant` slopes the hems, piping on the
+  vent and front edges, 12 strips (outer longest). Banded calves; slimmer boots and knee guards.
+- Sword: the single-figure image's (broad base, long taper, hooked barbs, lightning notches, a guard
+  swept up round a violet four-point star gem).
+- Idle: the sword hung at his right side, out and forward-down; `dirLerp` sends near half-turns round
+  the front (the light combo's finish → idle cut the sword arm's shoulder for one frame).
+- Game-camera shading: blade far self-light 2.3 → 1.25 × far and HDR cap 1.8 → 1.3 (a tight glow),
+  armour far fill / lines −25 %, the lavender torn zone's far fill 0.4 → 0.8.
+
+**Decisions:** ADR-034 (lean hero, coat tails, idle at the right side), ADR-035 (look-dev tools).
+The idle follows the turnaround, not the single-figure image's dynamic portrait stance: the user
+gave the rear views equal priority, and from behind the portrait's diagonal blade was hidden.
+
+**Verification:**
+- Captures (session scratchpad `cap/`): every angle in Solid and ASCII at inspection scale, the
+  gameplay camera at 36 m from the back / front / side / rear 3/4 (dark and in the grass), the sword
+  face-on, reference-vs-ours side by side (back, rear 3/4, front, right), and every move (idle, walk,
+  run, sprint, light 1, light 2, slam, charge + thrust, dodge) at key moments from the back, right
+  side and front: the grip stays in the right hand, nothing passes through his body.
+- Game camera, facing away: his lit area now matches the reference's at the same height (4357 vs
+  4374 px; the broad build covered 6462); mean luma 74 (reference 55; baseline 79), dark share 49 %
+  (reference 56 %, baseline 40 %).
+- `herolook`: lean proportions asserted; the drawn blade never enters his body over 831 frames
+  (closest 2.9 cm; the baseline let it sink ≤ 2 cm); it crosses a coat panel on 1 of 509 locomotion
+  frames. `hero`: 6 panels / 12 strips, strip tips ≥ 0.1 m above the grass, the steel point ≥ 0.014 m.
+- New Lab checks: the rear 3/4 + solid look, the turntable, the sheet overlay, a clean exit.
+- `npm test`: ALL PASSED; `npm run build`: OK (see the PR).
+- The DIE scenario's "dragon frozen while paused" failed once: the blade halo now spawns fewer
+  particles, which shifts the shared `Math.random` stream the seeded wyrm AI rolls on, and the wyrm
+  happened to walk on the Esc frame (which still runs on the pre-pause dt). The check now snapshots
+  the wyrm after that frame.
+
+**Open issues / next:**
+- At the game camera he is still brighter than the scaled reference (the one-pixel silhouette line,
+  kept for legibility on the grass); the hair has less volume than the reference's mop; the tails'
+  dotted lavender rag along the outer edges is fainter; the face has no nose / mouth lines.
+- The sleeve streamers are not in the new references (kept for now).
+- The slash / slam FX look huge in close-ups (sized for the 36 m camera, known).
+- Cosmetic FX share `Math.random` with the wyrm AI: give FX their own stream.
+- Move the capture harness into the repo (carried over).
+- **Next:** the owner reviews the PR preview (Lab → MODEL VIEW → Hero, Dark, Sheet / Spin / Solid).
+
+---
+
 ## 2026-11-09 — Session 6: the epic wyrm fight (combos, the plunge, flights and fire, three phases)
 **Owner:** the hero is "too lanky / skinny", and his sword always shows and clips through him, even
 through his back from behind. The dragon needs far more attacks, epic fire spells, flying attacks and
