@@ -146,6 +146,8 @@ Render helpers for creature modules:
   - `aPart` (float vertex attribute, 0 / 1): `sub(geometry, k)` in `player/model.js`, carried through
     the static merge; a geometry without it reads 0 (`defaultAttributeValues`). It splits one part
     into pieces the pass outlines up close (coat panels, hair locks, the blade's two halves).
+    `foldLines(geometry, fn)` (ADR-036) writes a smooth 0..0.9 field instead: the pass prints its
+    0.5 contour as a drawn crease and `sub` (`HERO_INK`, `uArtSub`) darkens the side above 0.5.
   - `folds`: dark fold bands in the fill up close (gone between 8 and 16 m).
 - **Per-part pass data** (`U.uHeroPartInk[20]`, `U.uHeroPartFill[20]`, vec4, shared; filled once by
   `createHeroMaterials` from `HERO_INK`): ink = line tint rgb × gain (`line`; > 1 blooms: the cyan
@@ -155,10 +157,13 @@ Render helpers for creature modules:
   bright (armour, blade)), w `farFill` (fill gain there). Materials that share a `part` must share
   these fields.
 - **The hero's letters and lines** (pass, hero branch):
-  - Grid: `createPixelArtAtlas(hs)` (`glyphs.js`; hs = max(1, floor(H / 1080))) → `{ texture, count,
-    lines, cols }`: row 1 = `ART_CHARS` in a 3x5 pixel font, sorted sparse → dense (`uHeroCount`,
-    `uHeroCols`); row 2 = `PIXEL_LINES` (`| - / \` and a dot), no longer sampled. Cells `uHeroCell`
-    = `pixelArtCell(hs)` (4hs x 6hs).
+  - Grid (ADR-036): `createPixelArtAtlas(hs)` (`glyphs.js`; hs = max(1, floor(H / 1080))) →
+    `{ texture, count, cols }`: one row, the 3x3 micro-font `PIXEL_3X3` (29 marks) sorted sparse →
+    dense (`uHeroCount`, `uHeroCols`). Cells `uHeroCell` = `pixelArtCell(hs)` (4hs x 4hs, square).
+    Ink lines are drawn per pixel by the pass, not from glyphs. `U.uArtHeroCel` (vec3: step from
+    shadow to lit between x and y, z = share of the step) cel-shades the art source;
+    `U.uHeroPartRim[20]` (vec4: tint × gain) is each part's silhouette ink; fill style + 8 = a
+    dotted silhouette.
   - Fill: a cell whose centre is on him (or ≥ 2 of its 4 samples) prints one letter. Its part's
     light (`uArtLum.x` 3, `uArtBlack.x` 0.06) picks it along the ramp `uHeroFill.zw` (near) /
     `uHeroFar.xy` (far), jittered by `uArtDither.x` 2.6 / `uHeroFar.z`; brightness `uHeroFill.xy` ×
@@ -384,15 +389,17 @@ the hips at the anchor) and `len[1]` includes the slant.
 The animator (`player/anim.js`) drives: `coat` = 6 panels (`COAT_PANELS`, above), each two spring
 segments (the lower one is two meshes: `coat` above, the lavender torn zone `hem` over its last
 60 %) plus `strips` (12 torn strips, one spring each, kept above the grass; per-panel `BREEZE` /
-`IDLE_FLARE` follow the panel order); `streamers` (two two-segment sleeve strips on the arms);
+`IDLE_FLARE` follow the panel order); `streamers` (the torn cape since ADR-036: four two-segment
+ribbons from under the pauldron, each record `{ segs, len, out }`, `out` = its own outward flare);
 `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root
 mesh (`hair`) and a sheened-tip mesh (`hairTip`); since ADR-034 the locks are layered pointed
 blades (crown spikes, top, two back layers, nape, sides, a jagged fringe, cowlicks). Static meshes
 that share a joint and a material are merged at build time (fewer draw calls; 123 meshes, ~19.7k
 triangles since the lean build); only the flask stays separate.
-**Idle** (`guard`, ADR-034): the sheet's easy stance, the sword hung one-handed at his right side,
-the blade (`IDLE_SW`) out to the right and forward ~37° below level, the drawn point just above the
-grass. Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
+**Idle** (`guard`, ADR-036; supersedes ADR-034's blade hung at his right side): the single-figure
+reference's stance, weight on the left leg, the right leg straight out, the sword arm beside the
+right hip, the blade (`IDLE_SW`) a low diagonal across his front, ~37° below level, to the drawn
+point just above the grass at his left; the head bowed along it. Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
 (`DIR_FLIP` 2.75 rad, below `DIR_FLIP_HIGH` 0.9 rad of elevation) goes round the front, never behind
 the shoulders (the light combo's finish → this idle).
 **Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every

@@ -4,7 +4,11 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Three pieces of work since 0.4.0:
+Four pieces of work since 0.4.0:
+- **Single-figure reference, round 2** (2026-11-09, partial): the hero stands in the single-figure
+  image's stance with the sword in a low diagonal across his front, is drawn as a fine dot matrix
+  instead of small letters, and wears a fuller pleated coat and a four-ribbon torn cape. It is closer
+  to the reference but not yet a match (coat, cape, hair, face, legs and sword are still to do).
 - **The lean reference match** (2026-11-09): the hero matches the owner's six-view ASCII turnaround
   and single-figure image, from the back and rear three-quarter views as much as the front: a lean
   swordsman with spiky pointed hair, a flared collar, a shaped back, a spiked shoulder stack, two
@@ -52,6 +56,13 @@ Three pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **The hero, single-figure reference round 2** (partial; ADR-036):
+  - idle: weight on the left leg, the right leg out, the sword arm at the right hip and the blade in
+    a low diagonal across his front, head bowed along it (was: the blade hung at his right side)
+  - shading: a 3x3 dot-matrix micro-font in square cells, cel-stepped light, dimmer non-glowing ink
+    lines, a per-part silhouette colour (dotted lavender round cloth, white round armour)
+  - coat: six wider, longer panels with drawn fold lines; cape: four torn ribbons from under the
+    pauldron replace the two sleeve streamers
 - **The hero, after the owner's six-view turnaround and single-figure image** (lean reference match):
   - a lean anime swordsman: a V from the shoulders (0.46 m across) to a narrow belted waist, slim
     arms and long legs (the broad build's 0.50 m chest is gone)

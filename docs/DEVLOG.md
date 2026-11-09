@@ -5,6 +5,44 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-09 — Session 8: single-figure reference, round 2 (stopped part-way)
+**Owner:** the hero "still does not look like the attached reference image on terms of detail and
+feel"; mirror the single-figure image as closely as possible; the sword hold and its angle are
+awkward. Branch `look/hero-reference-round-2`. The owner stopped the session before the geometry
+rebuild was finished, so this entry records a PARTIAL result.
+
+**Done:**
+- **Idle and sword hold (ADR-036):** the single-figure stance. Weight on the left leg, the right leg
+  straight out to his right and forward, the sword arm hanging beside the right hip, the blade in a
+  low diagonal across his front (`IDLE_SW` [0.75, -0.58, 0.26], ~37° below level; the reference is
+  ~44°), the head bowed and turned along the blade. Reverses ADR-034's blade hung at his right side.
+- **Dot-matrix shading (ADR-036):** the hero's fill is a 3x3 micro-font (29 marks, `PIXEL_3X3`) in
+  square 4x4 px cells instead of 3x5 letters in 4x6 cells; fill brightness linear in the light
+  value, a little greyer; cel-stepped key light (`U.uArtHeroCel`); per-part silhouette ink
+  (`U.uHeroPartRim`; fill style + 8 = a dotted silhouette); plain ink lines kept under the bloom
+  threshold. `PIXEL_3X5` and `PIXEL_LINES` are gone.
+- **Coat:** six wider, longer panels with drawn fold lines (`foldLines`: a smooth `aPart` field whose
+  0.5 contour the ink pass prints as a crease; `HERO_INK.*.sub` / `uArtSub` shades the valley side).
+- **Cape:** the two sleeve streamers became four torn ribbons from under the pauldron on the same
+  streamer springs, each with its own outward flare (`out`).
+
+**Verification:** `npm test` green, `npm run build` OK. Captures (session scratchpad): the reference
+angle, front / sides / back / rear 3/4, and every move from the back, right and front after the coat
+and cape change: grip in the right hand, no gross clipping, moves read as before. Not checked: the
+real 36 m gameplay camera in the grass, a phone, frame cost of the wider coat.
+
+**Honest state:** closer to the reference in stance, sword hold, mass and tone; still clearly NOT a
+match. The coat reads as a closed pleated skirt covered in straight lines (from behind it hides the
+legs that ADR-034 opened up); the cape is stiff shards, not a wide torn sheet; hair too narrow; no
+face; collar not winged; legs are wireframe plates; one smooth pauldron with long claws; plain
+straight sword; overall grey where the reference is near-black with sparse bright edges.
+
+**Next (planned, not started):** open flared coat (fewer, broader folds), a face-on cape sheet, hair
+mop, face lines, winged collar, dark legs with knee guards, layered pauldron, jagged blade, darker
+tones. See ROADMAP M1.9.
+
+---
+
 ## 2026-11-09 — Session 7: the lean reference match (the hero from every side)
 **Owner:** improve the hero to closely match two new ASCII references (a single-figure image for
 appearance, detail and the sword; a six-view turnaround for construction), "especially from the back

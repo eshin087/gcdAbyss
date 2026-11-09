@@ -125,6 +125,18 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
         their own stream
   - [ ] Move the headless capture harness (DevTools + `__tick`) into the repo
 
+## M1.9 — Single-figure reference, round 2 (2026-11-09, `look/hero-reference-round-2`, partial)
+- [x] Idle in the single-figure stance; the blade a low diagonal across his front (ADR-036)
+- [x] Dot-matrix fill (3x3 micro-font, square cells), cel light, per-part silhouette ink
+- [x] Pleated six-panel coat with drawn fold lines; four-ribbon torn cape
+- [ ] Still unlike the reference (the session was stopped here):
+  - [ ] Open, flared long coat with a few broad folds; the legs visible again from behind
+  - [ ] Cape as a wide torn sheet, not stiff ribbons
+  - [ ] Big hair mop, face lines, a tall winged collar
+  - [ ] Dark legs with knee guards; a layered pauldron with short spikes; a jagged glowing blade
+  - [ ] Darker masses with sparse bright edges; blade angle ~44° (now ~37°)
+  - [ ] Check the 36 m game camera in the grass, a phone, and the frame cost
+
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
 - [ ] Regular mobs (2–3 types) using the shared combat system and tell rules
