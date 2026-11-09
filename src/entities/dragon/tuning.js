@@ -2,6 +2,7 @@
 // Shared combat windows (parry / block / dodge / posture) live in src/combat/rules.js — never here.
 
 import { TELL } from '../../combat/rules.js';
+import { FIRE_ATTACKS } from './tuningFire.js';
 
 const DEG = Math.PI / 180;
 
@@ -122,6 +123,7 @@ export const TUNING = {
     },
   },
 };
+Object.assign(TUNING.attacks, FIRE_ATTACKS); // fire / flight attacks and spells (tuningFire.js)
 
 // Skeleton proportions in MODEL units (see SCALE above). Root = ground point under the torso centre,
 // facing +Z, model-left = +X. See model.js for how these are assembled and docs/art/dragon.md
