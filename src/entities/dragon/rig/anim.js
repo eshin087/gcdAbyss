@@ -244,7 +244,9 @@ export function resetPose(p) {
  *            toward the viewer, far wing reaching beyond the head, near wing swept back). The fan turns
  *            about the wrist and the arm `arm` x as much about the wing root (the whole wing protracts /
  *            retracts at the shoulder, so the far wrist itself comes forward); `look` = rad per rad of
- *            the head's turn, `bias` = left-forward offset when looking straight ahead, `max` caps it
+ *            the head's turn, `bias` = left-forward offset when looking straight ahead, `max` caps the
+ *            forward swing and `maxBack` the backward one (the resting sails already sweep back ~30°:
+ *            the far wing needs the long swing to show past the head, the near one only a little)
  */
 export const REST_POSE = {
   neck: { pitch0: 2.05, pitchStep: -0.42, pitchCurve: -0.006 },
@@ -258,7 +260,7 @@ export const REST_POSE = {
     stalk: { frontL: 0.4, frontR: -0.12, hindL: 0.1, hindR: -0.3 },
     crouch: 0.12,
   },
-  sweep: { bias: 0, look: 0.5, max: 0.5, arm: 0.4 },
+  sweep: { bias: 0, look: 0.7, max: 0.85, maxBack: 0.35, arm: 0.4 },
   // the painting's tail: carried off the rump about level for a third of its length, then arching
   // down (steepest ~60° around segment 7) and levelling out to land almost tangent on the ground
   // around segment 11, where the end lies and hooks round (tail-base frame, Chain.buildRest's dip;
@@ -1068,7 +1070,7 @@ export class Rig {
       {
         const SW = REST_POSE.sweep;
         const wRest = s.rest * clamp(1 - Math.abs(s.spread[k] - 0.5) * 3, 0, 1) * (1 - s.droop) * (1 - s.mantle) * (1 - lying) * clamp(1 - s.flapAmp * 8, 0, 1);
-        const target = clamp(side * (SW.bias - SW.look * s.lookYaw), -SW.max, SW.max) * wRest;
+        const target = clamp(side * (SW.bias - SW.look * s.lookYaw), -(SW.maxBack ?? SW.max), SW.max) * wRest;
         s.sweep[k] = snap ? target : damp(s.sweep[k], target, 2.2, dt);
         const a = s.sweep[k];
         if (Math.abs(a) > 1e-4) {
