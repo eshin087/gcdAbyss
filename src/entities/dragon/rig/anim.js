@@ -173,6 +173,7 @@ export function createPose() {
     tailWave: 0.07,
     tailStiff: 1, // spring stiffness multiplier (tail sweep keeps the tail extended)
     eyes: 1,
+    idle: 0, // 1 = no attack running (the AI's idle / walk): the rig's idle life plays
     speed: 0, // ground speed for the gait
     vel: new THREE.Vector3(),
   };
@@ -217,6 +218,7 @@ export function resetPose(p) {
   p.tailWave = 0.07;
   p.tailStiff = 1;
   p.eyes = 1;
+  p.idle = 0;
   return p;
 }
 
@@ -259,6 +261,9 @@ export const TAIL_HOOK = 0.017;
 
 /** Front shoulder joint's rest z in the root frame (chest joint + shoulder offset), model units. */
 const SHOULDER_Z = A.hipZ + A.chest[2] + A.shoulder[2];
+/** Idle wing rouse: duration (s) and the quiet gaps between rouses (s, cycled). */
+const ROUSE_TIME = 1.4;
+const ROUSE_GAPS = [9.5, 7.8, 11.2, 8.6];
 
 const mixParams = (a, b, t, out) => {
   for (const k in a) out[k] = a[k] + ((b[k] ?? 0) - a[k]) * t;
@@ -276,6 +281,11 @@ export class Rig {
     this.headPosR = V();
     this._visLive = false;
     this._nbR = {};
+    this._rouseP = -1; // idle wing rouse progress (-1 = none)
+    this._rouseT = 4.5; // s of quiet until the first one
+    this._rouseN = 0;
+    this._br = 0; // breath (-1..1), shared with the neck / wings
+    this._lookT = V();
     const tailMin = [0, ...model.tailRadii.map((r) => (r * 0.8 + 0.05) * S)];
     this.tail = new Chain(model.tail, A.tailLen * S, { minY: tailMin, maxBend: 0.56, baseBend: 0.8 });
     this.gait = new Gait((limb) => dragon.onStep?.(limb), S);
@@ -284,7 +294,7 @@ export class Rig {
       jaw: 0, spread: [0, 0], pawW: [0, 0], flapAmp: 0, flapPhase: 0, eyes: 0, tailCurl: 0, tailWave: 0.07,
       lookDown: 0.14, gaitRoll: 0, frontDip: 0,
       droop: 0, mantle: 0, stanceF: 0, stanceH: 0, strideF: 0, strideH: 0, restep: 0, elbowsOut: 0, swell: 0, airReach: 0,
-      rest: 0, sweep: [0, 0], lookYaw: 0,
+      rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0,
     };
     this.time = 0;
     this.breathPhase = 0;
@@ -487,10 +497,20 @@ export class Rig {
       const over = shY - (A.chest[1] + A.shoulder[1] + 0.1);
       if (over > 0) lower += over * (1 - s.rear) * (1 - s.airborne) * (1 - lying);
     }
-    const bob = -0.07 * hindLift + br * 0.03;
+    // --- idle life (no attack running): a slow weight shift from side to side with a little sink,
+    // the chest following the hips a beat later; the wings breathe and now and then rouse (lift,
+    // shiver and settle back, like a bird re-folding); the head's gaze drifts
+    s.idle = sm(s.idle, pose.idle * (1 - s.stagger) * (1 - lying) * (1 - s.airborne), pose.idle > s.idle ? 1.2 : 6);
+    const iw = s.idle, t = this.time;
+    this._br = br;
+    const sway = (Math.sin(t * 0.74) * 0.6 + Math.sin(t * 0.31 + 1.3) * 0.4) * iw;
+    const turnSway = Math.sin(t * 0.43 + 0.5) * iw;
+    this._updateRouse(dt, iw * s.rest);
+
+    const bob = -0.07 * hindLift + br * 0.03 - 0.025 * (0.5 + 0.5 * Math.sin(t * 0.53)) * iw;
     m.hips.position.set(0, A.hipY - lower + bob + s.alt / S, A.hipZ);
-    m.hips.rotation.set(s.pitch + s.sleep * 0.08, s.twist * 0.3, s.roll + s.gaitRoll + s.dead * 0.75);
-    m.chest.rotation.set(-br * 0.02 + s.stagger * 0.12 + s.frontDip * 0.022, s.twist * 0.7, 0);
+    m.hips.rotation.set(s.pitch + s.sleep * 0.08, s.twist * 0.3 + 0.025 * turnSway, s.roll + s.gaitRoll + s.dead * 0.75 + 0.02 * sway);
+    m.chest.rotation.set(-br * 0.02 + s.stagger * 0.12 + s.frontDip * 0.022, s.twist * 0.7 + 0.035 * Math.sin(t * 0.43 - 0.2) * iw, -0.012 * sway);
     m.root.updateMatrixWorld(true);
 
     const qHips = this._wq(m.hips, this._qHips);
@@ -543,6 +563,38 @@ export class Rig {
     }
   }
 
+  /**
+   * Idle wing rouse: every ~8-11 s of quiet the resting wings lift and open a little, shiver and
+   * settle back (s.rouse = 0..1 envelope, s.rouseP = progress). Deterministic intervals (the AI's
+   * random stream is left alone). `w` = how idle and resting the wyrm is.
+   */
+  _updateRouse(dt, w) {
+    const s = this.s;
+    if (this._rouseP >= 0) {
+      this._rouseP += dt / ROUSE_TIME;
+      if (this._rouseP >= 1 || w < 0.3) this._rouseP = -1;
+    } else if (w > 0.9) {
+      this._rouseT -= dt;
+      if (this._rouseT <= 0) {
+        this._rouseP = 0;
+        this._rouseT = ROUSE_GAPS[this._rouseN++ % ROUSE_GAPS.length];
+      }
+    }
+    const p = this._rouseP >= 0 ? this._rouseP : 0;
+    const env = this._rouseP >= 0 ? Math.sin(Math.PI * p) ** 2 : 0;
+    s.rouse = damp(s.rouse, env * w, 12, dt);
+    s.rouseP = p;
+  }
+
+  /** Look yaw (chest frame, distributed along the neck) toward `target`; writes this._under. */
+  _lookYaw(target, awakeW) {
+    const s = this.s;
+    const to = this._v[0].subVectors(target, this.pt.neckBase).applyQuaternion(this._qChestInv);
+    const u = (1 - clamp((Math.hypot(to.x, to.z) - 2.5 * S) / (2 * S), 0, 1)) * (1 - clamp(to.z / (1.5 * S), 0, 1));
+    this._under = u;
+    return clamp(Math.atan2(to.x, to.z), -1.3, 1.3) * awakeW * (1 - s.stagger * 0.7) * (1 - u);
+  }
+
   _updateNeck(dt, pose, snap, qChest, qNeckBase) {
     const s = this.s, m = this.m, pt = this.pt;
     // two neck solves: `sim` is the measured one (NECK_UP rest + the pose's head goal, FABRIK), the
@@ -555,14 +607,23 @@ export class Rig {
     // look target (smoothed)
     if (snap) this.lookPos.copy(pose.look);
     else this.lookPos.lerp(pose.look, 1 - Math.exp(-pose.lookRate * dt));
+    // idle, the visible gaze drifts a little around its foe (the measured solve keeps lookPos)
+    const lv = this._lookT.copy(this.lookPos);
+    if (s.idle > 1e-3) {
+      const t = this.time, iw = s.idle;
+      lv.x += (Math.sin(t * 0.29) * 2.2 + Math.sin(t * 0.71 + 2) * 0.6) * iw;
+      lv.y += Math.sin(t * 0.37 + 1) * 0.9 * iw;
+      lv.z += Math.cos(t * 0.23) * 1.4 * iw;
+    }
     // distribute the look yaw along the neck so it curves toward the target
-    const toLook = this._v[0].subVectors(this.lookPos, pt.neckBase).applyQuaternion(this._qChestInv);
     const awakeW = (1 - s.sleep) * (1 - s.dead);
     // a target right under / behind the chest (the hero beneath the belly, a leap landing on him)
     // cannot be looked at: the neck and head stay forward, the head tipped down (no craning back)
-    const under = (1 - clamp((Math.hypot(toLook.x, toLook.z) - 2.5 * S) / (2 * S), 0, 1)) * (1 - clamp(toLook.z / (1.5 * S), 0, 1));
-    const lookYaw = clamp(Math.atan2(toLook.x, toLook.z), -1.3, 1.3) * awakeW * (1 - s.stagger * 0.7) * (1 - under);
-    s.lookYaw = lookYaw;
+    const lookYaw = this._lookYaw(this.lookPos, awakeW);
+    const under = this._under;
+    const lookYawV = s.idle > 1e-3 ? this._lookYaw(lv, awakeW) : lookYaw;
+    this._under = under;
+    s.lookYaw = lookYawV;
     const n = neck.n;
     const base = this._nb;
     base.pitch0 = NECK_UP.pitch0;
@@ -596,12 +657,13 @@ export class Rig {
       rb.pitch0 = R.pitch0;
       rb.pitchStep = R.pitchStep;
       rb.pitchCurve = R.pitchCurve;
-      rb.yaw0 = base.yaw0;
-      rb.yawStep = base.yawStep;
+      rb.yaw0 = lookYawV * 0.1;
+      rb.yawStep = (lookYawV * 0.85) / n;
       vis.buildRest(pt.neckBase, qChest, rb);
       if (snap || !this._visLive) vis.snap();
       else vis.pull(1 - Math.exp(-7 * dt));
       const g = this._v[3].copy(vis.rest[n]).add(pose.headOffset);
+      g.y += this._br * 0.07 * S * s.idle; // the head rides the breath
       if (snap || !this._visLive) this.headPosR.copy(g);
       else {
         this.headPosR.y += this._dAlt || 0;
@@ -624,7 +686,7 @@ export class Rig {
     // head aims at the look point, held near level (at most lookDown nose-down) so the brow and
     // the lit maw face forward; limp / flat when lying or staggered
     const last = vis.dirs[n - 1];
-    const dir = this._v[2].subVectors(this.lookPos, vis.p[n]);
+    const dir = this._v[2].subVectors(lv, vis.p[n]);
     if (dir.lengthSq() < 1e-6) dir.copy(last);
     dir.normalize();
     if (under > 0.001) {
@@ -650,7 +712,8 @@ export class Rig {
     }
     constrainDir(dir, last, 1.1);
     aimJoint(m.head, dir, this._qNeckEnd, this._qHead);
-    m.jaw.rotation.x = s.jaw * 0.7;
+    // idle: the jaw parts a little more on each exhale (embers in the maw breathe with it)
+    m.jaw.rotation.x = (s.jaw + 0.06 * (0.5 - 0.5 * this._br) * s.idle) * 0.7;
   }
 
   _updateTail(dt, snap, qTailBase, stiff = 1) {
@@ -915,9 +978,20 @@ export class Rig {
     const qa = this._q[3], qb = this._q[4], qc = this._q[5], qd = this._q[6], qe = this._q[7];
     const theta = s.flapAmp * Math.sin(s.flapPhase);
     const CW = m.chest.matrixWorld;
+    // idle: the sails breathe (wrists ride up and the fans open a little on each inhale) and now and
+    // then rouse (lift and open, shiver along the fingers, settle back: _updateRouse)
+    const iw = s.idle * s.rest, br = this._br, ro = s.rouse;
     for (let k = 0; k < 2; k++) {
       const w = m.wings[k], side = w.side, out = pt.wings[k];
-      const K = this._wingKey(s.spread[k], lying, s.droop, s.mantle);
+      const K = this._wingKey(s.spread[k] + 0.14 * ro, lying, s.droop, s.mantle);
+      if (iw > 1e-3 || ro > 1e-3) {
+        K.wrist[1] += 0.07 * br * iw + 0.25 * ro;
+        K.wrist[0] += 0.12 * ro;
+        const shiver = ro * (1 - s.rouseP) * 0.05;
+        for (let f = 0; f < 4; f++) {
+          K.fingers[f][1] += (0.03 - 0.018 * f) * br * iw + shiver * Math.sin(this.time * 19 + f * 1.3 + k * 0.7);
+        }
+      }
       // wing beats: the fingers fold ~30 % on the upstroke (theta rising) and fan out on the downstroke
       if (s.flapAmp > 0.25) {
         const up = Math.max(0, Math.cos(s.flapPhase)) * 0.3;

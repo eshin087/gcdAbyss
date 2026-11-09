@@ -160,7 +160,8 @@ export class Gait {
       const c = this.pivot;
       for (const l of limbs) {
         if (l.free || l.stepping || l.lock) continue;
-        const skid = Math.min(1, Math.max(0, (l.homeSpeed - speed - 12) / 12));
+        // (a rake's 0.6 rad body twist, ~11-15 m/s at the front homes, still steps: only the spin skids)
+        const skid = Math.min(1, Math.max(0, (l.homeSpeed - speed - 20) / 12));
         if (skid <= 0) continue;
         const a = this.dYaw * skid, ca = Math.cos(a), sa = Math.sin(a);
         const x = l.plant.x - c.x, z = l.plant.z - c.z;
