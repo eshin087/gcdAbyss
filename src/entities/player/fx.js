@@ -573,8 +573,9 @@ export class PlayerFx {
         glyph: '·+°', color: COL.ghost, colorEnd: COL.ghostEnd, alpha: 1, alphaEnd: 0, drag: 2, flicker: 0.3,
       });
     }
-    fx.spawn({ x: nx, y: cy, z: nz, life: 0.22, size: 2.2, sizeEnd: 0.5, glyph: '+', color: COL.ghostCore, colorEnd: COL.ghost, alpha: 1, alphaEnd: 0, rot: 0.785 });
-    this._light({ x: nx, y: cy, z: nz, color: [0.55, 0.78, 1.4], intensity: 3.6, radius: 7, life: 0.55, fade: 0.45, fadeIn: 0.02 });
+    // (short: it runs in the slow-mo, and a long flare hid him for most of the hang)
+    fx.spawn({ x: nx, y: cy, z: nz, life: 0.1, size: 1.7, sizeEnd: 0.4, glyph: '+', color: COL.ghostCore, colorEnd: COL.ghost, alpha: 1, alphaEnd: 0, rot: 0.785 });
+    this._light({ x: nx, y: cy, z: nz, color: [0.55, 0.78, 1.4], intensity: 3, radius: 6, life: 0.3, fade: 0.25, fadeIn: 0.02 });
   }
 
   /** The hang at the apex: cold motes drawn in onto him (x, y, z: his chest). */

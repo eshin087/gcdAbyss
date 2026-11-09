@@ -78,6 +78,7 @@ export const PL = Object.freeze({ VANISH: 0, HANG: 1, DIVE: 2, RIDE: 3, FLIP: 4,
 const LAND_TURNS = [0, 0.45, -0.45, 0.9, -0.9, 1.35, -1.35, 1.8, -1.8, 2.4, -2.4, Math.PI];
 const PLUNGE_BEHIND_TURN = 1.0; // rad off the nose: a hero who came from behind lands front-side
 const PLUNGE_RIDE_MAX = 40; // m/s: the rider eases through a jump of the head (never teleports)
+const PLUNGE_HANG_TRACK = 7; // m/s: the hang point drifts after a moving head at most this fast
 // cross-fade (s) into each plunge phase's pose: the impact lands almost at once
 const PL_BLEND = [0.02, 0.03, 0.05, 0.025, 0.06, 0.05];
 
@@ -1176,25 +1177,29 @@ export class Player {
     }
     switch (pl.phase) {
       case PL.VANISH:
-        this._plungeHang(pl, 0, p);
-        if (pl.t >= P.vanish) {
+      case PL.HANG: {
+        // the apex holds still: it drifts after a moving head at PLUNGE_HANG_TRACK m/s at most (a
+        // spinning tail sweep swung the head, and him with it, round in a wide arc)
+        const hang = pl.phase === PL.HANG;
+        this._plungeHang(pl, hang ? clamp(pl.t / P.hang, 0, 1) : 0, this._v);
+        const d = this._v.distanceTo(p), max = PLUNGE_HANG_TRACK * dt;
+        if (d > max && d > 1e-6) p.lerp(this._v, max / d);
+        else p.copy(this._v);
+        if (!hang && pl.t >= P.vanish) {
           this._plungePhase(PL.HANG);
           this.ghostFx = 1; // resolves out of the cold dissolve over the hang
-        }
-        break;
-      case PL.HANG:
-        this._plungeHang(pl, clamp(pl.t / P.hang, 0, 1), p);
-        if (pl.t >= P.hang) {
+        } else if (hang && pl.t >= P.hang) {
+          pl.from.copy(p); // the dive starts where he hangs and pursues the head
           this._plungePhase(PL.DIVE);
           this.anim.kickCoat(0.6, this.anim.noise);
           this._emit('player:plunge', { execution: pl.exec });
         }
         break;
+      }
       case PL.DIVE: {
         const u = clamp(pl.t / P.dive, 0, 1);
-        this._plungeHang(pl, 1, this._v);
         this._plungeSeat(pl, this._v2);
-        p.lerpVectors(this._v, this._v2, u * u); // accelerating onto the head
+        p.lerpVectors(pl.from, this._v2, u * u); // accelerating onto the head
         if (u >= 1) this._plungeImpact();
         break;
       }
