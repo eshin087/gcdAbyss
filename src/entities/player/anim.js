@@ -1457,9 +1457,11 @@ const PAULDRON_FOLLOW = 0.35; // how much of the sword arm's swing the shoulder 
 // the thrust charge's updraft (× A.updraft 0..1): extra outward flare of the coat panels and the
 // torn strips (rad), and an upward pull on the hair tips (m of tip displacement)
 const UPDRAFT_COAT = 0.3, UPDRAFT_STRIP = 0.35, UPDRAFT_HAIR = 0.12;
-// hair cluster springs (rotation vector, head space); HAIR_DRAG = rad of blow-back per m/s of the
-// tips' own horizontal speed (head axes)
-const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4, HAIR_DRAG = 0.06;
+// hair blow-back: rad per m/s of the tips' own along-ground speed (head axes): ~20° at the sprint
+const HAIR_DRAG = 0.06;
+
+// hair cluster springs (rotation vector, head space)
+const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4;
 // idle breeze on the coat: extra outward flare per panel (back-left blows out the most)
 const BREEZE = [0.02, 0.03, 0.05, 0.04, 0.1, 0.05, 0.0];
 // standing still, the skirt FLARES like the reference portrait's (a wide A of torn tails either
