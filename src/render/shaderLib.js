@@ -50,13 +50,15 @@ export function createSharedUniforms() {
     // light from the camera's upper left + z × the scene light); w scales the metal glints
     uArtHeroLight: { value: new THREE.Vector4(0.45, 0.55, 0.25, 1.0) },
     // ... and its cool rim from the screen's left (the reference's blue-lavender silhouette side)
-    uArtHeroRim: { value: new THREE.Color(0.12, 0.15, 0.55) },
+    uArtHeroRim: { value: new THREE.Color(0.14, 0.19, 0.72) },
     // the art pass's ink lines per hero part (filled from HERO_INK by player/model.js): rgb tint × a
     // gain (> 1 glows under bloom: the cyan blade edges, the violet gem)
     uHeroPartInk: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },
     // ... x = the brightness of each part's letter fill (the pale face reads lighter than the coat),
-    // y = 1: its edges are bright DOTS (sparse letters), not strokes (the torn tails, the hair)
-    uHeroPartFill: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector2(1, 0)) },
+    // y = its ink-line style (0 a stroke per letter cell, 1 dotted: the torn tails, the hair, 2
+    // unbroken: the blade), z = how much light its inner lines keep at the game camera (0 = a dark
+    // seam: cloth; 1 = bright: armour), w = its fill gain there
+    uHeroPartFill: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 0, 0, 1)) },
   };
 }
 

@@ -673,12 +673,23 @@ const LEATHER_LEVELS = [":'", "=:", ":=", "=#="];
  */
 export const GLYPH_SCALE = { refDist: 12, min: 0.15, farZoom: 0.45 };
 
+/**
+ * The sword's depth pull at the game camera (m, `pull` parts: the blade, its point, the gem): seen
+ * from the 36 m camera his low guard puts the steel just behind his own legs when he faces away,
+ * and the grass covers its point; drawn this much nearer (along each view ray: the same pixels),
+ * it shows through both. Fades in from `near` to `far` m of view distance (none in close-ups).
+ */
+export const BLADE_PULL = { m: 0.65, near: 10, far: 24 };
+
 /** Set every hero material's glyph cell (and glyph zoom) for a camera `dist` metres away. Returns
  *  the scale k (1 = the game camera). No allocation. */
 export function setHeroGlyphScale(mats, dist) {
   const k = Math.min(1, Math.max(GLYPH_SCALE.min, (Number.isFinite(dist) ? dist : GLYPH_SCALE.refDist) / GLYPH_SCALE.refDist));
   const near = (1 - k) / (1 - GLYPH_SCALE.min); // 0 at the game camera … 1 in a close-up
+  const pf = Math.min(1, Math.max(0, ((Number.isFinite(dist) ? dist : 0) - BLADE_PULL.near) / (BLADE_PULL.far - BLADE_PULL.near)));
+  const pull = BLADE_PULL.m * pf * pf * (3 - 2 * pf);
   for (const m of mats) {
+    if (m.uniforms.uArtPull) m.uniforms.uArtPull.value = pull;
     const ud = m.userData;
     const b = ud?.cell;
     if (!b) continue;
@@ -765,34 +776,43 @@ export const ART_GAIN = 1.1;
  * darkens fold streaks into the fill up close (the coat), per material. See HERO_ART in
  * render/materials.js.
  */
+// `farFill` = the part's letter-fill gain at the game camera (× the pass's uHeroLod.z): there the
+// reference scaled down is a DARK figure (black coat, dark pants and hair) with bright silver
+// armour, pale lavender tails, a pale face and the cyan blade, so cloth drops and metal rises.
+// `farLine` = how much light its inner lines keep there (0: a dark seam, the cloth; 1: the armour).
+// `solid` = unbroken ink lines (the blade, the gem); `pull` = drawn nearer at the game camera
+// (BLADE_PULL); `open` = its letters stay lit beside an edge (no dark channel or depth-step gap:
+// the face, a small pale patch walled in by the fringe and the collar, would print dim).
 export const HERO_INK = {
-  skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8 },
+  skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8, farFill: 0.9, open: true },
   eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
-  shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85] },
-  lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85] },
-  collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85] },
-  pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9] },
-  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1] },
-  collar: { part: 6, fill: [0.175, 0.165, 0.155] },
-  facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1] },
-  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true },
-  piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1] },
-  leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9] },
+  shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85], farFill: 0.35 },
+  lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
+  collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
+  pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9], farFill: 0.35 },
+  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1], farFill: 0.35 },
+  collar: { part: 6, fill: [0.175, 0.165, 0.155], farFill: 0.35 },
+  facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1], farFill: 0.5 },
+  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true, farFill: 0.4 },
+  piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1], farFill: 0.6 },
+  leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9], farFill: 0.8 },
   // the reference's hair: near-neutral dark letters (lit mean ≈ rgb 103 99 113) with violet-white
   // strands on the outer edges and tips, not a navy cap; the tips carry the violet
-  hair: { part: 11, fill: [0.085, 0.08, 0.12], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true },
-  hairTip: { part: 11, fill: [0.2, 0.16, 0.4], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true },
+  hair: { part: 11, fill: [0.085, 0.08, 0.12], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true, farFill: 0.5 },
+  hairTip: { part: 11, fill: [0.2, 0.16, 0.4], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true, farFill: 0.5 },
   // the reference's armour: dark steel plates whose bright white edges and glints make it the
   // brightest thing on him (a light grey fill read as flat paper cut-outs up close)
-  armor: { part: 12, fill: [0.25, 0.25, 0.28], spec: 1.0, specPow: 20, line: [1, 1, 1, 1.3], fillGain: 1.2 },
-  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05 },
-  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6 },
+  armor: { part: 12, fill: [0.3, 0.3, 0.34], spec: 1.35, specPow: 18, line: [1, 1, 1, 1.3], fillGain: 1.35, farLine: 0.55, farFill: 1.05 },
+  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05, farLine: 0.7, farFill: 1.2 },
+  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6, farLine: 0.6, farFill: 1.1 },
   welt: { part: 15, fill: [0.3, 0.31, 0.36] },
-  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3 },
-  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 2.2] },
-  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 2.2] },
-  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0] },
-  flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5] },
+  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.7, farFill: 1.2 },
+  // the reference's blade: dark steel between two glowing cyan edges and a bright ridge line (the
+  // fill letters stay dim up close; far away the whole blade reads as one bright cyan line)
+  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 2.2], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
+  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 2.2], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
+  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1, pull: true },
+  flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
 
 export function createHeroMaterials(U) {
@@ -944,7 +964,7 @@ export function createHeroMaterials(U) {
   for (const h of Object.values(HERO_INK)) {
     const l = h.line ?? [1, 1, 1, 1];
     partInk?.[h.part]?.set(l[0], l[1], l[2], l[3]);
-    partFill?.[h.part]?.set(h.fillGain ?? 1, h.dotted ? 1 : 0);
+    partFill?.[h.part]?.set(h.fillGain ?? 1, (h.dotted ? 1 : h.solid ? 2 : 0) + (h.open ? 4 : 0), h.farLine ?? 0, h.farFill ?? 1);
   }
   return Object.fromEntries(Object.entries(specs).map(([name, s]) => [name, make(name, s.o, s.opts)]));
 }
