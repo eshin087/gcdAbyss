@@ -1193,6 +1193,147 @@ async function scenarioHero() {
   return G;
 }
 
+// ================================================================== scenario: hero look (round 3)
+// The broad build (model.js BODY) and the steel kept out of his body and his coat. Through a run, a
+// sprint, strafes and a backpedal, stops, a roll, the light combo + slam, a charged thrust and a
+// block, the DRAWN blade (to DIM.drawnTip) never sinks > 2 cm into a body part (BODY's primitives
+// in each joint's frame) and passes through a coat panel's sheet on only a few of the moving frames
+// (round 2: ~14 % of the run / sprint / strafe / turn frames). The game-camera depth pull
+// (heroArt.pull) is gone, so the blade is depth-tested like his body.
+async function scenarioHeroLook() {
+  out('\n== scenario HEROLOOK (broad build; the blade stays out of his body and his coat; no depth pull) ==');
+  const { BODY } = await imp('src/entities/player/model.js');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const p = game.player, r = p.rig, d = game.dragon, D = HERO_DIM;
+  p.debug.god = true;
+  p.debug.teleport(d.position.x + 14, d.position.z + 14);
+  const chest = Math.max(...BODY.shell.map((s) => s.rx)) * 2, waist = BODY.shell[1].rx * 2;
+  assert(chest >= 0.46 && chest / waist >= 1.45 && D.shoulder[0] >= 0.2 && BODY.upperArm[0] >= 0.085 && BODY.thigh[0] >= 0.095,
+    `broad build: chest ${chest.toFixed(2)} m over a ${waist.toFixed(2)} m waist, shoulders ±${D.shoulder[0]} m, upper arm r ${BODY.upperArm[0]}, thigh r ${BODY.thigh[0]}`);
+  assert(r.mats.every((m) => m.defines?.SG_HERO_PULL === undefined && !m.uniforms.uArtPull), 'no hero material is drawn nearer the camera than it is (the blade is depth-tested)');
+  const v = new THREE.Vector3(), w = new THREE.Vector3();
+  const restSpine = D.pivot + 0.015 + D.pelvis[1] + D.spine[1];
+  // signed depth (m, > 0 inside) of a joint-local point in an ellipsoid / a tapered capsule down −Y /
+  // the torso shell (BODY.shell rings at world idle heights)
+  const ell = (q, c, rr) => {
+    const k = Math.hypot((q.x - c[0]) / rr[0], (q.y - c[1]) / rr[1], (q.z - c[2]) / rr[2]);
+    return k > 1e-6 ? Math.hypot(q.x - c[0], q.y - c[1], q.z - c[2]) * (1 / k - 1) : 1;
+  };
+  const cap = (q, y0, len, r0, r1) => {
+    const t = clamp((y0 - q.y) / len, 0, 1);
+    return r0 + (r1 - r0) * t - Math.hypot(q.x, q.y - (y0 - t * len), q.z);
+  };
+  const shell = (q) => {
+    const R = BODY.shell, h = q.y + restSpine;
+    if (h < R[0].y || h > R[R.length - 1].y) return -1;
+    let k = 0;
+    while (k < R.length - 2 && R[k + 1].y < h) k++;
+    const A = R[k], B = R[k + 1], u = (h - A.y) / (B.y - A.y);
+    const rx = A.rx + (B.rx - A.rx) * u, rz = A.rz + (B.rz - A.rz) * u, cz = (A.cz ?? 0) + ((B.cz ?? 0) - (A.cz ?? 0)) * u;
+    const qq = Math.hypot(q.x / rx, (q.z - cz) / rz);
+    return qq > 1e-6 ? Math.hypot(q.x, q.z - cz) * (1 / qq - 1) : 1;
+  };
+  // (the sword arm's own forearm is left out: the blade's base sits in the gauntlet; the free
+  // forearm only to the wrist: the free hand braces the flat in the block)
+  const parts = [
+    ['torso', r.spine, shell],
+    ['hips', r.pelvis, (q) => ell(q, BODY.hips.c, BODY.hips.r)],
+    ['head', r.head, (q) => ell(q, BODY.head.c, BODY.head.r)],
+    ['right upper arm', r.arms.R.upper, (q) => cap(q, 0, D.upperArm, BODY.upperArm[0], BODY.upperArm[1])],
+    ['left upper arm', r.arms.L.upper, (q) => cap(q, 0, D.upperArm, BODY.upperArm[0], BODY.upperArm[1])],
+    ['left forearm', r.arms.L.fore, (q) => cap(q, 0, D.foreArm - 0.06, BODY.foreArm[0], BODY.foreArm[1])],
+    ...['R', 'L'].flatMap((s) => [
+      [`thigh ${s}`, r.legs[s].thigh, (q) => cap(q, 0, D.thigh, BODY.thigh[0], BODY.thigh[1])],
+      [`shin ${s}`, r.legs[s].shin, (q) => cap(q, -0.02, D.shin - 0.04, BODY.shin[0], BODY.shin[1])],
+    ]),
+  ];
+  const tip = D.drawnTip ?? D.steelTip;
+  let worst = -1, worstAt = '';
+  const bodyPen = () => {
+    for (let z = 0.2; z <= tip + 1e-6; z += 0.05) {
+      v.set(0, 0, z).applyMatrix4(r.sword.matrixWorld);
+      for (const [name, J, f] of parts) {
+        const pen = f(J.worldToLocal(w.copy(v)));
+        if (pen > worst) {
+          worst = pen;
+          worstAt = `${name}, ${p.state}`;
+        }
+      }
+    }
+  };
+  // a coat segment's sheet hangs −Y from its joint, curved round the hips (radius r0 + 0.25 × depth):
+  // the blade crosses it where its side of the sheet flips inside the sheet's span
+  const coatCross = () => {
+    for (const C of r.coat) {
+      const P = C.def;
+      if (P.flap) continue;
+      for (let s = 0; s < 2; s++) {
+        const len = P.len[s] + 0.02, Rt = C.r0 + (s ? 0.25 * P.len[0] : 0);
+        let pf = 0, pin = false;
+        for (let z = 0.16; z <= tip + 1e-6; z += 0.03) {
+          C.segs[s].worldToLocal(w.copy(v.set(0, 0, z).applyMatrix4(r.sword.matrixWorld)));
+          const t = -w.y / len, R = Rt + 0.25 * clamp(t, 0, 1) * len;
+          const u = Math.asin(clamp(w.x / R, -1, 1)) * R;
+          const f = w.z - (Math.cos(u / R) - 1) * R;
+          const inside = t >= 0 && t <= 1 && Math.abs(u) <= 0.5 * (P.w[s] + (P.w[s + 1] - P.w[s]) * t);
+          if (inside && pin && Math.sign(f) !== Math.sign(pf)) return true;
+          pf = f;
+          pin = inside;
+        }
+      }
+    }
+    return false;
+  };
+  let frames = 0, cross = 0, locoFrames = 0, locoCross = 0;
+  const LOCO = new Set(['idle', 'run', 'sprint']);
+  const go = (s) => {
+    for (let i = 0, n = Math.round(s / DT); i < n; i++) {
+      G.tick(DT);
+      frames++;
+      bodyPen();
+      const c = coatCross();
+      if (c) cross++;
+      if (LOCO.has(p.state)) {
+        locoFrames++;
+        if (c) locoCross++;
+      }
+    }
+  };
+  input.axis = { x: 0, y: 1 };
+  go(1.2);
+  input.hold('ShiftLeft');
+  go(1.0);
+  input.release('ShiftLeft');
+  for (const [x, y] of [[1, 0], [0, -1], [-1, 0], [0, 0]]) {
+    input.axis = { x, y };
+    go(1.0);
+  }
+  input.axis = { x: 0, y: 1 };
+  go(0.3);
+  input.tap('Space');
+  go(0.9);
+  input.axis = { x: 0, y: 0 };
+  go(0.5);
+  for (let k = 0; k < 3; k++) {
+    input.click(0);
+    go(0.45);
+  }
+  go(0.8);
+  input.press(0);
+  go(1.4);
+  input.up(0);
+  go(1.0);
+  input.press(2);
+  go(0.8);
+  input.up(2);
+  go(0.6);
+  assert(worst < 0.02, `the drawn blade never sinks > 2 cm into his body (${frames} frames; deepest ${(worst * 100).toFixed(1)} cm: ${worstAt})`);
+  assert(locoCross <= Math.max(3, locoFrames * 0.05), `the blade passes through a coat panel on ${locoCross} of ${locoFrames} run / sprint / idle frames (≤ 5 %; ${cross} of ${frames} over every move)`);
+  return G;
+}
+
 // ================================================================== scenario: touch controls
 // The REAL core/input.js fed by the touch controls (src/ui/touch.js) through pointer events on
 // their DOM, exactly like a phone: tap / hold ATTACK, a timed BLOCK tap parries, DODGE rolls,
@@ -1380,7 +1521,7 @@ async function scenarioTouch() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie, touch: scenarioTouch };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, herolook: scenarioHeroLook, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, win: scenarioWin, die: scenarioDie, touch: scenarioTouch };
 const runs = [];
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
