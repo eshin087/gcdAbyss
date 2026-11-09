@@ -1,10 +1,12 @@
 import { el, num } from './dom.js';
 
 // Short combat call-outs: world-anchored pop-ups over the player's head (PARRY / DEFLECT /
-// GHOSTEP / GUARD BROKEN / BLOCK), floating damage numbers at the hit point (crits read
-// "CRIT 123"), and a small mid-screen "POSTURE BROKEN" banner. Pooled DOM nodes, animated from
-// update(realDt) on real time so they stay readable during Ghostep slow-mo; only transform and
-// opacity are written per frame, and only for live items.
+// GHOSTEP / GUARD BROKEN / BLOCK, "DEFLECT ×N" for a deflect chain, EXECUTION), floating damage
+// numbers at the hit point (crits read "CRIT 123"), and a small mid-screen "POSTURE BROKEN"
+// banner. Pooled DOM nodes, animated from update(realDt) on real time so they stay readable during
+// Ghostep slow-mo; only transform and opacity are written per frame, and only for live items.
+// Subscribes itself to combat:deflectChain { count } (a string's blows parried in a row) and
+// player:plungeHit { execution } (the hud wires the rest).
 
 const HEAD_UP = 3.0; // m above the player's feet (just over the name tag)
 const KINDS = {
@@ -13,6 +15,9 @@ const KINDS = {
   ghostep: { text: 'GHOSTEP', life: 1.25, rise: 26, pop: 1.5, streak: true },
   gbreak: { text: 'GUARD BROKEN', life: 1.3, rise: 22, pop: 1.3 },
   block: { text: 'BLOCK', life: 0.6, rise: 16, pop: 1.15 },
+  // a deflect chain: the parry call-out of that blow turns into "DEFLECT ×N" (styled as deflect)
+  chain: { text: 'DEFLECT', life: 1.15, rise: 34, pop: 1.5, cls: 'deflect' },
+  exec: { text: 'EXECUTION', life: 1.4, rise: 30, pop: 1.6, cls: 'deflect' },
 };
 const NUM = { life: 0.95, rise: 34 };
 const CALL_POOL = 6;
@@ -70,6 +75,10 @@ export class Callouts {
     this.p = { x: 0, y: 0, on: false, front: false };
     this.mini = new MiniBanner(parent);
     this.critMult = 0;
+    game.events?.on?.('combat:deflectChain', (d) => this.chain(d?.count));
+    game.events?.on?.('player:plungeHit', (d) => {
+      if (d?.execution) this.call('exec');
+    });
   }
 
   /** Pop a call-out over the player's head. kind ∈ KINDS. */
@@ -95,8 +104,41 @@ export class Callouts {
     it.jx = 0;
     it.head = true;
     it.span.textContent = k.text;
-    it.node.className = `ab-call on k-${kind}`;
+    it.node.className = `ab-call on k-${k.cls ?? kind}`;
     it.streak.style.display = k.streak ? '' : 'none';
+    this._start(it);
+  }
+
+  /**
+   * A deflect chain (combat:deflectChain): "DEFLECT ×N" over the hero's head, popping bigger as the
+   * chain climbs. One counter per string: the live chain call-out counts up in place, and the
+   * PARRY / DEFLECT call-out this same blow just popped folds into it, so a string parried in
+   * rhythm reads as one climbing counter, not a stack of words.
+   */
+  chain(count) {
+    const n = Math.round(num(count));
+    if (!(n >= 2)) return;
+    const k = KINDS.chain;
+    const fresh = this.calls.find((c) => c.active && c.age < 0.05 && (c.kind === 'parry' || c.kind === 'deflect'));
+    let it = this.calls.find((c) => c.active && c.kind === 'chain');
+    if (it) {
+      if (fresh) fresh.hide();
+    } else if (fresh) it = fresh;
+    else {
+      let lift = 0;
+      for (const c of this.calls) if (c.active && c.age < STACK_GAP) lift = Math.max(lift, c.lift + STACK_PX);
+      it = this._take(this.calls);
+      it.lift = Math.min(lift, STACK_PX * 3);
+    }
+    it.kind = 'chain';
+    it.life = k.life;
+    it.rise = k.rise;
+    it.pop = Math.min(2, k.pop + 0.1 * (n - 2));
+    it.jx = 0;
+    it.head = true;
+    it.span.textContent = `${k.text} ×${n}`;
+    it.node.className = `ab-call on k-${k.cls}`;
+    it.streak.style.display = 'none';
     this._start(it);
   }
 
