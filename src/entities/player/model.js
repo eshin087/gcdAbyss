@@ -536,10 +536,11 @@ function hairGeometries() {
   const side = (az) => (Math.abs(Math.atan2(Math.sin(az), Math.cos(az))) > 2.5 ? 'crown' : Math.sin(az) > 0 ? 'left' : 'right');
   // fringe (the reference: thin pointed locks of uneven length hanging over the eyes to the nose,
   // fanned to either side): 9 locks across the front hairline, tips curling a little off the face,
-  // plus two long strands across the eyes
+  // plus two long strands across the eyes. The two locks over his LEFT eye stop above it, so it
+  // shows between the strands as in the reference (the right eye stays covered)
   for (let i = 0; i < 9; i++) {
     const u = (i / 8) * 2 - 1 + j(0.07);
-    const L = 0.075 + 0.06 * (1 - u * u) + j(0.025);
+    const L = (0.075 + 0.06 * (1 - u * u) + j(0.025)) * (i === 5 || i === 6 ? 0.55 : 1);
     const base = capPoint(u * 0.72, 0.72 - 0.1 * u * u + j(0.05), 0.99);
     clump('fringe', L, 0.02 + 0.007 * r() - 0.003 * Math.abs(u), 0.008, base, [u * 0.5 + j(0.25), -0.9, 0.44 - 0.12 * Math.abs(u)], [u * 0.3, 0.25, -1], 0.08 + j(0.05), 0.9);
   }
@@ -766,7 +767,7 @@ export const ART_GAIN = 1.1;
  */
 export const HERO_INK = {
   skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8 },
-  eye: { part: 2, fill: [0.3, 0.26, 0.5], rim: 0, line: [0.85, 0.8, 1.0, 0.8] },
+  eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
   shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85] },
   lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85] },
   collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85] },
@@ -1150,8 +1151,9 @@ export function buildHero(U) {
     mesh(head, jaw, M.skin, sx, sy - 0.066, sz + 0.016);
     // the right ear shows below the swept-back locks
     mesh(head, ellipsoidGeometry(0.012, 0.024, 0.018, { widthSegs: 6, heightSegs: 4 }), M.skin, sx - 0.08, sy - 0.014, sz - 0.008);
-    // the visible LEFT eye (the right one is under the fringe): one grey-violet half-lidded cell
-    mesh(head, ellipsoidGeometry(0.012, 0.0055, 0.004, { widthSegs: 8, heightSegs: 4 }), M.eye, sx + 0.03, sy - 0.012, sz + 0.085);
+    // the visible LEFT eye (the right one is under the fringe): a dark half-lidded almond, large
+    // enough to print as a few dark letters with a violet rim between the fringe strands
+    mesh(head, ellipsoidGeometry(0.016, 0.0075, 0.005, { widthSegs: 8, heightSegs: 4 }), M.eye, sx + 0.032, sy - 0.012, sz + 0.084);
     mesh(head, hairCap(), M.hair);
   }
   const hairGeo = hairGeometries();
