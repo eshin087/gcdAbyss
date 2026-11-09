@@ -70,7 +70,7 @@ export function createWyrmArtAtlas(s = 1) {
   glyphs.forEach(({ rows }, col) => {
     // a soft halo on the stroke's neighbours (the reference's letters are anti-aliased, not 1 px
     // hairlines); never into the right gap column, so letters stay apart
-    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
     for (let y = -1; y <= 6; y++) {
       for (let x = 0; x < 4; x++) {
         if (on(rows, x, y)) continue;

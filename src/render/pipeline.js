@@ -131,6 +131,7 @@ export class Pipeline {
         // (of 4) a stroke code needs to turn the cell into a stroke glyph
         uWyrmGlyph: { value: new THREE.Vector4(5, 30, 6, 1) },
         uWyrmAtlas: { value: new THREE.Vector2(22, 26) }, // ramp count, glyphs in the atlas row
+        uWyrmOutline: { value: 1 }, // 1: silhouette cells draw their edge as a stroke glyph
       },
       vertexShader: FS_VERT,
       fragmentShader: /* glsl */ `
@@ -165,6 +166,7 @@ export class Pipeline {
         uniform vec4 uWyrmTone;
         uniform vec4 uWyrmGlyph;
         uniform vec2 uWyrmAtlas;
+        uniform float uWyrmOutline;
         varying vec2 vUv;
 
         float hash12(vec2 p) {
@@ -320,11 +322,13 @@ export class Pipeline {
           float ahits = 0.0, dmin = 1e9, dmax = 0.0;
           vec4 votes = vec4(0.0); // wyrm stroke codes (alpha 0.51 .. 0.54, materials.js wyrmMain)
           vec3 arim = vec3(0.0); // brightest stroke-coded sample: a stroke glyph's colour
+          vec4 amask = vec4(0.0); // which samples hit the wyrm: x BL, y BR, z TL, w TR
           for (int i = 0; i < 4; i++) {
             vec2 o = vec2(i == 1 || i == 3 ? 0.75 : 0.25, i >= 2 ? 0.75 : 0.25);
             vec2 suv = (abase + o * uArtCell) / uRes;
             vec4 sa = texture2D(tScene, suv);
             if (isArt(sa.a) && !isHero(sa.a)) {
+              if (i == 0) amask.x = 1.0; else if (i == 1) amask.y = 1.0; else if (i == 2) amask.z = 1.0; else amask.w = 1.0;
               asum += sa.rgb;
               ahits += 1.0;
               float dz = linDepth(suv);
@@ -335,7 +339,22 @@ export class Pipeline {
               if (code > 0.5 && luma(sa.rgb) > luma(arim)) arim = sa.rgb;
             }
           }
-          if (ahits >= 2.0) {
+          // silhouette cells (1-3 of the 4 samples on the wyrm) draw their edge as a stroke glyph along
+          // it (marching squares on the samples): the reference's character-drawn outlines, so spikes,
+          // claws and torn wing edges keep their shape instead of dissolving into digits
+          float edgeS = -1.0;
+          if (uWyrmOutline > 0.5 && ahits >= 1.0 && ahits <= 3.0) {
+            if (ahits == 2.0 && amask.x == amask.w) edgeS = amask.x > 0.5 ? 1.0 : 3.0; // diagonal pair
+            else {
+              float gx = (amask.y + amask.w) - (amask.x + amask.z);
+              float gy = (amask.z + amask.w) - (amask.x + amask.y);
+              edgeS = mod(floor(mod(atan(gx, -gy), 3.14159265) / 0.7853982 + 0.5), 4.0);
+            }
+          }
+          // a cell needs 2 of 4 samples on the wyrm, or 1 when it draws a stroke (an outline, or a
+          // stroke-coded spike / claw / horn tip that would otherwise vanish between the samples)
+          float strokeHits = max(max(votes.x, votes.y), max(votes.z, votes.w));
+          if (ahits >= 2.0 || (ahits >= 1.0 && (strokeHits >= 1.0 || edgeS >= 0.0))) {
             if (uArtEdge.y > 0.0 && (dmax - dmin) > uArtEdge.y * dmin) {
               gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
               return;
@@ -346,6 +365,7 @@ export class Pipeline {
             float stroke = best < uWyrmGlyph.w ? -1.0 : votes.x == best ? 0.0 : votes.y == best ? 1.0 : votes.z == best ? 2.0 : 3.0;
             vec3 ca = asum / ahits;
             if (stroke >= 0.0) { ca = arim; cp = arim; } // an outline glyph is drawn whole in the rim's colour
+            if (edgeS >= 0.0) { stroke = edgeS; ca = max(asum / ahits, arim); cp = ca; }
             gl_FragColor = vec4(wyrmCell(ca, cp, acell, (px - abase) / uArtCell, stroke), 1.0);
             return;
           }

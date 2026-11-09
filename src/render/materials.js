@@ -178,8 +178,9 @@ function wyrmFeatures(w, defines, uniforms) {
   uniforms.uWScale = { value: new THREE.Vector2(...v(w.scale, 2, [0, 0])) };
   // x: 1 = 'down' scales (tips toward larger |aGUV x|: barrel parts mapped around the body axis);
   // y: stroke glyphs for the art pass, 0 none, 1 along the scale rims, 2 along the part (aGUV y)
+  // z: 'axis' strokes only where the fresnel term reaches it (the part's outline; 0 = everywhere)
   const strokes = { none: 0, rim: 1, axis: 2 }[w.strokes ?? (w.scale ? 'rim' : 'none')] ?? 0;
-  uniforms.uWShape = { value: new THREE.Vector4(w.scaleDir === 'down' ? 1 : 0, strokes, 0, 0) };
+  uniforms.uWShape = { value: new THREE.Vector4(w.scaleDir === 'down' ? 1 : 0, strokes, w.strokeEdge ?? 0.12, 0) };
   // [y0, y1, root value, root glow]: value ramps from `root value` at aGUV y0 to 1 at y1 (no ramp:
   // [-2, -1, 1, 0]); root glow x uGlow below y1 (molten spine roots)
   uniforms.uWTip = { value: new THREE.Vector4(...v(w.tip, 4, [-2, -1, 1, 0])) };
@@ -623,8 +624,11 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         // along their edge (the reference's scale outlines), thin parts (uWShape.y 2: spikes, claws,
         // bones) draw strokes along their length
         float stroke = 0.0;
-        if (uWShape.y > 1.5) stroke = wStroke(vec2(0.0, 1.0), dFdx(vG), dFdy(vG));
-        else if (uWShape.y > 0.5 && rimT.z > 0.5) stroke = wStroke(rimT.xy, jx, jy);
+        float axisS = wStroke(vec2(0.0, 1.0), dFdx(vG), dFdy(vG));
+        // thin parts: strokes along their silhouette (outlined horns and claws with letters inside;
+        // a wide horn filled with strokes read as a hatched plank); uWShape.z = fresnel threshold
+        if (uWShape.y > 1.5 && fres >= uWShape.z) stroke = axisS;
+        else if (uWShape.y > 0.5 && uWShape.y < 1.5 && rimT.z > 0.5) stroke = wStroke(rimT.xy, jx, jy);
         float hot = uGlow * uGlowMask;
         // horns, spikes, claws (aGUV y = distance from the root): dark roots, bright tips, molten
         // roots on the glowing spines (uWTip: tip ramp from .x to .y, value at the root .z, root glow .w)
@@ -636,12 +640,13 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         // tears glued to the membrane (aGUV): a few holes inside, a ragged trailing edge
         float tn = wNoise(vG * uWMem.z) * 0.6 + wNoise(vG * uWMem.z * 2.9 + 5.3) * 0.4;
         if (tn > 0.94 - uWMem.w * smoothstep(0.45, 1.0, vEdge)) discard;
-        // dark mottled patches, embers along the bones, sparse ember specks
-        float mo = wNoise(vG * 0.9 + 11.3) * 0.7 + wNoise(vG * 2.6 + 3.1) * 0.3;
-        col *= mix(1.0 - uWMem.x, 1.0 + 0.4 * uWMem.x, smoothstep(0.3, 0.72, mo));
-        float bone = 1.0 - smoothstep(0.0, 0.16, vBone);
-        float spk = step(1.0 - uWMem.y, hash12(floor(vG / 0.11) + uSeed));
-        col += uWEmit * (spk * (0.3 + hot) + bone * (0.03 + 0.5 * hot));
+        // dark mottled patches (the reference's sails are blotched deep red and near black, never a
+        // flat field), darker toward the torn edge, embers along the bones, sparse ember specks
+        float mo = wNoise(vG * 0.75 + 11.3) * 0.65 + wNoise(vG * 2.4 + 3.1) * 0.35;
+        col *= mix(1.0 - uWMem.x, 1.0 + 0.5 * uWMem.x, smoothstep(0.32, 0.68, mo)) * (1.0 - 0.45 * smoothstep(0.5, 1.0, vEdge));
+        float bone = 1.0 - smoothstep(0.0, 0.3, vBone);
+        float spk = step(1.0 - uWMem.y, hash12(floor(vG / 0.075) + uSeed)) * step(0.36, mo);
+        col += uWEmit * (spk * (0.3 + 0.9 * hot) + bone * bone * (0.05 + 0.9 * hot));
   #endif
         if (uWVein.x > 0.0 && hot > 0.001) {
           float vn = wVeins(vG / uWVein.w, uWVein.y, uWVein.z / uWVein.w);
