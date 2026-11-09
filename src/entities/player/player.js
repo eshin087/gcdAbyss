@@ -147,7 +147,7 @@ export class Player {
     };
 
     this.anim = new HeroAnimator(this.rig, this);
-    this.anim.onFootstep = (side) => this._footstep(side);
+    this.anim.onFootstep = (side, dust) => this._footstep(side, dust);
     this.fx = new PlayerFx(game, this.rig);
     // camera lean (model.js LEAN): visual only; hits and the dragon's aim use unleaned positions
     this.lean = installLean(this.object3d);
@@ -1486,12 +1486,15 @@ export class Player {
   }
 
   // ------------------------------------------------------------------ fx / visuals
-  _footstep(side) {
+  /** A foot touches down (the gait's planner, the thrust dash's steps): `dust` (0..1, optional)
+   *  kicks up a puff of its own size (the dash's bounding steps). */
+  _footstep(side, dust = 0) {
     const leg = side < 0 ? this.rig.legs.R : this.rig.legs.L;
     leg.foot.getWorldPosition(this._v);
     const sprint = this.state === 'sprint';
     this._emit('player:footstep', { x: this._v.x, z: this._v.z, sprint });
-    if (sprint) this.fx.dust(this._v.x, this._v.z, 2, 0.4);
+    if (dust > 0) this.fx.dust(this._v.x, this._v.z, Math.round(3 + 5 * dust), 0.5 + 0.6 * dust);
+    else if (sprint) this.fx.dust(this._v.x, this._v.z, 2, 0.4);
   }
 
   _updateFx(dt) {
