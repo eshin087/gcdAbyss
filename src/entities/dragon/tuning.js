@@ -192,7 +192,7 @@ export const TUNING = {
         { kind: 'bite', tell: TELL.NORMAL, windup: 0.55, active: 0.2, impact: 0.125, damage: 18, knockback: 1.5, reach: 5.4 * S },
         { kind: 'claw', side: 1, chance: 0.6, tell: TELL.NORMAL, windup: 0.5, active: 0.25, impact: 0.15, damage: 16, knockback: 1.2, turn: 0.8 },
         { kind: 'claw', side: -1, tell: TELL.NORMAL, windup: 0.5, hold: [0.3, 0.75], active: 0.25, impact: 0.15, damage: 18, knockback: 1.5, turn: 0.8 },
-        { kind: 'bite', tell: TELL.BLUE, windup: 0.55, active: 0.2, impact: 0.1, damage: 24, knockback: 3, reach: 5.4 * S },
+        { kind: 'bite', tell: TELL.BLUE, windup: 0.55, active: 0.2, impact: 0.12, damage: 24, knockback: 3, reach: 5.4 * S },
         { kind: 'stomp', tell: TELL.RED, windup: 0.85, active: 0.15, impact: 0.15, damage: 36, knockback: 4, radius: 4.5 * S },
       ],
       recovery: 1.2, cooldown: 12, weight: [0, 0, 2.6], range: [2.4, 5.4], maxAng: 0.9,
