@@ -162,9 +162,16 @@ function surfaceFeatures(o, cell) {
  *                        from `root` at y0 to 1 at y1 (bright tips), molten glow x uGlow at the root
  *   tone: [gap, body, rim, rimWidth]  value over a scale: under the covering scale's edge (the black
  *                        gap), the scale body, its free-edge rim; rimWidth in rows
+ *   gap: [rows, px]      width of that black gap: at least `rows` of a scale row and `px` screen pixels
  *   ink: [r,g,b]         albedo of the source (charcoal hide, molten plates, crimson membrane)
- *   light: [gain, key, fresnel, floor]  moon + fire lights x gain, a camera key light (the reference
- *                        is evenly lit from the front), a moonlit edge rim, a flat light floor
+ *   rimInk: [r,g,b]      albedo of the scale rims (default: ink), e.g. gold rims on molten plates
+ *   light: [gain, key, fresnel, floor]  moon + fire lights x gain, a key light fixed to the camera
+ *                        (`key` direction: the reference's light, the same from every view), a moonlit
+ *                        edge rim, a flat light floor
+ *   key: [right, up, toward]  the key light's direction in camera space (screen right, screen up,
+ *                        toward the viewer): [-0.6, 0.9, 1] lights the upper-left faces of every form
+ *   envSat: 0..1         saturation of the moonlight and ambient on the part (default 1; 0 = neutral
+ *                        grey); fire light keeps its colour
  *   vein: [strength, share, width, plate]  molten fissures x uGlow: voronoi plates of `plate` aGUV
  *                        units, only `share` of the fissures glow (a broken, branching net), `width`
  *   glow: [gaps, all]    emissive x uGlow in the scale gaps (molten plates) / everywhere (maw, eye)
@@ -185,8 +192,12 @@ function wyrmFeatures(w, defines, uniforms) {
   // [-2, -1, 1, 0]); root glow x uGlow below y1 (molten spine roots)
   uniforms.uWTip = { value: new THREE.Vector4(...v(w.tip, 4, [-2, -1, 1, 0])) };
   uniforms.uWTone = { value: new THREE.Vector4(...v(w.tone, 4, [0.0, 0.2, 1.0, 0.2])) };
+  uniforms.uWGap = { value: new THREE.Vector2(...v(w.gap, 2, [0.22, 5])) };
   uniforms.uWInk = { value: new THREE.Color(...v(w.ink, 3, [0.3, 0.29, 0.28])) };
+  uniforms.uWRimInk = { value: new THREE.Color(...v(w.rimInk ?? w.ink, 3, [0.3, 0.29, 0.28])) };
   uniforms.uWLight = { value: new THREE.Vector4(...v(w.light, 4, [1, 0.5, 0.3, 0.02])) };
+  uniforms.uWKey = { value: new THREE.Vector3(...v(w.key, 3, [0, 0.7, 1])) };
+  uniforms.uWEnvSat = { value: Number.isFinite(w.envSat) ? w.envSat : 1 };
   uniforms.uWVein = { value: new THREE.Vector4(...v(w.vein, 4, [0, 0.4, 0.06, 1])) };
   // molten colour of veins / gaps / glow: a red-orange (ACES turns a (1, 0.34, 0.05) lava gold)
   uniforms.uWEmit = { value: new THREE.Color(...v(w.emit, 3, [1.0, 0.17, 0.03])) };
@@ -348,6 +359,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
     uniforms: {
       ...pickShared(U, SHARED),
       ...pickShared(U, SURFACE_SHARED),
+      ...(o.wyrm != null ? pickShared(U, ['uCamRight', 'uCamUp']) : {}), // the wyrm source's key light
       ...feat.uniforms,
       uAsciiSet: { value: asciiSet },
       uBase: { value: new THREE.Color(...(o.base ?? [0.016, 0.014, 0.016])) },
@@ -512,8 +524,14 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec4 uWShape;
       uniform vec4 uWTip;
       uniform vec4 uWTone;
+      uniform vec2 uWGap;
       uniform vec3 uWInk;
+      uniform vec3 uWRimInk;
       uniform vec4 uWLight;
+      uniform vec3 uWKey;
+      uniform float uWEnvSat;
+      uniform vec3 uCamRight;
+      uniform vec3 uCamUp;
       uniform vec4 uWVein;
       uniform vec3 uWEmit;
       uniform vec2 uWGlow;
@@ -558,7 +576,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       vec2 wScales(vec2 p, out vec3 rimT) {
         float ppx = max(max(length(dFdx(p)), length(dFdy(p))), 1e-6); // scale units per pixel
         float rimW = max(uWTone.w, 4.5 * ppx);
-        float gapW = max(0.22, 5.0 * ppx);
+        float gapW = max(uWGap.x, uWGap.y * ppx);
         float lod = smoothstep(0.11, 0.2, ppx); // fades as a scale shrinks from ~9 to ~5 px across
         // a slow warp: rows wobble and scales vary a little, hand-drawn rather than a fishnet lattice
         p += (vec2(wNoise(p * 0.31 + uSeed), wNoise(p.yx * 0.27 + uSeed + 7.7)) - 0.5) * vec2(0.5, 0.36);
@@ -610,10 +628,18 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float sh = shadowAt(vW + n * 0.1);
         vec3 V = normalize(uCamPos - vW);
         float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
-        float key = max(dot(n, normalize(V + vec3(0.0, 0.7, 0.0))), 0.0);
+        // key light fixed to the camera (uWKey: screen right, screen up, toward the viewer)
+        vec3 kd = uCamRight * uWKey.x + uCamUp * uWKey.y + V * uWKey.z;
+        float key = max(dot(n, kd * inversesqrt(max(dot(kd, kd), 1e-8))), 0.0);
         // the lava's light comes from below but wraps up the flanks (the reference's lower scales are
         // rimmed orange, the upper ones silver)
-        vec3 light = lightAt(vW, n, 0.25, sh) + vec3(1.0, 0.95, 0.9) * key * uWLight.y + uMoonColor * fres * uWLight.z
+        // the blue moon (and ambient) is desaturated toward its own brightness (uWEnvSat 0 = grey):
+        // the reference's hide, horns and bones are neutral to warm greys, never lavender; fire light
+        // keeps its colour
+        float ndl = max((dot(n, uMoonDir) + 0.25) / 1.25, 0.0);
+        vec3 env = ambientAt(n) + uMoonColor * (ndl * sh + fres * uWLight.z);
+        env = mix(vec3(luma(env)), env, uWEnvSat) + pointLights(vW, n, 0.25);
+        vec3 light = env + vec3(1.0, 0.95, 0.9) * key * uWLight.y
           + uWLight.w + uWUnder.rgb * uWUnder.a * clamp((0.35 - n.y) / 1.35, 0.0, 1.0);
         // 'down' scales (uWShape.x 1: the barrel) hang from the dorsal line toward the belly like
         // roof tiles: rows run along the body, tips toward larger |aGUV x| (around the body)
@@ -636,7 +662,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         // roots on the glowing spines (uWTip: tip ramp from .x to .y, value at the root .z, root glow .w)
         float tipT = smoothstep(uWTip.x, uWTip.y, vG.y);
         sc.x *= mix(uWTip.z, 1.0, tipT);
-        vec3 col = uWInk * uTint * (light * uWLight.x + uInkGlow) * sc.x;
+        vec3 col = mix(uWInk, uWRimInk, clamp(rimT.z, 0.0, 1.0)) * uTint * (light * uWLight.x + uInkGlow) * sc.x;
         col += uWEmit * hot * uWTip.w * (1.0 - tipT);
   #ifdef SG_WYRM_MEMBRANE
         // tears glued to the membrane (aGUV): a few holes inside, a ragged trailing edge
