@@ -1328,6 +1328,22 @@ async function scenarioFire() {
   meteorAt(5);
   d.debug.reset();
   assert(H.alive === 0, 'reset clears them');
+
+  // ---- killed in mid-air (hovering before the dive): it drops and dies cleanly, nothing left flying
+  fightSetup(G);
+  settle(G);
+  front(14);
+  game.lab.trigger('diveBomb');
+  run(G, 4, { passive: true }, () => d.brain.action?.phase === 'hover');
+  const alt0 = d.rig.s.alt, st0 = d.state;
+  assert(d.debug.kill() === true, `killed while hovering (${st0}, alt ${alt0.toFixed(1)})`);
+  let okFall = true;
+  run(G, 2, { passive: true }, () => {
+    if (![d.position.x, d.position.z, d.rig.s.alt, d.rig.pt.chest.y].every(Number.isFinite)) okFall = false;
+    return false;
+  });
+  out(`   killed at alt ${alt0.toFixed(1)} (${st0}) → ${d.state}, alt ${d.rig.s.alt.toFixed(2)}`);
+  assert(st0 === 'airborne' && alt0 > 10 && okFall && d.state === 'dying' && d.rig.s.alt < 0.2, 'a mid-air death drops the wyrm to the ground and plays the death');
   return G;
 }
 
