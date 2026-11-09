@@ -32,6 +32,7 @@ export const P = {
 const N = 52;
 const ENTRY_EASE = 0.85; // an easeOut cross-fade (attack entries) arrives at this fraction of its time
 const TURN_LAG_MAX = 1.4; // rad: how far the drawn heading may trail the gameplay yaw in a fast turn
+const TURN_K = 650; // stiffness (1/s²) of the critically damped spring the drawn heading follows
 const ANGLES = [P.pitch, P.yaw, P.roll];
 const ANK = DIM.ankle;
 const LEG_IDX = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rK, P.rK + 1, P.rK + 2, P.lK, P.lK + 1, P.lK + 2, P.footFlat, P.rFy, P.lFy, P.rFf, P.lFf];
@@ -936,8 +937,13 @@ function blockPose(p, A) {
   v3(p, P.swF, -0.1, 1, 0.5);
   v3(p, P.lH, 0.05, -0.1, 0.3);
   v3(p, P.lP, 0.7, -0.5, -0.4);
-  v3(p, P.rF, -0.19, ANK, -0.18);
-  v3(p, P.lF, 0.15, ANK, 0.2);
+  // a tap of the guard (a parry attempt) keeps the feet where they are; held, the stance settles
+  // into the block's after ~0.2 s (each tap used to cost two settle steps in and two out again)
+  const E = A.entry, fw = smoothstep(0.16, 0.4, A.t);
+  v3(p, P.rF, lerp(E[0], -0.19, fw), ANK, lerp(E[2], -0.18, fw));
+  v3(p, P.lF, lerp(E[3], 0.15, fw), ANK, lerp(E[5], 0.2, fw));
+  p[P.rFy] = lerp(E[6], p[P.rFy], fw);
+  p[P.lFy] = lerp(E[7], p[P.lFy], fw);
   p[P.footFlat] = 0.92;
   const r = A.recoil;
   if (r > 0.001) {
@@ -1198,7 +1204,9 @@ function staggerPose(p, A) {
   p[P.bodyZ] -= 0.08 * k;
   to3(p, P.rH, -0.25, -0.3, 0.3, k);
   to3(p, P.lH, 0.3, -0.25, 0.25, k);
-  dirTo(p, P.swD, -0.7, -0.25, 0.6, k);
+  // the blow jolts the blade up and out from wherever the guard holds it (~40°): a fixed target
+  // out to the right swung it ~110° across the legs and back with the low ready guard
+  dirTo(p, P.swD, p[P.swD] - 0.45, p[P.swD + 1] + 0.5, p[P.swD + 2] + 0.25, k);
   p[P.lF + 2] -= 0.2 * k;
 }
 
@@ -1402,8 +1410,9 @@ const STREAM_K = [55, 40], STREAM_C = [6, 4.5], STREAM_LAG = [0.3, 0.4], STREAM_
 const STREAM_A = 2.6, STREAM_B = 1.3;
 const TWO_HAND_GRIP = 0.11; // m down the grip from the sword hand to the off hand (two-handed)
 const PAULDRON_FOLLOW = 0.35; // how much of the sword arm's swing the shoulder armour follows
-// hair cluster springs (rotation vector, head space)
-const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4;
+// hair cluster springs (rotation vector, head space); HAIR_DRAG = rad of blow-back per m/s of the
+// tips' own horizontal speed (head axes)
+const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4, HAIR_DRAG = 0.06;
 // idle breeze on the coat: extra outward flare per panel (back-left blows out the most)
 const BREEZE = [0.02, 0.03, 0.05, 0.04, 0.1, 0.05, 0.0];
 // standing still, the skirt FLARES like the reference portrait's (a wide A of torn tails either
@@ -1698,9 +1707,11 @@ export class HeroAnimator {
     }
     const strafe = sp > 0.6 ? 0.5 * this.mx * clamp((this.mz + 0.2) / 0.25, -1, 1) * (1 - 0.5 * Math.abs(this.mz)) : 0;
     this.strafeYaw = damp(this.strafeYaw, strafe, 8, dt);
-    // the visual heading trails the (snappy) gameplay yaw: hips lag, the head leads (walking clips)
+    // the visual heading trails the (snappy) gameplay yaw: hips lag, the head leads (walking clips).
+    // A standing 180° flip peaks at ~63° of lag and is half way round in 0.1 s (it trailed by up to
+    // 76° and took ~0.27 s to settle: it read a touch slow behind the instant aim)
     const dy = wrapAngle(fin(pl.yaw) - this.visYaw);
-    this.visYawV += (dy * 420 - this.visYawV * 2 * Math.sqrt(420)) * dt;
+    this.visYawV += (dy * TURN_K - this.visYawV * 2 * Math.sqrt(TURN_K)) * dt;
     this.visYaw = wrapAngle(this.visYaw + clamp(this.visYawV, -30, 30) * dt);
     if (Math.abs(wrapAngle(fin(pl.yaw) - this.visYaw)) > TURN_LAG_MAX) this.visYaw = wrapAngle(fin(pl.yaw) - Math.sign(dy) * TURN_LAG_MAX);
     this.turnLag = clamp(wrapAngle(this.visYaw - fin(pl.yaw)), -TURN_LAG_MAX, TURN_LAG_MAX);
@@ -2455,10 +2466,11 @@ export class HeroAnimator {
       S.prev.copy(_w);
       _v.copy(S.vel).applyQuaternion(_qInv);
       _d.set(C.tip[0], C.tip[1], C.tip[2]).normalize();
-      // desired tip displacement: against the motion + sag relative to upright
-      const wx = -_v.x * 0.03 + _g.x * 0.25;
+      // desired tip displacement: against the motion + sag relative to upright. The along-ground
+      // drag blows the locks back ~20° at the sprint (the sheet's), ~13° at the run
+      const wx = -_v.x * HAIR_DRAG + _g.x * 0.25;
       const wy = -_v.y * 0.03 + (_g.y + 1) * 0.25;
-      const wz = -_v.z * 0.03 + _g.z * 0.25;
+      const wz = -_v.z * HAIR_DRAG + _g.z * 0.25;
       // rotation vector moving the tip by w: d × w
       _axis.set(_d.y * wz - _d.z * wy, _d.z * wx - _d.x * wz, _d.x * wy - _d.y * wx);
       // a breeze through the locks (stronger standing still): two slow sways per cluster
