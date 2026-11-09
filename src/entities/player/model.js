@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { createSurfaceGlyphMaterial, FLAG } from '../../render/materials.js';
 import { limbGeometry, ellipsoidGeometry, hornGeometry, planarGUV } from '../../render/glyphGeometry.js';
 
-// The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md): a slim
-// 1.80 m anime swordsman, 7.8 heads tall. A small head under a messy black mop whose heavy fringe
+// The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md): an
+// athletic, broad-shouldered 1.80 m anime swordsman (BODY, round 3), 7.8 heads tall. A small head
+// under a messy black mop whose heavy fringe
 // falls over the eyes; a tall flared stand collar up to the jaw; a long OPEN black greatcoat over
 // a buttoned black shirt, a belt stack at the natural waist, the skirt flaring into an A-line of
 // 22 claw-like torn strips with grey-lavender edges; a stepped, spiked pauldron on the RIGHT
@@ -32,10 +33,15 @@ import { limbGeometry, ellipsoidGeometry, hornGeometry, planarGUV } from '../../
 export const DIM = {
   pivot: 1.04, // body pivot height with straight legs (the idle stands 0.015 above it)
   pelvis: [0, -0.1, 0],
-  hip: [0.09, -0.05, 0],
+  hip: [0.1, -0.05, 0], // hip joints ±0.1 (round 3: 0.09; room for the thicker thighs)
   spine: [0, 0.08, 0],
   chest: [0, 0.19, 0],
-  shoulder: [0.17, 0.215, 0], // shoulder joints ±0.17 (deltoid to deltoid 0.44 m)
+  // shoulder joints ±0.21 (round 3: 0.17), deltoid to deltoid ≈ 0.62 m: the broad shoulders
+  shoulder: [0.21, 0.215, 0],
+  // the point the SWORD hand's pose targets are offsets from: where the shoulder joint was before
+  // round 3 widened it, so every sword-hand target the arm can reach (and with it every attack's
+  // hit segment) is unchanged by the broader frame (anim.js _handTarget, rig.arms.R.anchor)
+  gripShoulder: [0.17, 0.215, 0],
   neck: [0, 0.31, 0], // head (neck-base) joint, 1.535 m
   skull: [0, 0.14, 0.005], // skull centre above the head joint (1.675 m; chin 1.57, crown 1.775)
   upperArm: 0.28,
@@ -44,7 +50,7 @@ export const DIM = {
   shin: 0.42,
   ankle: 0.07, // ankle height with the foot flat on the ground
   coatY: 0.18, // coat-skirt anchor above the pelvis joint (1.135 m: tucked under the belt stack)
-  coatR: 0.139, // skirt anchor half-width at the sides (the depth is 0.69 of it: inside the shell)
+  coatR: 0.163, // skirt anchor half-width at the sides (the depth is 0.69 of it: inside the shell)
   // the sword (sword space: origin = grip centre, blade along +Z)
   gripBack: 0.08, // grip runs from −gripBack …
   guard: 0.1, // … to the crossguard
@@ -59,6 +65,38 @@ export const DIM = {
   drawnTip: 1.45,
   bladeBase: 0.16, // hit segment along +Z (hilt side) …
   bladeTip: 1.5, // … to here (+ REACH.tipExt 0.4): gameplay reach, independent of the drawn steel
+};
+
+/**
+ * Girth (round 3; owner: "the character is too lanky / skinny"): an athletic, broad-shouldered
+ * swordsman on the same bones. Bone lengths drive the IK, the foot planner and the blade's hit
+ * segment, so the mass comes from mesh radii and widths: a deeper, wider chest and back over a V to a
+ * fuller waist, thick upper arms and forearms, heavy thighs and calves in bigger boots. Metres; the
+ * meshes below are built from these, anim.js sizes the blade's leg clearance, the coat's leg push and
+ * the ground-clamp spheres from them, and the look-dev tools measure blade-in-body against them.
+ * Was (round 2): chest 0.40 × 0.21 m, waist 0.27, hips 0.30, upper arm r 0.064, forearm 0.06, thigh
+ * 0.076 → 0.056, boot 0.058 → 0.045.
+ */
+export const BODY = {
+  // torso shell (the coat over the chest): rings at world idle height y, half-width rx, half-depth
+  // rz, centre offset cz (the chest pushes forward), the open coat front's half-chord `gap`
+  shell: [
+    { y: 1.09, rx: 0.17, rz: 0.12, gap: 0.09 },
+    { y: 1.21, rx: 0.157, rz: 0.113, gap: 0.095 },
+    { y: 1.3, rx: 0.198, rz: 0.128, cz: 0.01, gap: 0.068 },
+    { y: 1.37, rx: 0.232, rz: 0.14, cz: 0.017, gap: 0.048 },
+    { y: 1.43, rx: 0.25, rz: 0.134, cz: 0.012, gap: 0.034 },
+    { y: 1.475, rx: 0.215, rz: 0.114, cz: 0.003, gap: 0.025 },
+    { y: 1.505, rx: 0.115, rz: 0.09, gap: 0.017 },
+  ],
+  hips: { c: [0, 0, -0.005], r: [0.172, 0.127, 0.125] }, // pelvis ellipsoid (pelvis space, x y z)
+  head: { c: [0, 0.154, -0.007], r: [0.12, 0.132, 0.126] }, // the hair cap round the skull (head space)
+  deltoid: [0.1, 0.088, 0.096], // shoulder cap on each upper arm (x out, y, z)
+  upperArm: [0.088, 0.074], // sleeve radius at the shoulder / the elbow
+  foreArm: [0.076, 0.062], // vambrace / bracer at the elbow / the wrist
+  thigh: [0.098, 0.07, 0.014], // r at the hip, at the knee, mid bulge
+  shin: [0.074, 0.056, 0.01], // the boot: r at the knee, at the ankle, calf bulge
+  foot: { c: [0, -0.02, 0.054], r: [0.062, 0.05, 0.152] }, // boot foot ellipsoid (foot space)
 };
 
 /** Idle-stance reference heights (m) of the joints the meshes hang on. */
@@ -80,15 +118,18 @@ const REST = (() => {
 // animator's outward pull, see COAT_FLARE in anim.js: 0.3 ≈ 17°; 0.62 ≈ 32° on the sides).
 // (round 2: the front panels hang nearly straight, the coat's open front edges; the side and back
 // drapes are wider at the hem with soft folds, so the flare reads as cloth, not planks)
+// (round 3: the anchor ring follows the fuller hips, DIM.coatR 0.139 → 0.163, and the panel tops
+// widen with it (×1.17) so they keep their overlaps; the hems only ×1.07, so the skirt's A-line does
+// not outgrow the broader shoulders)
 export const COAT_PANELS = [
-  { az: 0.75, w: [0.14, 0.22, 0.3], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.22, folds: 1 }, // front-left
-  { az: -0.75, w: [0.14, 0.22, 0.3], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.22, folds: 1 }, // front-right
-  { az: 1.6, w: [0.21, 0.38, 0.6], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.5 }, // left
-  { az: -1.6, w: [0.21, 0.38, 0.6], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.5 }, // right
-  { az: 2.55, w: [0.2, 0.36, 0.55], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
-  { az: -2.55, w: [0.2, 0.36, 0.55], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
+  { az: 0.75, w: [0.164, 0.25, 0.32], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.22, folds: 1 }, // front-left
+  { az: -0.75, w: [0.164, 0.25, 0.32], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.22, folds: 1 }, // front-right
+  { az: 1.6, w: [0.246, 0.43, 0.64], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.5 }, // left
+  { az: -1.6, w: [0.246, 0.43, 0.64], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.5 }, // right
+  { az: 2.55, w: [0.234, 0.4, 0.59], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
+  { az: -2.55, w: [0.234, 0.4, 0.59], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
   // the front flap: hangs between the legs from 1.05 m to a point at 0.55 m (seen in wide stances)
-  { az: 0, w: [0.12, 0.12, 0.11], len: [0.28, 0.22], strips: [], fork: [], out: 0, flap: true, y: -0.085, r: 0.112 },
+  { az: 0, w: [0.14, 0.14, 0.125], len: [0.28, 0.22], strips: [], fork: [], out: 0, flap: true, y: -0.085, r: 0.131 },
 ];
 
 /** Hair clusters: each is one merged mesh on a spring joint (pivot in head space). `tip` is the
@@ -652,10 +693,11 @@ function hairCap() {
 function collarGeometry() {
   const y0 = 1.505 - REST.chest, yB = 1.61 - REST.chest, yF = 1.635 - REST.chest;
   return gridGeometry(24, 5, (s, t, o) => {
-    const gap = lerp(0.014, 0.078, Math.pow(t, 1.4));
+    const gap = lerp(0.015, 0.08, Math.pow(t, 1.4));
     const fl = Math.pow(t, 0.8);
     const roll = 0.015 * Math.pow(Math.max(0, (t - 0.65) / 0.35), 2);
-    const rx = lerp(0.078, 0.12, fl) + roll, rz = lerp(0.072, 0.096, fl) + roll * 0.5;
+    // (round 3: ~11 % bigger round the thicker neck and the broader shoulders)
+    const rx = lerp(0.088, 0.132, fl) + roll, rz = lerp(0.081, 0.106, fl) + roll * 0.5;
     const a0 = Math.asin(gap / rx);
     const a = a0 + s * (Math.PI * 2 - 2 * a0);
     const front = Math.pow((1 + Math.cos(a)) / 2, 2);
@@ -695,23 +737,12 @@ const LEATHER_LEVELS = [":'", "=:", ":=", "=#="];
  */
 export const GLYPH_SCALE = { refDist: 12, min: 0.15, farZoom: 0.45 };
 
-/**
- * The sword's depth pull at the game camera (m, `pull` parts: the blade, its point, the gem): seen
- * from the 36 m camera his low guard puts the steel just behind his own legs when he faces away,
- * and the grass covers its point; drawn this much nearer (along each view ray: the same pixels),
- * it shows through both. Fades in from `near` to `far` m of view distance (none in close-ups).
- */
-export const BLADE_PULL = { m: 0.65, near: 10, far: 24 };
-
 /** Set every hero material's glyph cell (and glyph zoom) for a camera `dist` metres away. Returns
  *  the scale k (1 = the game camera). No allocation. */
 export function setHeroGlyphScale(mats, dist) {
   const k = Math.min(1, Math.max(GLYPH_SCALE.min, (Number.isFinite(dist) ? dist : GLYPH_SCALE.refDist) / GLYPH_SCALE.refDist));
   const near = (1 - k) / (1 - GLYPH_SCALE.min); // 0 at the game camera … 1 in a close-up
-  const pf = Math.min(1, Math.max(0, ((Number.isFinite(dist) ? dist : 0) - BLADE_PULL.near) / (BLADE_PULL.far - BLADE_PULL.near)));
-  const pull = BLADE_PULL.m * pf * pf * (3 - 2 * pf);
   for (const m of mats) {
-    if (m.uniforms.uArtPull) m.uniforms.uArtPull.value = pull;
     const ud = m.userData;
     const b = ud?.cell;
     if (!b) continue;
@@ -802,9 +833,10 @@ export const ART_GAIN = 1.1;
 // reference scaled down is a DARK figure (black coat, dark pants and hair) with bright silver
 // armour, pale lavender tails, a pale face and the cyan blade, so cloth drops and metal rises.
 // `farLine` = how much light its inner lines keep there (0: a dark seam, the cloth; 1: the armour).
-// `solid` = unbroken ink lines (the blade, the gem); `pull` = drawn nearer at the game camera
-// (BLADE_PULL); `open` = its letters stay lit beside an edge (no dark channel or depth-step gap:
-// the face, a small pale patch walled in by the fringe and the collar, would print dim).
+// `solid` = unbroken ink lines (the blade, the gem); `open` = its letters stay lit beside an edge (no
+// dark channel or depth-step gap: the face, a small pale patch walled in by the fringe and the
+// collar, would print dim). The blade is depth-tested like every other part (round 3 removed the
+// game-camera depth pull: the sword showed through his back and legs).
 export const HERO_INK = {
   skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 2.2, farFill: 0.8, open: true },
   eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
@@ -831,9 +863,9 @@ export const HERO_INK = {
   trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.7, farFill: 1.2 },
   // the reference's blade: dark steel between two glowing cyan edges and a bright ridge line (the
   // fill letters stay dim up close; far away the whole blade reads as one bright cyan line)
-  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
-  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
-  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1, pull: true },
+  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0 },
+  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0 },
+  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1 },
   flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
 
@@ -1020,64 +1052,74 @@ export function buildHero(U) {
   const pelvis = joint(body, ...DIM.pelvis);
 
   // ---------------------------------------------------------------- hips, hip strap, drop strap
-  mesh(pelvis, orient.up(ellipsoidGeometry(0.15, 0.11, 0.12)), M.pants, 0, 0.0, -0.005);
+  {
+    const [hx, hy, hz] = BODY.hips.r;
+    mesh(pelvis, orient.up(ellipsoidGeometry(hx, hz, hy)), M.pants, ...BODY.hips.c);
+  }
   {
     // H1: diagonal hip strap (0.034 m), left hip (1.13 m) down across the front to the right thigh
-    const h1 = mesh(pelvis, bandGeometry(0.178, 0.134, 0.034, 28), M.leather, 0.012, yPe(1.04), 0.004);
+    const h1 = mesh(pelvis, bandGeometry(0.196, 0.148, 0.034, 28), M.leather, 0.012, yPe(1.04), 0.004);
     h1.rotation.z = 0.55;
     // D1: centre drop strap from the second belt to 0.93 m, a D-ring and a pointed metal tip
-    mesh(pelvis, strapGeometry([0, yPe(1.13), 0.124], [0, yPe(0.93), 0.116], 0.028, 0.008, [1, 0, 0]), M.leather);
+    mesh(pelvis, strapGeometry([0, yPe(1.13), 0.137], [0, yPe(0.93), 0.129], 0.028, 0.008, [1, 0, 0]), M.leather);
     mesh(pelvis, mergeGeometries([
-      boxGeometry(0.034, 0.026, 0.012, 0, yPe(1.07), 0.131),
-      kiteGeometry(0.016, 0.024, 0.007, { yPos: 0.4 }).translate(0, yPe(0.915), 0.118),
-      boxGeometry(0.05, 0.04, 0.014, -0.1, yPe(1.0), 0.108, 0, -0.5, -0.5), // H1 buckle, right thigh
+      boxGeometry(0.034, 0.026, 0.012, 0, yPe(1.07), 0.144),
+      kiteGeometry(0.016, 0.024, 0.007, { yPos: 0.4 }).translate(0, yPe(0.915), 0.131),
+      boxGeometry(0.05, 0.04, 0.014, -0.11, yPe(1.0), 0.12, 0, -0.5, -0.5), // H1 buckle, right thigh
     ]), M.trim);
   }
 
-  // ---------------------------------------------------------------- torso: one slim V-shell
+  // ---------------------------------------------------------------- torso: one V-shell
   const spine = joint(pelvis, ...DIM.spine);
-  // open coat: hips 0.32 → waist 0.27 (1.21 m) → chest 0.36 → shoulders, the front open from the
-  // collar (0.04 m) to the belt (0.17 m)
-  const SHELL = [
-    { y: 1.09, rx: 0.15, rz: 0.104, gap: 0.08 },
-    { y: 1.21, rx: 0.136, rz: 0.096, gap: 0.085 },
-    { y: 1.3, rx: 0.162, rz: 0.104, cz: 0.004, gap: 0.06 },
-    { y: 1.37, rx: 0.183, rz: 0.11, cz: 0.008, gap: 0.042 },
-    { y: 1.43, rx: 0.2, rz: 0.106, cz: 0.006, gap: 0.03 },
-    { y: 1.475, rx: 0.17, rz: 0.092, gap: 0.022 },
-    { y: 1.5, rx: 0.095, rz: 0.078, gap: 0.016 },
-  ];
+  // open coat (BODY.shell): hips 0.33 → waist 0.30 (1.21 m) → chest 0.43 → shoulders 0.46, the
+  // front open from the collar (0.03 m) to the belt (0.19 m)
+  const SHELL = BODY.shell;
+  const shellAt = (h) => {
+    let k = 0;
+    while (k < SHELL.length - 2 && SHELL[k + 1].y < h) k++;
+    const A = SHELL[k], B = SHELL[k + 1], u = Math.min(1, Math.max(0, (h - A.y) / (B.y - A.y)));
+    return { rx: lerp(A.rx, B.rx, u), rz: lerp(A.rz, B.rz, u), cz: lerp(A.cz ?? 0, B.cz ?? 0, u), gap: lerp(A.gap, B.gap, u) };
+  };
+  /** z of the coat shell's front (s = 1) / back (s = −1) surface at height h, x across. */
+  const shellZ = (h, x, s = 1) => {
+    const R = shellAt(h);
+    return s * Math.sqrt(Math.max(0, 1 - (x / R.rx) ** 2)) * R.rz + R.cz;
+  };
   mesh(spine, shellGeometry(SHELL.map((r) => ({ ...r, y: ySp(r.y) })), { sub: 3, cols: 28 }), M.coat);
-  // the black shirt in the open front, buttons down the centre
-  mesh(spine, shellGeometry([
-    { y: ySp(1.17), rx: 0.135, rz: 0.091 },
-    { y: ySp(1.3), rx: 0.152, rz: 0.098, cz: 0.004 },
-    { y: ySp(1.43), rx: 0.17, rz: 0.098, cz: 0.004 },
-    { y: ySp(1.5), rx: 0.08, rz: 0.075 },
-  ], { span: 1.0, cols: 8, sub: 2 }), M.shirt);
+  // the black shirt in the open front (just inside the coat shell), buttons down the centre
+  const SHIRT = [1.17, 1.3, 1.43, 1.5].map((h) => {
+    const R = shellAt(h);
+    return { h, rx: R.rx * 0.93, rz: R.rz - 0.008, cz: R.cz };
+  });
+  mesh(spine, shellGeometry(SHIRT.map((r) => ({ y: ySp(r.h), rx: r.rx, rz: r.rz, cz: r.cz })), { span: 1.0, cols: 8, sub: 2 }), M.shirt);
+  // the main belt W1 (1.21 m) and W2 (1.15 m) radii: 0.012 m off the coat
+  const W1 = [shellAt(1.21).rx + 0.012, shellAt(1.21).rz + 0.012], W2 = [shellAt(1.15).rx + 0.016, shellAt(1.15).rz + 0.015];
   {
     const bt = [];
     for (let i = 0; i < 7; i++) {
       const h = 1.255 + i * 0.03;
-      const t = (h - 1.17) / 0.26;
-      bt.push(ellipsoidGeometry(0.007, 0.007, 0.004, { widthSegs: 5, heightSegs: 3 }).translate(0, ySp(h), lerp(0.093, 0.101, Math.min(1, t)) + 0.006));
+      // on the shirt's front (its rings are linear between SHIRT heights)
+      let k = 0;
+      while (k < SHIRT.length - 2 && SHIRT[k + 1].h < h) k++;
+      const A = SHIRT[k], B = SHIRT[k + 1], u = Math.min(1, Math.max(0, (h - A.h) / (B.h - A.h)));
+      bt.push(ellipsoidGeometry(0.007, 0.007, 0.004, { widthSegs: 5, heightSegs: 3 }).translate(0, ySp(h), lerp(A.rz + A.cz, B.rz + B.cz, u) + 0.006));
     }
     // belt hardware: W1 buckle (3 cm left of centre), W2 buckle (front-right), C1 buckle, rivets
-    bt.push(boxGeometry(0.05, 0.04, 0.014, 0.03, ySp(1.21), 0.112));
-    bt.push(boxGeometry(0.046, 0.036, 0.014, -0.045, ySp(1.152), 0.118, 0, 0, 0.14));
-    bt.push(boxGeometry(0.036, 0.03, 0.012, -0.03, ySp(1.42), 0.122, 0, 0, -0.75));
-    for (const [x, h] of [[0.095, 1.21], [-0.085, 1.21], [0.125, 1.21], [-0.12, 1.21]]) {
-      bt.push(ellipsoidGeometry(0.008, 0.008, 0.006, { widthSegs: 5, heightSegs: 3 }).translate(x, ySp(h), Math.sqrt(Math.max(0, 1 - (x / 0.149) ** 2)) * 0.108 + 0.003));
+    bt.push(boxGeometry(0.05, 0.04, 0.014, 0.03, ySp(1.21), W1[1] + 0.004));
+    bt.push(boxGeometry(0.046, 0.036, 0.014, -0.045, ySp(1.152), W2[1] + 0.003, 0, 0, 0.14));
+    bt.push(boxGeometry(0.036, 0.03, 0.012, -0.034, ySp(1.42), shellZ(1.42, -0.034) + 0.016, 0, 0, -0.75));
+    for (const [x, h] of [[0.105, 1.21], [-0.095, 1.21], [0.138, 1.21], [-0.132, 1.21]]) {
+      bt.push(ellipsoidGeometry(0.008, 0.008, 0.006, { widthSegs: 5, heightSegs: 3 }).translate(x, ySp(h), Math.sqrt(Math.max(0, 1 - (x / W1[0]) ** 2)) * W1[1] + 0.003));
     }
     mesh(spine, mergeGeometries(bt), M.trim);
   }
   // W1 main belt at the natural waist, W2 sloping 1.17 (left) → 1.13 (right): flat leather bands
   // 0.045 m wide standing 0.012 m off the coat — the bright band between the torso and the skirt
-  mesh(spine, bandGeometry(0.149, 0.108, 0.048, 32), M.leather, 0, ySp(1.21), 0.0);
-  mesh(spine, bandGeometry(0.157, 0.115, 0.04, 32), M.leather, 0, ySp(1.15), 0.0).rotation.z = 0.14;
+  mesh(spine, bandGeometry(W1[0], W1[1], 0.048, 32), M.leather, 0, ySp(1.21), 0.0);
+  mesh(spine, bandGeometry(W2[0], W2[1], 0.04, 32), M.leather, 0, ySp(1.15), 0.0).rotation.z = 0.14;
   // C1: chest harness (0.035 m) from the right collarbone (1.47 m) across the shirt to the left ribs
   {
-    const c1 = mesh(spine, bandGeometry(0.218, 0.124, 0.035, 32), M.leather, 0.035, ySp(1.375), 0.004);
+    const c1 = mesh(spine, bandGeometry(0.25, 0.145, 0.035, 32), M.leather, 0.04, ySp(1.375), 0.008);
     c1.rotation.z = -0.76;
   }
   // lapels: narrow facings folded out from the collar to ~1.37 m, grey-violet piping along their
@@ -1086,22 +1128,16 @@ export function buildHero(U) {
     const lp = [], pp = [];
     const lapel = (s, u, t, o) => {
       const h = lerp(1.485, 1.365, t);
-      const w = lerp(0.03, 0.055, Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.6 + t * 0.4);
-      const xi = s * lerp(0.022, 0.055, t);
+      const w = lerp(0.034, 0.062, Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.6 + t * 0.4);
+      const xi = s * lerp(0.024, 0.06, t);
       const x = xi + s * u * w;
-      const rx = lerp(0.095, 0.183, Math.min(1, (1.5 - h) / 0.13));
-      const z = Math.sqrt(Math.max(0, 1 - (x / rx) ** 2)) * lerp(0.085, 0.112, t) + 0.012 + 0.008 * u;
+      const R = shellAt(h);
+      const z = Math.sqrt(Math.max(0, 1 - (x / R.rx) ** 2)) * R.rz + R.cz + 0.01 + 0.008 * u;
       o[0] = x;
       o[1] = ySp(h);
       o[2] = z;
       o[3] = x;
       o[4] = ySp(h);
-    };
-    const shellAt = (h) => {
-      let k = 0;
-      while (k < SHELL.length - 2 && SHELL[k + 1].y < h) k++;
-      const A = SHELL[k], B = SHELL[k + 1], u = Math.min(1, Math.max(0, (h - A.y) / (B.y - A.y)));
-      return { rx: lerp(A.rx, B.rx, u), rz: lerp(A.rz, B.rz, u), cz: lerp(A.cz ?? 0, B.cz ?? 0, u), gap: lerp(A.gap, B.gap, u) };
     };
     for (const s of [1, -1]) {
       lp.push(gridGeometry(1, 3, (u, t, o) => lapel(s, u, t, o), s > 0));
@@ -1125,7 +1161,7 @@ export function buildHero(U) {
       }, s < 0));
     }
     // the back emblem: a dark grey-violet spearhead diamond between the shoulder blades
-    lp.push(kiteGeometry(0.03, 0.05, 0.006, { yPos: 1.2 }).translate(0, ySp(1.385), -0.108));
+    lp.push(kiteGeometry(0.034, 0.056, 0.006, { yPos: 1.2 }).translate(0, ySp(1.385), shellZ(1.385, 0, -1) - 0.0065));
     mesh(spine, mergeGeometries(lp), M.facing);
     mesh(spine, mergeGeometries(pp), M.piping);
   }
@@ -1136,7 +1172,7 @@ export function buildHero(U) {
     const cg = collarGeometry();
     mesh(chest, cg, M.collar);
     mesh(chest, cg, M.collarIn);
-    mesh(chest, bandGeometry(0.05, 0.047, 0.032, 16), M.shirt, 0, yCh(1.52), 0.01);
+    mesh(chest, bandGeometry(0.057, 0.054, 0.032, 16), M.shirt, 0, yCh(1.52), 0.01);
   }
 
   // ---------------------------------------------------------------- pauldron (RIGHT only)
@@ -1149,19 +1185,21 @@ export function buildHero(U) {
     // the reference's pauldron is a big layered mass (≈ 0.3 m across, three claw-like blades towering
     // over the shoulder): P1 a wide shallow cap, P2 a broad band over the deltoid, both standing off
     // the sleeve so black gaps and ink lines show between the layers
-    const p1 = { r: [0.105, 0.042, 0.108], el: -0.35, at: [-0.012, 0.064, 0], tilt: 0.34 };
+    // (round 3: ×1.24 round the bigger deltoid, the claws ×1.12 long: it sits on the broad shoulder)
+    const S = 1.24, SL = 1.12;
+    const p1 = { r: [0.105 * S, 0.042 * S, 0.108 * S], el: -0.35, at: [-0.012 * S, 0.064 * S, 0], tilt: 0.34 };
     const pg = [
       place(domeShell(...p1.r, p1.el), ...p1.at, 0, 0, p1.tilt),
-      sub(place(arcPlate(0.04, -0.045, 0.1, 0.122, -Math.PI / 2, 1.6, 12), -0.014, 0, 0.004, 0, 0, 0.14), 1),
+      sub(place(arcPlate(0.04 * S, -0.045 * S, 0.1 * S, 0.122 * S, -Math.PI / 2, 1.6, 12), -0.014 * S, 0, 0.004, 0, 0, 0.14), 1),
     ];
     const tg = [
       place(domeRim(...p1.r, p1.el, 0.012, 0.004), ...p1.at, 0, 0, p1.tilt),
-      place(arcPlate(-0.031, -0.046, 0.1195, 0.1235, -Math.PI / 2, 1.6, 12), -0.014, 0, 0.004, 0, 0, 0.14),
+      place(arcPlate(-0.031 * S, -0.046 * S, 0.1195 * S, 0.1235 * S, -Math.PI / 2, 1.6, 12), -0.014 * S, 0, 0.004, 0, 0, 0.14),
     ];
     // broad flattened claw blades (length ≈ 3–4× width, curving back): S1 inner by the collar, S2
     // the tallest tilted out, S3 and S4 outward-up (they make the top-down star), S5 the fang down
     // over the chest, S6 a short spur off the band's outer edge
-    const blade = (L, w, base, dir, bend, curl = 0.17) => orientTo(clumpGeometry(L, w, 0.006, { curl, taper: 1, cols: 8, rows: 4 }), base, dir, bend);
+    const blade = (L, w, base, dir, bend, curl = 0.17) => orientTo(clumpGeometry(L * SL, w * SL, 0.006, { curl, taper: 1, cols: 8, rows: 4 }), base.map((c) => c * S), dir, bend);
     const sg = [
       blade(0.11, 0.027, [0.03, 0.096, -0.022], [0.08, 1, -0.32], [0, 0, -1]), // S1 inner
       sub(blade(0.21, 0.038, [-0.018, 0.104, -0.024], [-0.55, 0.78, -0.3], [0, 0.25, -1], 0.22), 1), // S2 tallest
@@ -1179,7 +1217,7 @@ export function buildHero(U) {
   const head = joint(chest, ...DIM.neck);
   {
     const [sx, sy, sz] = DIM.skull;
-    mesh(head, limb({ length: 0.12, r0: 0.036, r1: 0.034, radial: 8, rings: 2, capSegs: 1 }), M.skin, 0, 0.1, 0.0);
+    mesh(head, limb({ length: 0.12, r0: 0.043, r1: 0.04, radial: 8, rings: 2, capSegs: 1 }), M.skin, 0, 0.1, 0.0);
     mesh(head, orient.up(ellipsoidGeometry(0.078, 0.09, 0.1)), M.skin, sx, sy, sz);
     // slim V-jaw with a pointed chin (chin at ~1.57 m)
     const jaw = ellipsoidGeometry(0.05, 0.04, 0.056, { widthSegs: 10, heightSegs: 6 });
@@ -1211,70 +1249,79 @@ export function buildHero(U) {
   // flattened wedge (pauldron / elbow / knee points): base 2w wide, curving toward `bend`
   const wedge = (L, w, base, dir, bend, curl = 0.17) => orientTo(clumpGeometry(L, w, 0.006, { curl, taper: 1, cols: 8, rows: 3 }), base, dir, bend);
   const arms = {};
+  const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm;
   for (const side of [-1, 1]) {
     const R = side < 0;
     const out = side; // the outer side of this arm is x = side (right arm: −X)
     const upper = joint(chest, side * DIM.shoulder[0], DIM.shoulder[1], DIM.shoulder[2]);
     // sleeves: sub-id 1 against the torso shell's 0, so the arm is outlined where it meets the body
-    // (round 2: fuller coat sleeves, the reference's arms are not thin tubes)
-    mesh(upper, sub(limb({ length: DIM.upperArm, r0: 0.064, r1: 0.056 }), 1), M.coat);
+    // (round 2: fuller coat sleeves, the reference's arms are not thin tubes; round 3: thick upper
+    // arms with a rounded deltoid cap, the broad shoulder line)
+    mesh(upper, mergeGeometries([
+      sub(limb({ length: DIM.upperArm, r0: ua0, r1: ua1, bulge: 0.004 }), 1),
+      sub(ellipsoidGeometry(...BODY.deltoid, { widthSegs: 12, heightSegs: 8 }).translate(out * 0.008, -0.02, 0), 1),
+    ]), M.coat);
     const fore = joint(upper, 0, -DIM.upperArm, 0);
-    mesh(fore, sub(limb({ length: 0.09, r0: 0.056, r1: 0.054 }), 1), M.coat);
+    mesh(fore, sub(limb({ length: 0.09, r0: ua1, r1: ua1 - 0.003 }), 1), M.coat);
     if (R) {
       // P3 / P4: lower pauldron lames riding on the arm itself, standing 0.03 m off the sleeve,
       // a silver bevel along each lower edge and a small down-back blade each
+      const o = ua0 - 0.064; // round 3: everything on the sleeve stands this much further out
       mesh(upper, mergeGeometries([
-        sub(arcPlate(-0.045, -0.125, 0.1, 0.096, -Math.PI / 2, 1.95), 0),
-        sub(arcPlate(-0.11, -0.185, 0.094, 0.088, -Math.PI / 2, 1.85), 1),
+        sub(arcPlate(-0.045, -0.125, 0.1 + o, 0.096 + o, -Math.PI / 2, 1.95), 0),
+        sub(arcPlate(-0.11, -0.185, 0.094 + o, 0.088 + o, -Math.PI / 2, 1.85), 1),
       ]), M.armor);
       mesh(upper, mergeGeometries([
-        arcPlate(-0.113, -0.126, 0.0975, 0.0975, -Math.PI / 2, 1.95),
-        arcPlate(-0.173, -0.186, 0.0895, 0.0895, -Math.PI / 2, 1.85),
+        arcPlate(-0.113, -0.126, 0.0975 + o, 0.0975 + o, -Math.PI / 2, 1.95),
+        arcPlate(-0.173, -0.186, 0.0895 + o, 0.0895 + o, -Math.PI / 2, 1.85),
       ]), M.bevel);
       mesh(upper, mergeGeometries([
-        wedge(0.085, 0.02, [-0.095, -0.11, -0.03], [-0.6, -0.6, -0.5], [0, -1, 0], 0.15),
-        wedge(0.07, 0.017, [-0.088, -0.17, -0.03], [-0.6, -0.65, -0.45], [0, -1, 0], 0.15),
+        wedge(0.09, 0.022, [-0.095 - o, -0.11, -0.03], [-0.6, -0.6, -0.5], [0, -1, 0], 0.15),
+        wedge(0.075, 0.018, [-0.088 - o, -0.17, -0.03], [-0.6, -0.65, -0.45], [0, -1, 0], 0.15),
       ]), M.spike);
       // A1 strap just below the pauldron
-      mesh(upper, bandGeometry(0.065, 0.065, 0.02, 12), M.leather, 0, -0.19, 0);
+      mesh(upper, bandGeometry(ua1 + 0.011, ua1 + 0.011, 0.02, 12), M.leather, 0, -0.19, 0);
       // plate vambrace: 3 overlapping lames with silver bevels, an elbow point and a wrist barb
+      const v = fa0 - 0.06; // round 3: the thicker forearm
       mesh(fore, mergeGeometries([
-        limb({ length: 0.085, r0: 0.06, r1: 0.056, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.035, 0),
-        sub(limb({ length: 0.08, r0: 0.057, r1: 0.053, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.105, 0), 1),
-        limb({ length: 0.075, r0: 0.054, r1: 0.05, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.17, 0),
+        limb({ length: 0.085, r0: 0.06 + v, r1: 0.056 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.035, 0),
+        sub(limb({ length: 0.08, r0: 0.057 + v, r1: 0.053 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.105, 0), 1),
+        limb({ length: 0.075, r0: 0.054 + v, r1: 0.05 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.17, 0),
         // the articulated gauntlet over the grip
-        sub(ellipsoidGeometry(0.043, 0.042, 0.06, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm - 0.008, 0.006), 1),
+        sub(ellipsoidGeometry(0.05, 0.048, 0.066, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm - 0.008, 0.006), 1),
       ]), M.armor);
       mesh(fore, mergeGeometries([
-        bandGeometry(0.0605, 0.0605, 0.01, 14).translate(0, -0.113, 0),
-        bandGeometry(0.0575, 0.0575, 0.01, 14).translate(0, -0.178, 0),
+        bandGeometry(0.0605 + v, 0.0605 + v, 0.01, 14).translate(0, -0.113, 0),
+        bandGeometry(0.0575 + v, 0.0575 + v, 0.01, 14).translate(0, -0.178, 0),
       ]), M.bevel);
       mesh(fore, mergeGeometries([
-        bandGeometry(0.054, 0.054, 0.016, 14).translate(0, -0.247, 0), // the gauntlet cuff ring
-        ellipsoidGeometry(0.03, 0.012, 0.04, { widthSegs: 8, heightSegs: 3 }).translate(0, -DIM.foreArm + 0.02, 0.035),
+        bandGeometry(0.054 + v, 0.054 + v, 0.016, 14).translate(0, -0.247, 0), // the gauntlet cuff ring
+        ellipsoidGeometry(0.035, 0.014, 0.046, { widthSegs: 8, heightSegs: 3 }).translate(0, -DIM.foreArm + 0.02, 0.042),
       ]), M.trim);
       mesh(fore, mergeGeometries([
-        wedge(0.065, 0.02, [out * 0.045, -0.04, -0.025], [out * 0.35, 1, -0.55], [0, 0, -1], 0.12), // elbow point
-        wedge(0.045, 0.014, [out * 0.05, -0.21, 0], [out, 0.25, 0], [0, 1, 0], 0.1), // wrist barb
+        wedge(0.07, 0.022, [out * (0.045 + v), -0.04, -0.025], [out * 0.35, 1, -0.55], [0, 0, -1], 0.12), // elbow point
+        wedge(0.05, 0.015, [out * (0.05 + v), -0.21, 0], [out, 0.25, 0], [0, 1, 0], 0.1), // wrist barb
       ]), M.spike);
     } else {
       // left: plain coat shoulder, A2 strap above the elbow, a leather bracer with two silver
       // bands, a silver cuff ring, a fingerless glove with skin fingertips
-      mesh(upper, bandGeometry(0.065, 0.065, 0.02, 12), M.leather, 0, -0.19, 0);
-      mesh(fore, limb({ length: 0.18, r0: 0.06, r1: 0.049, radial: 10, rings: 3 }), M.leather, 0, -0.05, 0);
+      mesh(upper, bandGeometry(ua1 + 0.011, ua1 + 0.011, 0.02, 12), M.leather, 0, -0.19, 0);
+      mesh(fore, limb({ length: 0.18, r0: fa0, r1: fa1, radial: 10, rings: 3 }), M.leather, 0, -0.05, 0);
       mesh(fore, mergeGeometries([
-        bandGeometry(0.0565, 0.0565, 0.012, 14).translate(0, -0.1, 0),
-        bandGeometry(0.0525, 0.0525, 0.012, 14).translate(0, -0.17, 0),
+        bandGeometry(fa0 - 0.0035, fa0 - 0.0035, 0.012, 14).translate(0, -0.1, 0),
+        bandGeometry(fa1 + 0.0035, fa1 + 0.0035, 0.012, 14).translate(0, -0.17, 0),
       ]), M.bevel);
-      mesh(fore, bandGeometry(0.051, 0.051, 0.025, 14).translate(0, -0.236, 0), M.trim);
-      mesh(fore, wedge(0.045, 0.016, [out * 0.045, -0.05, -0.02], [out * 0.3, 1, -0.5], [0, 0, -1], 0.12), M.spike);
-      mesh(fore, ellipsoidGeometry(0.04, 0.038, 0.055, { widthSegs: 10, heightSegs: 6 }), M.pants, 0, -DIM.foreArm - 0.006, 0.004);
-      mesh(fore, ellipsoidGeometry(0.03, 0.014, 0.02, { widthSegs: 8, heightSegs: 4 }), M.skin, 0, -DIM.foreArm - 0.046, 0.022);
+      mesh(fore, bandGeometry(fa1 + 0.002, fa1 + 0.002, 0.025, 14).translate(0, -0.236, 0), M.trim);
+      mesh(fore, wedge(0.05, 0.018, [out * (fa0 - 0.015), -0.05, -0.02], [out * 0.3, 1, -0.5], [0, 0, -1], 0.12), M.spike);
+      mesh(fore, ellipsoidGeometry(0.047, 0.045, 0.062, { widthSegs: 10, heightSegs: 6 }), M.pants, 0, -DIM.foreArm - 0.006, 0.004);
+      mesh(fore, ellipsoidGeometry(0.035, 0.016, 0.023, { widthSegs: 8, heightSegs: 4 }), M.skin, 0, -DIM.foreArm - 0.05, 0.026);
     }
     arms[R ? 'R' : 'L'] = { upper, fore };
   }
+  // the sword hand's targets stay offsets from the round-2 shoulder (DIM.gripShoulder)
+  arms.R.anchor = new THREE.Vector3(-DIM.gripShoulder[0], DIM.gripShoulder[1], DIM.gripShoulder[2]);
   // flask, shown only while healing
-  const flask = mesh(arms.L.fore, orient.up(ellipsoidGeometry(0.036, 0.036, 0.055, { widthSegs: 10, heightSegs: 6 })), M.flask, 0, -DIM.foreArm - 0.03, 0.06);
+  const flask = mesh(arms.L.fore, orient.up(ellipsoidGeometry(0.036, 0.036, 0.055, { widthSegs: 10, heightSegs: 6 })), M.flask, 0, -DIM.foreArm - 0.03, 0.068);
   flask.visible = false;
 
   // sleeve streamers: torn strips on springs, from the back of the right upper arm under P4 (0.54
@@ -1282,8 +1329,8 @@ export function buildHero(U) {
   const streamers = [];
   {
     const defs = [
-      { arm: arms.R.upper, at: [-0.012, -0.12, -0.06], w: 0.075, len: [0.26, 0.28], seed: 501 },
-      { arm: arms.L.fore, at: [0.004, -0.012, -0.054], w: 0.068, len: [0.17, 0.18], seed: 507 },
+      { arm: arms.R.upper, at: [-0.014, -0.12, -(ua0 - 0.004)], w: 0.08, len: [0.26, 0.28], seed: 501 },
+      { arm: arms.L.fore, at: [0.004, -0.012, -(ua1 - 0.002)], w: 0.072, len: [0.17, 0.18], seed: 507 },
     ];
     for (const d of defs) {
       const s0 = joint(d.arm, ...d.at);
@@ -1296,31 +1343,36 @@ export function buildHero(U) {
 
   // ---------------------------------------------------------------- legs
   const legs = {};
+  const [th0, th1, thB] = BODY.thigh, [sh0, sh1, shB] = BODY.shin;
+  /** limb radius t (0 → 1) along a bulging taper */
+  const rAt = (r0, r1, bulge, t) => lerp(r0, r1, t) + bulge * Math.sin(Math.PI * t);
   for (const side of [-1, 1]) {
     const thigh = joint(pelvis, side * DIM.hip[0], DIM.hip[1], DIM.hip[2]);
-    mesh(thigh, limb({ length: DIM.thigh, r0: 0.076, r1: 0.056, bulge: 0.006 }), M.pants);
+    mesh(thigh, limb({ length: DIM.thigh, r0: th0, r1: th1, bulge: thB }), M.pants);
     // knee-guard straps
+    const ks = (y) => rAt(th0, th1, thB, (-y) / DIM.thigh) + 0.004;
     mesh(thigh, mergeGeometries([
-      bandGeometry(0.062, 0.062, 0.015, 12).translate(0, -DIM.thigh + 0.085, 0),
-      bandGeometry(0.06, 0.06, 0.015, 12).translate(0, -DIM.thigh + 0.035, 0),
+      bandGeometry(ks(-DIM.thigh + 0.085), ks(-DIM.thigh + 0.085), 0.015, 12).translate(0, -DIM.thigh + 0.085, 0),
+      bandGeometry(ks(-DIM.thigh + 0.035), ks(-DIM.thigh + 0.035), 0.015, 12).translate(0, -DIM.thigh + 0.035, 0),
     ]), M.leather);
     if (side < 0) {
       // D2: the sword hanger down the right thigh to 0.85 m, with a ring
-      mesh(thigh, strapGeometry([-0.072, 0.04, 0.035], [-0.076, -0.06, 0.025], 0.022, 0.008, [0, 0, 1]), M.leather);
-      mesh(thigh, ring(0.016, 0.016, 0.005, 8).rotateX(Math.PI / 2).translate(-0.076, -0.065, 0.02), M.trim);
+      mesh(thigh, strapGeometry([-(th0 - 0.006), 0.04, 0.04], [-(th0 - 0.002), -0.06, 0.03], 0.022, 0.008, [0, 0, 1]), M.leather);
+      mesh(thigh, ring(0.016, 0.016, 0.005, 8).rotateX(Math.PI / 2).translate(-(th0 - 0.002), -0.065, 0.025), M.trim);
     }
     const shin = joint(thigh, 0, -DIM.thigh, 0);
     // knee-high armoured boot: the shell, a cuff lame under the knee and one at the ankle, and the
     // reference's KITE GREAVE down the shin: a faceted diamond plate pointed at the knee and the
     // ankle with a raised centre ridge, silver bevels on its edges and the ridge (stacked ring lames
-    // read as a stack of tyres)
-    mesh(shin, limb({ length: DIM.shin - 0.02, r0: 0.058, r1: 0.045 }), M.armor, 0, -0.02, 0);
+    // read as a stack of tyres). Round 3: a heavier boot round a real calf (BODY.shin)
+    mesh(shin, limb({ length: DIM.shin - 0.02, r0: sh0, r1: sh1, bulge: shB }), M.armor, 0, -0.02, 0);
+    const b = sh0 - 0.058; // how much further out the boot's plates stand (round 3)
     mesh(shin, mergeGeometries([
-      sub(arcPlate(-0.045, -0.09, 0.067, 0.065, 0, 1.4, 6), 1),
-      sub(arcPlate(-0.33, -0.375, 0.054, 0.052, 0, 1.5, 6), 1),
+      sub(arcPlate(-0.045, -0.09, 0.067 + b, 0.065 + b, 0, 1.4, 6), 1),
+      sub(arcPlate(-0.33, -0.375, 0.054 + b * 0.9, 0.052 + b * 0.9, 0, 1.5, 6), 1),
     ]), M.armor);
     {
-      const T = [0, -0.06, 0.069], Rt = [0.058, -0.16, 0.058], B = [0, -0.355, 0.051], Lf = [-0.058, -0.16, 0.058], C = [0, -0.16, 0.08];
+      const T = [0, -0.06, 0.069 + b], Rt = [0.058 + b, -0.16, 0.058 + b], B = [0, -0.355, 0.051 + b * 0.9], Lf = [-0.058 - b, -0.16, 0.058 + b], C = [0, -0.16, 0.08 + b * 1.3];
       const kg = new THREE.BufferGeometry();
       kg.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...T, ...C, ...Rt, ...T, ...Lf, ...C, ...C, ...Lf, ...B, ...C, ...B, ...Rt]), 3));
       kg.computeVertexNormals();
@@ -1329,36 +1381,38 @@ export function buildHero(U) {
       const e = (a, b) => strapGeometry([a[0], a[1], a[2] + 0.003], [b[0], b[1], b[2] + 0.003], 0.009, 0.004, [-(b[1] - a[1]), b[0] - a[0], 0]);
       mesh(shin, mergeGeometries([
         e(T, Rt), e(Rt, B), e(B, Lf), e(Lf, T), e(T, C), e(C, B),
-        arcPlate(-0.083, -0.092, 0.0675, 0.0675, 0, 1.4, 6),
-        arcPlate(-0.366, -0.375, 0.0535, 0.0535, 0, 1.5, 6),
+        arcPlate(-0.083, -0.092, 0.0675 + b, 0.0675 + b, 0, 1.4, 6),
+        arcPlate(-0.366, -0.375, 0.0535 + b * 0.9, 0.0535 + b * 0.9, 0, 1.5, 6),
       ]), M.bevel);
     }
-    // kite knee guard (poleyn): 0.10 W × 0.13 H standing 0.02 m off the knee, a ridge down the
+    // kite knee guard (poleyn): 0.12 W × 0.14 H standing 0.02 m off the knee, a ridge down the
     // middle, silver bevels on all four edges, wings wrapping the sides; its point leans 15° out
     // and a short spike carries it to 0.60 m
     {
       const lean = -side * 0.26;
-      const T = [0, 0.08, 0.082], Rt = [0.05, 0.004, 0.072], B = [0, -0.05, 0.08], Lf = [-0.05, 0.004, 0.072], C = [0, 0.012, 0.094];
+      const T = [0, 0.085, 0.082 + b], Rt = [0.06, 0.004, 0.072 + b], B = [0, -0.05, 0.08 + b], Lf = [-0.06, 0.004, 0.072 + b], C = [0, 0.012, 0.094 + b];
       const kp = new THREE.BufferGeometry();
       kp.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...T, ...C, ...Rt, ...T, ...Lf, ...C, ...C, ...Lf, ...B, ...C, ...B, ...Rt]), 3));
       kp.computeVertexNormals();
       planarGUV(kp, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
       const wings = [];
-      for (const s of [-1, 1]) wings.push(place(kiteGeometry(0.012, 0.03, 0.03), s * 0.06, -0.006, 0.03, 0, s * 0.6, 0));
+      for (const s of [-1, 1]) wings.push(place(kiteGeometry(0.014, 0.034, 0.034), s * (0.06 + b), -0.006, 0.03 + b * 0.5, 0, s * 0.6, 0));
       mesh(shin, mergeGeometries([kp, ...wings]).rotateZ(lean), M.armor);
-      const edge = (a, b) => strapGeometry([a[0], a[1], a[2] + 0.003], [b[0], b[1], b[2] + 0.003], 0.01, 0.004, [-(b[1] - a[1]), b[0] - a[0], 0]);
+      const edge = (a, c) => strapGeometry([a[0], a[1], a[2] + 0.003], [c[0], c[1], c[2] + 0.003], 0.01, 0.004, [-(c[1] - a[1]), c[0] - a[0], 0]);
       mesh(shin, mergeGeometries([edge(T, Rt), edge(Rt, B), edge(B, Lf), edge(Lf, T), edge(T, C), edge(C, B)]).rotateZ(lean), M.bevel);
-      mesh(shin, wedge(0.035, 0.012, [0, 0.07, 0.083], [0, 1, 0.12], [0, 0, 1], 0.05).rotateZ(lean), M.spike);
+      mesh(shin, wedge(0.038, 0.013, [0, 0.075, 0.083 + b], [0, 1, 0.12], [0, 0, 1], 0.05).rotateZ(lean), M.spike);
     }
     const foot = joint(shin, 0, -DIM.shin, 0);
-    // boot foot, 2 instep lames, a rounded slightly pointed toe, heel, the silver sole welt
+    // boot foot, 2 instep lames, a rounded slightly pointed toe, heel, the silver sole welt (round
+    // 3: a bigger boot under the heavier leg; the sole still rests on the ground at −0.07)
+    const F = BODY.foot;
     mesh(foot, mergeGeometries([
-      ellipsoidGeometry(0.05, 0.044, 0.135, { widthSegs: 10, heightSegs: 6 }).translate(0, -0.026, 0.05),
-      sub(place(ellipsoidGeometry(0.046, 0.022, 0.04, { widthSegs: 8, heightSegs: 4 }), 0, 0.006, 0.065, -0.35), 1),
-      place(ellipsoidGeometry(0.042, 0.02, 0.036, { widthSegs: 8, heightSegs: 4 }), 0, -0.006, 0.11, -0.25),
-      sub(boxGeometry(0.06, 0.03, 0.05, 0, -0.055, -0.06), 1),
+      ellipsoidGeometry(...F.r, { widthSegs: 10, heightSegs: 6 }).translate(...F.c),
+      sub(place(ellipsoidGeometry(0.053, 0.026, 0.045, { widthSegs: 8, heightSegs: 4 }), 0, F.c[1] + F.r[1] - 0.016, 0.068, -0.35), 1),
+      place(ellipsoidGeometry(0.048, 0.023, 0.04, { widthSegs: 8, heightSegs: 4 }), 0, F.c[1] + F.r[1] - 0.032, 0.118, -0.25),
+      sub(boxGeometry(0.07, 0.034, 0.056, 0, -0.053, -0.066), 1),
     ]), M.armor);
-    mesh(foot, ellipsoidGeometry(0.055, 0.007, 0.141, { widthSegs: 14, heightSegs: 3 }), M.welt, 0, -0.06, 0.05);
+    mesh(foot, ellipsoidGeometry(F.r[0] + 0.006, 0.007, F.r[2] + 0.007, { widthSegs: 14, heightSegs: 3 }), M.welt, 0, -0.062, F.c[2]);
     legs[side < 0 ? 'R' : 'L'] = { thigh, shin, foot };
   }
 
@@ -1411,7 +1465,8 @@ export function buildHero(U) {
       mesh(sj, sub(tatterStrip(P.strips[k], Math.max(0.065, wr * 1.3), { fork: !!P.fork[k], curl: 0.4, seed: 1000 + i * 31 + k * 7 }), (i + k) % 2), M.hem);
       strips.push({ joint: sj, len: P.strips[k], rest: a, phase: (i * 1.7 + k * 2.3) % (Math.PI * 2) });
     }
-    coat.push({ anchor, segs: [s0, s1], def: P, strips, len: [P.len[0], P.len[1] + (n ? Math.max(...P.strips) * 0.8 : 0)] });
+    // r0 = the sheet's radius round the hips at the anchor (the lower segment's is r0 + 0.25 × len[0])
+    coat.push({ anchor, segs: [s0, s1], def: P, strips, len: [P.len[0], P.len[1] + (n ? Math.max(...P.strips) * 0.8 : 0)], r0: R0 });
   });
 
   // ---------------------------------------------------------------- the longsword
