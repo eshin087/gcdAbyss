@@ -2,7 +2,9 @@
 
 Browser game, Three.js 0.180 (WebGL2), plain ES modules, no framework. `npm run dev` serves the
 repo at http://localhost:5173 ; `npm run build` emits a single-file `dist/index.html`.
-This file is the **source of truth for cross-module APIs and event names** (contract version: v0.2).
+This file is the **source of truth for cross-module APIs and event names** (contract version: v0.5,
+the epic wyrm fight of 2026-11-09: strings and the deflect chain, the plunge, three phases, fire
+hazards, keep-in-view camera).
 
 ## Conventions
 - Units: meters, seconds, radians. **Y up**, ground plane y = 0 (flat).
@@ -32,6 +34,10 @@ override is skipped for that frame (never throws, never feeds NaN).
 `dt = realDt × game.timeScale × game.debugTimeScale × hit-stop`. `realDt` is unscaled. Input edges
 (`pressed`) are valid for exactly one frame. Construction order: world, audio, player, dragon, hud,
 touch, flow, lab — constructors must not dereference modules built later.
+**Keep-in-view:** during their update, flow (a flying or rearing wyrm) and the player (the plunge)
+may call `cameraRig.keep(...)` for world spheres that must stay on screen; the rig consumes the
+requests in its update the same frame (requests last one frame). `dragon.update` also runs the fire
+hazards (`dragon.hazards.update`, guarded).
 
 ## The `game` context (passed to every constructor)
 | field | what |
@@ -41,10 +47,10 @@ touch, flow, lab — constructors must not dereference modules built later.
 | `events` | pub/sub: `on(name, fn)` → unsubscribe fn, `emit(name, data)` |
 | `input` | `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
 | `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame; with touch controls on, the touch aim point (see Touch controls) |
-| `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus`, `zoom(steps)` (2.5 m per step, clamped to the profile), `targetDistance`; distance profile `setMobile(bool)` / `mobile`, `defaultDistance`, `minDistance`, `maxDistance`, `maxExtraZoom` (desktop: `CONFIG.camera.distance/min/max`, unlimited extra zoom; phone: `mobileDistance` 20 / `mobileMinDistance` 14 / `mobileMaxDistance` 34, extra zoom (lock-on, boss framing, title / intro shots) capped at `mobileMaxExtraZoom` 3 m). `setMobile` resets the zoom to the profile default. |
+| `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus`, `zoom(steps)` (2.5 m per step, clamped to the profile), `targetDistance`; distance profile `setMobile(bool)` / `mobile`, `defaultDistance`, `minDistance`, `maxDistance`, `maxExtraZoom` (desktop: `CONFIG.camera.distance/min/max`, unlimited extra zoom; phone: `mobileDistance` 20 / `mobileMinDistance` 14 / `mobileMaxDistance` 34, extra zoom (lock-on, boss framing, title / intro shots) capped at `mobileMaxExtraZoom` 3 m). `setMobile` resets the zoom to the profile default. **Keep-in-view** (`FIT` in `core/cameraRig.js`): `keep(x, y, z, r = 1, must = false)` asks for a world sphere to stay on screen this frame (≤ 16 per frame; non-finite input is ignored). After the usual follow / distance damping the rig projects the subjects with the real camera and eases a ground-plane pan (`fitX` / `fitZ`, ≤ 30 m) and extra distance (`fitZoom`: ≤ 6 m to fit every subject, ≤ 12 m for `must` ones; phone 1.5 / 3 m) until they sit inside the NDC box (\|x\| 0.9, top 0.86, bottom 0.78). `must` subjects (the hero) are never cropped to fit the others. Damped (5/s, 12/s while a must subject is off the box), eased back to 0 with no requests, reset by `snap()`. `focus` = the damped follow focus + the pan. |
 | `touch` | touch controls (`ui/touch.js`, below): `active`, `phone`, `portrait`, `autoAim`, `setActive(bool)`, `update(realDt)` |
 | `shake(a)` | camera trauma (0.15 light hit … 0.7 huge slam) |
-| `hitstop(sec, scale=0.04)` | brief time-scale dip measured in real seconds (also used for Ghostep slow-mo: `hitstop(0.6, 0.3)`) |
+| `hitstop(sec, scale=0.04)` | brief time-scale dip measured in real seconds (also the perfect-dodge slow-mo, the plunge's included: `hitstop(0.6, 0.3)`) |
 | `debugTimeScale` | Lab multiplier on game time (1 = normal). Only the Lab writes it. |
 | `viewOverride` | `null` or `{ pos, target, focus? }` — camera override applied by main.js after the rig (see Frame order). Only the Lab model viewer writes it. |
 | `lights` | `add({x,y,z,color:[r,g,b],intensity,radius,life,fade,fadeIn,flicker})` → light (mutable `x,y,z`, `.set()`, `.kill()`) |
@@ -56,7 +62,9 @@ touch, flow, lab — constructors must not dereference modules built later.
 | `settings` | `{ quality: 0..2, showFps: bool }`; `applyQuality()` re-applies. Touch devices start on `CONFIG.defaultQualityTouch` (LOW) unless the player picked one. |
 
 Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `DEFENSE`, `POSTURE`,
-`tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code.
+`tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code. `DEFENSE.plunge`
+holds the plunge's range, damage and timeline (contract 2, COMBAT.md "The plunge");
+`RESULT.PERFECT` now means "plunge or Ghostep".
 
 Render helpers for creature modules:
 - **Creature ASCII art** (v0.4, reworked by the reference match of 2026-11-08: ADR-018 … ADR-022).
@@ -125,18 +133,17 @@ Render helpers for creature modules:
     (0.8) is shared.
 - **The hero's source** (`heroArt: {...}` option, built from `HERO_INK` by `createHeroMaterials`):
   `part` (0..19, required; throws outside), `fill [r, g, b]`, `spec`, `specPow`, `rim`, `glow` (share
-  of the animated `uInkGlow`: blade, gem, flask), `pull` (bool), `folds [freq, depth, wander]` (throws
-  if not finite). Defines `SG_HERO_ART` (with `HERO_A0`, `HERO_AS`), `SG_HERO_PULL`,
-  `SG_HERO_FOLDS`; uniforms `uArtFill`, `uArtSpec`, `uArtRim`, `uArtGlowK`, `uArtPart` (= part × 2),
-  `uArtPull` (m, set per frame), `uArtFold`; shared `U.uCamRight`, `U.uCamUp`, `U.uArtHeroLight`
-  (vec4: flat fill, camera key light from the upper left, scene-light share, glint gain; (0.2, 0.95,
-  0.2, 1.4)) and `U.uArtHeroRim` (the cool screen-left rim colour). The fill is flat per part (no
-  glyph gaps); glints only where the surface curves.
+  of the animated `uInkGlow`: blade, gem, flask), `folds [freq, depth, wander]` (throws if not
+  finite). Defines `SG_HERO_ART` (with `HERO_A0`, `HERO_AS`), `SG_HERO_FOLDS`; uniforms `uArtFill`,
+  `uArtSpec`, `uArtRim`, `uArtGlowK`, `uArtPart` (= part × 2), `uArtFold`; shared `U.uCamRight`,
+  `U.uCamUp`, `U.uArtHeroLight` (vec4: flat fill, camera key light from the upper left, scene-light
+  share, glint gain; (0.2, 0.95, 0.2, 1.4)) and `U.uArtHeroRim` (the cool screen-left rim colour).
+  The fill is flat per part (no glyph gaps); glints only where the surface curves. Every hero
+  material, the blade included, is depth-tested like any mesh: the depth pull (`heroArt.pull`,
+  `SG_HERO_PULL`, `uArtPull`, ADR-022) was removed on 2026-11-09 (ADR-031).
   - `aPart` (float vertex attribute, 0 / 1): `sub(geometry, k)` in `player/model.js`, carried through
     the static merge; a geometry without it reads 0 (`defaultAttributeValues`). It splits one part
     into pieces the pass outlines up close (coat panels, hair locks, the blade's two halves).
-  - `pull`: each vertex moves `uArtPull` m toward the camera along its own view ray (at most half the
-    distance): the same pixels on screen, a nearer depth. Visual only (ADR-022).
   - `folds`: dark fold bands in the fill up close (gone between 8 and 16 m).
 - **Per-part pass data** (`U.uHeroPartInk[20]`, `U.uHeroPartFill[20]`, vec4, shared; filled once by
   `createHeroMaterials` from `HERO_INK`): ink = line tint rgb × gain (`line`; > 1 blooms: the cyan
@@ -241,29 +248,40 @@ Render helpers for creature modules:
 ```
 constructor(game)                      // builds model, adds object3d to game.scene, spawns at CONFIG.world.playerSpawn
 object3d: THREE.Object3D;  position: THREE.Vector3 (=== object3d.position);  yaw: number;  radius = 0.45
+                                       // position.y is 0 except in the plunge, where it carries the visual
+                                       // lift (x / z stay the ground point under him)
 name = 'Wanderer'
-hp, maxHp, flasks, maxFlasks: number   // (v0.2: NO stamina)
-state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block'|'parry'|'ghostep'|'heal'|'stagger'|'guardBreak'|'knockdown'|'dead'
-                //  ('attack' = light sweeps + the slam finisher, 'heavy' = the released charge thrust)
+hp, maxHp, flasks, maxFlasks: number   // (v0.2: NO stamina) TUNE: 160 HP, 5 flasks of +70 HP
+state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block'|'parry'|'ghostep'|'plunge'|'heal'|'stagger'|'guardBreak'|'knockdown'|'dead'
+                //  ('attack' = light sweeps + the slam finisher, 'heavy' = the released charge thrust,
+                //   'ghostep' = a perfect dodge without the plunge, 'plunge' = the head-stab, contract 2)
 blocking: boolean                      // RMB held and able to block
-critTimer: number                      // > 0 while the post-Ghostep crit window is open
+critTimer: number                      // > 0 while the crit window is open (after a perfect dodge / the plunge's landing)
 lockOn: boolean                        // toggled by Tab / middle mouse; facing tracks dragon.lockPoint
 get alive(): boolean
-isInvulnerable(): boolean              // roll i-frames, Ghostep, get-up, dead
+isInvulnerable(): boolean              // roll i-frames, the whole plunge, Ghostep / plunge-landing i-frames, get-up, dead
 takeHit({ damage, from:{x,z}, knockback=0, knockdown=false, kind='hit', burn=0,
-          tell='normal', parryable, blockable, attack, attacker }): RESULT   // see COMBAT.md
+          tell='normal', parryable, blockable, attack, attacker, plunge }): RESULT   // see COMBAT.md
+                                       // plunge: false = a perfect dodge of this hit never becomes the plunge
+                                       // (fire hazards); while the plunge runs every hit returns 'ignored'
 getChestPos(out: Vector3, visual = false): Vector3   // upright gameplay body; visual = the drawn one (FX)
 unlean(v: Vector3): Vector3            // drawn (leaned, HERO_SCALE) world point → upright gameplay body
 leanPoint(v: Vector3): Vector3         // upright gameplay point → where it is drawn (name tag)
-respawn(x, z)                          // full restore, idle, facing north, clears burn/lock/crit
+respawn(x, z)                          // full restore, idle, facing north, clears burn/lock/crit/plunge/deflect chain
 restAtBonfire()                        // refill hp/flasks (no teleport)
 update(dt)
-debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill() }   // used by the Lab
+debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill(),   // used by the Lab
+         plunge(execution = false) }   // Lab / captures: start the plunge on the dragon now (any range, in the air too)
 ```
+Module-private state the animator reads (anim.js): `plungeAnim { phase, u, t, exec, h }` (the plunge
+phase from the exported `PL` enum `{ VANISH, HANG, DIVE, RIDE, FLIP, LAND }`, progress through it,
+the lift), `deflect { n, t, side }` (the parry chain), `guardHold` 0..1 (the guard lingering between
+parries), `rmb { held, upT, parryT, edge, chain }`.
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
 light combo (sweep → backhand sweep → two-handed slam finisher), LMB hold ≥ 0.3 s then release =
-charged lunging thrust · RMB hold = block, RMB tap before impact =
-parry · Space = dodge roll · Shift = sprint · F = flask · Tab / MMB = lock-on. (E is flow's.)
+charged lunging thrust · LMB tap with a posture-broken wyrm's head within 9 m = the execution ·
+RMB hold = block, RMB tap before impact = parry · Space = dodge roll · Shift = sprint · F = flask ·
+Tab / MMB = lock-on. (E is flow's.)
 Drawn body vs gameplay body (ADR-017): the root draws the hero `HERO_SCALE` (1.2) tall and leaned
 away from the camera (`model.js` `LEAN`, `installLean`). The animator runs with `lean.on = false`
 (plain upright 1.85 m body, so IK and ground clamps work in metres); the drawn transform is applied
@@ -275,12 +293,49 @@ extended `up` m above / `down` m below it counts, so the giant wyrm's chest is i
 front); swings step in toward a hurt surface ahead (`REACH.assist`); the slam's ground shards hit
 if the blade missed. Pushes itself out of
 `game.dragon.bodyCircles` and resolves vs `game.world.resolve(pos, radius, CONFIG.world.playerBound)`.
-On `perfectDodge` it performs Ghostep using `attacker.position`/`attacker.yaw` (teleport behind,
-`game.hitstop(slowmoTime, slowmoScale)`, opens `critTimer`). A harsher freeze already running defers the
-slow-mo until it ends; actors skip a short freeze while a longer, gentler slow-mo runs, so impact
-freezes never swallow a Ghostep.
+**Perfect dodge** (`takeHit` returns `RESULT.PERFECT`; `_perfectDodge(attacker, attack, tell,
+hit.plunge !== false)`), by attacker:
+- it offers the plunge (`plungePoint(out)` + `onPlunge(o)`, and it is not sleeping / dying / dead),
+  the hit allows it, and its head (`plungePoint`) is within `DEFENSE.plunge.range` (30 m, ground
+  distance) → **the plunge** (state `plunge`, below);
+- it offers the plunge but is out of range or the hit says `plunge: false` → state `ghostep`
+  without a teleport: the slow-mo and the crit window where the hero dodged;
+- it has no plunge API (future enemies) → the v0.2 **Ghostep**: a blink `DEFENSE.ghostep.distanceBehind`
+  behind it (only within `TUNE.ghostepMaxRange` 12 m), slow-mo, crit window.
+The slow-mo is `game.hitstop(slowmoTime, slowmoScale)`; a harsher freeze already running defers it
+until it ends, and actors skip a short freeze while a longer, gentler slow-mo runs, so impact freezes
+never swallow it. `player:perfectDodge` + `player:ghostep` fire in every case (for the plunge, x / z =
+the hang point).
+**The plunge** (contract 2, player side; numbers `DEFENSE.plunge`, timeline in COMBAT.md "The
+plunge"): `_tickPlunge` runs the `PL` phases VANISH (the afterimage at the dodge spot) → HANG
+(`appearUp` 5 m above `plungePoint`, `appearBack` 0.3 m toward the landing side, drifting after a
+moving head at ≤ 7 m/s) → DIVE (accelerating onto the head) → impact: `attacker.onPlunge({ damage,
+posture, point, execution })` exactly once (its return = the damage dealt), a hitstop, the burst →
+RIDE (keeps his offset to `plungePoint` each frame, easing through a jump of the head at ≤ 40 m/s) →
+FLIP (a backflip to a clear landing in front of the head, toward where he came from: `landMin` …
+`landMax` from the head, `landClear` past the attacker's `bodyCircles`, inside the arena,
+`world.resolve`d; turned off the body when it is in the way) → LAND (crouch; free after
+`landCancel`; the crit window and `landIframes` open on touchdown). Hits are ignored and body circles
+skipped until the landing; if the head point disappears he springs off from where he is. Every frame
+he asks `cameraRig.keep` for himself and the head (`must`), plus the landing point during the flip.
+Events: `player:plunge {execution}` as the dive starts, `player:plungeHit {damage, execution}` and a
+`player:hitDragon` (kind 'plunge', part 'head', heavy, crit = execution) at the impact.
+**Execution:** while `game.dragon.broken`, a light-attack press (from neutral or buffered from a
+recovery, `_tryExecution`) with the head within `DEFENSE.plunge.execRange` 9 m starts the same move
+at HANG with `execution: true` (`execDamage`, no slow-mo, no perfect-dodge events); the press is
+spent.
+**Parry and the deflect chain** (player side): an RMB press counts as a parry attempt only once RMB
+has been up `DEFENSE.parryRearm` (anti-mash), except right after a successful parry: `_parry` sets
+`rmb.chain`, so the next press counts as soon as RMB was released; every press clears it, so a whiffed
+press needs the full re-arm again (ADR-032). Parries ≤ `TUNE.deflectChainGap` (1.1 s) apart count up
+`deflect.n` (the blade snaps to alternating sides, the clash grows, `player:parry {chain}` raises
+the clang); each parry slides him `TUNE.deflectPush` 0.16 m back (×1.6 for blue); between parries
+the guard lingers (`guardHold` eases 1 → 0 over `TUNE.guardLinger` [0.32, 0.6] s after the last one).
+`player:parry.chain` is the hero's own rhythm count and can run across two strings; the HUD's
+"DEFLECT ×N" uses the attacker's `combat:deflectChain` (one string).
 RMB cancels a charge (the LMB press is consumed); an RMB press during one's own swing is queued and
-raises the guard when recovery starts. Streams (breath) only Ghostep when the roll starts into them.
+raises the guard when recovery starts. Streams (breath) only count as a perfect dodge when the roll
+starts into them.
 
 Model (`player/model.js`, built to `docs/art/hero.md`, the Shadow Swordsman): private to the player
 module (nothing outside reads the rig). It is drawn as ink-line ASCII art (ADR-019): every material
@@ -295,14 +350,27 @@ Three sword lengths (sword space, m from the grip centre):
   (`PlayerFx.bladeHalo`'s dots and tip streak); the cyan dot halo past the point carries the rest of
   the reach.
 
+**Build (round 3, 2026-11-09, ADR-031):** a broad-shouldered build on the same bones. `model.js`
+exports `BODY`, the girth table (metres): `shell` (torso rings: height `y`, half-width `rx`,
+half-depth `rz`, forward offset `cz`, the open coat front's `gap`), `hips` and `head` ellipsoids,
+`deltoid`, `upperArm`, `foreArm`, `thigh`, `shin` (radii along the limb + bulge) and `foot`. The
+meshes are built from it; `anim.js` sizes the blade's leg clearance (`BLADE_CLEAR`), the coat's leg
+push (`LEG_R`) and the ground-clamp spheres from it; the `herolook` test measures blade-in-body
+against it. No bone length changed (IK, the foot planner and the hit segment run on bones). Joints:
+`DIM.shoulder` ±0.21 (was ±0.17), `DIM.hip` ±0.1 (was ±0.09), `DIM.coatR` 0.163 (was 0.139). The sword
+hand's pose targets are offsets from `DIM.gripShoulder` [0.17, 0.215, 0], the old shoulder spot
+(`rig.arms.R.anchor`; `_handTarget` uses `arm.anchor ?? arm.upper.position`), so every grip the arm
+reaches is unchanged by the wider frame. Coat records carry `r0` (the sheet's radius round the hips
+at the anchor).
+
 The animator (`player/anim.js`) drives: `coat` = 7 skirt panels (`COAT_PANELS`: six + the front
 flap, each with a resting `flare` and optional `folds`), each two spring segments (the lower one is
 two meshes: `coat` above, the lavender torn zone `hem` over its last 55 %) plus `strips` (22 torn
 strips, one spring each, kept above the grass); `streamers` (two two-segment sleeve strips on the
 arms); `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a
 dark-root mesh (`hair`) and a sheened-tip mesh (`hairTip`). Static meshes that share a joint and a
-material are merged at build time (fewer draw calls; 127 meshes, ~20k triangles); only the flask
-stays separate.
+material are merged at build time (fewer draw calls; 128 meshes, ~20.5k triangles since the broad
+build); only the flask stays separate.
 **Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every
 frame `Player._updateMaterials` measures the camera → hero distance (`player.viewDist`) and rescales
 the hero materials' glyph cells, k = clamp(dist / 12, 0.15, 1): in-game cells at the 36 m camera
@@ -312,11 +380,11 @@ plates), `userData.lockX` (the blade's two columns), `userData.zoom / zoomNear` 
 game camera, default `GLYPH_SCALE.farZoom` 0.45 so the glyphs fill their cells / in close-ups);
 materials without `userData.cell` (gem, eye, skin, flask) keep fixed
 cells. (The ink-line source is flat per part, so these cells no longer show in game; they still set
-the per-cell dissolve and the `U.uArtSolid` = 0 render.) The same call sets `uArtPull` on the `pull`
-materials (blade, point, gem) from `BLADE_PULL` `{ m: 0.65, near: 10, far: 24 }`: 0 under 10 m of
-view distance, 0.65 m from 24 m (ADR-022). `player.bladeFar` (0 close-up … 1 at ≥ 28 m) makes the
-blade self-light with distance (dark steel with glowing edges up close, a solid cyan line at the
-game camera). It touches only the hero's own materials (no shared uniform, no allocation).
+the per-cell dissolve and the `U.uArtSolid` = 0 render.) Until 2026-11-09 the same call also set the
+blade's depth pull (`BLADE_PULL` → `uArtPull`, ADR-022); it is gone (ADR-031). `player.bladeFar`
+(0 close-up … 1 at ≥ 28 m) makes the blade self-light with distance (dark steel with glowing edges
+up close, a solid cyan line at the game camera). It touches only the hero's own materials (no shared
+uniform, no allocation).
 FX helpers that changed shape: `PlayerFx.gemTick(dt, x, y, z, k, vx, vz, vy)` and
 `gemGlint(x, y, z, s, vx, vz, vy)` take the gem's own velocity (`player.gemVel`, measured from the
 gem joint each frame) so glints ride the hilt; `gemTick` also keeps an always-on 0.22–0.26 m violet
@@ -325,7 +393,12 @@ glow point at the gem; `bladeHalo(dt, k, far)` grows its dots with distance and 
 but sub-steps by the outer point's travel (one per 0.24 m, up to 8) and slerps the blade round the
 hilt between frames, so a sweep reads as one curved crescent. New: `skid(dt, slot, x, z, dx, dz, sp,
 k)` (dust and torn grass off a sliding contact; `slot` 0 / 1 keeps a rate accumulator each) and
-`scrape(dt, x, y, z, dx, dz, sp)` (cold sparks off the dragging point). Glyph strokes are laid
+`scrape(dt, x, y, z, dx, dz, sp)` (cold sparks off the dragging point). 2026-11-09: `parry(x, y, z,
+blue, chain = 1, dx = 0, dz = 0)` (the clash grows with the deflect chain, crossed streaks from the
+2nd; (dx, dz) = toward the blow) and the plunge's `plungeBlink(segs, nSegs, ox, oz, nx, ny, nz)`,
+`plungeHang`, `plungeImpact(x, y, z, dx, dz, exec)`, `plungeRide`, `plungeRip`, `plungeLand(x, z,
+dx, dz)` (cold afterimage and streak, crystal shards and molten blood at the wound, landing dust;
+world-atlas glyphs only). Glyph strokes are laid
 along the rendering camera's axes (`game.camera.matrixWorld`, read in `get add()`; the fixed 58°
 basis is the fallback), so they stay right in Lab views.
 
@@ -352,7 +425,25 @@ Animator ↔ player hooks (`anim.js` is private to the player module):
   compare of `sword.matrixWorld` and the hit points against the previous build.
 - Blade directions blend by azimuth / elevation round the outside of the body (`dirLerp` /
   `dirTo`), a cross-fade keeps last frame's way round, and outside attacks the blade is pushed out of
-  the leg capsules before the ground clamp (ADR-023).
+  the leg capsules before the ground clamp (ADR-023). Since the broad build (ADR-031) the clearances
+  come from `BODY`. The build is not bit-identical on active frames (ADR-024): the hit segment moved
+  by ≤ 2.5 cm on some of them (light 1 on 57 of 73 frames, light 2 on 9 of 29, the slam on 15 of 36;
+  the thrust is identical), and the REACH table is unchanged.
+- **Coat vs blade** (round 3): every frame the grip and 12 points along the drawn blade are tested
+  against each coat panel segment in that segment's frame. With the sword hand outside the cloth the
+  panel hangs inside the hand and the blade (they cap its flare; the legs still win); with the hand
+  under it, or steel running in under it inside the pivot, the panel drapes over the blade. The side
+  is latched per panel (`coatSide`: 1 outside, 2 under) while any steel is over it; the steel moves a
+  segment at most 0.12 rad per 60 fps frame; off while down or tumbling (the floor contact rules).
+  The torn strips and the sleeve streamers ignore the blade. The run / sprint pose trails the sword
+  hand outside the coat.
+- **Plunge and deflect clips** (the "PLUNGE + DEFLECT" block): `plunge` (`plungePose`: hang, dive,
+  ride, flip, land poses by `player.plungeAnim.phase`; `player._plungePhase` re-enters the clip with a
+  short cross-fade at each phase), `parry` = `deflectPose` (the blade snaps into the blow on
+  alternating sides by `player.deflect.side`, back in the guard by ~0.17 s; it replaced `parryPose`),
+  `loco` = `locoGuard` (the walking clips blend in the block's upper body by `player.guardHold`). The
+  plunge's root is the ground point carried up by `position.y`: foot targets stay root-relative, the
+  ground clamps are world-space.
 
 ### Dragon — `src/entities/dragon/dragon.js` exports `class Dragon`
 ```
@@ -361,57 +452,122 @@ object3d, position (Vector3, root on ground), yaw
 bound: number                           // radius around the arena centre the root stays inside:
                                         // min(CONFIG.world.dragonBound, TUNING.bound = 24) (move, charge, leap target)
 name = 'VAELGRIM, THE CINDER WYRM';  hp, maxHp;  phase: 1|2|3
-phaseAt: number[]                       // HP fractions where each phase starts (TUNING.phaseAt [1, 0.66, 0.33])
-nextPhaseHp: number                     // HP of the next phase's gate (0 in phase 3)
-posture, maxPosture: number;  broken: boolean   // posture break = staggered + broken
-state: 'sleeping'|'waking'|'combat'|'staggered'|'airborne'|'dying'|'dead'
+phaseAt: number[]                       // HP fractions where each phase starts (TUNING.phaseAt [1, 0.66, 0.33]);
+                                        // the HUD draws its boss-bar ticks from it
+nextPhaseHp: number                     // HP of the next phase's gate (maxHp × phaseAt[phase]; 0 in phase 3)
+posture, maxPosture: number;  broken: boolean   // posture break = staggered + broken; maxPosture per phase
+state: 'sleeping'|'waking'|'combat'|'staggered'|'airborne'|'dying'|'dead'   // 'airborne': the leap, the flights
 hurtSpheres: Array<{x,y,z,r,part,mult}>  // world space, refreshed every update; part ∈ head|neck|body|tail|wing|leg
                                         // (leg = the four legs; wing = the wing wrists + finger knuckles)
 bodyCircles: Array<{x,z,r}>              // ground footprint for player push-out (empty while airborne):
                                         // chest, hips, neck base, loins, then each PLANTED foot (0..4 more)
+hazards: Hazards                        // the fire hazards (hazards.js, contract 3): see "Hazards" below
+crashing: boolean                       // true while a plunge stops a flight: that action's end() must not land it elsewhere
 isTargetable(): boolean                 // false while sleeping/dying/dead
 lockPoint(out): Vector3                  // chest/neck base, for lock-on + camera
 startIntro()                            // wake → rise → roar; emits 'dragon:introDone' when the fight starts
-takeHit({ damage, part, point:{x,y,z}, dir:{x,z}, poise, heavy, crit }): number   // returns damage dealt; adds posture
-                                        // phase gate: with the AI on, damage stops at the next phase's
-                                        // threshold until its transition starts (no skipping a phase)
+takeHit({ damage, part, point:{x,y,z}, dir:{x,z}, poise, heavy, crit, exact, posture }): number
+                                        // returns the damage dealt (before the gate clamp); adds posture.
+                                        // Phase gate: with the AI on, damage stops at the next phase's
+                                        // threshold until its transition starts (no skipping a phase).
+                                        // exact: the damage is final (no part / broken multipliers); posture:
+                                        // add exactly this much instead of the weapon gain (onPlunge)
 onParried({ attack, tell }): void       // the dragon calls this itself when player.takeHit returns 'parried'.
                                         // Deflect chain (contract 1): a string's non-final hit is only
                                         // deflected (posture + a 0.14 s visual knock-back, the string goes
                                         // on); its last hit / a single melee attack recoils. Emits
                                         // dragon:parried {attack, tell, hit, last} (+ combat:deflectChain)
-plungePoint(out): Vector3               // contract 2: the top of the drawn head (+0.6 x SCALE), valid in flight
-onPlunge({ damage, posture, point, execution }): number   // contract 2: final damage to the head (phase
-                                        // gate kept), posture; cancels the action (not intro / phase2 /
-                                        // phase3 / death) and plays 'plunged' (head slammed down, thrash,
-                                        // rise ~1.35 s; airborne: a fall + crash landing first; an execution
-                                        // on a broken wyrm ~2 s and it consumes the break); emits
-                                        // dragon:plunged {execution}; returns the damage dealt (0 = ignored)
-enterPhase(n)                           // the transition roars call it: phase n's posture meter, emptied
-crashing: boolean                       // true while a plunge cancels a flight: its end() must not land it
+plungePoint(out): Vector3               // contract 2: the top of the head (rig.pt.head + 0.6 × SCALE up), valid in flight
+onPlunge({ damage, posture, point, execution }): number   // contract 2 (below): final damage to the head
+                                        // (phase gate kept), posture, the 'plunged' reaction; emits
+                                        // dragon:plunged {execution}; returns the damage dealt (0 = ignored:
+                                        // not targetable, or a repeat within 0.25 s)
+enterPhase(n)                           // the transition roars call it at their start: phase n's posture meter
+                                        // (emptied, a waiting break dropped), the staggered unlock of phase n's
+                                        // abilities (TUNING.unlockStagger); enterPhase2() = the v0.4 name
 hitstop(sec, scale)                     // game.hitstop that won't crush a running Ghostep slow-mo
-reset()                                 // back to sleeping at the nest, full HP/posture, phase 1, all FX/lights cleared
+reset()                                 // back to sleeping at the nest, full HP/posture, phase 1, FX/lights/hazards cleared
 update(dt)
 debug: {                                // used by the Lab (generic shape every future enemy implements)
-  abilities(): Array<{ name, label, tell, phase }>,   // includes 'roar' (the phase-2 shock ring)
+  abilities(): Array<{ name, label, tell, phase }>,   // every ATTACKS entry (24: singles, strings, fire
+                                        // attacks and 'roar', the transition shock ring)
   trigger(name): boolean,               // force an ability now (wakes/starts the fight if needed); false while busy
   setAI(enabled: boolean), aiEnabled: boolean,
   wake(), startFight(),                 // startFight skips the intro straight into combat (no-op if fighting)
   phase2(), phase3(), stagger(), postureBreak(), kill(), reset(), setHp(fraction 0..1),
+                                        // phase3: straight into the phase-3 transition (from phase 1 or 2)
   hitboxes(): Array<{ x, y, z, r, kind: 'hurt'|'attack' }>,  // for the Lab overlay
   currentAction?(): object|string|null  // optional, Lab readout (the running action)
 }
 ```
-Attacks (`attacks.js` `ATTACKS`): the AI picks any entry generically (`ai.js` `attackWeight`) by
-`phase` (first phase, on the def or `TUNING.attacks[name]`), `weight` (a number, `[P1, P2, P3]` or a
-function of `(dragon, sense)` returning either), `cooldown` and `air` (usable while airborne; ground
-attacks never are). **Strings** (contract 1, `makeString(name)`): `TUNING.attacks[name].hits` = N
-hits, each `{ kind, side?, tell, windup, hold?: [min, max], active, impact, damage, knockback,
-chance?, ...kind extras }`, plus the string's `recovery`, `cooldown`, `weight`, `phase`, AI band
-`range` [min, max] (model units x SCALE), `maxAng` / `minAng`. Every hit gets a beat (combat:tell at
-its windup start, combat:flash `flashLead` before its impact); the kinds (`KINDS`: claw, overhead,
-bite, rearBite, lungeBite, wing, tailJab, tailSweep, hop, stomp) perform them through pose fields.
-A string def carries `string: true`, `melee: true` and `noBreak(a)`.
+**Attacks and selection** (`attacks.js` `ATTACKS`: the singles, the strings, `roar` and, spread in,
+`FIRE` from `fireAttacks.js`; their numbers are `TUNING.attacks`, into which `tuningFire.js`
+`FIRE_ATTACKS` is merged). The AI picks any entry generically: `ai.js`
+`attackWeight(def, name, d, sense)` reads `phase` (first phase, on the def or `TUNING.attacks[name]`),
+`weight` (a number, `[P1, P2, P3]` or a function of `(dragon, sense)` returning either; per-phase
+arrays go through `perPhase(v, phase)`) and `air` (usable while airborne; no entry sets it today, as
+every flight runs inside one action). `Brain._choose` skips entries on `cooldown` and damps the last
+two picks (×0.3, ×0.65). Melee stays allowed while hazards burn. String and single attacks gate their
+weight on an AI band (`bandWeight`: `range` in model units × SCALE, `maxAng` / `minAng`); fire attacks
+gate on world-metre distances in their own `weight(d, s)`. `TUNING.openingCooldowns` hold the ranged
+singles back after the intro. `TUNING.unlockStagger` [first, step, jitter] ([2, 2.5, 2] s) staggers
+the abilities a new phase unlocks: in a random order, the i-th gets an opening cooldown of first +
+step × i + a random share of jitter (`enterPhase`; the nova opener is not delayed).
+**Strings** (contract 1, `makeString(name)`): `TUNING.attacks[name].hits` = N hits, each `{ kind,
+side?, tell, windup, hold?: [min, max], active, impact, damage, knockback, chance?, ...kind extras }`
+(`side` ±1 = the limb on the hero's side at the string's start / the other one; `hold` = a random
+extra windup hold that baits an early parry; `chance` < 1 = rolled at the string's start), plus the
+string's `recovery`, `cooldown`, `weight`, `phase`, AI band `range` [min, max] and `maxAng` /
+`minAng`. The phase list is per hit `windup{N}` (windup × `tScale` + hold) and `active{N}`, then
+`recovery`. Every realised hit gets a beat (`combat:tell` at its windup start, `combat:flash`
+`flashLead` before its impact, holds included) carrying `{ hit, wi }`; the kinds (`KINDS`: claw,
+overhead, bite, rearBite, lungeBite, wing, tailJab, tailSweep, hop, stomp) perform them through pose
+fields (`init`, `windup`, `aim`, `active`, `endActive`, `recover`, `hit`, `zone`, `noBreakActive`).
+A string def carries `string: true`, `melee: true` and `noBreak(a)` (a break waits out the pounce's
+hop). Data rules (STRINGS / TIMING scenarios): a tell per hit, the first windup ≥ 0.7 s, ≥
+`TUNING.minHitGap` 0.45 s from one impact to the next, each contact within ±85 ms of its flash + lead.
+**Deflect chain** (contract 1, `onParried`): a parry of the running action's own hit (`attack` null
+or the action's name) reads `hit` from the current beat; `last` = not a string, or its last realised
+hit. It emits `dragon:parried {attack, tell, hit, last}`; in a string it counts `action.chain` and
+emits `combat:deflectChain {count}` from 2. A non-final hit is deflected: `POSTURE.parry` posture and
+a knock-back of the struck part (`_startKnock` → `applyDeflectKnock(dt)` at the end of
+`Brain.update`: the paw override / head offset thrown out and back over `TUNING.deflectKnock.time`
+0.14 s; visual only, no timing change); the last hit (or a single melee attack) recoils
+(`brain.recoil()`). `strike()` resets `action.chain` when a hit lands or is blocked (dodges keep it).
+**The plunge, dragon side** (contract 2, `onPlunge`): only while targetable; a repeat within 0.25 s
+is ignored. `takeHit({ damage, part: 'head', heavy, crit, exact: true, posture: 0 })` (the damage is
+final; the phase gate holds). Unless the running action is in `NO_PLUNGE` (intro, phase2, phase3,
+death: the damage lands, no reaction), the red glow drops and `brain.plunged({ air, alt, heavy })`
+cancels the action and starts `SEQ.plunged` (air = `state === 'airborne'` or the rig's altitude >
+1 m; heavy = an execution on a broken wyrm). While it stops a flight `d.crashing` is true, so the
+flight's `end()` does not land the wyrm elsewhere (the leap honours it; the fire flights only drop to
+'combat') and the wyrm falls from where it was hit. `SEQ.plunged`: [`fall` (~0.6 s, longer from
+higher up) + the crash landing (dust ring, shake, `dragon:land`)] → `slam` 0.3 → `thrash` 0.6 →
+`rise` 0.45 s (an execution 0.35 / 1.15 / 0.5); the head stays on its joints, so `plungePoint` keeps
+tracking it for the rider. The hurt flash is capped at `TUNING.plunged.flash` 0.45 (the impact's
+hitstop freezes its decay). A plain plunge then adds its posture (a full meter breaks once the
+reaction is over: `NO_BREAK` holds `plunged`); an execution interrupts the posture break, whose end
+consumes it (`broken` false, meter 0). A pending phase transition waits for the reaction
+(`NO_TRANSITION`).
+**Three phases** (contract 4): phase n starts at `phaseAt[n − 1]` of max HP. `takeHit` clamps the HP
+at `nextPhaseHp` while the AI runs and sets `brain.pendingPhase` (the phase to enter, 0 = none) once
+the gate is reached; `Brain.update` starts `SEQ.phase2` / `SEQ.phase3` when the wyrm is in combat or
+staggered, not broken, the AI is on and the running action is not in `NO_TRANSITION` (intro, the
+transitions, death, plunged). The transitions are `makeRoar(name, toPhase)` (attacks.js; always P1
+timings): `start` calls `enterPhase(toPhase)` and `hazards.clear()`, the roar announces
+`dragon:phase2` / `dragon:phase3` + `dragon:phase {n}` and sets the crack glow (`TUNING.phaseGlow`);
+the shock ring is red; `end` queues `ATTACKS.nova` after the phase-3 roar when the AI runs.
+`enterPhase(n)` queues the next transition at once if the HP is already past its gate (Lab, AI off).
+Per-phase tuning (`[P1, P2, P3]`, read with `perPhase`): `turnSpeed`, `walkSpeed`, `phaseTimeScale`
+(windups and recoveries; `tScale`), `idleGap`, `phaseGlow`, `phaseEmbers` (body embers / s),
+`posture.max`, `rest.jaw`, attack weights. Phase-2 values of the singles (`activeP2`, `sweepP2`, the
+3-shell volley, the leap) apply from phase 2 on. `phase2At` / `phase3At` / `phase2TimeScale` are kept
+for older readers.
+**Flights** (contract 3, short flights inside one action, ADR-030): `takeOff` sets `state =
+'airborne'` (`dragon:takeoff`; body circles empty, a stagger or break waits), `touchDown` returns to
+'combat' (`dragon:land`). Flights stay ≤ 16 m up (the tests see ≤ 13.5 m) and inside the bound; the
+hurt spheres ride the drawn body, so a flying wyrm is out of sword reach (lowest sphere 5.3–10.1 m in
+the tests) and only the plunge reaches its head.
 Size: the model is authored in model units and the root is scaled by `SCALE` (tuning.js, 1.875
 since v0.3); every world-space number (reaches, radii, hurt spheres, body circles, AI ranges, FX,
 pushers, pose targets via `rootPt`) is multiplied by it. The hero does not scale, so 3D hit volumes
@@ -428,7 +584,8 @@ throat, lava, membrane, wingBone, spine, bone, claw, teeth, maw, eye; `limbs` = 
 tail and the wing arm; `head` = skull, brow and jaw with finer scales). What the player sees is each
 material's `WYRM_ART` source (the `wyrm` option, see Render helpers); the surface-glyph `levels` /
 fissure options only shape the `U.uArtSolid` = 0 render. Crack glow per material from `model.glow`
-(`[phase-1 ember, × glow (phase 2 / death), × throat charge]`, applied in `_applyMaterials`; every
+(`[phase-1 ember, × glow (later phases / death), × throat charge]`, the glow target per phase
+`TUNING.phaseGlow` [0, 0.5, 0.8], applied in `_applyMaterials`; every
 `model.mats` key needs a `model.glow` row except `eye`, which follows `rig.s.eyes`); the art
 source's veins, cracks and gap glow scale with it.
 Visual-only geometry on gameplay joints: every head mesh hangs on `model.headVis`, scaled
@@ -442,8 +599,8 @@ from the bones every frame (allocation-free); `aGUV` is laid out once from `rest
 resting pose. Two static per-vertex attributes feed the `wyrm` membrane source: `aEdge` (0 inside →
 1 on the free trailing edge) and `aBone` (model units to the panel's nearer bone). Trailing-edge
 scallops `SAG` [0.3, 0.28, 0.24, 0.16] plus torn `RAG` notches. Resting body language
-(`TUNING.rest`): wings `spread` 0.5 (HALF) in both phases, ≤ 0.3 while walking; jaw 0.65 (phase 1) /
-0.85 (phase 2), the painting's snarl (visual only); attacks return to `TUNING.rest.spread`.
+(`TUNING.rest`): wings `spread` 0.5 (HALF) in every phase, ≤ 0.3 while walking; jaw [0.65, 0.85,
+0.95] per phase, the painting's snarl (visual only); attacks return to `TUNING.rest.spread`.
 Rig (rig/anim.js, internal to the dragon module; attacks.js / ai.js are its only writers): each
 frame the brain writes a `pose` (head / look goals, `lookDown` = max nose-down head pitch, jaw 0..1
 → 0.7 rad, pitch / roll / lower / twist, `spread[2]` per wing: 0 FOLD · 0.5 HALF (the painting's
@@ -465,8 +622,8 @@ neckBase, `legs[2]` (hind: hip, knee, ankle, toe), `arms[2]` (front: shoulder, e
 model-left (+X) side. Gait contacts (`rig.gait.limbs`): footL, footR, handL, handR; 4-beat lateral
 walk (LH → LF → RH → RF) up to 5 m/s, diagonal trot to 8, bound above.
 Striking-part names for tells (`partPos`): 'snout', 'head', 'mouth', 'claw' (a front paw, `b.wi`),
-'forefeet' (front-paw midpoint; flashes at both paws; 'wrists' is the v0.3 alias), 'tailTip',
-'shell', default chest. The stomp's red ground ring is centred between the two forefeet's landing
+'forefeet' (front-paw midpoint; flashes at both paws; 'wrists' is the v0.3 alias), 'wing' (a wing's
+middle knuckle, `b.wi`: the wing buffet), 'tailTip', 'shell', default chest. The stomp's red ground ring is centred between the two forefeet's landing
 spots (root frame (±1.2, 0, 2.9) model units); the slam presses the paws there (dust + a heavy
 `dragon:step` at each), holds them for 0.3 of the recovery, then plants them and steps home.
 
@@ -490,6 +647,21 @@ brain writes them):
   active frames are untouched (ADR-025).
 - `drape[2]` 0..1 per wing: the wing collapses onto the ground beside the body, in world space
   (dying; the chest frame rolls with the body).
+
+Rig additions for the flights (2026-11-09; used with `alt` / `airborne` / `flap` / `flapHz`):
+- `hover` 0..1: hind legs hang straight down (swaying), forelegs reach down with the claws ready, the
+  tail hangs from the tilted body and curls back up toward the tip, and the wingbeat sweeps fore and
+  aft (the wrists come forward on the downstroke).
+- `glide` 0..1: the wings blend toward `WING_KEYS.GLIDE` (arms nearly level, a ~27° dihedral, the
+  fingers fanning the sail out flat, so from the 58° camera the membrane faces up; span ~34 m).
+- `dive` 0..1: the wings blend toward `WING_KEYS.DIVE` (the stoop: arms tucked back and up, fingers
+  swept back along the body), the tail streams straight.
+- `altRate` (default 12/s): the smoothing rate of `alt`; a dive sets it high so the body meets the
+  ground on the impact frame.
+- In the air every downstroke heaves the body up, and the tail streams back as a rudder a little
+  below level (held at 34° down, the 15.6 m tail reached the sword band from a 7–8 m flight).
+- The deflect knock-back (`applyDeflectKnock`) adds to `pawOv[i].pos` (claw / forefeet hits) or
+  `headOffset` + `pitch` (bites, wings, tail) after the action wrote the pose.
 
 Two neck solves (ADR-025): `rig._neckSim` is the measured solve every attack's head path and hit
 spheres were tuned on; `rig.neck` is the shown chain (applied to the joints, read by the neck hurt
@@ -537,11 +709,69 @@ Damages the player only via `game.player.takeHit(...)` with tell data; announces
 - red (dodge-only) hits: `uWarn` on every material (`model.mats`), driven in `_updateWarn` from the
   running action's beats — strength ramps 0.1 → 0.38 from the hit's `combat:tell` to its
   `combat:flash`, spikes to 1.6 on the flash, decays to 0 in 0.25 s (game time). A replaced action
-  (stagger, posture break, parry recoil, death, Lab interrupt) drops it at once; `reset()` and death
-  zero it. Plus a red glyph burst + red light at the striking part on the flash (`fx.tellFlash`).
+  (stagger, posture break, parry recoil, plunge reaction, death, Lab interrupt) drops it at once;
+  `reset()` and death zero it. Plus a red glyph burst + red light at the striking part on the flash
+  (`fx.tellFlash`). Each hit of a string is its own beat, so a red hit inside a string glows on its
+  own windup only.
 - parryable (normal / blue) hits: nothing during the windup; on the flash a white glint (star core,
   four-point sparkle, short rays, small white light) at the striking part, ×1.5 for blue.
 - parries throw white/gold sparks (bigger for blue).
+- fire hazards draw a red glyph ground warning from spawn to impact (see Hazards); the
+  self-announcing ones (meteors, chase pillars) send their own `combat:tell` / `combat:flash` with
+  `hazard: true`.
+
+**Hazards** (contract 3; `src/entities/dragon/hazards.js` `class Hazards`, internal to the dragon
+module: `dragon.hazards`): pooled world-space fire threats (48 records, 8 hit-cap groups) that live
+on their own, independent of the wyrm's current action, so it can fight while meteors fall.
+`dragon.update` calls `hazards.update(dt)` every frame (guarded: an error clears the field, never
+throws); the field is cleared on `reset()` (`fx.reset()`), on every phase change, when dying / dead
+/ asleep, and by the transition roars. No per-frame allocations (pooled records, reused hit /
+event scratch).
+- Spawns return `{ slot, id }` (a reference; `get(ref)` → the live record or null) or `null` when the
+  pool is full (the hazard is dropped). Common options: `kind`, `attack` (the name the tells and
+  `takeHit` carry), `delay` (s to impact), `damage`, `burn`, `knockback`, `knockdown`, `announce`
+  (default true), `group` (a hit cap from `group(maxHits)`).
+- Shapes (`SHAPE`): `circle({ x, z, r, active, fall, from, drawShell })` (a meteor falling from
+  `from` over its last `fall` s, a lava pillar, a barrage shell: one blast at impact, hitting for
+  `active` s); `strip({ ax, az, bx, bz, w, speed, linger, tick, tickDamage, tickBurn })` (a fire
+  front runs A → B; the ground it passed burns `linger` s); `ring({ x, z, r0, r1, speed, w })`
+  (ignites at r0, expands to r1); `wall({ x, z, dx, dz, len, w, speed, dist })` (sweeps along its
+  normal); `line({ ax, az, dx, dz, n, step, r, stagger, active })` (lava pillars erupting one after
+  another); emitters `rain({ count, first, span, warn, warnLed, ledEvery, lo, hi, r, fall })`
+  (meteors round the hero, every `ledEvery`-th on his led position) and `chase({ every, until, warn,
+  lead, r, active, linkFirst })` (pillars under the led hero).
+- Also: `cutStrip(ref)` (a knocked-out pass stops its front; the burnt part lingers), `timeTo(ref,
+  px, pz, vx, vz, pr)` (s until the hazard reaches a moving point: the spawning attack re-times its
+  own flash with it), `count(kind?)`, `clear()`.
+- Every hazard draws a red ground warning until it goes off, then deals its one blow through
+  `dragon.hitPlayer({ ..., tell: 'red', parryable: false, blockable: false, plunge })`: i-frames or
+  leaving the area avoid it. `plunge` is the spawn option `plunge` (default false: a perfect dodge
+  gives the slow-mo in place). Fire the wyrm breathes or spits from the air spawns with `plunge: true`
+  (the burning pass's strip front, the hover barrage's shells): a perfect dodge of it sends the hero
+  onto the flying wyrm's head, and it crashes. Spells from the sky or the ground never plunge.
+  A strip's lingering fire deals contact ticks instead (tell normal, blockable, not parryable,
+  skipped while the hero rolls or is invulnerable). A group stops dealing blows at its cap.
+- Tells: a self-announcing circle (`announce`; meteors, chase pillars except a first one the attack's
+  beat covers) emits `combat:tell` once the hero is within 3 m of its ring and `combat:flash`
+  `flashLead` before impact (both `hazard: true`, `source: 'dragon'`, `attack` = its spell). Other
+  hazards (`announce: false`) are covered by the spawning attack's own beat, re-timed with `timeTo`.
+- Events: `dragon:hazard {kind, stage, x, z, radius}` (stage 'fall' when a meteor starts its visible
+  fall; 'hit' when a meteor or pillar goes off; the dive's crash and the nova emit it too from
+  fireAttacks.js).
+`dragon.hitPlayer(o, action)` forwards `plunge` (`o.plunge ?? the current beat's plunge`) to
+`player.takeHit`; without it `plunge: false` never reaches the hero.
+
+**Fire attacks** (`fireAttacks.js` `FIRE`, numbers `tuningFire.js` `FIRE_ATTACKS`; the same action
+shape as attacks.js: phases / beats / zone / weight / start / enter / update / hit / end): flights
+`skyStrafe`, `diveBomb`, `hoverBarrage`; spells `meteorRain`, `eruptions`, `flameRing`,
+`flameWall`, `nova`. Every blow is red; each attack has one tell beat per blow unless its hazards
+announce themselves (the meteor cast has no beat: each meteor rings and flashes). Hazard-dealt blows
+pass `plunge: false`, except the burning pass's strip front and the hover barrage's shells (spawned
+with `plunge: true`: the airborne plunge); the dive's crash and the nova pass the default (a perfect
+dodge may plunge).
+Each emits `dragon:spell {name, x, z}` at its signature moment. `meteorRain` is not picked while a
+rain or meteors are still falling. The nova keeps its 2.5 s charge in every phase (it is the tell)
+and is the phase-3 opener. Numbers and gates: COMBAT.md "Current numbers".
 
 ### HUD — `src/ui/hud.js` exports `class Hud`
 ```
@@ -568,8 +798,15 @@ Desktop (no `.ab-touch`) is unchanged.
 Renders no attack tells of its own: no text, icons, rings or arrows (tells are read from the
 attacker — COMBAT.md). Its only tell cue is a brief red screen-edge flash (~0.25 s, game time,
 stronger on the attacker's side) on a red `combat:flash`, dropped by a stagger / posture break /
-death / retry (`ui/tells.js`). Also renders parry / Ghostep / guard-break call-outs, the cyan
-Ghostep edge pulse, the posture bar, and the crit-window cue.
+death / retry (`ui/tells.js`); flashes with `hazard: true` (meteors, chase pillars) are skipped,
+their red ground rings already warn. Also renders parry / Ghostep / guard-break call-outs, the cyan
+Ghostep edge pulse (a plunge's perfect dodge included), the posture bar, and the crit-window cue.
+`ui/callouts.js` subscribes itself to `combat:deflectChain {count}` ("DEFLECT ×N" over the hero's
+head: one counter per string that counts up in place and absorbs the PARRY / DEFLECT pop of the same
+blow) and `player:plungeHit {execution}` ("EXECUTION"). The boss bar draws a thin tick at each
+phase gate (`dragon.phaseAt` after the first, read at construction: 66 % and 33 %) and takes the
+`p2` (orange) / `p3` (white-hot) style from `dragon.phase`; the minimap's wyrm dot follows the same
+three colours.
 
 ### Flow — `src/game/flow.js` exports `class GameFlow`
 ```
@@ -587,6 +824,12 @@ always kept inside the view, and the far end of the wyrm crops first. It fades o
 `rig.defaultDistance`). On a phone (`cameraRig.mobile`) `TUNE.bossCamMobile` overrides it: weight
 0.85, at most 2 m of zoom (the rig caps extra zoom at 3 m anyway), a wider landscape view to the
 sides, and the hero may sit lower (`marginSouth` 1.6 m) so more of the wyrm shows above it.
+**Flying framing:** the box above can't see 10–20 m up, so while the override is on (weight > 0.05)
+and the wyrm is airborne, or a head / body hurt sphere is above `bossCam.highY` (13 m), `_bossFrame`
+also asks `cameraRig.keep` for every head and body sphere and for the hero (`must`, never cropped).
+Phases: `dragon:phase2` and `dragon:phase3` (queued like the other dragon events) show the phase
+banner ("THE CINDER WYRM'S FURY IGNITES" / "ITS HEART BURNS WHITE-HOT") and switch the music to
+'boss2'; `flow.phase2` means phase ≥ 2.
 Touch: with `game.touch.active` the death hint reads "tap to rise again" and the "H: controls ·
 Esc: pause" log line is skipped. Screen taps reach `_dismissPressed` as a virtual LMB press.
 
@@ -595,10 +838,21 @@ Esc: pause" log line is skipped. Screen taps reach `_dismissPressed` as a virtua
 constructor(game)          // subscribes to events; AudioContext created lazily
 unlock()                   // call on first user gesture (flow does this on title dismiss)
 update(realDt)
-play(name, opts)           // one-shot SFX by name
+play(name, opts)           // one-shot SFX by name (sfx.js SFX, then fire.js FIRE_SFX)
 setMusic(mode)             // 'none'|'ambient'|'boss'|'boss2'|'victory'|'death'
 toggleMute(); muted: boolean;  setVolume(0..1)
 ```
+Every sound is procedural (no samples). 2026-11-09 additions:
+- `sfx.js`: `parry {tell, chain}` (each deflect in a chain rings 2 semitones higher, up to 8 steps,
+  with a bell 'ting' from the 2nd), `plungeDive {exec}` (on `player:plunge`), `plungeHit {exec}` (on
+  `player:plungeHit`; a `player:hitDragon` of kind 'plunge' plays no ordinary hit sound).
+- `audio/fire.js` (`FIRE_SFX`, `subscribeFire(on, engine)`): `dragon:spell` → skyStrafe `skyRoar`,
+  diveBomb `diveScream`, meteorRain `meteorCast`, eruptions `rumble`, flameRing / flameWall
+  `flameIgnite`, nova `novaCharge`; `dragon:hazard` → meteor fall `meteorFall`, hit `meteorHit`,
+  `pillar`, `crash`, `novaBlast`; a `combat:tell` with `hazard: true` → `hazardTell` (lighter than the
+  red brass sting, no music dip). Spatialised at the event's x / z.
+- `dragon:phase3` replays the phase-2 sting and keeps 'boss2'; `dragon:plunged` → `dragonPain`
+  (an execution: the `postureBreak` roar).
 
 ### Lab — `src/dev/lab.js` exports `class Lab`
 ```
@@ -617,10 +871,13 @@ Small screens (≤ 560 px tall or ≤ 700 px wide): a compact panel with a max-h
 and scrolls inside (`touch-action: pan-y`). VIEW → **Touch UI** switches the touch controls on / off
 (desktop testing of the phone layout, camera and quality).
 
-Debug panel to test the fight without playing it: trigger any `dragon.debug.abilities()`, phase /
-stagger / posture break / kill / reset, jump flow states, god mode, infinite flasks, time scale,
-AI on/off, hitbox overlay, teleport. Talks only to the `debug` APIs above, plus the
-`game.viewOverride` and `world.debug.setVisible` hooks for the model viewer.
+Debug panel to test the fight without playing it: trigger any `dragon.debug.abilities()` (the
+strings and fire attacks show up on their own), Phase 2 / Phase 3 (`dragon.debug.phase3()`: the
+transition roar; with the AI on it opens with the nova) / stagger / posture break / kill / reset,
+jump flow states, god mode, infinite flasks, time scale, AI on/off, hitbox overlay, teleport. Talks
+only to the `debug` APIs above, plus the `game.viewOverride` and `world.debug.setVisible` hooks for
+the model viewer. The timing trainer also logs `combat:deflectChain`, `dragon:phase3`,
+`dragon:phase` and `dragon:plunged`. Captures start the plunge with `player.debug.plunge(execution)`.
 
 **Model viewer** (`src/dev/modelView.js`, Lab → VIEW → MODEL VIEW) renders an actor from the angles
 of a character sheet (the game camera is a fixed 58° top-down view):
@@ -690,28 +947,35 @@ panel and the pause panel still scroll). Tuning: `CONFIG.touch`, sizes / look in
 Player → hud/audio/fx/flow:
 - `player:attack {kind:'light'|'slam'|'thrust', combo, charge}` (swing starts; slam = combo hit 3, thrust = charge release),
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
-  `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust), `player:hurt {damage, kind, hp}`,
-  `player:block {damage, tell}`, `player:parry {tell, attack, chain}` (chain = parries in rhythm, 1 = single), `player:guardBreak {attack}`,
-  `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}`,
-  `player:ghostep {x, z}` (with every perfect dodge, also the plunge's: x/z = where he reappears),
-  `player:plunge {execution}` (the dive starts), `player:plungeHit {damage, execution}` (the blade meets the head;
-  also a `player:hitDragon` with kind 'plunge'), `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
+  `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust / plunge; kind 'plunge' = the
+  head-stab, crit on an execution), `player:hurt {damage, kind, hp}`,
+  `player:block {damage, tell}`, `player:parry {tell, attack, chain}` (chain = the hero's parries in rhythm, ≤ 1.1 s
+  apart, 1 = single; it can run across two strings), `player:guardBreak {attack}`,
+  `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}` (every perfect dodge:
+  plunge, in place or Ghostep; not on an execution),
+  `player:ghostep {x, z}` (with every perfect dodge; for the plunge x/z = the hang point above the head),
+  `player:plunge {execution}` (the dive starts; also an execution), `player:plungeHit {damage, execution}` (the blade
+  meets the head, once per plunge; damage = what onPlunge returned; also a `player:hitDragon` with kind 'plunge' when
+  it dealt damage), `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
   `player:footstep {x, z, sprint}` (a planted foot's touchdown while moving, and the thrust dash's
   two bounding steps), `player:lockOn {on}`
 Dragon (any attacker) → hud/audio/flow:
-- `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit; x/z = the
-  striking part; impactIn is a first estimate in game seconds),
+- `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit, so once per hit of a
+  string; x/z = the striking part; impactIn is a first estimate in game seconds),
   `combat:flash {source:'dragon', attack, tell, x, y, z}` (~0.35 s before impact — the **authoritative**
-  timing cue: moving targets (charge, fireball) re-time it after the tell),
-  `combat:deflectChain {count}` (the 2nd, 3rd ... parry in a row within one string; contract 1; the HUD
-  shows "DEFLECT ×N")
+  timing cue: moving targets (charge, fireball) and hazard-dealt blows re-time it after the tell),
+  `combat:deflectChain {count}` (the attacker's count: the 2nd, 3rd ... parry in a row within one string;
+  a hit that lands or is blocked resets it, dodges keep it; contract 1; the HUD shows "DEFLECT ×N")
 - `dragon:wake`, `dragon:roar {strength}`, `dragon:introDone`, `dragon:windup {name}`, `dragon:attack {name}`,
-  `dragon:step {x, z, heavy}`, `dragon:wingFlap {strength}`, `dragon:takeoff`, `dragon:land {x, z}`,
-  `dragon:breathStart`, `dragon:breathEnd`, `dragon:fireball {x, y, z}`, `dragon:explosion {x, z, radius}`,
+  `dragon:step {x, z, heavy}`, `dragon:wingFlap {strength}`, `dragon:takeoff`, `dragon:land {x, z}` (the leap,
+  every flight, and the crash of a plunged flier),
+  `dragon:breathStart`, `dragon:breathEnd` (the breath and the sky strafe's pass), `dragon:fireball {x, y, z}`,
+  `dragon:explosion {x, z, radius}`,
   `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last}` (hit = 0-based
   index in its string, last = the string's last hit or a single attack: only then a recoil),
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
-  `dragon:phase3`, `dragon:phase {n}` (with each of the two above), `dragon:plunged {execution}` (contract 2),
+  `dragon:phase3`, `dragon:phase {n}` (with each of the two above, on the transition roar), `dragon:plunged {execution}`
+  (contract 2: every plunge that lands, even during a transition or the killing one),
   `dragon:death`, `dragon:dead`,
   `dragon:spell {name, x, z}` (a fire attack's signature moment: the strafe's pass, the dive, the barrage's
   rise, a spell's cast / the nova's charge start), `dragon:hazard {kind, stage, x, z, radius}` (a fire hazard:

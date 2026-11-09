@@ -51,12 +51,14 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
       sliding kneel, crescent trails (ADR-023)
 - [x] Gameplay unchanged: hit-tested frames identical / within cm (ADR-024); `npm test` + build green
 - [ ] Independent review pass on round 2 (stopped early; the dragon branches have no self-report)
-- [ ] Owner approval of the PR preview; merge and release
+- [x] Merged to `main` (PR #4, `8ce6aef`)
+- [ ] Release (version bump, changelog heading, tag)
 - Follow-ups:
   - [ ] Find the time / random leak that makes deterministic captures differ run to run
   - [ ] Stray `"` glyph particles left of the hero in a back view
   - [ ] Hero coat as one wide ragged drape with burn holes and blotches
   - [ ] Hero proportions, curved hair strands and wisps, face lines (nose, mouth, eye shadow)
+        (proportions: the broad build in M1.7)
   - [ ] Hero at the game camera: tone down the armour column and glow (still brighter than the
         reference), capitals that read as text; the halo over the wyrm's letters
   - [ ] Stronger strike key poses (needs a hit-volume decision, ADR-024); light 2 choreography;
@@ -65,6 +67,36 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Boss camera in melee: the wyrm's head and wings sit off the top of the screen
   - [ ] Wyrm letter boil (temporal buffer), close-up scale LOD, fast single-frame jumps
   - [ ] Move the capture / per-frame compare tools from the scratchpad into the repo
+
+## M1.7 — Epic wyrm fight (2026-11-09, `combat/epic-wyrm`)
+- [x] Combo strings with a deflect chain: seven strings, a parry deflects a hit without ending the
+      string, the last one recoils (ADR-026)
+- [x] The plunge: a perfect dodge in range stabs down into the wyrm's head; slow-mo + crits in place
+      otherwise; the execution on a posture break (ADR-027)
+- [x] Three phases behind HP gates, staggered unlocks, a white-hot phase 3 that opens with the nova
+      (ADR-028)
+- [x] Fire spells on a pooled hazard system: meteor rain, eruptions, flame ring, flame wall, inferno
+      nova (ADR-029)
+- [x] Short flights: the burning pass, the sky dive, the hover barrage (ADR-030)
+- [x] Broad hero build on the same bones; the blade depth-tested again; the coat yields to the steel
+      (ADR-031)
+- [x] Keep-in-view camera for the plunge and a flying wyrm
+- [x] A deflect re-arms the parry at once (ADR-032); difficulty measured with bots, HP 4500 (ADR-033)
+- [x] `npm test` + build green; merged captures at the game camera
+- [ ] Owner approval of the PR preview; merge
+- [ ] Human playtest of the difficulty (target 3–5 min for a player who knows the moves; a
+      near-perfect bot wins in ~2.5 min)
+- Follow-ups:
+  - [ ] Hero mass at the game camera (the skirt dominates); the low idle guard from behind shows
+        only the point
+  - [ ] Coat-crossing frames near the hilt; the torn strips and streamers vs the blade; the block's
+        free hand on the flat
+  - [ ] A real tail thrust for the tail lash (a tail-raise control in the rig)
+  - [ ] Widen the wing buffet's band; later string hits whiff a hero who stands still
+  - [ ] A readable overhead claw at the game camera; a stronger deflect knock-back
+  - [ ] A red windup glow for the meteor cast
+  - [ ] Teach the probe bot to heal (its death rates are pessimistic)
+  - [ ] Capture the phase-3 eruption chase
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions

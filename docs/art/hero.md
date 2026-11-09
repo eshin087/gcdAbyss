@@ -87,6 +87,12 @@ why the build checklist (§5) weights horizontal silhouette features for the top
 | Boot sole length × width | 0.27 × 0.10 | | | |
 | Upper arm (sleeve) / forearm with bracer / hand | 0.10 / 0.105 / 0.09 | | | |
 
+*Superseded 2026-11-09 for the torso and limb widths (round 3, §7.3, ADR-031):* the owner found
+the hero "too lanky / skinny". `BODY` in `player/model.js` now sets the girth: chest 0.50 × 0.27 m
+(was 0.40 × 0.21), waist 0.31 (0.27), hips 0.34 (0.30), deltoids ~0.62 m apart (shoulder joints
+±0.21), upper arm r 0.088 with a deltoid cap, forearm 0.076, thigh 0.098, calf 0.074, bigger boots.
+The heights in §1.1 (bone lengths) are unchanged.
+
 ### 1.3 Anime style cues (non-negotiable)
 - **7.8 heads tall**, slim and long-legged. The crotch sits at 0.49 H and the shoulder-to-waist
   ratio is 0.44 : 0.27 (**1.63**), a sharp V. The waist is narrow; there is no bulky chest.
@@ -98,6 +104,10 @@ why the build checklist (§5) weights horizontal silhouette features for the top
   mid-calf.
 - The **sword is longer than the legs** (concept 1.30 m total = 0.72 H) and is always held in the
   **right** hand.
+
+*Superseded 2026-11-09 (§7.3):* "slim", "no bulky chest" and the 0.44 : 0.27 V are replaced by an
+athletic, broad-shouldered build (shoulders to waist ≈ 0.62 : 0.31, a deep chest). The rest holds:
+7.8 heads, the small head under the mop, long legs, the A-line coat, the long sword.
 
 ### 1.4 Sword versus body
 | | Concept painting | ASCII gameplay panel | Current `model.js` | Recommendation |
@@ -1048,7 +1058,8 @@ ARCHITECTURE.md "Creature ASCII art" and "Player".
   glow is capped (HDR 1.8). A dark halo darkens the world grid round him from 8 m, fully at 20 m.
 - **Blade** (round 2, ADR-022): drawn to `DIM.drawnTip` 1.45 (1.64 m of steel); at the game camera
   the blade, point and gem are drawn up to 0.65 m nearer the camera (`BLADE_PULL`), so the low guard
-  reads as a full cyan line across his back from behind.
+  reads as a full cyan line across his back from behind. *Superseded 2026-11-09 (§7.3, ADR-031):
+  the pull is gone; it drew the sword through his back and legs.*
 
 **Model** (`model.js`).
 - Round 1: a wide coat flare through the per-panel `flare` with longer, wider strips (still 22); a
@@ -1110,6 +1121,7 @@ ADR-024):
 - The coat still reads as separate flat panels and fins with outlines; the reference's is one wide
   ragged drape with holes and blotches (a one-piece skirt or edge-sharing panels, plus burn holes).
 - Proportions (shoulders, waist, legs, skull) are round 1's; only the sleeves and hair grew.
+  *Resolved 2026-11-09 (§7.3): the broad build.*
 - At the game camera he is still brighter than the reference (mean 80–97 vs 56): the blade glow, the
   rim and the armour column (pauldron over vambrace, a bright white stack from the front); the
   capital fill letters (`A B H G`) can read as text at 4x6.
@@ -1126,3 +1138,73 @@ ADR-024):
 - The roll's planted-foot slide metric rose by design (the shin slides with the gameplay root);
   shorten the kneel window, not the pose, if it should drop.
 - hero-motion's foot-slide metrics were not re-run on the merged wide idle.
+
+### 7.3 Round 3 (2026-11-09): a broad build, the blade depth-tested again, plunge and deflect poses
+
+The owner found the hero "too lanky / skinny", and the sword always showed and clipped through him,
+even through his back from behind. The hero-look agent rebuilt the build, the blade and the coat;
+the plunge agent added the plunge and deflect poses (the epic wyrm fight, `combat/epic-wyrm`).
+Supersedes §1.2 / §1.3's widths and §7.2's blade pull. Decisions: ADR-031 (build, blade) and
+ADR-027 (the plunge). Contracts: ARCHITECTURE.md "Player".
+
+**Build** (`model.js` `BODY`): the girth comes from mesh radii and widths; no bone length changed
+(IK, the foot planner and the hit segment run on the bones).
+- Chest 0.40 × 0.21 → 0.50 × 0.27 m (the torso shell's rings), waist 0.27 → 0.31, hips 0.30 → 0.34.
+- Upper arm r 0.064 → 0.088 with a deltoid cap, forearm 0.06 → 0.076; thigh 0.076 → 0.098, calf
+  0.058 → 0.074, bigger feet. Collar ~11 % bigger, pauldron ×1.24, arm plates and leg armour scaled.
+- Joints: shoulders ±0.17 → ±0.21 (deltoids ~0.62 m apart), hips ±0.09 → ±0.1. `DIM.coatR` 0.139 →
+  0.163 with the coat panel tops ×1.17 (hems ×1.07, so the A-line doesn't outgrow the shoulders).
+- The sword hand aims from the old shoulder spot (`DIM.gripShoulder`, `rig.arms.R.anchor`), so its
+  grips are unchanged by the wider frame.
+- 128 meshes, ~20.5k triangles.
+
+**Blade:** the game-camera depth pull is gone (`BLADE_PULL`, `heroArt.pull`, `SG_HERO_PULL`,
+`uArtPull`); the blade is depth-tested like every part. Bloom comes from the scene target, which
+no longer holds blade pixels his body hides; the halo, tip-streak and gem particles were already
+soft depth-tested.
+
+**Coat vs blade** (`anim.js`): each frame the grip and 12 points along the blade are tested against
+each coat panel in its own frame. With the hand outside the cloth the panel hangs inside the hand
+and the blade; with the hand (or steel running in) under it, the panel drapes over. The side is
+latched per panel (`coatSide`), the steel moves a panel at most 0.12 rad per frame, and the rule is
+off while he is down or tumbling. The run / sprint pose trails the sword hand outside the coat (a
+change to `loco` beyond the agreed light touch).
+
+**Plunge and deflect poses** (anim.js "PLUNGE + DEFLECT" block; timeline in COMBAT.md "The plunge"):
+- HANG: coiled at the apex above the head, knees tucked, both fists high on the hilt in a reverse
+  grip, the blade hanging point-down in front of him.
+- DIVE: the fists punch down to the sternum, the blade straight down below his tucked feet, point
+  first.
+- RIDE: crouched on the skull, right knee down, both fists on the buried hilt, leaning over it; a
+  twist of the blade, then he coils to spring off.
+- FLIP: the blade ripped out, a full backflip (knees to the chest, the blade along his right side so
+  it turns with him), opening feet-first for the landing.
+- LAND: a deep three-point crouch (free hand on the grass, the blade trailing low on his right, eyes
+  on the wyrm), rising into the stance.
+- Deflect (the parry clip): from the guard the blade snaps out into the blow, on alternating sides
+  through a chain, the chest rocks back with the pushback, and he is back in the guard by ~0.17 s;
+  later deflects snap harder. Between parries in rhythm the walking clips keep the block's guard up
+  (`guardHold`).
+- He hangs 5 m above the head, not the design's 2–3 m: the 58° camera drew him on top of the head
+  there.
+
+**Measured** (hero-look agent, 23 deterministic clips; the merged `herolook` test):
+- Blade inside the body (> 2 cm): 0 frames before and after; closest 1.8 cm, at the blade base by
+  the wrist in the slam windup (the test, 831 frames: deepest 1.6 cm).
+- Blade crossing the coat: 156 → 25 frames (run 26 → 3, sprint 19 → 1, strafe 44 → 8, turn 19 → 1,
+  roll 21 → 2, roll-idle 9 → 5, thrust 5 → 0, quick thrust 5 → 0, knockdown 7 → 4, combo 1 → 0,
+  walk 0 → 1). The test: 12 of 509 run / sprint / idle frames (≤ 5 %).
+- Glow leak from behind (idle at 36 m): blade pixels over the figure 615 → 98.
+- Hit segment: the thrust identical; light 1 ≤ 2.5 cm off (57 of 73 frames), light 2 ≤ 1.5 cm (9 of
+  29), the slam ≤ 1.8 cm (15 of 36). REACH, win, parry and block pass.
+
+**Still open.**
+- At the game camera his mass reads only modestly; the wide skirt dominates the outline.
+- From behind, the low idle guard shows only the point (the pull is gone).
+- 25 coat-crossing frames remain (panel edges near the hilt, the swing cap); the torn strips and the
+  sleeve streamers ignore the blade.
+- The coat swings more in runs (frames over 0.15 rad: run 1 → 11, sprint 4 → 13, strafe 13 → 20,
+  knockdown 26 → 38), though its largest single swing is lower.
+- The block's free hand doesn't brace the flat.
+- Over the wyrm at the game camera the plunging hero reads mainly through his cold tint and the cyan
+  blade.

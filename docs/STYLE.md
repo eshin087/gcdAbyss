@@ -47,6 +47,10 @@ History matters here:
 - **Reference match (2026-11-08, ADR-018 … ADR-022):** the owner asked for the two creatures to
   look "as identical and good as" his two reference images. The wyrm became thin digits whose
   brightness draws the dragon; the hero became ink-line art.
+- **Epic wyrm fight (2026-11-09, ADR-031):** the hero is broad-shouldered, and his blade is
+  depth-tested again (the 2026-11-08 depth pull drew the sword through his back and legs). The wyrm
+  flies (glide and dive wing keys, a hover pose), burns white-hot in phase 3 and casts fire spells
+  whose FX are glyph particles from the world atlas, like every other effect.
 
 | Thing | Technique | Where |
 |---|---|---|
@@ -55,7 +59,7 @@ History matters here:
 | Canopies | screen-grid `LEAF` 0.6: blobby ramp `. : o 0 O 8 @` | same |
 | Grass | ~260k instanced quads, each ONE glyph stroke (`\| / \ ' Y V v l i`) **anchored in the world** (no shimmer when the camera moves); gentle slow wind, trample pushers, wing gusts, burnt to ash glyphs; dim world-space soil glyphs between | `world/grass.js`, `world/ground.js` |
 | Hero, wyrm | **classic ASCII art** of a shaded SOURCE image (v0.4), matched to the owner's two reference images on 2026-11-08: the **wyrm** as thin one-pixel digits on black whose brightness draws charcoal scales, molten cracks and crimson torn sails; the **hero** as ink-line art, dim dense letters inside bright one-pixel ink lines. Rules and numbers: "Creature ASCII art" below | `createSurfaceGlyphMaterial` (`wyrm` / `heroArt` sources) → `render/pipeline.js` (hero branch, `wyrmCell`), `render/wyrmGlyphs.js`, `createPixelArtAtlas` |
-| FX | camera-facing glyph particles, additive HDR (bloom) or alpha, drawn after the grid pass | `render/particles.js` |
+| FX | camera-facing glyph particles, additive HDR (bloom) or alpha, drawn after the grid pass; the fire spells' ground warnings, meteors, lava, flame walls and the plunge's bursts are made of them too ("Fire, hazards and the plunge" below) | `render/particles.js`, `dragon/fx.js`, `player/fx.js` |
 | Fire light | pooled point lights (8 visible) lighting every shader | `render/lights.js` |
 | Shadows | moon orthographic shadow map, casters on layer 1 (`markCaster`) | `render/pipeline.js` |
 
@@ -236,8 +240,52 @@ Rules of thumb:
   the world grid next to him, so he cuts out of the grass. The outline is one letter thick: a
   two-cell band turned the ~12-letter-wide figure into a wireframe.
 - **Blade:** drawn 1.64 m (gem to point ≈ 70 % of his height, the portrait) with a ridge line and
-  serrations; at the game camera it is drawn up to 0.65 m nearer the camera along its view ray, so
-  the low guard shows across his back instead of hiding behind his legs and the grass (visual only,
-  ADR-022).
+  serrations. It is depth-tested like the rest of him (2026-11-09, ADR-031): from behind only the
+  steel beside his silhouette shows (the low idle guard shows just its point), it no longer shows
+  through his back or legs, and the coat hangs inside or drapes over it instead of passing through
+  (a few run frames still cross a panel). *Superseded:* the 2026-11-08 depth pull that drew it up to
+  0.65 m nearer the camera (ADR-022) put the sword through his back from behind.
+- **Build:** broad-shouldered and athletic (2026-11-09): a deep chest over a V to a fuller waist
+  (chest 0.50 × 0.27 m, waist 0.31, hips 0.34), thick arms and legs, bigger boots, on the same
+  skeleton (`BODY` in `player/model.js`). At the game camera the mass reads only modestly; the wide
+  coat skirt still dominates his outline.
 - **Scale:** at the 36 m game camera ~25 rows of 4x6 px letters (~15 on a phone at LOW); drawn 1.2×
   and leaned toward the camera (ADR-017). Close-ups (Lab model viewer) show the full reference look.
+
+### Fire, hazards and the plunge (2026-11-09)
+Every effect below is glyph particles (`fx.add`, additive HDR, for fire and light; `fx.alpha` for
+smoke and dust) using world-atlas glyphs only (`gi()` throws on others; `npm test`'s glyph check).
+Fire stays the only saturated warm light: white-yellow HDR cores `[4.6,3.5,1.5]` cooling through
+orange `[3.4,1.4,0.28]` to a dying red `[0.8,0.08,0.012]`; lava `[3.3,1.9,0.55]` → `[2.5,0.8,0.13]`;
+smoke `[0.045,0.04,0.036]` in alpha. Code: `dragon/fx.js` (the "fire hazards, spells and flight"
+section), `player/fx.js` (the plunge).
+- **Red ground warnings** (`hzRing`, `stripWarn`, `ringWarn`, `wallWarn`): a ring of red `•` dots
+  with a `!` every fourth, an inner ring closing in on the centre as a countdown (a lava pillar's
+  rises as `^`), a `+` at the centre; `>` chevrons down the path of a fire strip or wall; a hot ring
+  where a flame ring will ignite and a dim dotted limit at its outer radius. Past their timing flash
+  they brighten and pulse faster (`hazardFlash`: the ring flares, red glyphs fly up, a red light).
+  The dots are bullets: a middle dot `·` is ~1 px at the 36 m camera (the stomp, leap and roar
+  rings switched to `•` too).
+- **Meteors:** a white-hot `@` core in a `*` halo with `|` strokes laid along its screen motion, a
+  fire trail, smoke and its own light over a 0.75 s visible fall; the impact is a white flash, a
+  fire burst, flung rocks (`. , : ; o`), a ring of `)` shock strokes, dust, scorch and a smouldering
+  crater.
+- **Lava pillars:** before the eruption the ground cracks glow and spit sparks (`~ ^ ,`), faster as
+  it nears; then a column of molten `# % @ & ! |`, droplets (`. o •`) and a `~` splash ring.
+- **Flames** on strips, rings and walls: tall `^ * # % &` and low `^ ~ *` fire behind a red leading
+  edge; the fresh front burns tallest, and the ground scorches as it passes.
+- **Casts and flight:** the meteor cast spits a fireball straight up; fire swirls in round the wyrm
+  before a flame ring; the nova's 2.5 s charge sucks embers onto the chest with contracting `)`
+  rings and glowing cracks round its feet, then shock rings race out with a white flash and a fire
+  storm; the sky strafe streams fire from the mouth onto the ground ahead; low wingbeats blast dust
+  rings and flatten the grass; the dive's crash throws `)` shock strokes, fire, rocks and dust.
+- **Phase 3** burns white-hot: crack glow 0.8 and 50 body embers / s (phase 2: 0.5 and 22), a
+  white-hot boss bar.
+- **The plunge** speaks the hero's cold language: a blue-white afterimage of his pose at the dodge
+  spot and a cold streak up to the hang point; cold motes drawn in at the apex; on impact a
+  white-cyan flash, cold crystal shards fanned out, molten blood thrown up from the wound and a shock
+  ring round the skull (an execution: bigger, gold-white); embers spurting round the buried blade
+  while he rides; a gout of embers as he rips it out; a dust ring and a low cold ring where he lands.
+  Its glyphs: `* ° | - ~ ^ ' · + x × A V . , : =`.
+- **The deflect chain:** each parry in rhythm clashes bigger and brighter, with a crossed pair of
+  sparking streaks from the second one.

@@ -4,11 +4,35 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-The wyrm and the hero are matched to the owner's two reference images (a red-black ASCII dragon and
-the "Shadow Swordsman" line art), and both move better. Gameplay is unchanged: attack timings,
-hitboxes, damage and parry windows are the same (the hero's attack frames are bit-identical).
+Two pieces of work since 0.4.0:
+- **The epic wyrm fight** (2026-11-09): a longer, harder battle in three phases, with combos you
+  parry blow by blow, fire spells, short flights, and a perfect dodge that drives the hero's blade
+  into the wyrm's head. The hero is broad-shouldered, and his sword no longer shows through his body.
+- **The reference match** (2026-11-08, PR #4): the wyrm and the hero look like the owner's two
+  reference images (a red-black ASCII dragon and the "Shadow Swordsman" line art) and move better.
+  That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **A three-phase wyrm fight:** the wyrm changes at 66 % and 33 % of its health with a roar that
+  clears the field; phase 3 burns white-hot and opens with the Inferno nova. The boss bar shows where
+  the phases begin.
+- **Combo strings** you can parry blow by blow (Sekiro style): the claw combo, the rending flurry,
+  the hesitant maw (a held bite that baits an early parry), the wing buffet, the tail lash, the
+  pounce and a 6–7-hit frenzy. Each parry deflects the blow and the combo goes on; parry the last
+  one to stagger the wyrm. Red blows inside a combo must be dodged. A "DEFLECT ×N" counter and a
+  clang that climbs with every deflect.
+- **The plunge:** a perfect dodge near the wyrm puts you above its head for a reverse-grip stab; you
+  ride the head down, backflip off to a landing you can see, and get the crit window. When the wyrm
+  is posture-broken, attack near its head for an **EXECUTION**.
+- **Flying attacks:** the burning pass (a low pass breathing fire, leaving a burning strip), the sky
+  dive (it climbs, tracks you and crashes down) and the hover barrage (fireballs from the air).
+  Perfect-dodge its fire from the air and you plunge onto the flying wyrm: it crashes out of the sky.
+- **Fire spells:** meteor rain (meteors keep falling while the wyrm fights on), fire eruptions (lava
+  pillars toward you; in phase 3 they chase you), a flame ring, a flame wall and the Inferno nova
+  (flee its blast or perfect-dodge it). Every one warns with a red ring on the ground.
+- **Lab:** a Phase 3 button; every new ability can be triggered.
+- **Tests:** scenarios for the strings, the deflect chain, the plunge, the wyrm's plunge reaction,
+  hit timing, the fire attacks and the hero's build, plus an opt-in difficulty probe bot.
 - **Hero moves:** the roll ends in a sliding kneel with dust, torn grass and sparks off the dragging
   blade; the charged thrust dashes in two real steps; the charge's updraft lifts the coat and hair;
   light 1 cocks the blade over the shoulder; finishes hold for a beat.
@@ -17,6 +41,19 @@ hitboxes, damage and parry windows are the same (the hero's attack frames are bi
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **A longer, harder fight:** the wyrm has 4500 HP (was 1500) and hits harder (most blows 15–24,
+  heavy ones 26–40, the nova 70; you have 160 HP); its posture meter is larger; each phase is faster,
+  with shorter pauses. It favours its combos and fire attacks, and a new phase's abilities arrive one
+  by one.
+- **Parrying in rhythm:** a parry no longer ends a combo, only its last blow; right after a deflect
+  the next tap counts at once, so you can keep the guard up between blows (mashing still fails).
+- **Perfect dodges** against the wyrm no longer teleport you behind it: you plunge onto its head,
+  or (out of range, or against a fire hazard) time slows and your hits crit where you dodged.
+- **The hero is broad-shouldered:** a deeper chest, thicker arms and legs, bigger boots, on the same
+  skeleton (his reach is unchanged).
+- **The camera** keeps the hero and a flying or rearing wyrm on screen, panning and pulling back a
+  little.
+- The red warning rings use bigger dots, so they read at the game camera.
 - **The wyrm looks like the reference dragon:**
   - thin pixel digits on black instead of bold letters (finer letters on screens under 900 px tall)
   - a charcoal scaled hide, molten cracks glowing on the undersides, an orange-lit chest and throat
@@ -26,7 +63,7 @@ hitboxes, damage and parry windows are the same (the hero's attack frames are bi
 - **The hero looks like the line-art reference:**
   - bright ink outlines that follow every curve over dim, dense letters
   - at the game camera a dark figure with a cool rim and a crisp cyan blade, cut out of the grass
-  - a longer blade (gem to point ~70 % of his height) that stays visible from behind
+  - a longer blade (gem to point ~70 % of his height)
   - a coat that drapes with folds and a lavender torn hem, kite greaves, a spiky pauldron, fuller
     hair, and his face shows
 - **Hero motion:** the portrait's wide idle with the blade low; feet stay planted while moving and
@@ -37,6 +74,8 @@ hitboxes, damage and parry windows are the same (the hero's attack frames are bi
   its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
 
 ### Fixed
+- The hero's sword no longer shows through his back or legs, and his coat rarely passes through the
+  blade any more (it drapes over it or hangs inside it).
 - Wyrm: wings and limbs flipping round in one frame, feet sliding or floating, the stomp's paws
   landing before the slam, toes under the ground when lying down, the tail folding over itself.
 - The wyrm's tail sweep can no longer land before its red warning flash.
@@ -45,6 +84,8 @@ hitboxes, damage and parry windows are the same (the hero's attack frames are bi
   feet, the blade's glow sitting short of its point.
 
 ### Removed
+- The blink behind the wyrm on a perfect dodge (enemies without a head to stab keep it).
+- The blade's depth pull, which drew the sword in front of the hero's body.
 - The red crack "worms" over the wyrm's back and the dash outlines along its wings and tail.
 - Dead code in the ASCII pass (the generic `artCell` letter path and `uArtCount`).
 

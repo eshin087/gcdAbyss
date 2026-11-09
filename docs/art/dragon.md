@@ -646,6 +646,10 @@ forward on a strong S, jaw 0.65 open, a stalking stance, the arched tail), and d
 collapse in which every foot stays planted and both wings crumple onto the ground. See
 "Implementation notes (reference match)".
 
+*Extended 2026-11-09:* the wyrm flies inside its flight attacks, with two more wing keys (GLIDE,
+DIVE), a hover pose and a level tail in the air; it has a `plunged` reaction (the head slammed down,
+a thrash, the rise) and a white-hot phase 3. See "Implementation notes (epic wyrm fight)".
+
 ## 5. Moveset mapping
 
 Every **tell type, windup, active, impact and recovery time** stays exactly as in `tuning.js`
@@ -668,6 +672,11 @@ and `docs/COMBAT.md`. Only who does the work changes. Reaches and AI ranges must
 **Recoil, flinch and hit reactions.** On a parry the head and shoulders snap back
 (`recoilTime` 0.6) and the forefeet hop back once. On a posture break, use the
 stagger/posture-break pose in §4.
+
+*2026-11-09:* the claw combo is now a string (its hits are the `claw` and `lungeBite` kinds below,
+same timings, more damage), and a parry of a string's non-final hit only knocks the struck part back
+(the recoil is for the last hit). Seven strings and eight fire attacks join the table: see
+"Implementation notes (epic wyrm fight)"; numbers in COMBAT.md "Current numbers".
 
 ## 6. Build checklist: the 15 traits that matter most
 
@@ -1147,3 +1156,77 @@ meshes 194 → 183.
 - Close-ups show large, flat scale plates (no LOD toward finer scales); letters still change on
   ~39 % of the lit cells per frame at idle.
 - Round 2's dragon work had no independent review.
+
+## Implementation notes (epic wyrm fight, 2026-11-09)
+
+The owner asked for far more attacks, epic fire spells, flying attacks with fire from the air,
+Sekiro-style combos to parry hit after hit, and a longer, harder fight in three phases. Two agents
+built the wyrm's side (dragon-melee: the strings, the deflect chain, the plunge reaction, three
+phases; dragon-fire: the flights, the spells, the hazards), merged with the hero's two agents into
+`combat/epic-wyrm`. Gameplay numbers: COMBAT.md; contracts: ARCHITECTURE.md "Dragon". Decisions:
+ADR-026 … ADR-030.
+
+**String performances** (`attacks.js` `KINDS`; each hit kind writes pose fields only):
+- `claw`: the foreleg rake (the swipe's performance) from the hero's side or the other one; a
+  delayed claw lifts the cocked paw a little higher and trembles while the head lowers to watch.
+- `overhead`: the paw raised high over the shoulder, then smashed straight down onto the hero (a
+  short lunge closes on a far hero).
+- `bite` / `lungeBite`: the single bite; the claw combo's finisher (it sits back onto its haunches,
+  head drawn up, wings pulsing, then lunges).
+- `rearBite`: the head rears high and back and holds (a slow weave, the jaw quivering), then snaps.
+- `wing`: the buffet. The struck wing half-opens (fingers fanned forward) and rises while the body
+  turns that flank to the hero and leans away, then crashes down beside it in one downstroke of the
+  rig's flap; the fingers rake the ground out to the side (a gust shoves). It pivots, and the other
+  wing comes down.
+- `tailJab`: the windup turns its back on the hero and stops with the tail short of him, coiled low
+  and stiff; the active snaps the tail through him with the hips thrusting back. It reads as a lash,
+  not a thrust.
+- `tailSweep` (the spin, on the v0.4 tail solve), `hop` (the pounce: a crouch that tracks the hero, a
+  short hop, the forefeet slam down in a red ring), `stomp` (the rear-up slam, the frenzy's finisher).
+- A parried non-final hit throws the struck paw (claw kinds) or the head and front (bites, wings,
+  tail) back and out over 0.14 s (`TUNING.deflectKnock`: head 1.1, paw 0.9, up 0.5 model units).
+
+**The plunged reaction** (ai.js `SEQ.plunged`; the hero rides `plungePoint`, so the head stays on
+its joints): slam (the head driven into the ground in front, forelegs buckled, wings flung up, dust
+at the head), thrash (pinned and furious: the head thrashes side to side on the ground, the jaw
+snaps, the wings beat erratically, stun stars; an execution weakens as it goes), rise (it tears the
+head free and shakes it). Airborne it first falls lopsided (wings flailing, nose pitching down, legs
+reaching) and crash-lands (a dust ring, a shake). The hurt flash is capped (0.45) so the hitstop
+doesn't wash the whole wyrm white.
+
+**Flight poses** (rig/anim.js; pose fields `hover`, `glide`, `dive`, `altRate` with `alt`,
+`airborne`, `flap`, `flapHz`):
+- `WING_KEYS.GLIDE`: the arms reach out nearly level (a ~27° dihedral) and the four fingers fan the
+  sail out flat behind them, so from the 58° camera the whole membrane faces up (the strafe's pass,
+  the landing glide). Span ~34 m, like SPREAD: wider filled the screen.
+- `WING_KEYS.DIVE`: the stoop: arms tucked back and up, the fingers swept back along the body (a
+  narrow delta).
+- Hover: the hind legs hang straight down and sway, the forelegs reach down with the claws ready, the
+  stroke sweeps fore and aft (the wrists come forward on the downstroke).
+- Every downstroke heaves the body up. In the air the tail streams back a little below level (held
+  34° down, the 15.6 m tail reached the sword band from a 7–8 m flight); hovering, it hangs from the
+  tilted body and curls back up toward the tip.
+- `altRate`: the dive sets it high so the body meets the ground on the impact frame.
+- Hover points sit beside the hero (east or west of him) so the flier stays on screen: altitude
+  shifts a flier up-screen ~0.53 m per metre, against ~0.85 m per metre of ground to the north. The
+  dive hovers 13 m up, 9 m beside its target; the barrage 9 m up, 13 m beside the hero; the strafe's
+  pass flies at 7 m (the head stays above 6 m, out of sword reach). The flying framing (flow +
+  `cameraRig.keep`) keeps the head and body on screen with the hero.
+
+**Phase 3, white-hot:** crack glow 0.8 (phase 2 0.5), 50 body embers / s (22), the resting jaw 0.95
+(0.85), a burst of embers from the whole body with the transition roar and embers at the mouth
+through its windup.
+
+**Fire FX:** STYLE.md "Fire, hazards and the plunge" (world-atlas glyphs only). The warning-ring
+dots are bullets `•` now, the stomp, leap and roar rings included.
+
+**Still open.**
+- The tail "jab" is a lash, not a thrust: a true thrust needs a tail-raise control in rig/anim.js.
+- The wing buffet only lands in a narrow band (6.8–8.3 model units out).
+- Later string hits can whiff a hero who doesn't move (the TIMING probe: the claw strings' second
+  claw lands on ~55 of 68 placements, the frenzy's 4th–6th hits on 13–17 of 33).
+- The knock-back is a 0.14 s offset, and the overhead claw's raise is hard to read at the game
+  camera.
+- The meteor cast has no red windup glow of its own (each meteor warns for itself).
+- The dive hovers 13 m up and the barrage 9 m (the spec said 14 / 8).
+- The phase-3 eruption chase is verified in the sim only (not captured).
