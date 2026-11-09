@@ -881,14 +881,18 @@ const KD = {
   sit: [0.84, 0, 0.98, 1, 1.14, 1, 1.3, 0],
   arms: [0.05, 0, 0.25, 1, 0.8, 1, 0.95, 0],
   push: [0.8, 0, 0.92, 1, 1.08, 1, 1.22, 0],
+  blade: [0.05, 0, 0.22, 1, 1.12, 1, 1.3, 0], // held out at his right side until he is on his feet
 };
 function knockdownPose(p, A) {
   const t = A.t;
   guard(p, A);
   p[P.bodyX] = 0;
+  p[P.pelvX] = 0;
   p[P.pelvY] = 0;
+  p[P.pelvZ] = 0;
   p[P.spY] = 0;
   p[P.spZ] = 0;
+  p[P.hdZ] = 0;
   p[P.pitch] = kf(t, KD.pitch);
   p[P.bodyY] = kf(t, KD.y) + 0.05 * Math.sin(Math.PI * clamp((t - 0.3) / 0.12, 0, 1)); // bounce
   p[P.bodyZ] = kf(t, KD.z);
@@ -904,8 +908,11 @@ function knockdownPose(p, A) {
   const arms = kf(t, KD.arms), push = kf(t, KD.push);
   to3(p, P.rH, -0.36, -0.15, -0.02, arms);
   to3(p, P.lH, 0.38, -0.15, 0.02, arms);
-  dirTo(p, P.swD, -1, 0.05, 0.25, arms);
-  to3(p, P.swF, 0, 1, 0, arms);
+  // the sword stays out at his right side (clear of the legs that fold up under him) until he
+  // stands, then comes back to the ready stance
+  const bl = kf(t, KD.blade);
+  dirTo(p, P.swD, -0.92, 0.0, -0.38, bl);
+  to3(p, P.swF, 0, 1, 0, bl);
   to3(p, P.rH, -0.1, -0.48, -0.12, push); // hands push off the ground
   to3(p, P.lH, 0.1, -0.48, -0.12, push);
 }
@@ -971,7 +978,8 @@ const POSES = {
   knockdown: knockdownPose,
   dead: deathPose,
 };
-const WALK_KEYS = new Set(['loco', 'heal', 'block', 'charge']); // clips whose feet emit footsteps
+// clips whose feet the foot planner holds on the ground (and whose touchdowns are footsteps)
+const WALK_KEYS = new Set(['loco', 'heal', 'block', 'charge', 'parry']);
 
 
 // ---------------------------------------------------------------- IK
@@ -1043,6 +1051,7 @@ const COAT_LAG = [0.065, 0.095]; // × (1 + COAT_LAG_V·|v|): ~40° behind verti
 const COAT_LAG_V = 0.18;
 const COAT_FLARE = 0.3; // resting outward flare from the hips (≈16°: the A-line)
 const COAT_FLOOR = 0.04; // panel ends stay this far above the ground
+const COAT_JUMP = 0.2; // rad per frame: the most a lying-down floor fix may swing a panel at once
 const COAT_A = [[-1.5, 0.3], [-1.0, 0.6]]; // outward (−) / inward (+) swing limits per segment
 const COAT_B = [0.7, 0.55]; // sideways swing limit per segment
 const LEG_R = 0.08; // thigh / knee radius used to push the panels out
@@ -1257,7 +1266,9 @@ export class HeroAnimator {
     this.def = pl.atk ? pl.atk.def : null;
     this.chargeK = fin(pl.chargeK);
     this.releaseK = fin(pl.releaseK);
-    this.recoil = fin(pl.recoil);
+    // a blocked blow drives the guard in over 2-3 frames (an impact, not a one-frame pop)
+    const rc = clamp(fin(pl.recoil), 0, 1);
+    this.recoil = rc > this.recoil ? Math.min(rc, this.recoil + dt * 24) : rc;
 
     // gait drivers from the hero's actual ground velocity, expressed in model space
     const c = Math.cos(pl.yaw), s = Math.sin(pl.yaw);
@@ -1652,6 +1663,7 @@ export class HeroAnimator {
     const r = this.rig;
     const steps = dt > 0 ? Math.min(8, Math.ceil(dt / (1 / 120))) : 0;
     const h = steps ? dt / steps : 0;
+    const dtk = dt > 0 ? dt * 60 : 100; // frames this step (rate limits); a reset snaps
     r.pelvis.getWorldQuaternion(_qPelvis);
     _qInv.copy(_qPelvis).invert();
     _g.set(0, -1, 0).applyQuaternion(_qInv); // gravity in pelvis space
@@ -1741,15 +1753,25 @@ export class HeroAnimator {
       if (this._hemY(LEN, s0.x, s0.z, s1.x, s1.z) < COAT_FLOOR) {
         const [b0, b1] = COAT_A[1];
         let best1 = s1.x, bestD = Infinity;
-        for (let k = 0; k <= 8; k++) {
-          const a1 = b0 + ((b1 - b0) * k) / 8;
+        for (let k = 0; k <= 16; k++) {
+          const a1 = b0 + ((b1 - b0) * k) / 16;
           if (this._hemY(LEN, s0.x, s0.z, a1, s1.z) >= COAT_FLOOR && Math.abs(a1 - s1.x) < bestD) {
             bestD = Math.abs(a1 - s1.x);
             best1 = a1;
           }
         }
         if (bestD < Infinity) {
-          s1.x = best1;
+          // refine to the exact floor contact between that sample and the current swing, so the
+          // hem rests ON the ground continuously (sample-snapping flicked panels between limits)
+          let lo = best1, hi = s1.x;
+          for (let it = 0; it < 7; it++) {
+            const mid = (lo + hi) * 0.5;
+            if (this._hemY(LEN, s0.x, s0.z, mid, s1.z) >= COAT_FLOOR) lo = mid;
+            else hi = mid;
+          }
+          // a small fix lands at once (the hem rests on the grass); a flip to the other side of
+          // its range swings over in a few frames instead of one
+          s1.x += clamp(lo - s1.x, -COAT_JUMP * dtk * 2, COAT_JUMP * dtk * 2);
         } else {
           // lying down: the sideways swing can point a side panel into the ground, so also try
           // the panel straightened sideways (z = 0)
@@ -1779,10 +1801,14 @@ export class HeroAnimator {
             }
           }
           const ok = bestD < Infinity;
-          s0.x = ok ? pa : hiA;
-          s1.x = ok ? pb : hiB;
+          // the panel swings over to the clearing configuration quickly but never in one frame
+          // (a lying body used to flip whole panels between their limits frame to frame)
+          const J = COAT_JUMP * dtk;
+          s0.x += clamp((ok ? pa : hiA) - s0.x, -J, J);
+          s1.x += clamp((ok ? pb : hiB) - s1.x, -J, J);
           if ((ok ? pz : hiZ) === 0) {
-            s0.z = s1.z = 0;
+            s0.z += clamp(-s0.z, -J, J);
+            s1.z += clamp(-s1.z, -J, J);
             s0.vz = s1.vz = 0;
           }
           s0.vx = 0;
@@ -1836,19 +1862,26 @@ export class HeroAnimator {
       // ground: swing the strip until its tip clears the grass
       const rootY = _S.copy(S.joint.position).applyQuaternion(_q0).add(_e0).y;
       if (this._stripTipY(S, c.x, c.z, rootY) < STRIP_FLOOR) {
-        let best = c.x, hiY = -Infinity;
-        for (let m = 1; m <= 6; m++) {
-          for (const sgn of [-1, 1]) {
-            const a = clamp(c.x + sgn * m * 0.3, -2.4, 2.4);
-            const y = this._stripTipY(S, a, c.z, rootY);
-            if (y > hiY) {
-              hiY = y;
-              best = a;
+        // the nearest swing (either way, up to straight up off a coat lying on the grass) whose
+        // tip clears; failing that, the highest, also trying the strip straightened sideways
+        let best = c.x, bestZ = c.z, hiY = -Infinity;
+        for (let zz = 0; zz < 2 && hiY < STRIP_FLOOR; zz++) {
+          const bz = zz ? 0 : c.z;
+          for (let m = 1; m <= 16; m++) {
+            for (let g = -1; g <= 1; g += 2) {
+              const a = clamp(c.x + g * m * 0.2, -Math.PI, Math.PI);
+              const y = this._stripTipY(S, a, bz, rootY);
+              if (y > hiY) {
+                hiY = y;
+                best = a;
+                bestZ = bz;
+              }
             }
+            if (hiY >= STRIP_FLOOR) break;
           }
-          if (hiY >= STRIP_FLOOR) break;
         }
         c.x = best;
+        c.z = bestZ;
         c.vx = 0;
       }
       S.joint.rotation.set(c.x, S.rest, c.z);
