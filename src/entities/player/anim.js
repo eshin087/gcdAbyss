@@ -1454,9 +1454,10 @@ const LEG_R = BODY.thigh[0] + 0.004; // thigh / knee radius used to push the pan
 // through the tails behind a run). Every frame the grip and points along the drawn blade (BLADE_PTS,
 // pelvis space) are tested against each panel segment's sheet: with the sword hand outside the cloth
 // the panel hangs INSIDE the hand and the blade (they cap how far it flares; the legs still win), with
-// the hand under the cloth it drapes OVER the blade (they push it out). The side is latched while any
-// steel is over the panel. COAT_BLADE_R / COAT_HAND_R = the blade's half-width / the gauntlet, + the
-// cloth's margin.
+// the hand under the cloth (or the steel running in under it, inside the panel's pivot) it drapes OVER
+// the blade (they push it out). The side is latched while any steel is over the panel; lying down or
+// tumbling, the floor contact rules instead. COAT_BLADE_R / COAT_HAND_R = the blade's half-width /
+// the gauntlet, + the cloth's margin.
 const COAT_BLADE_R = 0.07, COAT_HAND_R = 0.06;
 const COAT_STEEL_JUMP = 0.12; // rad per 60 fps frame: the most the steel moves a coat segment at once
 const BLADE_PTS = Array.from({ length: 13 }, () => new THREE.Vector3()); // [0] = the grip
@@ -2297,7 +2298,8 @@ export class HeroAnimator {
       r.pelvis.worldToLocal(lp[li * 2 + 1].copy(_T));
     }
     const still = 1 - clamp(this.speed / 2.5, 0, 1); // the idle breeze fades out once moving
-    const nb = this._bladePts();
+    // (not while he lies down or tumbles: there the hem's floor contact rules the cloth)
+    const nb = Math.abs(wrapAngle(this.cur[P.pitch])) < 1.0 ? this._bladePts() : 0;
 
     for (let i = 0; i < r.coat.length; i++) {
       const C = r.coat[i], D = C.def, st = this.coatState[i], LEN = C.len;
@@ -2328,18 +2330,22 @@ export class HeroAnimator {
           QA[k * 3 + 1] = B.y - ap.y;
           QA[k * 3 + 2] = dx * nx + dz * nz;
         }
-        let gh = Infinity, near = false; // the grip's height over the sheet; any steel over it
+        // gh = the grip's height over the sheet; near = any steel over it; dive = steel under the
+        // sheet that the cloth cannot hang inside of (it runs in under the cloth, inside the pivot)
+        let gh = Infinity, near = false, dive = false;
         this._lowerFrame(nb, st[0].x, st[0].z, D.len[0]);
         for (let s = 0; s < 2; s++) {
           const Q = s ? QB : QA, L = s ? L1 : D.len[0], R = s ? R1 : C.r0;
           for (let k = 0; k < nb; k++) {
             if (!segLocal(Q, k, st[s].x, st[s].z, L, D.w[s] / 2, D.w[s + 1] / 2, R)) continue;
             near = true;
-            if (k === 0 && SEG[2] < gh) gh = SEG[2];
+            if (k === 0) {
+              if (SEG[2] < gh) gh = SEG[2];
+            } else if (SEG[2] < -0.02 && Q[k * 3 + 2] - COAT_BLADE_R <= 0.005) dive = true;
           }
         }
         const side = this.coatSide;
-        if (gh < -0.01) side[i] = 2;
+        if (gh < -0.01 || dive) side[i] = 2;
         else if (gh > 0.05 || !near) side[i] = 1;
       }
       const over = steel && this.coatSide[i] === 2;
