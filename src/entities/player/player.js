@@ -4,7 +4,7 @@ import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../..
 import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE } from './model.js';
-import { HeroAnimator } from './anim.js';
+import { HeroAnimator, ROLL_SLIDE } from './anim.js';
 import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
 
@@ -1508,6 +1508,24 @@ export class Player {
       else this.healLight.set?.(p.x, 1.3, p.z);
     }
     const sw = this.sweep;
+    // the roll's sliding kneel (the root still carries 4-6 m/s through it): dust and torn grass
+    // off the shin and the planted foot, cold sparks off the point dragging behind
+    if (this.state === 'roll' && !this.rollBack && dt > 0) {
+      const t = this.stateT, S = ROLL_SLIDE;
+      const k = smoothstep(S[0] - 0.02, S[0] + 0.03, t) * (1 - smoothstep(S[1] - 0.05, S[1], t));
+      const gx = this.groundVel.x, gz = this.groundVel.z, sp = Math.hypot(gx, gz);
+      if (k > 0.01 && sp > 0.3) {
+        const dx = gx / sp, dz = gz / sp;
+        this.rig.legs.R.shin.getWorldPosition(this._v);
+        this.fx.skid(dt, 0, this._v.x, this._v.z, dx, dz, sp, k);
+        this.rig.legs.L.foot.getWorldPosition(this._v);
+        this.fx.skid(dt, 1, this._v.x, this._v.z, dx, dz, sp, 0.55 * k);
+        if (sw.valid) {
+          sw.point(1, this._v);
+          if (this._v.y < 0.14) this.fx.scrape(dt, this._v.x, this._v.y, this._v.z, dx, dz, sp * k);
+        }
+      }
+    }
     if (sw.valid) {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);

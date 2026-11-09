@@ -1018,25 +1018,34 @@ function guardBreakPose(p, A) {
 // Dodge keys (§4.5, the sheet's 0.55 s frames mapped onto the 0.6 s roll): 01 crouch 0.0,
 // 02 launch 0.09, 03 tuck 0.2, 04 roll 0.32, 05 kneel 0.44, 06 recover 0.6. Hands / sword in body
 // axes; feet in model space (the tuck uses body points instead).
+// The kneel is a SLIDE: the root still carries 4-6 m/s out of the roll (gameplay), so the kneel
+// travels ~1 m. It is posed as an intended sliding kneel (0.42-0.54): the right shin flat on the
+// grass, the left foot planted ahead with the free hand braced on that knee, the torso upright
+// against the momentum, the blade trailing back-down on the right with its point dragging in the
+// grass; player.js kicks dust off the knee and the foot and sparks off the dragging point. The
+// recover (06) rises into the sheet's low guard: the blade still trailing back-down (the run's
+// own carry, so rolling out into a run doesn't swing it) and the free fist up.
 const ROLL = {
-  y: [0, -0.24, 0.05, -0.27, 0.09, -0.16, 0.2, -0.36, 0.32, -0.5, 0.44, -0.4, 0.6, -0.15],
-  sp: [0, 0.55, 0.09, 0.42, 0.2, 0.95, 0.33, 0.95, 0.44, 0.3, 0.6, 0.42],
-  hd: [0, 0.05, 0.09, -0.1, 0.2, 0.75, 0.33, 0.75, 0.44, 0.0, 0.6, -0.25],
-  rH: [0, -0.04, -0.42, -0.1, 0.09, -0.1, -0.36, -0.14, 0.2, -0.08, -0.38, 0.06, 0.33, -0.08, -0.38, 0.06, 0.44, 0.03, -0.42, 0.2, 0.6, -0.02, -0.46, 0.08],
-  lH: [0, 0.0, -0.42, 0.35, 0.09, 0.0, -0.3, 0.45, 0.2, 0.06, -0.3, 0.2, 0.33, 0.06, -0.3, 0.2, 0.44, 0.1, -0.4, 0.25, 0.6, 0.06, -0.3, 0.3],
+  y: [0, -0.24, 0.05, -0.27, 0.09, -0.16, 0.2, -0.36, 0.32, -0.5, 0.42, -0.47, 0.54, -0.44, 0.6, -0.2],
+  sp: [0, 0.55, 0.09, 0.42, 0.2, 0.95, 0.33, 0.95, 0.42, 0.2, 0.54, 0.14, 0.6, 0.34],
+  hd: [0, 0.05, 0.09, -0.1, 0.2, 0.75, 0.33, 0.75, 0.42, 0.08, 0.54, 0.1, 0.6, -0.12],
+  rH: [0, -0.04, -0.42, -0.1, 0.09, -0.1, -0.36, -0.14, 0.2, -0.08, -0.38, 0.06, 0.33, -0.08, -0.38, 0.06, 0.42, -0.13, -0.42, -0.04, 0.54, -0.13, -0.43, -0.06, 0.6, -0.04, -0.45, -0.12],
+  lH: [0, 0.0, -0.42, 0.35, 0.09, 0.0, -0.3, 0.45, 0.2, 0.06, -0.3, 0.2, 0.33, 0.06, -0.3, 0.2, 0.42, 0.0, -0.48, 0.34, 0.54, 0.0, -0.48, 0.36, 0.6, -0.05, -0.14, 0.36],
   // the blade in BODY axes, so it turns over with him: trailing back-down at the hip → swung out
   // to his right side as he launches → held out there, flat (an axle the ball rolls round: the
-  // point circles beside him instead of flipping through the ground) → swept forward-down for the
-  // kneel, the point on the grass ahead → easing toward the ready stance (dirLerp: round the
-  // outside, never through the legs)
-  sw: [0, -0.2, -0.4, -0.89, 0.09, -0.72, -0.28, -0.63, 0.2, -0.86, -0.14, -0.49, 0.32, -0.86, -0.14, -0.49, 0.44, 0.12, -0.55, 0.83, 0.6, 0.42, -0.66, 0.62],
+  // point circles beside him instead of flipping through the ground) → trailing back-down for the
+  // slide, the point dragging in the grass → the low guard's carry (round the outside, never
+  // through the legs)
+  sw: [0, -0.2, -0.4, -0.89, 0.09, -0.72, -0.28, -0.63, 0.2, -0.86, -0.14, -0.49, 0.32, -0.86, -0.14, -0.49, 0.42, -0.42, -0.48, -0.77, 0.54, -0.36, -0.52, -0.77, 0.6, -0.2, -0.55, -0.8],
   // body pitch (rad, piecewise linear so the turn never stalls): crouch, the 65° launch, the
   // 110° ball, 220° over the shoulder (blade flat along the ground behind), upright at the kneel
   pitch: [0, 0, 0.09, 0.45, 0.2, 1.9, 0.32, 3.85, 0.44, TAU, 0.6, TAU],
-  rF: [0, -0.14, ANK + 0.03, -0.32, 0.09, -0.12, 0.3, -0.62, 0.36, -0.13, ANK + 0.05, -0.36, 0.44, -0.13, ANK + 0.02, -0.4, 0.6, -0.16, ANK, -0.38],
-  lF: [0, 0.12, ANK, 0.3, 0.36, 0.13, ANK + 0.05, 0.32, 0.44, 0.13, ANK, 0.35, 0.6, 0.14, ANK, 0.32],
-  rK: [0, -0.3, 0, 1, 0.36, -0.2, 0.3, 1, 0.44, -0.1, -0.4, 1, 0.6, -0.35, 0, 1],
+  rF: [0, -0.14, ANK + 0.03, -0.32, 0.09, -0.12, 0.3, -0.62, 0.36, -0.13, ANK + 0.05, -0.36, 0.44, -0.14, ANK + 0.01, -0.44, 0.54, -0.14, ANK, -0.46, 0.6, -0.16, ANK, -0.38],
+  lF: [0, 0.12, ANK, 0.3, 0.36, 0.13, ANK + 0.05, 0.32, 0.44, 0.15, ANK, 0.38, 0.6, 0.14, ANK, 0.32],
+  rK: [0, -0.3, 0, 1, 0.36, -0.2, 0.3, 1, 0.44, -0.1, -0.5, 1, 0.54, -0.1, -0.5, 1, 0.6, -0.35, 0, 1],
 };
+/** The slide window of the forward roll (s): player.js kicks skid dust / point sparks in it. */
+export const ROLL_SLIDE = [0.42, 0.58];
 /** Direction keys k = [t0, x, y, z, ...] → p[i..i+2], each span eased and blended by dirLerp. */
 function kdir(p, i, t, k) {
   const n = k.length / 4;

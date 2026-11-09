@@ -18,6 +18,7 @@ const COL = {
   crit: [2.2, 2.8, 4.2], critEnd: [0.3, 0.55, 1.4],
   flash: [4.2, 3.6, 2.6],
   dust: [0.2, 0.18, 0.14], dustEnd: [0.09, 0.08, 0.065],
+  grassBit: [0.16, 0.26, 0.12], grassBitEnd: [0.05, 0.09, 0.04], // torn grass kicked up by a slide
   heal: [1.3, 1.9, 0.55], healEnd: [0.25, 0.6, 0.12],
   flame: [3.0, 1.35, 0.32], flameEnd: [0.9, 0.12, 0.02],
   ash: [0.34, 0.035, 0.028], ashEnd: [0.1, 0.012, 0.01],
@@ -69,6 +70,8 @@ export class PlayerFx {
     this.haloAcc = 0;
     this.gemGlowAcc = 0;
     this.tipAcc = 0;
+    this.skidAcc = [0, 0]; // per sliding contact (skid)
+    this.scrapeAcc = 0;
   }
 
   get add() {
@@ -651,6 +654,51 @@ export class PlayerFx {
     }
   }
 
+  /**
+   * A sliding contact (the roll's kneel: the shin, the planted foot): a low spray of dust and torn
+   * grass kicked off the ground spot (x, z), thrown back against the slide (dx, dz unit) and
+   * outward, faster and denser with the slide speed sp (m/s). `slot` keeps one rate accumulator
+   * per contact.
+   */
+  skid(dt, slot, x, z, dx, dz, sp, k = 1) {
+    const fx = this.alpha;
+    if (!fx || !(sp > 0.3)) return;
+    const acc = this.skidAcc;
+    acc[slot] += dt * 40 * k * Math.min(1.5, sp / 4);
+    while (acc[slot] >= 1) {
+      acc[slot] -= 1;
+      const s = sp * R(0.15, 0.45), side = R(-0.9, 0.9);
+      const grass = Math.random() < 0.3;
+      fx.spawn({
+        x: x + R(-0.08, 0.08), y: R(0.03, 0.12), z: z + R(-0.08, 0.08),
+        vx: -dx * s - dz * side, vy: R(0.4, 1.5), vz: -dz * s + dx * side,
+        life: R(0.3, 0.6), size: grass ? R(0.12, 0.17) : R(0.14, 0.22), sizeEnd: grass ? 0.08 : R(0.3, 0.42),
+        glyph: grass ? "/\\'," : '.,:', color: grass ? COL.grassBit : COL.dust, colorEnd: grass ? COL.grassBitEnd : COL.dustEnd,
+        alpha: 0.85, alphaEnd: 0, drag: 2.2, gravity: -2.4, spin: R(-4, 4),
+      });
+    }
+  }
+
+  /** The blade's point dragging in the grass (the roll's slide): cold sparks flicked off it, back
+   *  against the slide (dx, dz unit). */
+  scrape(dt, x, y, z, dx, dz, sp) {
+    const fx = this.add;
+    if (!fx || !(sp > 0.3)) return;
+    this.scrapeAcc += dt * 30 * Math.min(1.5, sp / 4);
+    while (this.scrapeAcc >= 1) {
+      this.scrapeAcc -= 1;
+      const s = sp * R(0.2, 0.6), side = R(-1.2, 1.2);
+      const vx = -dx * s - dz * side, vy = R(0.6, 2.2), vz = -dz * s + dx * side;
+      fx.spawn({
+        x: x + R(-0.04, 0.04), y: y + R(0, 0.05), z: z + R(-0.04, 0.04),
+        vx, vy, vz,
+        life: R(0.12, 0.26), size: R(0.08, 0.14), sizeEnd: 0.03,
+        glyph: "'|", rot: alongRot(vx, vy, vz), stretch: 0.8,
+        color: COL.trailCore, colorEnd: COL.trailEnd, alpha: 1, alphaEnd: 0, drag: 1.5, gravity: -4,
+      });
+    }
+  }
+
   reset() {
     this.flameAcc = 0;
     this.healAcc = 0;
@@ -660,5 +708,7 @@ export class PlayerFx {
     this.haloAcc = 0;
     this.gemGlowAcc = 0;
     this.tipAcc = 0;
+    this.skidAcc[0] = this.skidAcc[1] = 0;
+    this.scrapeAcc = 0;
   }
 }
