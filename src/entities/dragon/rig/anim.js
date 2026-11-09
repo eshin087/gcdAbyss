@@ -771,7 +771,9 @@ export class Rig {
       home(l.home, side * (lerp(A.footHome[0], 1.5, lying) + (s.stanceH + st.hindOut) * awake) * S, (lerp(A.footHome[2], -0.95, lying) + (s.strideH + st.hindBack) * awake) * S);
       l.home.addScaledVector(pose.vel, lead);
       l.home.y = 0;
-      l.free = s.airborne > 0.3;
+      // (off the ground as soon as the body has left it: a leap's take-off used to drag the planted
+      // hind feet up to 0.4 m a frame for a few frames until the airborne blend caught up)
+      l.free = s.airborne > 0.3 || s.alt > 0.6 * S;
       l.lock = !!pose.hindLock && !l.free;
     }
     for (let k = 0; k < 2; k++) {
@@ -856,6 +858,16 @@ export class Rig {
       if (md.lengthSq() < 1e-6) md.set(0, -1, 0);
       md.normalize();
       out.toe.copy(out.ankle).addScaledVector(md, A.meta * S);
+      // the metatarsus is a little longer than the hock's offset from its toe, and much longer while
+      // the body sinks to lie down (sleep, wake, death): there the toe dipped ~0.2 m under the
+      // ground; tip the bone up just enough to keep the toe on top (standing it is within 3 cm)
+      if (out.toe.y < -0.03 && out.ankle.y > -0.03) {
+        const L = A.meta * S, dy = out.ankle.y + 0.03;
+        const h = Math.sqrt(Math.max(0, L * L - dy * dy)) / L, hl = Math.hypot(md.x, md.z);
+        if (hl > 1e-4) md.set((md.x / hl) * h, -dy / L, (md.z / hl) * h);
+        else md.set(0, -1, 0);
+        out.toe.copy(out.ankle).addScaledVector(md, L);
+      }
       aimJointStable(leg.meta, md, qc, qd, snap);
       const toeDir = v[10].copy(fwdFlat).addScaledVector(up, -0.15 - s.airborne * 0.8).normalize();
       aimJointUp(leg.toe, toeDir, up, qd, qa); // no roll: the toes splay flat on the ground
