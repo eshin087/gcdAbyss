@@ -143,7 +143,58 @@ function surfaceFeatures(o, cell) {
     throw new Error(`surface glyph crack: 'grid' | 'voronoi', got ${JSON.stringify(crack)}`);
   } else if (seamAxis === 'y') defines.SG_SEAM_Y = '';
   else if (seamAxis === 'x') defines.SG_SEAM_X = '';
+  if (o.wyrm != null) wyrmFeatures(o.wyrm, defines, uniforms);
   return { defines, uniforms };
+}
+
+/**
+ * Wyrm ASCII-art source (option `wyrm`, the dragon's materials only): in art mode (FLAG.ART with
+ * uArtSolid) the part renders `wyrmMain` instead of the smooth lit ink, the image the art pass
+ * turns into letters (the owner's red-black dragon reference). All fields optional:
+ *   scale: [w, h]        overlapping shingle scales in aGUV units (w across, h per row; tips point
+ *                        toward -aGUV y); omit for smooth parts (spikes, bones, membranes)
+ *   scaleDir: 'along' (default) | 'down' (rows along aGUV y, tips toward larger |aGUV x|: roof-tile
+ *                        scales hanging from the dorsal line, for parts mapped around the body axis)
+ *   strokes: 'rim' (default with scale) | 'axis' | 'none': where the art pass draws stroke glyphs
+ *                        (- / | \) in the edge's screen direction: along the scale rims, or along the
+ *                        part (aGUV y: spikes, claws, bones). Encoded as alpha = flag + 0.01 x code.
+ *   tip: [y0, y1, root, glow]  horns / spikes / claws (aGUV y = distance from the root): value ramps
+ *                        from `root` at y0 to 1 at y1 (bright tips), molten glow x uGlow at the root
+ *   tone: [gap, body, rim, rimWidth]  value over a scale: under the covering scale's edge (the black
+ *                        gap), the scale body, its free-edge rim; rimWidth in rows
+ *   ink: [r,g,b]         albedo of the source (charcoal hide, molten plates, crimson membrane)
+ *   light: [gain, key, fresnel, floor]  moon + fire lights x gain, a camera key light (the reference
+ *                        is evenly lit from the front), a moonlit edge rim, a flat light floor
+ *   vein: [strength, share, width, plate]  molten fissures x uGlow: voronoi plates of `plate` aGUV
+ *                        units, only `share` of the fissures glow (a broken, branching net), `width`
+ *   glow: [gaps, all]    emissive x uGlow in the scale gaps (molten plates) / everywhere (maw, eye)
+ *   under: [r,g,b,k]     warm light from below on down-facing surfaces (lava light under the jaw)
+ *   membrane: [mottle, specks, tears, edgeTears]  wing membranes only (needs aEdge / aBone): dark
+ *                        mottling, ember specks, holes, a ragged trailing edge
+ */
+function wyrmFeatures(w, defines, uniforms) {
+  const v = (a, n, d) => (Array.isArray(a) && a.length === n && a.every(Number.isFinite) ? a : d);
+  defines.SG_WYRM = '';
+  uniforms.uWScale = { value: new THREE.Vector2(...v(w.scale, 2, [0, 0])) };
+  // x: 1 = 'down' scales (tips toward larger |aGUV x|: barrel parts mapped around the body axis);
+  // y: stroke glyphs for the art pass, 0 none, 1 along the scale rims, 2 along the part (aGUV y)
+  const strokes = { none: 0, rim: 1, axis: 2 }[w.strokes ?? (w.scale ? 'rim' : 'none')] ?? 0;
+  uniforms.uWShape = { value: new THREE.Vector4(w.scaleDir === 'down' ? 1 : 0, strokes, 0, 0) };
+  // [y0, y1, root value, root glow]: value ramps from `root value` at aGUV y0 to 1 at y1 (no ramp:
+  // [-2, -1, 1, 0]); root glow x uGlow below y1 (molten spine roots)
+  uniforms.uWTip = { value: new THREE.Vector4(...v(w.tip, 4, [-2, -1, 1, 0])) };
+  uniforms.uWTone = { value: new THREE.Vector4(...v(w.tone, 4, [0.0, 0.2, 1.0, 0.2])) };
+  uniforms.uWInk = { value: new THREE.Color(...v(w.ink, 3, [0.3, 0.29, 0.28])) };
+  uniforms.uWLight = { value: new THREE.Vector4(...v(w.light, 4, [1, 0.5, 0.3, 0.02])) };
+  uniforms.uWVein = { value: new THREE.Vector4(...v(w.vein, 4, [0, 0.4, 0.06, 1])) };
+  // molten colour of veins / gaps / glow: a red-orange (ACES turns a (1, 0.34, 0.05) lava gold)
+  uniforms.uWEmit = { value: new THREE.Color(...v(w.emit, 3, [1.0, 0.17, 0.03])) };
+  uniforms.uWGlow = { value: new THREE.Vector2(...v(w.glow, 2, [0, 0])) };
+  uniforms.uWUnder = { value: new THREE.Vector4(...v(w.under, 4, [1, 0.35, 0.08, 0])) };
+  if (w.membrane != null) {
+    defines.SG_WYRM_MEMBRANE = '';
+    uniforms.uWMem = { value: new THREE.Vector4(...v(w.membrane, 4, [0.5, 0.03, 0.1, 0.4])) };
+  }
 }
 
 function pickShared(U, names) {
@@ -330,6 +381,12 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
 #ifdef SG_AXIS
       varying vec3 vNO;
 #endif
+#ifdef SG_WYRM_MEMBRANE
+      attribute float aEdge; // wing membrane: 0 inside -> 1 on the free trailing edge (membrane.js)
+      attribute float aBone; // 0 on a finger / the arm edge -> 1 mid-panel
+      varying float vEdge;
+      varying float vBone;
+#endif
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vW = wp.xyz;
@@ -337,6 +394,10 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vG = aGUV;
 #ifdef SG_AXIS
         vNO = normal; // object space: glowAxis / inkAxis stay glued to the part
+#endif
+#ifdef SG_WYRM_MEMBRANE
+        vEdge = aEdge;
+        vBone = aBone;
 #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
@@ -442,6 +503,157 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         return vec2(sqrt(d2) - sqrt(d1), hash12(id + uSeed * 1.7));
       }
 #endif
+#ifdef SG_WYRM
+      // ---- wyrm ASCII-art source (option wyrm; see wyrmFeatures). The owner's reference dragon:
+      // dark charcoal hide of overlapping shingle scales whose free edges catch the light, molten
+      // fissures and glowing gaps on the chest / throat / undersides, crimson torn membranes.
+      uniform vec2 uWScale;
+      uniform vec4 uWShape;
+      uniform vec4 uWTip;
+      uniform vec4 uWTone;
+      uniform vec3 uWInk;
+      uniform vec4 uWLight;
+      uniform vec4 uWVein;
+      uniform vec3 uWEmit;
+      uniform vec2 uWGlow;
+      uniform vec4 uWUnder;
+  #ifdef SG_WYRM_MEMBRANE
+      uniform vec4 uWMem;
+      varying float vEdge;
+      varying float vBone;
+  #endif
+      float wNoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash12(i), b = hash12(i + vec2(1.0, 0.0));
+        float c = hash12(i + vec2(0.0, 1.0)), d = hash12(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+      vec2 wHash22(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.xx + p3.yz) * p3.zy);
+      }
+      // Overlapping shingle scales in scale units (p = aGUV / size, tips toward -y), rows offset by
+      // half a scale. Each visible scale is a pointed diamond: its lower V is its own free edge (a
+      // bright rim), its upper half lies under the two scales above, whose edges shade it (the black
+      // gap). Rim and gap stay at least ~one letter cell wide on screen (the art pass averages 4
+      // samples per 5 x 8 px cell), and scales smaller than ~1.5 letters fade to a dim mean (at a
+      // distance they would only alias into noise). Each plate is shaded like a convex scale: dark
+      // under the overlap, lighter toward its free edge. Returns x = value (gap .. rim), y = gap mask;
+      // rimT = the free edge's tangent in p space (xy) and the rim mask (z), for the stroke glyphs.
+      // The free (tip) edge of a scale above its row bottom: a pointed leaf, steeper at the sides.
+      float wEdge(float ax) { return -0.45 + 1.15 * ax + 2.4 * ax * ax * ax; }
+      float wEdgeD(float ax) { return 1.15 + 7.2 * ax * ax; }
+      // Screen direction of the p-space direction t (p = aGUV-derived coords): the stroke glyph code
+      // the art pass draws there: 1 '-', 2 '/', 3 '|', 4 '\\' (screen y up)
+      float wStroke(vec2 t, vec2 jx, vec2 jy) {
+        float det = jx.x * jy.y - jy.x * jx.y;
+        if (abs(det) < 1e-14) return 0.0;
+        vec2 s = vec2(t.x * jy.y - jy.x * t.y, jx.x * t.y - t.x * jx.y) / det;
+        float a = mod(atan(s.y, s.x), 3.14159265);
+        return 1.0 + mod(floor(a / 0.7853982 + 0.5), 4.0);
+      }
+      vec2 wScales(vec2 p, out vec3 rimT) {
+        float ppx = max(max(length(dFdx(p)), length(dFdy(p))), 1e-6); // scale units per pixel
+        float rimW = max(uWTone.w, 4.5 * ppx);
+        float gapW = max(0.22, 5.0 * ppx);
+        float lod = smoothstep(0.11, 0.2, ppx); // fades as a scale shrinks from ~9 to ~5 px across
+        // a slow warp: rows wobble and scales vary a little, hand-drawn rather than a fishnet lattice
+        p += (vec2(wNoise(p * 0.31 + uSeed), wNoise(p.yx * 0.27 + uSeed + 7.7)) - 0.5) * vec2(0.5, 0.36);
+        float row = floor(p.y);
+        float px = p.x + 0.5 * mod(row, 2.0);
+        vec2 f = vec2(fract(px) - 0.5, p.y - row);
+        float ax = abs(f.x);
+        float eC = wEdge(ax), eO = wEdge(0.5 - ax); // this row's / the offset rows' edge here
+        float dOwn = f.y - eC; // > 0: on this row's scale (above its free edge)
+        float dUp = f.y - 1.0 - eO; // > 0: on the upper row's scale (it lies on top)
+        float xo = floor(p.x + 0.5 * mod(row + 1.0, 2.0)); // the offset rows' scale index here
+        float dIn, dCov; // above its own free edge / below the edge of the scale covering it
+        float axl; // |x| from the centre line of the scale the point is on
+        vec2 id, tg;
+        if (dUp > 0.0) { dIn = dUp; dCov = 2.0 + eC - f.y; axl = 0.5 - ax; id = vec2(xo, row + 1.0); tg = vec2(f.x > 0.0 ? -1.0 : 1.0, wEdgeD(0.5 - ax)); }
+        else if (dOwn > 0.0) { dIn = dOwn; dCov = -dUp; axl = ax; id = vec2(floor(px), row); tg = vec2(f.x > 0.0 ? 1.0 : -1.0, wEdgeD(ax)); }
+        else { dIn = f.y + 1.0 - eO; dCov = -dOwn; axl = 0.5 - ax; id = vec2(xo, row - 1.0); tg = vec2(1.0, 0.0); }
+        float hs = hash12(id + uSeed * 0.37);
+        float t = clamp(dCov / max(dCov + dIn, 1e-4), 0.0, 1.0); // 0 under the overlap .. 1 at its edge
+        float body = uWTone.y * (0.6 + 0.8 * hs) * (0.3 + 0.7 * t * t);
+        // the free edge catches the light most at its tip: a bright chevron per scale that fades
+        // toward the shoulders (a continuous rim drew a fishnet lattice over the hide)
+        float rim = (1.0 - smoothstep(0.0, rimW, dIn)) * (1.0 - 0.8 * smoothstep(0.16, 0.46, axl)) * (0.55 + 0.45 * fract(hs * 7.3));
+        float gap = 1.0 - smoothstep(0.0, gapW, dCov);
+        float v = mix(mix(body, uWTone.z * (0.8 + 0.4 * hs), rim), uWTone.x, gap);
+        rimT = vec3(tg, rim * (1.0 - gap) * (1.0 - lod));
+        return mix(vec2(v, gap), vec2(uWTone.y * 0.7 + uWTone.z * 0.05, 0.2), lod);
+      }
+      // molten fissures: a voronoi net (p in plate units) of which only a share of the edges glow,
+      // so the cracks branch and break off instead of closing into cells; w = width in plate units
+      float wVeins(vec2 p, float share, float w) {
+        vec2 i = floor(p), f = fract(p);
+        float d1 = 8.0, d2 = 8.0;
+        vec2 id1 = i, id2 = i;
+        for (int y = -1; y <= 1; y++) {
+          for (int x = -1; x <= 1; x++) {
+            vec2 o = vec2(float(x), float(y));
+            vec2 r = o + 0.15 + 0.7 * wHash22(i + o + uSeed) - f;
+            float d = dot(r, r);
+            if (d < d1) { d2 = d1; id2 = id1; d1 = d; id1 = i + o; }
+            else if (d < d2) { d2 = d; id2 = i + o; }
+          }
+        }
+        float on = step(hash12(id1 + id2 + uSeed * 0.71), share);
+        return on * (1.0 - smoothstep(w * 0.5, w, sqrt(d2) - sqrt(d1)));
+      }
+      void wyrmMain() {
+        vec3 n = normalize(gl_FrontFacing ? vN : -vN);
+        float sh = shadowAt(vW + n * 0.1);
+        vec3 V = normalize(uCamPos - vW);
+        float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
+        float key = max(dot(n, normalize(V + vec3(0.0, 0.7, 0.0))), 0.0);
+        vec3 light = lightAt(vW, n, 0.25, sh) + vec3(1.0, 0.95, 0.9) * key * uWLight.y + uMoonColor * fres * uWLight.z
+          + uWLight.w + uWUnder.rgb * uWUnder.a * max(-n.y, 0.0);
+        // 'down' scales (uWShape.x 1: the barrel) hang from the dorsal line toward the belly like
+        // roof tiles: rows run along the body, tips toward larger |aGUV x| (around the body)
+        vec2 gp = uWShape.x > 0.5 ? vec2(vG.y, -abs(vG.x)) : vG;
+        vec2 gs = gp / max(uWScale, vec2(1e-4));
+        vec2 jx = dFdx(gs), jy = dFdy(gs);
+        vec3 rimT = vec3(0.0);
+        vec2 sc = uWScale.x > 0.0 ? wScales(gs, rimT) : vec2(1.0, 0.0);
+        // stroke glyph code for the art pass (alpha = flag + 0.01 x code): scale rims draw '\ /'
+        // along their edge (the reference's scale outlines), thin parts (uWShape.y 2: spikes, claws,
+        // bones) draw strokes along their length
+        float stroke = 0.0;
+        if (uWShape.y > 1.5) stroke = wStroke(vec2(0.0, 1.0), dFdx(vG), dFdy(vG));
+        else if (uWShape.y > 0.5 && rimT.z > 0.5) stroke = wStroke(rimT.xy, jx, jy);
+        float hot = uGlow * uGlowMask;
+        // horns, spikes, claws (aGUV y = distance from the root): dark roots, bright tips, molten
+        // roots on the glowing spines (uWTip: tip ramp from .x to .y, value at the root .z, root glow .w)
+        float tipT = smoothstep(uWTip.x, uWTip.y, vG.y);
+        sc.x *= mix(uWTip.z, 1.0, tipT);
+        vec3 col = uWInk * uTint * (light * uWLight.x + uInkGlow) * sc.x;
+        col += uWEmit * hot * uWTip.w * (1.0 - tipT);
+  #ifdef SG_WYRM_MEMBRANE
+        // tears glued to the membrane (aGUV): a few holes inside, a ragged trailing edge
+        float tn = wNoise(vG * uWMem.z) * 0.6 + wNoise(vG * uWMem.z * 2.9 + 5.3) * 0.4;
+        if (tn > 0.94 - uWMem.w * smoothstep(0.45, 1.0, vEdge)) discard;
+        // dark mottled patches, embers along the bones, sparse ember specks
+        float mo = wNoise(vG * 0.9 + 11.3) * 0.7 + wNoise(vG * 2.6 + 3.1) * 0.3;
+        col *= mix(1.0 - uWMem.x, 1.0 + 0.4 * uWMem.x, smoothstep(0.3, 0.72, mo));
+        float bone = 1.0 - smoothstep(0.0, 0.16, vBone);
+        float spk = step(1.0 - uWMem.y, hash12(floor(vG / 0.11) + uSeed));
+        col += uWEmit * (spk * (0.3 + hot) + bone * (0.03 + 0.5 * hot));
+  #endif
+        if (uWVein.x > 0.0 && hot > 0.001) {
+          float vn = wVeins(vG / uWVein.w, uWVein.y, uWVein.z / uWVein.w);
+          col += uWEmit * hot * uWVein.x * vn * (0.75 + 0.25 * sin(uTime * 2.3 + vG.y * 3.1));
+        }
+        col += uWEmit * hot * (uWGlow.x * sc.y + uWGlow.y);
+        col += vec3(1.0, 0.92, 0.85) * uFlash * (0.15 + 0.6 * sc.x);
+        col += uWarn.rgb * uWarn.a * (0.1 + 0.8 * sc.x + fres * 2.0);
+        col = applyFog(col, vW);
+        gl_FragColor = vec4(col, uFlag + 0.01 * stroke);
+      }
+#endif
 
       // Grid mode: lit colour + (set, screen flow angle) packed into alpha for the ASCII pass.
       void asciiMain() {
@@ -477,6 +689,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vec2 f = fract(g);
         float h = hash12(cell + uSeed);
         if (uDissolve > 0.0 && h < uDissolve) discard;
+#ifdef SG_WYRM
+        if (uArtSolid * step(0.46, uFlag) * step(uFlag, 0.55) > 0.5) { wyrmMain(); return; } // wyrm art source
+#endif
 
         vec3 n = normalize(gl_FrontFacing ? vN : -vN);
         float sh = shadowAt(vW + n * 0.1);
