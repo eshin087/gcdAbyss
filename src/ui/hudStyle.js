@@ -253,6 +253,9 @@ const CSS = `
 .ab-bar.boss > .chunk { background: rgba(238, 204, 150, 0.85); }
 .ab-boss.p2 .ab-bar.boss > .fill { background: linear-gradient(180deg, #ffa24f, #c2410c); }
 .ab-boss.p2 .ab-bar.boss { box-shadow: 0 0 9px rgba(255, 138, 61, 0.45); border-color: rgba(255, 138, 61, 0.45); }
+.ab-boss.p3 .ab-bar.boss > .fill { background: linear-gradient(180deg, #fff0c4, #ff8f2a); }
+.ab-boss.p3 .ab-bar.boss { box-shadow: 0 0 12px rgba(255, 210, 140, 0.55); border-color: rgba(255, 222, 170, 0.55); }
+.ab-bar.boss > .tick { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -1px; background: rgba(255, 236, 214, 0.6); pointer-events: none; }
 .ab-boss.p2 .ab-boss-name { color: #ffd2a4; }
 /* posture: thin gold bar under the HP bar, grows from the centre toward a break */
 .ab-boss-post { position: relative; display: flex; justify-content: center; margin-top: 3px; }

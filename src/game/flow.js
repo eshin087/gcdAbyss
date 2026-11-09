@@ -19,11 +19,12 @@ const FIGHTING = new Set(['combat', 'staggered', 'airborne']);
 // (Backquote opens the Lab)
 const NON_DISMISS = new Set(['KeyM', 'KeyH', 'Escape', 'Backquote', 'ContextMenu', 'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen']);
 const NON_DISMISS_RE = /^(F\d+|Alt|Control|Meta|OS)/;
-const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:death', 'dragon:dead', 'player:died'];
+const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:phase3', 'dragon:death', 'dragon:dead', 'player:died'];
 const AREA = 'Cinderwood Hollow';
 const DEBUG_STATES = new Set(['explore', 'boss', 'dead', 'victory']);
 const DRAGON_DOWN = new Set(['dying', 'dead']);
 const PHASE2_TEXT = "THE CINDER WYRM'S FURY IGNITES";
+const PHASE3_TEXT = 'ITS HEART BURNS WHITE-HOT';
 
 const TUNE = {
   restRadius: 2.4,
@@ -301,9 +302,10 @@ export class GameFlow {
           if (st === 'bossIntro' || st === 'explore') this._enterBoss();
           break;
         case 'dragon:phase2':
+        case 'dragon:phase3':
           if (st === 'boss' || st === 'bossIntro') {
             this.phase2 = true;
-            g.hud?.banner?.(PHASE2_TEXT, 'phase');
+            g.hud?.banner?.(name === 'dragon:phase3' ? PHASE3_TEXT : PHASE2_TEXT, 'phase');
             g.audio?.setMusic?.('boss2');
           }
           break;
@@ -800,7 +802,7 @@ export class GameFlow {
       if (typeof d?.debug?.startFight === 'function') d.debug.startFight();
       else d?.startIntro?.();
     }, 'dragon.debug.startFight');
-    this.phase2 = d?.phase === 2;
+    this.phase2 = d?.phase >= 2;
     this.grade.desat = 0;
     this._setState('boss');
     g.hud?.showBossBar?.(d?.name ?? 'VAELGRIM, THE CINDER WYRM');
@@ -841,7 +843,7 @@ export class GameFlow {
     if (g.state !== 'boss') {
       this._setState('boss');
       g.hud?.showBossBar?.(d.name ?? 'VAELGRIM, THE CINDER WYRM');
-      g.audio?.setMusic?.(d.phase === 2 ? 'boss2' : 'boss');
+      g.audio?.setMusic?.(d.phase >= 2 ? 'boss2' : 'boss');
     }
     this.debugVictoryT = TUNE.debugVictoryTimeout;
     this._try(() => d.debug.kill(), 'dragon.debug.kill');

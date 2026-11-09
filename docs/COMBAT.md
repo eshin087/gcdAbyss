@@ -147,3 +147,51 @@ defence timings in `TUNE` (`player.js`).
     the wyrm hits hips and legs more, the tail less); the resting head (lower, on the painting's S)
     keeps its sphere above the sword band (bottom ~5.9 m vs ~4 m). The 1.3× drawn head, the longer
     distal finger bones and the thicker drawn tail are visual only.
+
+## Strings, the deflect chain and three phases (v0.5 "epic wyrm fight", dragon side)
+**Strings** (`attacks.js` `makeString`, data in `tuning.js` `TUNING.attacks[name].hits`): an attack
+of N hits, each with its own kind (performance), tell, windup (+ an optional random `hold` that baits
+an early parry), active, impact, damage and knockback; a hit with `chance` < 1 may be rolled out.
+Every hit announces itself (`combat:tell` at its windup start) and flashes `flashLead` (0.35 s)
+before its real impact, holds included. Data rules (checked by `npm test` → STRINGS, all phases):
+a tell per hit, the first windup ≥ 0.7 s, the flash after the tell, ≥ `minHitGap` 0.45 s from one
+impact to the next (time to release and re-press RMB: `parryRearm` 0.25 s).
+
+| String (phase ≥) | Hits (tell; P1 windup / active / impact s; damage) |
+|---|---|
+| Claw combo (1) | claw (N; 0.8 / 0.25 / 0.15; 16) · claw (N; 0.55 / 0.25 / 0.15; 16) · lunge bite (B; 0.6 / 0.24 / 0.05; 22) |
+| Rending flurry (1) | claw (N; 0.75; 16) · claw (N; 0.45; 16) · overhead claw (B; 0.62 / 0.24 / 0.22; 22) · lunge bite (B; 0.55 / 0.24 / 0.05; 24) |
+| Hesitant maw (1) | reared bite (B; 0.85 + hold 0.25–0.9 / 0.2 / 0.06; 24) · 50 %: quick bite (B; 0.5 / 0.2 / 0.06; 20) |
+| Wing buffet (1) | wing slam (N; 0.8 / 0.3 / 0.25; 18, kb 5) · pivot + the other wing (B; 0.9 / 0.3 / 0.25; 22, kb 7) |
+| Tail lash (2) | claw (N; 0.75; 18) · pivot + tail lash (R; 1.0 / 0.36 / 0.245; 26) · tail sweep (R; 0.9 / 0.45 / 0.2 + flank; 30) |
+| Pounce (2) | a hop onto the hero (R, ground ring; 0.8 / 0.6 / 0.6 = the landing; 30, knockdown) · bite (B; 0.55 / 0.2 / 0.06; 22) |
+| Frenzy (3) | claw · claw · bite (N) · 60 %: claw · a delayed claw (hold 0.3–0.75) · bite (B) · stomp (R, ground ring; 36) |
+
+Later phases scale windups and recoveries by `phaseTimeScale` [1, 0.85, 0.78] (the swings keep their
+speed). AI bands (model units × SCALE from the root): the claw strings 2.4–5.4 within 0.9 rad of the
+nose, Hesitant maw 3.5–6.5 / 0.65 rad, Wing buffet 6.8–8.3 on any side up to 2.6 rad (its windup turns
+the flank to the hero; the fingers come down there), Pounce 6–13 / 1.0 rad.
+**Verifier** (`npm test` → TIMING): every string and single melee attack, started through the AI's
+own start path from every placement the AI picks it at (phases 1–3, the hero standing still), lands
+each contact within ±85 ms of its flash + lead (worst 67–83 ms), and every pick lands its first hit.
+
+**Deflect chain** (contract 1): parrying a hit that is not its string's last does not cancel the
+string: the posture damage applies (`POSTURE.parry`), the struck paw / head is knocked back for
+0.14 s (visual only) and the next hit comes on schedule. Parrying the last hit (or a single melee
+attack) recoils the wyrm as before (the punish window). `dragon:parried` carries `{hit, last}`;
+`combat:deflectChain {count}` fires from the 2nd parry in a row within one string (a hit that lands or
+is blocked resets the count; dodges keep it). A red hit inside a string can't be parried or blocked:
+dodge it (a perfect dodge → the plunge, which cancels the string).
+
+**Plunge reaction** (contract 2, dragon side): `onPlunge` deals its damage to the head (the phase gate
+holds), adds its posture, cancels the action (not the intro, a transition or the death) and plays the
+`plunged` reaction (~1.35 s: the head slammed to the ground, a thrash, the rise; airborne: a fall and
+a crash landing first). An execution on a broken wyrm (~2 s) consumes the break. A full posture meter
+breaks after the reaction; a pending phase transition waits for it too.
+
+**Three phases** (contract 4): P1 100–66 %, P2 66–33 %, P3 33–0 % of 4200 HP, each threshold a gate
+until its transition roar (the red shock ring, which also clears the hazards). Per phase [P1, P2, P3]:
+posture max 560 / 640 / 720 (a near-perfect defender breaks it every ~25–60 s), turn speed 70 / 110 /
+125 °/s, idle gap 1.3–2.1 / 0.9–1.5 / 0.4–0.8 s. Phase 3 burns white-hot (glow 0.8, embers) and opens
+with the inferno nova when the fire attacks are in. Damage: string hits 16–24, heavy blows 30–40
+(tail sweep 32, stomp 34, charge 36, leap 40), the roar ring 12.
