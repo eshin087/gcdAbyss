@@ -6,6 +6,7 @@ import * as THREE from 'three';
 const Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
 const _qi = new THREE.Quaternion();
+const _qe = new THREE.Quaternion();
 const _perp = new THREE.Vector3();
 const _d = new THREE.Vector3();
 const _rd = new THREE.Vector3();
@@ -284,5 +285,21 @@ export class Chain {
       this._q.copy(this._q2);
     }
     return out.copy(this._q);
+  }
+
+  /**
+   * World rotation the LAST joint would get from apply() (aimJoint, no stable twist), without touching
+   * the joints: lets another chain be shown while a child is placed as if this one were.
+   */
+  endQuat(parentQ, out) {
+    out.copy(parentQ);
+    for (let i = 0; i < this.n; i++) {
+      _qi.copy(out).invert();
+      _v.copy(this.dirs[i]).applyQuaternion(_qi);
+      const l = _v.length();
+      if (l > 1e-6 && Number.isFinite(l)) out.multiply(_qe.setFromUnitVectors(Z, _v.multiplyScalar(1 / l)));
+      else out.multiply(this.joints[i].quaternion);
+    }
+    return out;
   }
 }

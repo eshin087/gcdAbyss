@@ -296,6 +296,10 @@ const ROUSE_TIME = 1.4;
 const ROUSE_GAPS = [9.5, 7.8, 11.2, 8.6];
 /** Fastest the head's aim may turn (rad/s) when no hit sphere rides on it (see _updateNeck). */
 const HEAD_AIM_RATE = 11;
+/** Share of the way the driven visible neck is drawn to the measured shape each frame (_updateNeck). */
+const NECK_FOLLOW = 0.45;
+/** Below this resting blend the driven visible neck swings (s.rest; see _updateNeck). */
+const NECK_SWING_REST = 0.03;
 /** Soft-IK fraction for the wing arms (see solveTwoBone). */
 const WING_SOFT_IK = 0.05;
 /** Deepest the tail's rest shape may dive under the ground clearance, in segments (Chain.buildRest sinkMax). */
@@ -318,6 +322,10 @@ export class Rig {
     this._neckSim = new Chain(model.neck, A.neckLen * S, { minY: 0.5 * S, maxBend: 0.62, baseBend: 1.25 });
     this.headPosR = V();
     this._headDir = V(); // last frame's head aim (world), for the turn-rate limit
+    this._qNeckEndM = new THREE.Quaternion(); // the measured neck's end rotation (head pinning)
+    this._frame = 0; // update count
+    this._swingAt = -2; // last frame the visible neck swung toward the measured head (_updateNeck)
+    this._swingP = Array.from({ length: A.neckSegs + 1 }, () => V()); // its points then
     this._visLive = false;
     this._nbR = {};
     this._rouseP = -1; // idle wing rouse progress (-1 = none)
@@ -437,6 +445,7 @@ export class Rig {
     const snap = this.needsSnap;
     this.needsSnap = false;
     this.time += dt;
+    this._frame++;
     const sm = (cur, target, rate) => (snap ? target : damp(cur, target, rate, dt));
     // root yaw rate (turning in place, the tail sweep's spin): drives the feet's turn lead
     {
@@ -739,12 +748,37 @@ export class Rig {
       vis.baseAxis.copy(neck.baseAxis);
       this._visLive = false;
     }
+    // driven (an attack, a stagger...: the measured solve carries the head, s.rest ~0): the visible
+    // chain swings rigidly about its base toward the measured head, then bends to reach it, drawn a
+    // little toward the measured shape every frame (NECK_FOLLOW). FABRIK alone moves the tip first:
+    // the bite's 1.8 m strike step turned the last segment 75° in one frame while the base barely
+    // moved. The head joint is pinned to the measured solve below (position and rotation), so every
+    // sphere riding on it (snout, head, mouth) is exactly the measured one
+    if (s.rest < NECK_SWING_REST) {
+      if (!snap && this._swingAt === this._frame - 1) {
+        // last frame's shape, the base moved with the body and the head's step spread down the chain
+        // (point i takes i/n of it), drawn toward the measured shape, then the segments re-laid
+        const B = neck.p[0], E = neck.p[n], sw = this._swingP;
+        const db = this._v[3].subVectors(B, sw[0]), dh = this._v[4].subVectors(E, sw[n]).sub(db);
+        for (let i = 0; i <= n; i++) vis.p[i].copy(sw[i]).add(db).addScaledVector(dh, i / n).lerp(neck.p[i], NECK_FOLLOW);
+        vis.p[0].copy(B);
+        vis.rest[0].copy(B);
+        vis.baseAxis.copy(neck.baseAxis);
+        vis.solve(E, 4);
+      }
+      for (let i = 0; i <= n; i++) this._swingP[i].copy(vis.p[i]);
+      this._swingAt = this._frame;
+    }
     vis.apply(qNeckBase, this._qNeckEnd);
+    // (pinned: the head is placed as if the measured chain were shown)
+    const pin = this._swingAt === this._frame;
+    const hc = pin ? neck : vis;
+    const qEnd = pin ? neck.endQuat(qNeckBase, this._qNeckEndM) : this._qNeckEnd;
 
     // head aims at the look point, held near level (at most lookDown nose-down) so the brow and
     // the lit maw face forward; limp / flat when lying or staggered
-    const last = vis.dirs[n - 1];
-    const dir = this._v[2].subVectors(lv, vis.p[n]);
+    const last = hc.dirs[n - 1];
+    const dir = this._v[2].subVectors(lv, hc.p[n]);
     if (dir.lengthSq() < 1e-6) dir.copy(last);
     dir.normalize();
     if (under > 0.001) {
@@ -776,7 +810,13 @@ export class Rig {
     const hd = this._headDir;
     if (!snap && !pose.headExact && hd.lengthSq() > 0.5) constrainDir(dir, hd, HEAD_AIM_RATE * dt);
     hd.copy(dir);
-    aimJoint(m.head, dir, this._qNeckEnd, this._qHead);
+    aimJoint(m.head, dir, qEnd, this._qHead);
+    if (pin) {
+      // re-express the measured head under the shown neck: same world rotation, joint placed on the
+      // measured end (local offset from the shown last segment, in model units)
+      m.head.quaternion.copy(this._q[9].copy(this._qNeckEnd).invert()).multiply(this._qHead);
+      m.head.position.subVectors(neck.p[n], vis.p[n - 1]).applyQuaternion(this._q[9]).multiplyScalar(1 / S);
+    } else m.head.position.set(0, 0, A.neckLen);
     // idle: the jaw parts a little more on each exhale (embers in the maw breathe with it)
     m.jaw.rotation.x = (s.jaw + 0.06 * (0.5 - 0.5 * this._br) * s.idle) * 0.7;
   }
