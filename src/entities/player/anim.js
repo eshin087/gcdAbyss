@@ -24,11 +24,15 @@ export const P = {
   rK: 37, lK: 40, // knee pole directions (body axes)
   footFlat: 43, flask: 44,
   twoHand: 45, // 0..1: the off hand joins the grip (slam)
+  hdZ: 46, // head tilt (roll)
+  pelvX: 47, // pelvis tuck / tilt (pitch)
+  rFy: 48, lFy: 49, // foot yaw (toe-out) relative to the root
+  rFf: 50, lFf: 51, // per-foot flat factor (× footFlat): heel peel / toe-off / swing
 };
-const N = 46;
+const N = 52;
 const ANGLES = [P.pitch, P.yaw, P.roll];
 const ANK = DIM.ankle;
-const LEG_IDX = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rK, P.rK + 1, P.rK + 2, P.lK, P.lK + 1, P.lK + 2, P.footFlat];
+const LEG_IDX = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rK, P.rK + 1, P.rK + 2, P.lK, P.lK + 1, P.lK + 2, P.footFlat, P.rFy, P.lFy, P.rFf, P.lFf];
 const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const IDLE_LOOP = 2.4; // s (concept sheet: idle 2.4 s loop)
 
@@ -50,7 +54,58 @@ const setLen = (p, i, x, y, z, len) => {
   v3(p, i, (x / l) * len, (y / l) * len, (z / l) * len);
 };
 function blend(out, a, b, t) {
+  const ax = a[P.swD], ay = a[P.swD + 1], az = a[P.swD + 2];
+  const bx = b[P.swD], by = b[P.swD + 1], bz = b[P.swD + 2];
   for (let i = 0; i < N; i++) out[i] = a[i] + (b[i] - a[i]) * t;
+  dirLerp(out, P.swD, ax, ay, az, bx, by, bz, t);
+}
+
+// ---------------------------------------------------------------- blade direction blending
+// Blade directions are blended by azimuth (round the body's vertical axis, + = the hero's left)
+// and elevation, not component-wise: a component lerp between a blade low ahead and one trailing
+// low behind passes through "straight down", which buried the point; the tip floor then swung it
+// round under the body in 2-3 frames (a whip through the legs on every run start / stop, roll and
+// recovery). Now a low blade sweeps round the side at its own height, and never through the
+// back-left (from the right hand that path runs between the legs): it goes round the outside.
+const DIR_AVOID = 2.35; // azimuth a LOW blade never sweeps through (back-left, between the legs)
+const DIR_LOW = -0.3; // "low": either end's elevation below this (rad)
+const _ae = [0, 0, 0];
+function azEl(x, y, z, o) {
+  const h = Math.hypot(x, z);
+  o[0] = Math.atan2(x, z);
+  o[1] = Math.atan2(y, h);
+  o[2] = h / (Math.hypot(x, y, z) || 1); // how horizontal (0 = vertical: no heading)
+}
+function dirLerp(out, i, ax, ay, az, bx, by, bz, t) {
+  if (!(t > 0)) {
+    v3(out, i, ax, ay, az);
+    return;
+  }
+  if (t >= 1) {
+    v3(out, i, bx, by, bz);
+    return;
+  }
+  azEl(ax, ay, az, _ae);
+  let a0 = _ae[0];
+  const e0 = _ae[1], h0 = _ae[2];
+  azEl(bx, by, bz, _ae);
+  let a1 = _ae[0];
+  const e1 = _ae[1], h1 = _ae[2];
+  if (h0 < 0.06) a0 = a1; // a vertical end has no heading: borrow the other's
+  if (h1 < 0.06) a1 = a0;
+  let d = wrapAngle(a1 - a0);
+  if (Math.min(e0, e1) < DIR_LOW) {
+    const f = wrapAngle(DIR_AVOID - a0);
+    if ((d > 0 && f > 0 && f < d) || (d < 0 && f < 0 && f > d)) d -= Math.sign(d) * TAU;
+  }
+  const a = a0 + d * t, e = e0 + (e1 - e0) * t;
+  const c = Math.cos(e);
+  v3(out, i, c * Math.sin(a), Math.sin(e), c * Math.cos(a));
+}
+/** Turn the blade direction p[i..i+2] toward (x, y, z) by t, round the outside (see dirLerp). */
+function dirTo(p, i, x, y, z, t) {
+  if (!(t > 0)) return;
+  dirLerp(p, i, p[i], p[i + 1], p[i + 2], x, y, z, Math.min(1, t));
 }
 /** Piecewise curve through flat [t0, v0, t1, v1, ...] keys, smoothstepped between neighbours. */
 function kf(t, k) {
@@ -75,6 +130,7 @@ function bodyPointTo(p, i, x, y, z, t) {
 
 const SCRATCH = new Float32Array(N);
 const SCR_LEGS = new Float32Array(N);
+const FEET_WANT = new Float32Array(8); // foot planner: [x, y, z, yaw] the clip wants, right then left
 
 // ---------------------------------------------------------------- poses
 // A = the animator: time, t (clip time), moveW, sprintW, speed, phase, mx/mz (move dir in model
@@ -110,99 +166,158 @@ function kv3(p, i, t, k) {
   v3(p, i, k[e + 1], k[e + 2], k[e + 3]);
 }
 
-/** Idle (2.4 s loop, hero.md §4.2): a ¾ stance, right foot 0.12 m ahead, toes out, knees nearly
- *  straight, the weight on the left leg; chest turned a little left, the head turned 15–20° left
- *  and tipped down. The sword hangs one-handed at the right thigh, point down and forward across
- *  the front of the right leg, the tip resting on the ground ahead of the left boot; the free hand
- *  hangs loose. Breathing + a breeze sway; no steps. */
+/** Idle / ready stance (2.4 s loop), the owner's reference portrait: contrapposto — the weight on
+ *  the straight LEFT leg planted under the body, the right leg relaxed, stepped out to the side and
+ *  a little forward with the knee bent; the hips tilt up on the left, the shoulders counter-tilt.
+ *  The sword hangs one-handed and LOW in the right hand at the right thigh, the blade pointing
+ *  down-left across the front of the legs (down-right on screen) with the point just off the grass
+ *  outside the left boot; the free hand hangs relaxed beside the left thigh; the head tips down and
+ *  turns a little toward the blade. Breathing + a slow weight sway; no steps. */
+const IDLE_SW = [0.68, -0.68, 0.27]; // blade direction (body axes): ~43° below level, toward the left foot
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
-  const br = Math.sin(ph), sw = Math.sin(ph + 1.1);
-  p[P.bodyX] = 0.03 + 0.014 * sw;
-  p[P.bodyY] = 0.015 + 0.004 * br;
-  p[P.bodyZ] = 0;
+  const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
+  p[P.bodyX] = 0.045 + 0.01 * sw; // over the left (weight) foot
+  p[P.bodyY] = 0.02 + 0.004 * br; // the weight leg nearly straight
+  p[P.bodyZ] = 0.0;
   p[P.pitch] = 0;
   p[P.yaw] = 0;
   p[P.roll] = 0;
-  p[P.pelvY] = 0.1;
-  p[P.pelvZ] = 0.04 + 0.02 * sw;
-  p[P.spX] = 0.07 + 0.008 * br;
-  p[P.spY] = 0.1;
-  p[P.spZ] = -0.03 - 0.015 * sw;
-  p[P.hdX] = 0.19 - 0.05 * br;
-  p[P.hdY] = 0.06;
-  v3(p, P.rH, 0.03, -0.52 + 0.006 * br, 0.08);
-  v3(p, P.rP, -0.7, -0.3, -1);
-  v3(p, P.lH, 0.09, -0.52, 0.0);
-  v3(p, P.lP, 0.6, -0.2, -1);
-  v3(p, P.swD, 0.25 + 0.03 * sw, -0.85, 0.46 + 0.02 * br);
-  v3(p, P.swF, 0.1, 0.5, 0.86);
-  v3(p, P.rF, -0.14, ANK, 0.1);
-  v3(p, P.lF, 0.14, ANK, -0.04);
-  v3(p, P.rK, -0.45, 0, 1);
-  v3(p, P.lK, 0.45, 0, 1);
+  p[P.pelvX] = 0;
+  p[P.pelvY] = 0.12; // the right hip comes forward with the relaxed leg
+  p[P.pelvZ] = 0.16 + 0.025 * sw; // the left hip rides up over the straight leg
+  p[P.spX] = 0.06 + 0.01 * br;
+  p[P.spY] = -0.04; // shoulders square to the view, the chest turned back a little from the hips
+  p[P.spZ] = -0.17 - 0.03 * sw; // counter-tilt: the right shoulder rides higher
+  p[P.hdX] = 0.2 - 0.04 * br;
+  p[P.hdY] = 0.22;
+  p[P.hdZ] = 0.07 + 0.015 * sw;
+  v3(p, P.rH, -0.04, -0.5 + 0.006 * br, 0.1); // grip at the right thigh, a hand ahead of the hip
+  v3(p, P.rP, -0.8, -0.2, -0.7);
+  v3(p, P.lH, 0.11, -0.49, 0.03); // free hand hangs loose beside the left thigh
+  v3(p, P.lP, 0.7, -0.1, -1);
+  v3(p, P.swD, IDLE_SW[0] + 0.03 * br, IDLE_SW[1], IDLE_SW[2] + 0.02 * sw);
+  v3(p, P.swF, -0.15, 0.2, 0.95); // the flat faces the viewer
+  v3(p, P.rF, -0.25, ANK, 0.15); // relaxed leg: out to the side, a little forward
+  v3(p, P.lF, 0.13, ANK, -0.03); // weight leg: under the body
+  v3(p, P.rK, -0.55, 0.1, 1);
+  v3(p, P.lK, 0.25, 0, 1);
   p[P.footFlat] = 0.95;
+  p[P.rFy] = -0.4; // toes turned out
+  p[P.lFy] = 0.22;
+  p[P.rFf] = 1;
+  p[P.lFf] = 1;
   p[P.flask] = 0;
   p[P.twoHand] = 0;
 }
 
-/** One foot of the gait. u = cycle phase: stance [0, .5) sweeps back, swing [.5, 1) lifts forward. */
-function footCycle(p, i, side, u, ax, az, exc, lift, w) {
+/** One foot of the gait (model space). u = this foot's cycle phase: stance [0, β) sweeps the foot
+ *  back under the hips at exactly the ground speed (the cycle length is matched to the speed, so
+ *  a planted foot never skates), swing [β, 1) lifts it — the heel kicking up behind first — and
+ *  reaches it forward to the next contact. Writes the foot-flat factor for this foot into FLAT. */
+const FLAT = [0.9, 0.9];
+function footCycle(p, i, side, u, A, w, fi) {
   u -= Math.floor(u);
-  let along, up = 0;
-  if (u < 0.5) {
-    along = exc * (1 - 4 * u);
+  const G = A.gait, beta = G.beta, exc = G.exc, off = G.off;
+  let along, up = 0, flat;
+  if (u < beta) {
+    const v = u / beta;
+    along = exc * (1 - 2 * v);
+    // heel-strike → flat → heel peels off the ground toward toe-off
+    up = G.peel * smoothstep(0.62, 1, v);
+    flat = 1 - 0.7 * smoothstep(0.55, 1, v);
   } else {
-    const t = (u - 0.5) * 2;
-    along = exc * (-1 + 2 * t * t * (3 - 2 * t));
-    up = Math.sin(Math.PI * t) * lift;
+    const t = (u - beta) / (1 - beta);
+    // Hermite swing whose end speeds match the stance's (the foot keeps pushing back after toe-off,
+    // swings through, and paws back onto the ground at ground speed): no stop-start at contact
+    const m = (-2 * (1 - beta)) / beta, t2 = t * t, t3 = t2 * t;
+    along = exc * (-4 * t3 + 6 * t2 - 1 + m * (2 * t3 - 3 * t2 + t));
+    // the heel kicks up behind early in the swing, then the foot reaches forward low
+    up = G.peel * (1 - smoothstep(0, 0.25, t)) + G.lift * Math.sin(Math.PI * Math.pow(t, 0.8)) + G.kick * Math.sin(Math.PI * Math.min(1, t * 1.7)) * (1 - t);
+    flat = 0.3 + 0.6 * smoothstep(0.6, 0.95, t);
   }
-  to3(p, i, side + ax * along, ANK + up, az * along, w);
+  FLAT[fi] = flat;
+  to3(p, i, side + A.mx * (along + off) * 0.85, ANK + up, A.mz * (along + off), w);
 }
 
-/** Idle ↔ run ↔ sprint, blended by moveW / sprintW; works for strafing and backpedalling (§4.3,
- *  §4.4). Run: lean 6°, the sword arm trailing, the blade back and down ~38° with the tip just
- *  above the grass; the free fist swings ahead of the belt. Sprint: lean 28°, head up, the blade
- *  trailing nearly level behind, the free fist pumping chin ↔ hip (the coat and the streamers
- *  stream back on their own). */
+/** Gait parameters from the ground speed (m/s): stance fraction, half stance length (model m),
+ *  stance-centre offset, swing lift / heel kick, and the cycle length that makes the stance foot
+ *  travel back at exactly the drawn ground speed. Walk ≈ 0.8 s cycles with double support; run
+ *  0.56 s with a flight phase; sprint long leaping strides. */
+function gaitParams(G, sp, sprintW) {
+  const runK = smoothstep(1.7, 4.2, sp), walkK = clamp(sp / 1.6, 0, 1);
+  G.beta = lerp(0.62, 0.38, runK) - 0.07 * sprintW;
+  G.exc = lerp(0.11 + 0.17 * walkK, 0.37, runK) + 0.05 * sprintW;
+  G.off = -0.05 * runK - 0.03 * sprintW; // the run lands under the hips and pushes off behind them
+  G.lift = lerp(0.05 + 0.04 * walkK, 0.13, runK) + 0.06 * sprintW;
+  G.kick = 0.16 * runK + 0.12 * sprintW; // heel recovery toward the seat
+  G.peel = lerp(0.02, 0.06, runK);
+  G.len = (2 * G.exc) / G.beta;
+  G.bob = lerp(0.012, -0.032, runK) - 0.014 * sprintW; // + = high at mid-stance (walk vault), − = run compression
+}
+
+/** Idle ↔ walk ↔ run ↔ sprint, blended by moveW / sprintW; strafing and backpedalling turn the
+ *  stride with the move direction while the chest stays on the aim. A grounded run: the body sinks
+ *  and leans into the speed and harder into acceleration (sits back when braking), compresses on
+ *  each contact, the hips swing with the stride and the shoulders counter-rotate, the head stays
+ *  level. The sword arm trails the blade back and down beside the right leg (run) → nearly level
+ *  behind (sprint); the free fist swings / pumps against the legs. Planted feet are held in the
+ *  world by the foot planner (HeroAnimator._feet). */
 function loco(p, A) {
   guard(p, A);
   const w = A.moveW;
   if (w < 0.002) return;
   const s = A.sprintW, sp = A.speed, mx = A.mx, mz = A.mz;
+  const G = A.gait;
   const ph = A.phase;
-  const exc = Math.min(0.5, 0.08 * sp + 0.04);
-  const lift = lerp(0.14, 0.26, s) * Math.min(1, sp / 3 + 0.3);
-  footCycle(p, P.lF, 0.11, ph, mx * 0.75, mz, exc, lift, w);
-  footCycle(p, P.rF, -0.11, ph + 0.5, mx * 0.75, mz, exc, lift, w);
-  p[P.footFlat] = lerp(p[P.footFlat], 0.55, w);
-  to3(p, P.rK, -0.1, 0, 1, w);
-  to3(p, P.lK, 0.1, 0, 1, w);
+  const runK = smoothstep(1.7, 4.2, sp);
+  const side = lerp(0.11, 0.075, runK);
+  footCycle(p, P.lF, side, ph, A, w, 1);
+  footCycle(p, P.rF, -side, ph + 0.5, A, w, 0);
+  p[P.footFlat] = lerp(p[P.footFlat], 0.9, w);
+  p[P.rFy] = lerp(p[P.rFy], 0, w);
+  p[P.lFy] = lerp(p[P.lFy], 0, w);
+  p[P.rFf] = lerp(p[P.rFf], FLAT[0], w);
+  p[P.lFf] = lerp(p[P.lFf], FLAT[1], w);
 
-  const cs = Math.cos(ph * TAU); // +1 when the left foot is planted forward
-  const bob = Math.cos(ph * TAU * 2);
+  // stride drivers: cs = +1 when the left foot lands in front; sL = +1 at the left mid-stance,
+  // −1 at the right; st = +1 at every mid-stance
+  const cs = Math.cos(TAU * ph);
+  const sL = Math.cos(TAU * (ph - G.beta * 0.5));
+  const st = Math.cos(TAU * 2 * (ph - G.beta * 0.5));
   const fwd = mz > 0 ? mz : 0;
-  p[P.bodyY] = lerp(p[P.bodyY], -0.035 - 0.07 * s + 0.02 * bob, w);
-  p[P.bodyX] = lerp(p[P.bodyX], 0, w);
-  p[P.bodyZ] = lerp(p[P.bodyZ], 0.06 * s * fwd, w);
-  p[P.pelvY] = lerp(p[P.pelvY], -0.12 * cs * mz - 0.04, w);
-  p[P.pelvZ] = lerp(p[P.pelvZ], 0, w);
-  const lean = lerp(0.1, 0.44, s) * Math.min(1, sp / 4);
-  p[P.spX] = lerp(p[P.spX], 0.05 + lean * (mz > 0 ? mz : mz * 0.4), w);
-  p[P.spZ] = lerp(p[P.spZ], -lean * mx * 0.6, w);
-  p[P.spY] = lerp(p[P.spY], 0.1 * cs * mz + 0.04, w);
-  p[P.hdX] = lerp(p[P.hdX], 0.04 - p[P.spX] * 0.75, w);
-  p[P.hdY] = lerp(p[P.hdY], 0, w);
+  const accF = A.leanF, accS = A.leanS;
+  const lean = (lerp(0.05, 0.2, runK) + 0.26 * s) * clamp(sp / 4, 0, 1);
+  p[P.bodyY] = lerp(p[P.bodyY], -0.02 - 0.045 * runK - 0.05 * s + G.bob * st - 0.04 * Math.abs(accF), w);
+  p[P.bodyX] = lerp(p[P.bodyX], 0.022 * sL * (1 - runK), w); // walking: the hips ride over the stance foot
+  p[P.bodyZ] = lerp(p[P.bodyZ], 0.05 * s * fwd + 0.1 * accF, w);
+  p[P.roll] = lerp(p[P.roll], -A.bank, w);
+  const hipSw = lerp(0.12, 0.2, runK);
+  p[P.pelvY] = lerp(p[P.pelvY], -hipSw * cs * (mz >= -0.2 ? 1 : -1) + A.strafeYaw, w);
+  p[P.pelvZ] = lerp(p[P.pelvZ], 0.05 * sL * (1 - 0.5 * runK), w); // the swing side's hip drops
+  p[P.pelvX] = lerp(p[P.pelvX], 0.05 * runK, w);
+  p[P.spX] = lerp(p[P.spX], 0.04 + lean * (mz > -0.2 ? Math.max(0.4, mz) : -0.3) + accF, w);
+  p[P.spZ] = lerp(p[P.spZ], -lean * mx * 0.4 - accS, w);
+  // knees point along the hips
+  const ky = p[P.pelvY];
+  to3(p, P.rK, Math.sin(ky) - 0.12, 0, Math.cos(ky), w);
+  to3(p, P.lK, Math.sin(ky) + 0.12, 0, Math.cos(ky), w);
+  // shoulders counter-rotate the hips (the chest stays on the aim)
+  p[P.spY] = lerp(p[P.spY], -p[P.pelvY] * 1.25 + 0.04, w);
+  p[P.hdX] = lerp(p[P.hdX], 0.06 - (p[P.spX] + p[P.pelvX]) * 0.8 - 0.02 * st * runK, w);
+  p[P.hdY] = lerp(p[P.hdY], -0.3 * (p[P.pelvY] + p[P.spY]), w);
+  p[P.hdZ] = lerp(p[P.hdZ], 0.4 * A.bank, w);
 
-  // sword arm trailing: low behind the hip, blade back-down (run) → swept back, blade level (sprint)
+  // sword arm trailing: low behind the hip, blade back-down beside the right leg (run) → swept
+  // back, blade nearly level (sprint); it bobs and swings a little with the stride
   const amp = 0.05 * cs * mz;
-  to3(p, P.rH, lerp(0.01, -0.04, s), lerp(-0.5, -0.4, s), lerp(-0.14 + amp, -0.3, s), w);
+  to3(p, P.rH, lerp(-0.02, -0.06, s), lerp(-0.49, -0.38, s) + 0.012 * st, lerp(-0.12 + amp, -0.3, s), w);
   to3(p, P.rP, -0.6, lerp(-0.3, 0.2, s), -1, w);
-  to3(p, P.swD, lerp(-0.08, -0.12, s), lerp(-0.62, -0.2, s), lerp(-0.78, -0.97, s), w);
-  to3(p, P.swF, 0.2, 1, 0, w);
+  dirTo(p, P.swD, lerp(-0.2, -0.14, s), lerp(-0.6, -0.22, s) - 0.03 * st * (1 - s), lerp(-0.77, -0.96, s), w);
+  to3(p, P.swF, -0.3, 1, 0, w);
   // free arm swings opposite the legs: ahead of the belt (run) → a pumping fist chin ↔ hip (sprint)
   const k = 0.5 - 0.5 * cs * mz; // 1 = fist forward
-  to3(p, P.lH, lerp(-0.02, -0.08, s) * k + 0.05 * (1 - k), lerp(lerp(-0.42, -0.3, k), lerp(-0.38, -0.04, k), s), lerp(lerp(-0.06, 0.22, k), lerp(-0.12, 0.3, k), s), w);
+  to3(p, P.lH, lerp(-0.02, -0.08, s) * k + 0.06 * (1 - k), lerp(lerp(-0.44, -0.3, k), lerp(-0.38, -0.04, k), s), lerp(lerp(-0.1, 0.24, k), lerp(-0.14, 0.32, k), s), w);
   to3(p, P.lP, 0.6, -0.6, -0.6, w);
 }
 /** Blend only the legs toward the walking gait (block / charge can move). */
@@ -227,6 +342,7 @@ function stance(p, A, lunge) {
   p[P.pelvZ] = 0;
   p[P.spZ] = 0;
   p[P.hdX] = 0.02;
+  p[P.hdZ] = 0;
   p[P.footFlat] = 0.9;
 }
 
@@ -301,7 +417,7 @@ function chargeStance(p, A, k, sink) {
   p[P.hdX] = 0.02 - 0.3 * sink;
   to3(p, P.rH, -0.02, -0.42, -0.28, 0.35 + 0.65 * sink);
   v3(p, P.rP, -0.5, -0.4, -0.6);
-  to3(p, P.swD, -0.3, -0.55 - 0.08 * k, -0.78, 0.35 + 0.65 * sink);
+  dirTo(p, P.swD, -0.3, -0.55 - 0.08 * k, -0.78, 0.35 + 0.65 * sink);
   v3(p, P.swF, 0.4, 0.3, -0.3);
   p[P.twoHand] = smoothstep(0.1, 0.7, sink);
   v3(p, P.lP, 0.8, -0.4, -0.3);
@@ -320,7 +436,7 @@ function thrustPose(p, A, t, W, Ac) {
   chargeStance(p, A, k, 1);
   // the windup whips the blade round from the hip onto the line, so the lunge drives it straight
   const wu = easeOutCubic(clamp(t / W, 0, 1));
-  to3(p, P.swD, 0.0, -0.06, 1, wu);
+  dirTo(p, P.swD, 0.0, -0.06, 1, wu);
   to3(p, P.rH, 0.1, -0.22, 0.3, wu);
   if (t < W) return;
   const v = clamp((t - W) / Ac, 0, 1);
@@ -335,7 +451,7 @@ function thrustPose(p, A, t, W, Ac) {
   p[P.hdX] = lerp(p[P.hdX], -0.5 - 0.2 * launch, e);
   to3(p, P.rH, 0.13, 0.02, 0.5, e);
   v3(p, P.rP, -0.6, -0.5, -0.4);
-  to3(p, P.swD, 0.0, -0.02, 1, e);
+  dirTo(p, P.swD, 0.0, -0.02, 1, e);
   to3(p, P.swF, 0, 1, 0, e);
   p[P.twoHand] = 1;
   to3(p, P.lF, 0.15, ANK + 0.12 * launch, 0.7, e);
@@ -456,7 +572,7 @@ function parryPose(p, A) {
   blockPose(p, A);
   const t = A.t;
   const f = t < 0.06 ? easeOutCubic(t / 0.06) : 1 - smoothstep(0.06, 0.3, t);
-  to3(p, P.swD, -0.55, 0.8, 0.5, f);
+  dirTo(p, P.swD, -0.55, 0.8, 0.5, f);
   to3(p, P.swF, 0, 0.3, 1, f);
   to3(p, P.rH, -0.05, -0.08, 0.4, f);
   to3(p, P.lH, 0.22, -0.32, 0.02, f);
@@ -488,7 +604,7 @@ function ghostepPose(p, A) {
   v3(p, P.rF, -0.2, ANK, -0.34);
   v3(p, P.lF, 0.18, ANK, 0.26);
   const rise = smoothstep(0.14, 0.32, t);
-  to3(p, P.swD, -0.25, -0.2, 1, rise * 0.6);
+  dirTo(p, P.swD, -0.25, -0.2, 1, rise * 0.6);
   to3(p, P.rH, 0.02, -0.4, 0.2, rise * 0.6);
 }
 
@@ -504,7 +620,7 @@ function guardBreakPose(p, A) {
   p[P.bodyY] -= 0.05 * k;
   p[P.bodyZ] -= 0.1 * k;
   to3(p, P.rH, -0.3, 0.1, 0.05, k);
-  to3(p, P.swD, -0.3, 0.85, -0.35, k);
+  dirTo(p, P.swD, -0.3, 0.85, -0.35, k);
   to3(p, P.swF, 1, 0, 0, k);
   to3(p, P.lH, 0.35, -0.1, 0.05, k);
   const st = smoothstep(0.1, 0.3, t);
@@ -591,7 +707,7 @@ function backstepPose(p, A) {
   p[P.lF + 1] += 0.12 * hop;
   p[P.rF + 2] += 0.12 * k; // feet trail forward as the body hops back
   p[P.lF + 2] += 0.18 * k;
-  to3(p, P.swD, -0.1, -0.15, 1, k);
+  dirTo(p, P.swD, -0.1, -0.15, 1, k);
   to3(p, P.lH, -0.06, -0.3, 0.3, k);
 }
 
@@ -609,7 +725,7 @@ function healPose(p, A) {
   p[P.hdY] = lerp(p[P.hdY], 0, raise);
   // sword arm rests low at the side
   to3(p, P.rH, 0.03, -0.46, 0.14, raise);
-  to3(p, P.swD, 0.1, -0.6, 0.75, raise);
+  dirTo(p, P.swD, 0.1, -0.6, 0.75, raise);
   p[P.flask] = smoothstep(0.0, 0.1, t) * (1 - smoothstep(0.74, 0.85, t));
 }
 
@@ -625,7 +741,7 @@ function staggerPose(p, A) {
   p[P.bodyZ] -= 0.08 * k;
   to3(p, P.rH, -0.25, -0.3, 0.3, k);
   to3(p, P.lH, 0.3, -0.25, 0.25, k);
-  to3(p, P.swD, -0.7, -0.25, 0.6, k);
+  dirTo(p, P.swD, -0.7, -0.25, 0.6, k);
   p[P.lF + 2] -= 0.2 * k;
 }
 
@@ -663,7 +779,7 @@ function knockdownPose(p, A) {
   const arms = kf(t, KD.arms), push = kf(t, KD.push);
   to3(p, P.rH, -0.36, -0.15, -0.02, arms);
   to3(p, P.lH, 0.38, -0.15, 0.02, arms);
-  to3(p, P.swD, -1, 0.05, 0.25, arms);
+  dirTo(p, P.swD, -1, 0.05, 0.25, arms);
   to3(p, P.swF, 0, 1, 0, arms);
   to3(p, P.rH, -0.1, -0.48, -0.12, push); // hands push off the ground
   to3(p, P.lH, 0.1, -0.48, -0.12, push);
@@ -700,7 +816,7 @@ function deathPose(p, A) {
   to3(p, P.lF, 0.15, ANK, 0.3, kneel);
   to3(p, P.rK, -0.15, -0.3, 1, kneel);
   to3(p, P.rH, 0.0, -0.36, 0.34, kneel); // leaning on the sword, tip planted ahead
-  to3(p, P.swD, -0.05, -0.75, 0.66, kneel);
+  dirTo(p, P.swD, -0.05, -0.75, 0.66, kneel);
   to3(p, P.swF, 1, 0, 0, kneel);
   to3(p, P.lH, -0.06, -0.45, 0.24, kneel);
   const flat = kf(t, DEATH.flat);
@@ -710,7 +826,7 @@ function deathPose(p, A) {
   // face down: body +Z points into the ground, +Y toward the head
   const limp = kf(t, DEATH.limp);
   to3(p, P.rH, -0.45, 0.05, 0.1, limp);
-  to3(p, P.swD, -0.55, 0.8, -0.05, limp); // sword dropped flat beside the head
+  dirTo(p, P.swD, -0.55, 0.8, -0.05, limp); // sword dropped flat beside the head
   to3(p, P.swF, 0, 0, 1, limp);
   to3(p, P.lH, 0.32, -0.05, 0.12, limp);
 }
@@ -787,6 +903,7 @@ const _m4 = new THREE.Matrix4();
 const _qInv = new THREE.Quaternion(), _qA = new THREE.Quaternion(), _q0 = new THREE.Quaternion();
 const _qs = new THREE.Quaternion(), _pa = new THREE.Vector3(), _e0 = new THREE.Vector3(), _e1 = new THREE.Vector3();
 const _axis = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
 const _G = new THREE.Vector3(), _TL = new THREE.Vector3(), _qId = new THREE.Quaternion();
 const _qInv2 = new THREE.Quaternion(), _qB = new THREE.Quaternion();
 
@@ -816,6 +933,10 @@ const PAULDRON_FOLLOW = 0.35; // how much of the sword arm's swing the shoulder 
 const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4;
 // idle breeze on the coat: extra outward flare per panel (back-left blows out the most)
 const BREEZE = [0.02, 0.03, 0.05, 0.04, 0.1, 0.05, 0.0];
+// standing still, the skirt FLARES like the reference portrait's (a wide A of torn tails either
+// side of the legs, the sword side widest): extra outward swing per panel, faded out by speed
+// (front-left, front-right, left, right, back-left, back-right, flap)
+const IDLE_FLARE = [0.1, 0.16, 0.34, 0.42, 0.26, 0.32, 0];
 
 export class HeroAnimator {
   /** player must expose: yaw, state, stateT, animT, atk ({def}), groundVel {x, z}, chargeK,
@@ -843,6 +964,25 @@ export class HeroAnimator {
     this.releaseK = 0;
     this.recoil = 0;
     this.onFootstep = null;
+    // gait drivers (update): cycle parameters, model-space acceleration, banking, strafe hip turn
+    this.gait = { beta: 0.62, exc: 0.11, off: 0, lift: 0.05, kick: 0, peel: 0.02, len: 0.35, bob: 0 };
+    this.accF = 0;
+    this.accS = 0;
+    this.bank = 0;
+    this.turnV = 0;
+    this.strafeYaw = 0;
+    this.turnLag = 0; // visual: the hips trail a fast turn of the root
+    this.visYaw = 0;
+    this.visYawV = 0;
+    this.cycOn = false;
+    this._pv = { x: 0, z: 0, h: 0, init: false };
+    // foot planner (see _feet): per foot { init, lock, wx, wz, wyaw, mode, s, dur, lx, ly, lz, lyaw, cx, cz, cyaw, prevU }
+    this.feet = [0, 1].map(() => ({ init: false, lock: false, hold: false, wx: 0, wz: 0, wyaw: 0, mode: 0, s: 1, dur: 0.2, lift: 0, lx: 0, ly: ANK, lz: 0, lyaw: 0, cx: 0, cz: 0, cyaw: 0, prevU: 0, ox: 0, oy: ANK, oz: 0, oyaw: 0 }));
+    this.leanF = 0; // acceleration lean (rad), a critically damped spring on the smoothed acceleration
+    this.leanFV = 0;
+    this.leanS = 0;
+    this.leanSV = 0;
+    this.stepCool = 0;
     this.coatState = rig.coat.map(() => [{ x: 0, vx: 0, z: 0, vz: 0 }, { x: 0, vx: 0, z: 0, vz: 0 }]);
     this.stripState = rig.coat.map((C) => C.strips.map(() => ({ x: 0, vx: 0, z: 0, vz: 0 })));
     this.streamState = (rig.streamers ?? []).map(() => ({
@@ -892,6 +1032,13 @@ export class HeroAnimator {
     this.releaseK = 0;
     this.recoil = 0;
     this.key = 'loco';
+    this.accF = this.accS = this.bank = this.turnV = this.strafeYaw = this.turnLag = this.visYawV = 0;
+    this.leanF = this.leanFV = this.leanS = this.leanSV = 0;
+    this.visYaw = fin(this.player.yaw);
+    this.cycOn = false;
+    this._pv.init = false;
+    for (const F of this.feet) F.init = false;
+    gaitParams(this.gait, 0, 0);
     guard(this.cur, this);
     this.from.set(this.cur);
     this.target.set(this.cur);
@@ -928,6 +1075,10 @@ export class HeroAnimator {
     this.coatInit = false;
     this.hairInit = false;
     this.streamInit = false;
+    this._pv.init = false;
+    this.visYaw = fin(this.player.yaw);
+    this.visYawV = this.turnLag = 0;
+    for (const F of this.feet) F.init = false;
     for (const v of this.coatVel) v.set(0, 0, 0);
     for (const h of this.hairState) h.vel.set(0, 0, 0);
     for (const st of this.streamState) st.vel.set(0, 0, 0);
@@ -976,13 +1127,54 @@ export class HeroAnimator {
     this.speed = sp;
     this.moveW = damp(this.moveW, clamp(sp / 3, 0, 1), 10, dt);
     this.sprintW = damp(this.sprintW, pl.state === 'sprint' ? 1 : 0, 6, dt);
-    const prev = this.phase;
-    // the drawn hero is HERO_SCALE tall: his stride is too, so the cycle slows to keep feet planted
-    this.phase += (sp * dt) / ((1.2 + 0.15 * sp) * HERO_SCALE);
-    if (WALK_KEYS.has(this.key) && sp > 0.8 && this.onFootstep) {
-      if (Math.floor(prev) !== Math.floor(this.phase)) this.onFootstep(1); // left foot lands
-      if (Math.floor(prev + 0.5) !== Math.floor(this.phase + 0.5)) this.onFootstep(-1);
+    // acceleration (model space) for the lean into starts / the sit-back on stops, and the turn rate
+    // of the velocity heading for banking into curves
+    const P0 = this._pv;
+    if (P0.init && dt > 1e-4) {
+      const ax = (vx - P0.x) / dt, az = (vz - P0.z) / dt;
+      this.accS = damp(this.accS, clamp(ax * c - az * s, -60, 60), 9, dt);
+      this.accF = damp(this.accF, clamp(ax * s + az * c, -60, 60), 9, dt);
+      const h = Math.atan2(vx, vz);
+      const om = sp > 1 && Math.hypot(P0.x, P0.z) > 1 ? clamp(wrapAngle(h - P0.h) / dt, -10, 10) : 0;
+      this.turnV = damp(this.turnV, om, 8, dt);
+      P0.h = h;
+    } else {
+      P0.h = Math.atan2(vx, vz);
     }
+    P0.x = vx;
+    P0.z = vz;
+    P0.init = dt > 1e-4;
+    this.bank = clamp(this.turnV * sp * 0.014, -0.26, 0.26);
+    {
+      const W2 = 110, Z2 = 2 * Math.sqrt(W2); // ω ≈ 10.5 /s, critically damped
+      const tf = clamp(this.accF * 0.03, -0.24, 0.3), ts = clamp(this.accS * 0.02, -0.15, 0.15);
+      this.leanFV += (W2 * (tf - this.leanF) - Z2 * this.leanFV) * dt;
+      this.leanF += this.leanFV * dt;
+      this.leanSV += (W2 * (ts - this.leanS) - Z2 * this.leanSV) * dt;
+      this.leanS += this.leanSV * dt;
+      if (!Number.isFinite(this.leanF + this.leanFV + this.leanS + this.leanSV)) this.leanF = this.leanFV = this.leanS = this.leanSV = 0;
+    }
+    const strafe = sp > 0.6 ? 0.5 * this.mx * (this.mz >= -0.2 ? 1 : -1) * (1 - 0.5 * Math.abs(this.mz)) : 0;
+    this.strafeYaw = damp(this.strafeYaw, strafe, 8, dt);
+    // the visual heading trails the (snappy) gameplay yaw: hips lag, the head leads (walking clips)
+    const dy = wrapAngle(fin(pl.yaw) - this.visYaw);
+    this.visYawV += (dy * 420 - this.visYawV * 2 * Math.sqrt(420)) * dt;
+    this.visYaw = wrapAngle(this.visYaw + clamp(this.visYawV, -30, 30) * dt);
+    if (Math.abs(wrapAngle(fin(pl.yaw) - this.visYaw)) > 1.4) this.visYaw = wrapAngle(fin(pl.yaw) - Math.sign(dy) * 1.4);
+    this.turnLag = clamp(wrapAngle(this.visYaw - fin(pl.yaw)), -0.9, 0.9);
+    // the gait cycle: its length is matched to the speed, so a stance foot moves back at exactly the
+    // drawn ground speed (the drawn hero is HERO_SCALE tall)
+    gaitParams(this.gait, sp, this.sprintW);
+    if (this.cycOn ? sp < 0.22 : sp > 0.4) {
+      this.cycOn = !this.cycOn;
+      if (this.cycOn) {
+        // setting off: the rear foot (along the move direction) takes the first step
+        const c0 = this.cur;
+        const aR = c0[P.rF] * this.mx + c0[P.rF + 2] * this.mz, aL = c0[P.lF] * this.mx + c0[P.lF + 2] * this.mz;
+        this.phase = aL < aR ? this.gait.beta : this.gait.beta + 0.5;
+      }
+    }
+    this.phase += (sp / HERO_SCALE) * dt / this.gait.len;
     if (this.phase > 1e4) this.phase -= 1e4;
 
     POSES[this.key](this.target, this);
@@ -993,11 +1185,13 @@ export class HeroAnimator {
     } else {
       this.cur.set(this.target);
     }
+    this._feet(dt);
     for (let i = 0; i < N; i++) {
       if (!Number.isFinite(this.cur[i])) {
         guard(this.cur, this); // never let a bad frame poison the rig
         this.from.set(this.cur);
         this.blendT = this.blendDur;
+        for (const F of this.feet) F.init = false;
         break;
       }
     }
@@ -1008,13 +1202,157 @@ export class HeroAnimator {
     this.rig.root.updateMatrixWorld(true);
   }
 
+  /**
+   * Foot planner (walking clips: loco, block, charge, heal). A planted foot stays put in the WORLD
+   * (drawn position, HERO_SCALE) while the root moves and turns under it, so nothing skates on run
+   * starts and stops, speed changes, curves or turns in place. The gait cycle lifts a foot off at
+   * the end of its stance (its swing then blends from where it really was onto the cycle's path)
+   * and plants it at touchdown. Standing, a foot whose spot has drifted from the stance pose (a turn
+   * in place, a shove, the end of a run or an attack) re-plants with a short step, one foot at a
+   * time. Other clips (attacks, roll, falls) pose the feet themselves; the planner re-plants from
+   * wherever they are when a walking clip resumes. Writes the foot targets of `cur`.
+   */
+  _feet(dt) {
+    const pl = this.player, cur = this.cur;
+    if (!WALK_KEYS.has(this.key) || !pl.position) {
+      for (const F of this.feet) F.init = false;
+      return;
+    }
+    const yaw = fin(pl.yaw), px = fin(pl.position.x), pz = fin(pl.position.z);
+    const c = Math.cos(yaw), s = Math.sin(yaw), HS = HERO_SCALE;
+    const G = this.gait, cyc = this.cycOn;
+    if (this.stepCool > 0) this.stepCool -= dt;
+    // knocked back (a blocked blow, a shove): the feet skid with the body instead of stepping
+    const kb = pl.kb ? Math.hypot(fin(pl.kb.x), fin(pl.kb.z)) : 0;
+    const skid = kb > 0.8;
+    // where the clip wants each foot (read before either is overwritten)
+    const W = FEET_WANT;
+    for (let fi = 0; fi < 2; fi++) {
+      const i = fi ? P.lF : P.rF, iy = fi ? P.lFy : P.rFy, o = fi * 4;
+      W[o] = cur[i];
+      W[o + 1] = cur[i + 1];
+      W[o + 2] = cur[i + 2];
+      W[o + 3] = cur[iy];
+    }
+    const Tcyc = (G.len * HS) / Math.max(0.3, this.speed); // s per cycle
+    for (let fi = 0; fi < 2; fi++) {
+      const F = this.feet[fi], O = this.feet[1 - fi];
+      const i = fi ? P.lF : P.rF, iy = fi ? P.lFy : P.rFy, o = fi * 4;
+      const dx = W[o], dy = W[o + 1], dz = W[o + 2], dyaw = W[o + 3];
+      let u = fi ? this.phase : this.phase + 0.5;
+      u -= Math.floor(u);
+      const inStance = u < G.beta;
+      if (!F.init) {
+        F.init = true;
+        F.prevU = u;
+        F.hold = false;
+        if (dy < ANK + 0.04) this._plant(F, dx, dz, dyaw, px, pz, c, s, yaw);
+        else this._lift(F, 1, dx, dy, dz, dyaw, 0.18);
+      }
+      if (skid && F.lock) this._plant(F, dx, dz, dyaw, px, pz, c, s, yaw); // slides with the root
+      // the planted spot in model space
+      let mx = 0, mz = 0;
+      if (F.lock) {
+        const wx = (F.wx - px) / HS, wz = (F.wz - pz) / HS;
+        mx = wx * c - wz * s;
+        mz = wx * s + wz * c;
+      }
+      if (inStance) F.hold = false;
+      if (cyc) {
+        if (F.lock) {
+          if (!inStance && F.prevU < G.beta) {
+            // lift-off: the swing starts from the real spot and blends onto the cycle's path
+            F.lock = false;
+            F.mode = 0;
+            F.cx = mx - dx;
+            F.cz = mz - dz;
+            F.cyaw = wrapAngle(F.wyaw - yaw - dyaw);
+          } else if (!inStance && !F.hold) {
+            // planted through its swing (the cycle just started): step to the cycle's path in the
+            // time left in the swing
+            this._lift(F, 1, mx, ANK, mz, wrapAngle(F.wyaw - yaw), clamp((1 - u) * Tcyc, 0.12, 0.3));
+            F.hold = true;
+          } else if (Math.hypot(mx - dx, mz - dz) > 0.45) {
+            this._lift(F, 1, mx, ANK, mz, wrapAngle(F.wyaw - yaw), 0.15); // left behind by a turn: step
+            F.hold = true;
+          }
+        } else if (F.mode === 0 && inStance && F.prevU >= G.beta) {
+          this._plant(F, dx, dz, dyaw, px, pz, c, s, yaw); // touchdown
+          if (this.speed > 0.8 && this.onFootstep) this.onFootstep(fi ? 1 : -1);
+        }
+      } else {
+        if (!F.lock && F.mode === 0) this._lift(F, 1, F.ox, F.oy, F.oz, F.oyaw, 0.2); // stopping: the swing lands on the stance spot
+        if (F.lock && O.lock && this.stepCool <= 0 && !skid) {
+          const drift = Math.hypot(mx - dx, mz - dz) + 0.22 * Math.abs(wrapAngle(F.wyaw - yaw - dyaw));
+          const oo = (1 - fi) * 4;
+          const owx = (O.wx - px) / HS, owz = (O.wz - pz) / HS;
+          const od = Math.hypot(owx * c - owz * s - W[oo], owx * s + owz * c - W[oo + 2]) + 0.22 * Math.abs(wrapAngle(O.wyaw - yaw - W[oo + 3]));
+          if (drift > 0.1 && drift >= od) this._lift(F, 1, mx, ANK, mz, wrapAngle(F.wyaw - yaw), lerp(0.24, 0.17, clamp((drift - 0.1) / 0.3, 0, 1)));
+        }
+      }
+      F.prevU = u;
+      // write the foot
+      if (F.lock) {
+        const wx = (F.wx - px) / HS, wz = (F.wz - pz) / HS;
+        cur[i] = wx * c - wz * s;
+        cur[i + 1] = cyc && inStance ? Math.min(dy, ANK + G.peel) : ANK;
+        cur[i + 2] = wx * s + wz * c;
+        cur[iy] = wrapAngle(F.wyaw - yaw);
+      } else if (F.mode === 0) {
+        const sw = clamp((u - G.beta) / Math.max(0.05, 1 - G.beta), 0, 1);
+        const k = 1 - smoothstep(0, 0.65, sw);
+        cur[i] = dx + F.cx * k;
+        cur[i + 2] = dz + F.cz * k;
+        cur[iy] = dyaw + F.cyaw * k;
+      } else {
+        // a step: lift, carry, set down on the spot the clip wants (the stance or the cycle's)
+        F.s = Math.min(1, F.s + dt / F.dur);
+        const e = smoothstep(0, 1, F.s);
+        cur[i] = lerp(F.lx, dx, e);
+        cur[i + 1] = lerp(F.ly, Math.max(ANK, Math.min(dy, ANK + 0.02)), e) + Math.sin(Math.PI * F.s) * (0.05 + 0.25 * F.lift);
+        cur[i + 2] = lerp(F.lz, dz, e);
+        cur[iy] = F.lyaw + wrapAngle(dyaw - F.lyaw) * e;
+        if (F.s >= 1) {
+          this._plant(F, cur[i], cur[i + 2], cur[iy], px, pz, c, s, yaw);
+          this.stepCool = 0.06;
+        }
+      }
+      F.ox = cur[i];
+      F.oy = cur[i + 1];
+      F.oz = cur[i + 2];
+      F.oyaw = cur[iy];
+    }
+  }
+
+  /** Plant foot F at model-space (x, z) with model yaw `fy`: store its drawn world spot. */
+  _plant(F, x, z, fy, px, pz, c, s, yaw) {
+    F.lock = true;
+    F.wx = px + HERO_SCALE * (x * c + z * s);
+    F.wz = pz + HERO_SCALE * (-x * s + z * c);
+    F.wyaw = yaw + fin(fy);
+    F.s = 1;
+  }
+
+  /** Start a step (mode 1) for foot F from model-space (x, y, z) / yaw over `dur` seconds. */
+  _lift(F, mode, x, y, z, fy, dur) {
+    F.lock = false;
+    F.mode = mode;
+    F.s = 0;
+    F.dur = Math.max(0.08, dur);
+    F.lx = x;
+    F.ly = y;
+    F.lz = z;
+    F.lyaw = fin(fy);
+    F.lift = 0;
+  }
+
   apply(p) {
     const r = this.rig;
     r.body.position.set(p[P.bodyX], DIM.pivot + p[P.bodyY], p[P.bodyZ]);
     r.body.rotation.set(p[P.pitch], p[P.yaw], p[P.roll]);
-    r.pelvis.rotation.set(0, p[P.pelvY], p[P.pelvZ]);
+    r.pelvis.rotation.set(p[P.pelvX], p[P.pelvY], p[P.pelvZ]);
     r.spine.rotation.set(p[P.spX], p[P.spY], p[P.spZ]);
-    r.head.rotation.set(p[P.hdX], p[P.hdY], 0);
+    r.head.rotation.set(p[P.hdX], p[P.hdY], p[P.hdZ]);
     r.root.updateMatrixWorld(true);
     // ground clamp: lift the whole body if a head/torso proxy sphere dips below the ground
     // (keeps the roll's tucked ball, falls and the corpse on top of the grass)
@@ -1052,8 +1390,8 @@ export class HeroAnimator {
     this._arm(r.arms.L, _T, p, P.lP, false);
     // the pauldron rides on the shoulder, following part of the sword arm's swing
     r.pauldron.quaternion.slerpQuaternions(_qId, r.arms.R.upper.quaternion, PAULDRON_FOLLOW);
-    this._leg(r.legs.R, p, P.rF, P.rK);
-    this._leg(r.legs.L, p, P.lF, P.lK);
+    this._leg(r.legs.R, p, P.rF, P.rK, P.rFy, P.rFf);
+    this._leg(r.legs.L, p, P.lF, P.lK, P.lFy, P.lFf);
 
     // sword: blade along +Z = swD, flat normal (+Y) = swF, both in body axes
     _bz.set(p[P.swD], p[P.swD + 1], p[P.swD + 2]);
@@ -1115,7 +1453,7 @@ export class HeroAnimator {
     }
   }
 
-  _leg(leg, p, fi, ki) {
+  _leg(leg, p, fi, ki, yi, ffi) {
     const r = this.rig;
     _S.copy(leg.thigh.position);
     _T.set(p[fi], Math.max(FOOT_FLOOR, p[fi + 1]), p[fi + 2]); // model y == height above ground
@@ -1127,7 +1465,9 @@ export class HeroAnimator {
     // ankle: keep the sole level with the ground by footFlat (0 = rigid with the shin)
     _q1.copy(_qPelvis).multiply(leg.thigh.quaternion).multiply(leg.shin.quaternion);
     _q2.copy(_q1).invert().multiply(_qRoot);
-    leg.foot.quaternion.identity().slerp(_q2, clamp(p[P.footFlat], 0, 1));
+    const fy = p[yi]; // toe-out / a planted foot's own heading
+    if (fy) _q2.multiply(_qs.setFromAxisAngle(_UP, clamp(fy, -1.2, 1.2)));
+    leg.foot.quaternion.identity().slerp(_q2, clamp(p[P.footFlat] * p[ffi], 0, 1));
   }
 
   /** Hem height (world) of a coat panel for segment angles (a0,b0) and (a1,b1). Uses _qA (anchor
@@ -1182,7 +1522,7 @@ export class HeroAnimator {
       for (let s = 0; s < 2; s++) {
         const c = st[s];
         const lag = COAT_LAG[s] * (1 + COAT_LAG_V * vs);
-        const fl = (D.flap ? 0.05 : D.flare ?? COAT_FLARE) + breeze * still + Math.sin(this.time * 9 + i * 1.7 + s * 1.3) * 0.07 * flut;
+        const fl = (D.flap ? 0.05 : D.flare ?? COAT_FLARE) + (breeze + (IDLE_FLARE[i] ?? 0) * (s ? 0.7 : 1)) * still + Math.sin(this.time * 9 + i * 1.7 + s * 1.3) * 0.07 * flut;
         let hx = _g.x + nx * fl - _v.x * lag;
         let hy = _g.y - _v.y * lag * 0.5;
         let hz = _g.z + nz * fl - _v.z * lag;
