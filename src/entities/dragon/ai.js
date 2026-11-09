@@ -211,6 +211,8 @@ export const SEQ = {
       const want = d.sense.yawTo + (a.away ? Math.PI : 0);
       d.turnToward(want, TUNING.forceTurn.rate, dt);
       d.pose.speed = Math.max(d.pose.speed, 3);
+      // turning away = the tail sweep's prelude: its tail is already the measured v0.4 solve
+      if (a.away) d.pose.tailLegacy = true;
       if (Math.abs(angleDiff(d.yaw, want)) < 0.12) a.finish = true;
     },
   },

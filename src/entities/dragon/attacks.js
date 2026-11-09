@@ -504,6 +504,8 @@ const tail = {
   },
   update(d, a, dt) {
     const pose = d.pose;
+    // the sweep's tail is the measured v0.4 chain solve (its hit spheres and swept arc ride on it)
+    pose.tailLegacy = true;
     // wings folded tight through the whole sweep so the membranes stay clear of the tail
     pose.spread[0] = pose.spread[1] = a.phase === 'recovery' && a.k > 0.4 ? REST_SPREAD : 0;
     pose.spreadRate = 5;

@@ -177,6 +177,7 @@ export function createPose() {
     tailWave: 0.07,
     tailStiff: 1, // spring stiffness multiplier (tail sweep keeps the tail extended)
     tailLift: 1, // 1 = the arched resting tail (REST_POSE.tail), 0 = dragged low (tail sweep, stomp tripod)
+    tailLegacy: false, // the v0.4 tail solve exactly (the tail sweep: its hit spheres ride the chain)
     eyes: 1,
     idle: 0, // 1 = no attack running (the AI's idle / walk): the rig's idle life plays
     speed: 0, // ground speed for the gait
@@ -223,6 +224,7 @@ export function resetPose(p) {
   p.tailWave = 0.07;
   p.tailStiff = 1;
   p.tailLift = 1;
+  p.tailLegacy = false;
   p.eyes = 1;
   p.idle = 0;
   return p;
@@ -287,6 +289,10 @@ const SHOULDER_Z = A.hipZ + A.chest[2] + A.shoulder[2];
 /** Idle wing rouse: duration (s) and the quiet gaps between rouses (s, cycled). */
 const ROUSE_TIME = 1.4;
 const ROUSE_GAPS = [9.5, 7.8, 11.2, 8.6];
+/** Deepest the tail's rest shape may dive under the ground clearance, in segments (Chain.buildRest sinkMax). */
+const TAIL_SINK = 0.55;
+/** Tail segments swing at most this far from their rest direction (rad: soft from [0], capped at [1]). */
+const TAIL_DEV = [0.6, 1.2];
 
 const mixParams = (a, b, t, out) => {
   for (const k in a) out[k] = a[k] + ((b[k] ?? 0) - a[k]) * t;
@@ -320,6 +326,7 @@ export class Rig {
       droop: 0, mantle: 0, stanceF: 0, stanceH: 0, strideF: 0, strideH: 0, restep: 0, elbowsOut: 0, swell: 0, airReach: 0,
       rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0, tailLift: 0, still: 0,
     };
+    this.s.tailNew = 1; // 0..1 the round-2 tail limits (0 = the v0.4 solve: pose.tailLegacy)
     this.time = 0;
     this.breathPhase = 0;
     this.headPos = V();
@@ -567,7 +574,7 @@ export class Rig {
     this._leftFlat.set(fwdFlat.z, 0, -fwdFlat.x);
 
     this._updateNeck(dt, pose, snap, qChest, qNeckBase);
-    this._updateTail(dt, snap, qTailBase, pose.tailStiff);
+    this._updateTail(dt, snap, qTailBase, pose.tailStiff, pose.tailLegacy);
     this._updateLegs(dt, pose, snap, lying, fwd, up, left, fwdFlat);
     this._updateWings(dt, lying, qChest, fwdFlat, up, snap);
 
@@ -754,7 +761,7 @@ export class Rig {
     m.jaw.rotation.x = (s.jaw + 0.06 * (0.5 - 0.5 * this._br) * s.idle) * 0.7;
   }
 
-  _updateTail(dt, snap, qTailBase, stiff = 1) {
+  _updateTail(dt, snap, qTailBase, stiff = 1, legacy = false) {
     const s = this.s, tail = this.tail;
     const set = (o, pitch0, pitchStep, yaw0, yawStep, yawCurve, waveAmp, wavePhase) => {
       o.pitch0 = pitch0;
@@ -783,7 +790,17 @@ export class Rig {
     // where the dip sits is not blended (only its depth: the other shapes have none)
     p.dipAt = R.dipAt;
     p.dipWidth = R.dipWidth;
+    // the rest shape never dives more than TAIL_SINK segments under the ground (see Chain.buildRest)
+    // and no segment swings further than TAIL_DEV from its rest direction: the whipped tail can't fold
+    // over and roll (neither limit is reached at rest, so the idle tail, and the tail sweep starting
+    // from it, are the v0.4 solve). The tail sweep keeps that exact solve throughout (pose.tailLegacy:
+    // at once); leaving it, the limits ease back in (`tw`) so they never snap a tail still far from rest
+    s.tailNew = legacy || snap ? (legacy ? 0 : 1) : damp(s.tailNew, 1, 2.5, dt);
+    const tw = s.tailNew, loose = (1 - tw) * 6;
+    p.sinkMax = tw < 1e-3 ? Infinity : TAIL_SINK + loose;
     tail.buildRest(this._pTailBase, qTailBase, p);
+    tail.devSoft = tw < 1e-3 ? Infinity : TAIL_DEV[0] + loose;
+    tail.devMax = tw < 1e-3 ? Infinity : TAIL_DEV[1] + loose;
     if (snap) tail.snap();
     else {
       this._stiff = damp(this._stiff ?? 1, stiff, 6, dt);
@@ -840,7 +857,7 @@ export class Rig {
     // so a planted paw stays in reach through a stride or a turn; it eases home when lying down
     for (let k = 0; k < 2; k++) {
       const arm = m.arms[k], side = arm.side, sc = this._scap[k];
-      const paw = gait.limbs[2 + k].pos;
+      const paw = gait.limbs[2 + k].posRef; // (without the swing offset: see Gait)
       const sh = this._rootToWorld(v[13], side * A.shoulder[0] * S, 0, SHOULDER_Z * S);
       const dz = ((paw.x - sh.x) * fwdFlat.x + (paw.z - sh.z) * fwdFlat.z) / S - (A.handHome[2] - SHOULDER_Z);
       // only a paw on the ground (or stepping) pulls the shoulder: a raised / raking / slamming paw
