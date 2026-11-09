@@ -201,48 +201,49 @@ function kv3(p, i, t, k) {
   v3(p, i, k[e + 1], k[e + 2], k[e + 3]);
 }
 
-/** Idle / ready stance (2.4 s loop), the owner's reference portrait: contrapposto — the weight on
- *  the straight LEFT leg planted under the body, the right leg relaxed, stepped out to the side and
- *  a little forward with the knee bent; the hips tilt up on the left, the shoulders counter-tilt.
- *  The sword hangs one-handed and LOW in the right hand at the right thigh, the blade pointing
- *  down-left across the front of the legs (down-right on screen) with the point just off the grass
- *  outside the left boot; the free hand hangs relaxed beside the left thigh; the head tips down and
- *  turns a little toward the blade. Breathing + a slow weight sway; no steps.
- *  The blade runs square across his front (out past the left boot, not toward the camera), so in
- *  the portrait's view it reads long and at the portrait's ~45-50° instead of foreshortened and
- *  steep; the grip sits forward of the hip so the steel clears the left knee. */
-const IDLE_SW = [0.675, -0.737, 0.035]; // blade direction (body axes): ~47° below level, square to his left
+/** Idle / ready stance (2.4 s loop), the owner's reference portrait: a wide A stance in
+ *  contrapposto — the weight on the straight RIGHT leg, planted forward and out to the side, the hips
+ *  shifted over it (its hip riding higher), the LEFT foot set out and back with its knee bent
+ *  forward; the torso leans back toward his left over the bent leg, the hips turned a little with
+ *  the forward foot. The sword hangs one-handed and LOW in the right hand at the right hip, the long
+ *  blade running down-left across his front (down-right on screen, ~39° below level, the portrait's
+ *  long diagonal) to the point on the grass well past the left boot; the free arm hangs straight
+ *  beside the left hip; the head tips down and turns toward his left, past the blade. Breathing + a
+ *  slow weight sway; no steps. */
+// blade direction (body axes): ~39° below level, to his left, a little forward: the drawn point
+// (model.js DIM.drawnTip) rests on the grass through the breathing (measured 0–5 cm above it)
+const IDLE_SW = [0.76, -0.645, 0.17];
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
-  p[P.bodyX] = 0.045 + 0.01 * sw; // over the left (weight) foot
-  p[P.bodyY] = -0.008 + 0.004 * br; // the weight leg nearly straight
-  p[P.bodyZ] = -0.012; // over the weight foot, set a little back
+  p[P.bodyX] = -0.045 + 0.01 * sw; // the hips over the straight right (weight) leg
+  p[P.bodyY] = -0.035 + 0.004 * br; // sunk a little into the wide stance
+  p[P.bodyZ] = 0.0;
   p[P.pitch] = 0;
   p[P.yaw] = 0;
   p[P.roll] = 0;
   p[P.pelvX] = 0;
-  p[P.pelvY] = 0.12; // the right hip comes forward with the relaxed leg
-  p[P.pelvZ] = 0.16 + 0.025 * sw; // the left hip rides up over the straight leg
+  p[P.pelvY] = 0.22; // the hips turn a little with the forward right foot
+  p[P.pelvZ] = -0.08 - 0.02 * sw; // the weight leg's (right) hip rides higher
   p[P.spX] = 0.06 + 0.01 * br;
-  p[P.spY] = -0.04; // shoulders square to the view, the chest turned back a little from the hips
-  p[P.spZ] = -0.17 - 0.03 * sw; // counter-tilt: the right shoulder rides higher
-  p[P.hdX] = 0.2 - 0.04 * br;
-  p[P.hdY] = 0.22;
-  p[P.hdZ] = 0.07 + 0.015 * sw;
-  v3(p, P.rH, -0.1, -0.505 + 0.006 * br, 0.15); // grip low and out at the right thigh, ahead of the hip
-  v3(p, P.rP, -0.9, -0.1, -0.5); // the elbow out
-  v3(p, P.lH, 0.11, -0.49, 0.03); // free hand hangs loose beside the left thigh
-  v3(p, P.lP, 0.7, -0.1, -1);
-  v3(p, P.swD, IDLE_SW[0] + 0.02 * br, IDLE_SW[1], IDLE_SW[2] + 0.02 * sw);
-  v3(p, P.swF, 0.15, 0.15, 0.97); // the flat faces the viewer (front-left, the portrait's camera)
-  v3(p, P.rF, -0.27, ANK, 0.2); // relaxed leg: out to the side and forward
-  v3(p, P.lF, 0.12, ANK, -0.06); // weight leg: under the body, a little back
-  v3(p, P.rK, -0.55, 0.1, 1);
-  v3(p, P.lK, 0.25, 0, 1);
+  p[P.spY] = -0.02;
+  p[P.spZ] = -0.1 - 0.02 * sw; // the torso leans back toward his left over the bent leg
+  p[P.hdX] = 0.24 - 0.04 * br;
+  p[P.hdY] = 0.36; // head turned toward his left, looking down past the blade
+  p[P.hdZ] = 0.1 + 0.015 * sw;
+  v3(p, P.rH, 0.0, -0.47 + 0.006 * br, 0.19); // grip low at the right hip, in front of the thigh
+  v3(p, P.rP, -0.9, -0.1, -0.45); // the elbow out
+  v3(p, P.lH, 0.02, -0.53, 0.05); // free arm hangs straight beside the left hip
+  v3(p, P.lP, 0.6, -0.1, -0.8);
+  v3(p, P.swD, IDLE_SW[0] + 0.012 * br, IDLE_SW[1], IDLE_SW[2] + 0.02 * sw);
+  v3(p, P.swF, 0.12, 0.25, 0.96); // the flat faces the viewer (front-left, the portrait's camera)
+  v3(p, P.rF, -0.3, ANK, 0.2); // weight leg: straight, forward and out to the side
+  v3(p, P.lF, 0.27, ANK, -0.12); // free leg: out and back, the knee bent forward
+  v3(p, P.rK, -0.45, 0.1, 1);
+  v3(p, P.lK, 0.35, 0.05, 1);
   p[P.footFlat] = 0.95;
-  p[P.rFy] = -0.4; // toes turned out
-  p[P.lFy] = 0.22;
+  p[P.rFy] = -0.5; // toes turned out
+  p[P.lFy] = 0.35;
   p[P.rFf] = 1;
   p[P.lFf] = 1;
   p[P.flask] = 0;
@@ -1146,9 +1147,10 @@ const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4;
 // idle breeze on the coat: extra outward flare per panel (back-left blows out the most)
 const BREEZE = [0.02, 0.03, 0.05, 0.04, 0.1, 0.05, 0.0];
 // standing still, the skirt FLARES like the reference portrait's (a wide A of torn tails either
-// side of the legs, the sword side widest): extra outward swing per panel, faded out by speed
+// side of the legs, his right side sweeping out widest; the open front edges hang nearly straight):
+// extra outward swing per panel, faded out by speed
 // (front-left, front-right, left, right, back-left, back-right, flap)
-const IDLE_FLARE = [0.14, 0.24, 0.55, 0.75, 0.38, 0.52, 0];
+const IDLE_FLARE = [0.02, 0.06, 0.3, 0.62, 0.22, 0.45, 0];
 
 export class HeroAnimator {
   /** player must expose: yaw, state, stateT, animT, atk ({def}), groundVel {x, z}, chargeK,
