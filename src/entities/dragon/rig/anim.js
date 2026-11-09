@@ -134,6 +134,7 @@ export function createPose() {
     look: new THREE.Vector3(), // world point the head aims at
     lookRate: 7,
     lookDown: 0.14, // max nose-down head pitch (rad): the head stays near level unless an attack frees it (rest: REST_POSE)
+    headExact: false, // the head aims exactly (no turn-rate limit): hit spheres ride on the snout / mouth
     jaw: 0, // 0..1 (1 = 0.7 rad open)
     jawRate: 12,
     pitch: 0, // + = nose down
@@ -147,6 +148,7 @@ export function createPose() {
     spread: [0, 0], // per wing (0 = +X/left, 1 = -X/right): 0 FOLD, 0.5 HALF, 1 SPREAD
     spreadRate: 4,
     droop: 0, // 0..1 wings sag toward the DROOP key (stagger / posture break: tips on the ground)
+    drape: [0, 0], // per wing 0..1: collapsed onto the ground beside the body, in world space (dying)
     mantle: 0, // 0..1 spread wings brought forward (MANTLE key: the fire-breath display)
     flap: 0, // flap amplitude (rad)
     flapHz: 2,
@@ -191,6 +193,7 @@ export function resetPose(p) {
   p.headOffset.set(0, 0, 0);
   p.lookRate = 7;
   p.lookDown = 0.14;
+  p.headExact = false;
   p.jaw = 0;
   p.jawRate = 12;
   p.pitch = 0;
@@ -204,6 +207,7 @@ export function resetPose(p) {
   p.spread[0] = p.spread[1] = 0;
   p.spreadRate = 4;
   p.droop = 0;
+  p.drape[0] = p.drape[1] = 0;
   p.mantle = 0;
   p.flap = 0;
   p.flapHz = 2;
@@ -280,7 +284,8 @@ const NECK_STAGGER = { pitch0: 0.55, pitchStep: -0.2, pitchCurve: 0, yaw0: 0, ya
 // asleep: curled back along the right flank, head on the ground beside the right hind foot
 const NECK_SLEEP = { pitch0: -0.3, pitchStep: -0.06, pitchCurve: 0, yaw0: -1.0, yawStep: -0.32 };
 const NECK_DEAD = { pitch0: 0.15, pitchStep: -0.14, pitchCurve: 0, yaw0: -0.45, yawStep: -0.12 };
-const TAIL_DEAD = { pitch0: -0.45, pitchStep: 0.06, yaw0: 0.08, yawStep: 0.02, yawCurve: 0, waveAmp: 0, wavePhase: 0 };
+// dead: down off the rump and along the ground in a loose curve (it used to rise toward the tip: a stiff rod)
+const TAIL_DEAD = { pitch0: -0.5, pitchStep: 0.02, yaw0: 0.12, yawStep: 0.07, yawCurve: 0.003, waveAmp: 0, wavePhase: 0 };
 /** Resting tail hook toward model-right (yaw_i += 0.035 i + TAIL_HOOK * i^2: a ~170° C beside the body). */
 export const TAIL_HOOK = 0.017;
 
@@ -289,6 +294,10 @@ const SHOULDER_Z = A.hipZ + A.chest[2] + A.shoulder[2];
 /** Idle wing rouse: duration (s) and the quiet gaps between rouses (s, cycled). */
 const ROUSE_TIME = 1.4;
 const ROUSE_GAPS = [9.5, 7.8, 11.2, 8.6];
+/** Fastest the head's aim may turn (rad/s) when no hit sphere rides on it (see _updateNeck). */
+const HEAD_AIM_RATE = 11;
+/** Soft-IK fraction for the wing arms (see solveTwoBone). */
+const WING_SOFT_IK = 0.05;
 /** Deepest the tail's rest shape may dive under the ground clearance, in segments (Chain.buildRest sinkMax). */
 const TAIL_SINK = 0.55;
 /** Tail segments swing at most this far from their rest direction (rad: soft from [0], capped at [1]). */
@@ -308,6 +317,7 @@ export class Rig {
     this.neck = new Chain(model.neck, A.neckLen * S, { minY: 0.5 * S, maxBend: 0.62, baseBend: 1.25 });
     this._neckSim = new Chain(model.neck, A.neckLen * S, { minY: 0.5 * S, maxBend: 0.62, baseBend: 1.25 });
     this.headPosR = V();
+    this._headDir = V(); // last frame's head aim (world), for the turn-rate limit
     this._visLive = false;
     this._nbR = {};
     this._rouseP = -1; // idle wing rouse progress (-1 = none)
@@ -327,6 +337,7 @@ export class Rig {
       rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0, tailLift: 0, still: 0,
     };
     this.s.tailNew = 1; // 0..1 the round-2 tail limits (0 = the v0.4 solve: pose.tailLegacy)
+    this.s.drape = [0, 0];
     this.time = 0;
     this.breathPhase = 0;
     this.headPos = V();
@@ -482,6 +493,8 @@ export class Rig {
       }
     }
     s.droop = sm(s.droop, pose.droop, 3);
+    s.drape[0] = sm(s.drape[0], pose.drape[0], 3);
+    s.drape[1] = sm(s.drape[1], pose.drape[1], 3);
     s.mantle = sm(s.mantle, pose.mantle, 3);
     s.stanceF = sm(s.stanceF, pose.stanceF, 5);
     s.stanceH = sm(s.stanceH, pose.stanceH, 5);
@@ -756,6 +769,13 @@ export class Rig {
       dir.lerp(flat, limp).normalize();
     }
     constrainDir(dir, last, 1.1);
+    // the head's aim turns at most HEAD_AIM_RATE: a look target passing under or behind the head (the
+    // leap's dive onto its mark, the death fall, a target swapped mid-move) flipped it 30-90° in one
+    // frame. Attacks whose hit spheres ride on the snout or the mouth set pose.headExact for their
+    // active frames (the bite, the combo's lunge, the charge, the breath, the fireball's spit)
+    const hd = this._headDir;
+    if (!snap && !pose.headExact && hd.lengthSq() > 0.5) constrainDir(dir, hd, HEAD_AIM_RATE * dt);
+    hd.copy(dir);
     aimJoint(m.head, dir, this._qNeckEnd, this._qHead);
     // idle: the jaw parts a little more on each exhale (embers in the maw breathe with it)
     m.jaw.rotation.x = (s.jaw + 0.06 * (0.5 - 0.5 * this._br) * s.idle) * 0.7;
@@ -840,7 +860,9 @@ export class Rig {
       // (off the ground as soon as the body has left it: a leap's take-off used to drag the planted
       // hind feet up to 0.4 m a frame for a few frames until the airborne blend caught up)
       l.free = s.airborne > 0.3 || s.alt > 0.6 * S;
-      l.lock = !!pose.hindLock && !l.free;
+      // dying, every foot stays where it stands: the body falls and rolls over them (they used to
+      // keep stepping toward the lying homes, or be hauled out stiff through the rolling body)
+      l.lock = (!!pose.hindLock || s.dead > 0.01) && !l.free;
     }
     for (let k = 0; k < 2; k++) {
       const side = m.arms[k].side;
@@ -850,7 +872,7 @@ export class Rig {
       l.home.addScaledVector(pose.vel, lead);
       l.home.y = 0;
       l.free = s.airborne > 0.3 || s.rear > 0.35 || s.pawW[k] > 0.35;
-      l.lock = false;
+      l.lock = s.dead > 0.01 && !l.free;
     }
 
     // scapula glide: each shoulder rolls fore / aft toward its paw (and sinks a little as it reaches),
@@ -905,11 +927,6 @@ export class Rig {
         const tuck = v[6].set(side * lerp(1.0, 1.2, s.airReach), lerp(-1.6, -2.55, s.airReach), lerp(-1.9, 0.1, s.airReach)).applyMatrix4(m.hips.matrixWorld);
         toeT.lerp(tuck, s.airborne);
       }
-      if (s.dead > 0.001 && side > 0) {
-        // death (rolled onto the right side): the upper hind leg stiffens out, straight, down-back
-        const stiff = v[6].set(2.85, -1.95, -1.45).applyMatrix4(m.hips.matrixWorld);
-        toeT.lerp(stiff, s.dead);
-      }
       const ankleT = v[7].copy(toeT);
       ankleT.x += ankleOff.z * fwdFlat.x;
       ankleT.z += ankleOff.z * fwdFlat.z;
@@ -960,12 +977,6 @@ export class Rig {
         const tuck = v[6].set(side * lerp(0.9, 1.2, s.airReach), lerp(-1.55, -2.6, s.airReach), lerp(0.2, 1.0, s.airReach)).applyMatrix4(m.chest.matrixWorld);
         toeT.lerp(tuck, s.airborne);
         freeW = Math.max(freeW, s.airborne);
-      }
-      if (s.dead > 0.001 && side > 0) {
-        // death: the upper foreleg stiffens out, straight, down-forward (the lower one stays pinned)
-        const stiff = v[6].set(2.55, -2.05, 1.85).applyMatrix4(m.chest.matrixWorld);
-        toeT.lerp(stiff, s.dead);
-        freeW = Math.max(freeW, s.dead);
       }
       if (s.pawW[k] > 0.001) {
         toeT.lerp(pose.pawOv[k].pos, s.pawW[k]);
@@ -1121,11 +1132,21 @@ export class Rig {
         const wh = v[13].set(wx + A.chest[0], wy + A.chest[1], K.wrist[2] + A.chest[2]).applyMatrix4(m.hips.matrixWorld);
         wristT.lerp(wh, K.hipsW);
       }
+      // dying (pose.drape): the wing collapses onto the ground beside the body, in WORLD space (the
+      // chest frame rolls with the falling body: a chest-frame key pointed the upper sail at the sky).
+      // The wrist goes out to its side and a little back, low; the fingers fan flat over the ground
+      const dr = s.drape[k], L = this._leftFlat;
+      if (dr > 1e-3) {
+        const wd = v[14].set(out.root.x + side * L.x * 2.7 * S - fwdFlat.x * 0.5 * S, 0.9 * S, out.root.z + side * L.z * 2.7 * S - fwdFlat.z * 0.5 * S);
+        wristT.lerp(wd, dr);
+      }
       if (wristT.y < 0.3 * S) wristT.y = 0.3 * S;
       const pole = v[6].set(side * K.pole[0], K.pole[1], K.pole[2]).applyQuaternion(qChest);
+      if (dr > 1e-3) pole.lerp(v[15].set(-fwdFlat.x * 0.6, 1, -fwdFlat.z * 0.6), dr); // elbow up and back
       const bend = this._bend.wings[k];
       if (snap) bend.set(0, 0, 0);
-      solveTwoBone(out.root, wristT, A.wingHumerus * S, A.wingForearm * S, pole, out.elbow, out.wrist, bend);
+      // (soft IK: a wing lowered out of a near-straight spread used to pop its elbow out in one frame)
+      solveTwoBone(out.root, wristT, A.wingHumerus * S, A.wingForearm * S, pole, out.elbow, out.wrist, bend, WING_SOFT_IK);
       this._wq(w.root, qa);
       // twist-stable: a folded / drooping humerus points straight back along the root's -Z, where the
       // minimal rotation spun the whole wing ~180° about its arm in one frame (stagger, posture break)
@@ -1142,6 +1163,13 @@ export class Rig {
         dy = dx * sf + dy * cf;
         dx = tx;
         const dirW = v[7].set(dx, dy, kd[2]).normalize().applyQuaternion(qChest);
+        if (dr > 1e-3) {
+          // draped: fanned out over the ground, f0 out and forward ... f3 out and back. The fan leads
+          // the wrist (full at dr 0.5): fingers still pointing down when the wrist got low were all
+          // flattened onto their tiny outward heading by the ground clamp below (a one-line 'T' sail)
+          const fa = 0.55 - f * 0.5, ca = Math.cos(fa), sa = Math.sin(fa);
+          dirW.lerp(v[15].set(side * L.x * ca + fwdFlat.x * sa, -0.22, side * L.z * ca + fwdFlat.z * sa).normalize(), Math.min(1, dr * 2.4)).normalize();
+        }
         const len = A.fingers[f] * S, l0 = len * A.knuckle[f], l1 = len - l0;
         // keep finger tips above the ground (crouched / rolled / collapsed body)
         const minDy = (0.15 * S - out.wrist.y) / len;

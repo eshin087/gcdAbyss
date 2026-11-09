@@ -3,7 +3,7 @@ import { TUNING, SCALE } from './tuning.js';
 import { ATTACKS, PHASE2_ROAR, roarFx, roarPose } from './attacks.js';
 import { resetPose } from './rig/anim.js';
 import { POSTURE } from '../../combat/rules.js';
-import { clamp, damp, angleDiff } from '../../core/math.js';
+import { clamp, damp, angleDiff, lerp, smoothstep } from '../../core/math.js';
 
 // Boss brain: owns the action runner (attacks + scripted sequences, tell beats) and the combat
 // decision loop. Acts only while game.state === 'boss' and the AI is enabled; otherwise idles /
@@ -14,6 +14,70 @@ const REST = TUNING.rest; // resting body language (wings HALF, jaw open)
 const rand = (a, b) => a + Math.random() * (b - a);
 const ATTACK_NAMES = new Set(Object.keys(ATTACKS));
 const NO_BEATS = [];
+
+// ------------------------------------------------------------------ death performance
+// A timed collapse (s since the killing blow) instead of one smoothed blend, so the parts land one
+// after another: a throe (reared, head flung back, jaw wide, wings flared), the front buckles, the
+// body falls ACCELERATING onto its right side (pose.dead = u², the roll and the drop ride on it),
+// the chest hits the ground (thud, rebound), the wings crumple (the upper one draped half-open,
+// the lower one folded under), the head slaps down last, one last heave of the chest. The feet stay
+// where they stand (the rig locks them while dying), so no leg swings through the body.
+const DEATH = {
+  collapse: 2.5, // the 'collapse' phase (then 'dissolve')
+  fall0: 0.3, // the legs give way
+  fall1: 1.1, // the chest hits the ground (the thud)
+  head0: 0.34, // the head starts to fall from the throe
+  head1: 1.22, // the head hits the ground
+  breath: [1.75, 2.9], // the last heave of the chest
+};
+function deathPose(d, a, T) {
+  const pose = d.pose;
+  const u = clamp((T - DEATH.fall0) / (DEATH.fall1 - DEATH.fall0), 0, 1);
+  pose.dead = u * u;
+  pose.stateRate = 40; // s.dead follows the curve (the fall accelerates into its impact)
+  const throe = smoothstep(0, 0.12, T) * (1 - smoothstep(0.26, 0.52, T));
+  const front = smoothstep(0.22, 0.68, T) * (1 - smoothstep(0.95, 1.55, T));
+  const tb = T - DEATH.fall1;
+  const bounce = tb > 0 && tb < 0.3 ? Math.sin((Math.PI * tb) / 0.3) : 0;
+  pose.lower = -0.2 * throe + 0.38 * front - 0.14 * bounce;
+  pose.pitch = -0.12 * throe + 0.3 * front + 0.04 * u;
+  pose.roll = 0.06 * bounce - 0.3 * u; // (the rig rolls a dead body 0.75 rad: it settles leaning 0.45 onto its right side)
+  pose.bodyRate = 16;
+  pose.elbowsOut = Math.max(front, u);
+  pose.restep = 0;
+  pose.swell = T > DEATH.breath[0] && T < DEATH.breath[1] ? 0.85 * Math.sin((Math.PI * (T - DEATH.breath[0])) / (DEATH.breath[1] - DEATH.breath[0])) : 0;
+  // head: flung up and back in the throe, then it falls (accelerating) to the ground ahead and to the
+  // right of the chest, a small bounce on landing; the neck follows it down
+  if (!a.head0Set) {
+    a.head0Set = true;
+    d.rootPt(a.head0, 0, 6.1, 2.1);
+    d.rootPt(a.head1, -2.4, 0.72, 4.3);
+  }
+  const v = clamp((T - DEATH.head0) / (DEATH.head1 - DEATH.head0), 0, 1);
+  const th = T - DEATH.head1;
+  const hb = th > 0 && th < 0.24 ? Math.sin((Math.PI * th) / 0.24) : 0;
+  pose.head = pose.headTarget.lerpVectors(a.head0, a.head1, Math.pow(v, 1.3));
+  pose.head.y += 0.32 * S * hb;
+  pose.headRate = T < DEATH.head0 ? 6.5 : 24;
+  pose.lookDown = 1.0;
+  d.rootPt(pose.look, -5.5, 0, 9.5); // (far ahead: a target the falling head passes over flipped its aim)
+  pose.jaw = T < 0.5 ? 1 : lerp(0.8, 0.42, smoothstep(0.5, 1.8, T));
+  pose.jawRate = 14;
+  pose.eyes = T < 0.35 ? 1 : Math.max(0, 1 - (T - 0.35) / 1.3);
+  // wings: a flare in the throe, then they crumple onto the ground (pose.drape, world space): the
+  // lower (right) one splayed out flat beside the body, the upper one half-draped over the flank
+  if (T < 0.24) {
+    pose.spread[0] = pose.spread[1] = 0.8;
+    pose.spreadRate = 9;
+  } else {
+    pose.spread[0] = 0.35;
+    pose.spread[1] = 0.25;
+    pose.spreadRate = 2.6;
+    pose.drape[0] = 0.72;
+    pose.drape[1] = 1;
+  }
+  pose.tailWave = 0;
+}
 
 // ------------------------------------------------------------------ scripted sequences
 export const SEQ = {
@@ -225,27 +289,31 @@ export const SEQ = {
       d.throat = 0;
       d.glowTarget = 0.85;
       a.thud = false;
+      a.headThud = false;
       a.noShadow = false;
+      a.head0 = new THREE.Vector3();
+      a.head1 = new THREE.Vector3();
       d.emit('dragon:death');
       d.hitstop(0.12, 0.05);
     },
     update(d, a, dt) {
       const pose = d.pose, g = d.game;
-      pose.dead = 1;
-      pose.stateRate = 1.6;
-      pose.eyes = a.phase === 'collapse' ? Math.max(0, 1 - a.k * 1.6) : 0;
-      pose.jaw = 0.45;
-      pose.spread[0] = pose.spread[1] = 0.5;
-      pose.spreadRate = 2;
-      pose.tailWave = 0;
-      d.rootPt(pose.look, -3, 0, 6);
+      deathPose(d, a, a.phase === 'collapse' ? a.t : DEATH.collapse + a.t);
       if (a.phase === 'collapse') {
-        if (!a.thud && a.t > 1.1) {
+        // the chest hits the ground (the end of the fall: DEATH.fall1)
+        if (!a.thud && a.t > DEATH.fall1) {
           a.thud = true;
           g.shake?.(0.4);
           const c = d.rig.pt.chest;
           g.world?.gust?.(c.x, c.z, 1.2, 14 * S);
           d.fx.dustRing(c.x, c.z, 2.5 * S, 44, 1.0);
+        }
+        // a beat later the head slaps down, last
+        if (!a.headThud && a.t > DEATH.head1) {
+          a.headThud = true;
+          g.shake?.(0.15);
+          const h = d.rig.pt.head;
+          d.fx.dustRing(h.x, h.z, 1.1 * S, 18, 0.6);
         }
         d.fx.bodyEmbers(dt, d._hurtPool, 30 + a.k * 60, false);
       } else {

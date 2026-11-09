@@ -184,6 +184,7 @@ function biteWindup(d, a, dt) {
 /** The neck uncoils and the shoulders drive forward off the planted hind feet; the jaw snaps at k 0.62. */
 function biteActive(d, a, dt, speed) {
   const pose = d.pose;
+  pose.headExact = true; // the snout / head spheres ride on the head's aim
   pose.head = pose.headTarget.copy(a.goal);
   pose.look.copy(a.target);
   pose.lookDown = 1.2; // the snout aims down at the hero
@@ -765,6 +766,7 @@ const breath = {
       d.throat = a.k;
       d.fx.mouthEmbers(dt, pt.mouth, 30, pt.headFwd);
     } else if (a.phase === 'active') {
+      pose.headExact = true; // the stream leaves the mouth
       if (d.phase === 2) a.aim = a.aim0 + a.side * T.breath.sweepP2 * a.k;
       else a.aim = turnToward(a.aim, s.yawTo, 32 * DEG * dt);
       d.turnToward(a.aim, 1.2, dt);
@@ -862,6 +864,7 @@ const fireball = {
   update(d, a, dt) {
     const pose = d.pose, s = d.sense, pt = d.rig.pt;
     a.recoil = Math.max(0, a.recoil - dt * 4);
+    pose.headExact = true; // each shell leaves the mouth (launched from last frame's)
     pose.stanceF = 0.15; // forefeet planted a little wider: they absorb each spit
     pose.restep = 1;
     if (a.phase === 'windup') {
@@ -1024,6 +1027,7 @@ const charge = {
       }
     } else if (a.phase === 'active') {
       const k = a.k;
+      pose.headExact = true; // the snout sphere rides on the head's aim
       a.v = chargeSpeed(k);
       if (k < 0.4) d.turnToward(s.yawTo, 0.6, dt);
       const want = a.v * dt;
