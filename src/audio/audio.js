@@ -22,8 +22,9 @@ import { createMusic } from './music.js';
 // full level within 8 m, ≈ −12 dB at 35 m), opts.gain, opts.pan, opts.delay (s):
 //   player   swing{heavy,combo,thrust} slam hit{heavy,crit,part} hurt{damage,kind} sizzle roll
 //            footstep{sprint} heal noFlask lockOn{on} dodge gong
-//   combat   tellBlue tellRed tellTick flash{tell} parry{tell} block{tell} guardBreak
+//   combat   tellBlue tellRed tellTick flash{tell} parry{tell,chain} block{tell} guardBreak
 //            ghostep{slow}   (+ the sustained charge hum: player:charge → release/interrupt)
+//            plungeDive{exec} plungeHit{exec}
 //   dragon   roar{strength,pitch} wake dragonStep{heavy} wingFlap{strength} takeoff land bite
 //            windup{name} dragonSwipe dragonPain dragonRecoil{tell} postureBreak{roar}
 //            fireball explosion{radius} stagger phase2{roar} dragonDeath emberHiss
@@ -601,9 +602,13 @@ export class AudioEngine {
     });
     on('player:slam', (d) => this.play('slam', { x: d.x, z: d.z }));
     on('player:charge', (d) => this.charge?.start(d));
-    on('player:hitDragon', (d) =>
-      this.play('hit', { heavy: d.heavy, crit: d.crit, part: d.part, damage: d.damage, x: d.point?.x, z: d.point?.z }),
-    );
+    on('player:hitDragon', (d) => {
+      if (d.kind === 'plunge') return; // the plunge's own impact plays on player:plungeHit
+      this.play('hit', { heavy: d.heavy, crit: d.crit, part: d.part, damage: d.damage, x: d.point?.x, z: d.point?.z });
+    });
+    // the plunge: the dive's rush, then the blade into the skull
+    on('player:plunge', (d) => this.play('plungeDive', { exec: !!d.execution }));
+    on('player:plungeHit', (d) => this.play('plungeHit', { exec: !!d.execution }));
     on('player:hurt', (d) => {
       // (a hit that interrupts a charge is caught by the charge hum's player-state poll)
       // burn DoT ticks (every 0.5 s) and the breath's contact ticks (every 0.15 s) would grunt
@@ -642,7 +647,8 @@ export class AudioEngine {
     });
     on('player:parry', (d) => {
       this.charge?.stop(0.05);
-      this.play('parry', { tell: d.tell });
+      // a deflect chain (parries in rhythm) rings higher with every blow met
+      this.play('parry', { tell: d.tell, chain: d.chain });
     });
     on('player:guardBreak', () => {
       this.charge?.stop(0.05);

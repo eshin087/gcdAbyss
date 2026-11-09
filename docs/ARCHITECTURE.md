@@ -666,16 +666,19 @@ Player → hud/audio/fx/flow:
 - `player:attack {kind:'light'|'slam'|'thrust', combo, charge}` (swing starts; slam = combo hit 3, thrust = charge release),
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
   `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust), `player:hurt {damage, kind, hp}`,
-  `player:block {damage, tell}`, `player:parry {tell, attack}`, `player:guardBreak {attack}`,
+  `player:block {damage, tell}`, `player:parry {tell, attack, chain}` (chain = parries in rhythm, 1 = single), `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}`,
-  `player:ghostep {x, z}`, `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
+  `player:ghostep {x, z}` (with every perfect dodge, also the plunge's: x/z = where he reappears),
+  `player:plunge {execution}` (the dive starts), `player:plungeHit {damage, execution}` (the blade meets the head;
+  also a `player:hitDragon` with kind 'plunge'), `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
   `player:footstep {x, z, sprint}` (a planted foot's touchdown while moving, and the thrust dash's
   two bounding steps), `player:lockOn {on}`
 Dragon (any attacker) → hud/audio/flow:
 - `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit; x/z = the
   striking part; impactIn is a first estimate in game seconds),
   `combat:flash {source:'dragon', attack, tell, x, y, z}` (~0.35 s before impact — the **authoritative**
-  timing cue: moving targets (charge, fireball) re-time it after the tell)
+  timing cue: moving targets (charge, fireball) re-time it after the tell),
+  `combat:deflectChain {count}` (≥ 2 hits of one string parried in a row; the HUD shows "DEFLECT ×N")
 - `dragon:wake`, `dragon:roar {strength}`, `dragon:introDone`, `dragon:windup {name}`, `dragon:attack {name}`,
   `dragon:step {x, z, heavy}`, `dragon:wingFlap {strength}`, `dragon:takeoff`, `dragon:land {x, z}`,
   `dragon:breathStart`, `dragon:breathEnd`, `dragon:fireball {x, y, z}`, `dragon:explosion {x, z, radius}`,
