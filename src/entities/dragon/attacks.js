@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TUNING, SCALE } from './tuning.js';
 import { TELL } from '../../combat/rules.js';
 import { clamp, lerp, smoothstep, easeInOutSine, easeOutCubic, easeInCubic, turnToward, angleDiff } from '../../core/math.js';
+import { FIRE } from './fireAttacks.js';
 
 /** Wing spread the actions return to (the mantled HALF sails, TUNING.rest). */
 const REST_SPREAD = TUNING.rest.spread;
@@ -1308,7 +1309,7 @@ const roar = makeRoar('roar', false);
 export const PHASE2_ROAR = makeRoar('phase2', true);
 
 /** Every ability (AI-selectable and Lab-triggerable). Order = Lab list order. */
-export const ATTACKS = { bite, swipe, clawCombo, tail, stomp, breath, fireball, charge, leap, roar };
+export const ATTACKS = { bite, swipe, clawCombo, tail, stomp, breath, fireball, charge, leap, roar, ...FIRE };
 
 /** Parryable close-range swings: a parry interrupts these with a recoil. */
 export const MELEE = new Set(['bite', 'swipe', 'clawCombo']);
