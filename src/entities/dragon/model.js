@@ -104,6 +104,7 @@ export const GLOW = {
   scales: [0.35, 0.7, 0], // sparse embers in the hide's fissures; phase 2: the cracks wake up
   limbs: [0.32, 0.7, 0], // legs, tail, wing arm: as scales (fissures run along the limb)
   neck: [0.32, 0.7, 0.3], // the throat strip carries the molten S and its charge
+  head: [0.3, 0.7, 0.2], // skull, brow and jaw: as the neck, a little heat while the breath charges
   belly: [0.5, 1.0, 0.3],
   throat: [0.65, 0.9, 1.2],
   lava: [0.5, 1.0, 0],
@@ -121,48 +122,68 @@ export const GLOW = {
  * the art pass turns into letters, matched to the owner's red-black reference. The hide is dark
  * charcoal shingle scales (aGUV units, tips toward -y: tailward on the body, down the limbs) whose
  * free edges catch a camera key light; molten plates glow in their gaps; the membrane is crimson.
- *   scale [w, h] · tone [gap, body, rim, rimW] · ink · light [gain, key, fresnel, floor]
+ *   scale [w, h] · tone [gap, body, rim, rimW] · gap [rows, px] · ink · rimInk
+ *   light [gain, key, fresnel, floor] · key [right, up, toward] · envSat
  *   vein [strength, share, width, plate] · glow [gaps, all] · under [r, g, b, k] · membrane
  */
 const UNDER = [1.0, 0.3, 0.06, 0.8]; // lava light from below: the orange spill under jaw and belly
+// every part: the key light from the viewer's upper left (the reference's light: silver upper
+// edges, the lower half left to the lava's orange under-light), the blue moon mostly greyed out
+// (horns and bones read lavender), thin black gaps between the scales (a wide gap drew a black
+// diamond lattice over the hide)
+const LIT = { key: [-0.5, 0.9, 1.0], envSat: 0.3, gap: [0.12, 3.5] };
 const HIDE_ART = {
+  ...LIT,
   scale: [0.42, 0.32],
   tone: [0.0, 0.13, 1.8, 0.24],
   ink: [0.34, 0.31, 0.29],
   light: [1.0, 0.55, 0.25, 0.03],
-  vein: [2.2, 0.45, 0.06, 1.1],
+  // molten fissures scattered over the hide (the reference's glowing cracks on the shoulders,
+  // flanks and legs): small plates, about a third of their edges glow, ~1 letter wide
+  vein: [3.6, 0.36, 0.1, 0.75],
   under: UNDER,
 };
+// molten undersides: the reference's chest is grey scales lit orange from below with gold rims and
+// glowing cracks between them, not a lamp (an all-over glow flattened it into a smooth orange blob)
 const LAVA_ART = {
+  ...LIT,
   scale: [0.36, 0.27],
-  tone: [0.0, 0.26, 1.6, 0.22],
-  ink: [0.42, 0.3, 0.24],
+  tone: [0.0, 0.22, 1.7, 0.22],
+  ink: [0.45, 0.3, 0.22],
+  rimInk: [0.85, 0.5, 0.25],
   light: [1.0, 0.55, 0.25, 0.04],
-  vein: [3.0, 0.55, 0.07, 0.8],
-  glow: [3.2, 0.1],
-  under: UNDER,
+  vein: [3.0, 0.5, 0.06, 0.8],
+  glow: [1.4, 0.02],
+  under: [1.0, 0.3, 0.06, 1.2],
 };
 export const WYRM_ART = {
   // barrel (torso, ribcage, rump, haunches, shoulders: aGUV around the body axis, bodyGUV below):
   // roof-tile scales hanging from the dorsal line, [along the body, around it]
   scales: { ...HIDE_ART, scaleDir: 'down', scale: [0.48, 0.34] },
-  limbs: { ...HIDE_ART, scale: [0.25, 0.19], vein: [2.0, 0.38, 0.055, 0.85] },
-  neck: { ...HIDE_ART, scale: [0.28, 0.21], vein: [1.8, 0.35, 0.055, 0.85] },
-  belly: { ...LAVA_ART, scale: [0.56, 0.4] },
-  throat: { ...LAVA_ART, scale: [0.4, 0.3], glow: [3.4, 0.16] },
+  // limbs and neck: scales big enough to read as shapes at the reference view (~3-4 letters across;
+  // smaller ones printed as letter noise)
+  limbs: { ...HIDE_ART, scale: [0.3, 0.23], vein: [3.6, 0.38, 0.1, 0.6] },
+  neck: { ...HIDE_ART, scale: [0.4, 0.3], vein: [3.4, 0.36, 0.1, 0.6] },
+  // the head keeps fine scales (the neck's big plates turned the skull into a few flat tiles)
+  head: { ...HIDE_ART, scale: [0.2, 0.15], vein: [3.0, 0.3, 0.08, 0.45] },
+  belly: { ...LAVA_ART, scale: [0.56, 0.4], ink: [0.42, 0.34, 0.29], rimInk: [0.7, 0.48, 0.3], glow: [1.2, 0] },
+  // the throat: orange-lit scales with gold rims (it still flares for the breath / roar charge)
+  throat: { ...LAVA_ART, scale: [0.4, 0.3], tone: [0.0, 0.3, 1.8, 0.24], ink: [0.55, 0.3, 0.16], rimInk: [1.0, 0.62, 0.25], glow: [1.6, 0.05] },
   lava: LAVA_ART,
   // deep crimson, blotched, torn: [mottle, ember specks, tear noise frequency, trailing-edge tears]
-  membrane: { ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], under: UNDER },
+  membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], under: UNDER },
   // finger bones: charcoal lines with pale outlines, a little ember along them
-  wingBone: { ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
+  wingBone: { ...LIT, ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
   // dorsal / tail blades: charcoal with pale tips, molten at the root (the reference's orange-lit
   // tail spikes)
-  spine: { ink: [0.42, 0.36, 0.32], light: [1.0, 0.35, 1.5, 0.02], tip: [0.05, 0.5, 0.35, 3.0], strokes: 'axis', under: UNDER },
-  // horns, head / limb spikes: dark obsidian, outlined in strokes, bright tips
-  bone: { ink: [0.44, 0.42, 0.41], light: [1.0, 0.35, 1.6, 0.02], tip: [0.0, 0.5, 0.35, 0], strokes: 'axis', strokeEdge: 0.18, under: UNDER },
-  // talons: dark roots curving into bright ivory tips
-  claw: { ink: [0.62, 0.59, 0.54], light: [1.0, 0.55, 0.5, 0.04], tip: [0.05, 0.5, 0.35, 0], strokes: 'axis', strokeEdge: 0, under: UNDER },
-  teeth: { ink: [0.85, 0.83, 0.78], light: [1.0, 0.6, 0.3, 0.12], strokes: 'axis', strokeEdge: 0, under: UNDER },
+  spine: { ...LIT, ink: [0.34, 0.3, 0.28], light: [1.0, 0.35, 1.5, 0.02], tip: [0.05, 0.6, 0.25, 4.0], strokes: 'axis', under: UNDER },
+  // horns, head / limb spikes: dark obsidian, outlined in strokes (only at the very edge: wider bands
+  // hatched every horn into a plank), bright tips
+  bone: { ...LIT, ink: [0.4, 0.38, 0.37], light: [1.0, 0.35, 1.6, 0.02], tip: [0.0, 0.5, 0.3, 0], strokes: 'axis', strokeEdge: 0.35, under: UNDER },
+  // talons: dark roots curving into bright ivory tips, letters inside a stroked outline (strokes all
+  // over drew each foot as a hatched broom)
+  claw: { ...LIT, ink: [0.3, 0.28, 0.26], light: [1.0, 0.55, 0.5, 0.03], tip: [0.0, 0.75, 0.15, 0], strokes: 'axis', strokeEdge: 0.3, under: UNDER },
+  teeth: { ...LIT, ink: [0.85, 0.83, 0.78], light: [1.0, 0.6, 0.3, 0.12], strokes: 'axis', strokeEdge: 0, under: UNDER },
   // fire inside the mouth: deep red-orange and dimmer than the fangs, so the white teeth read on it
   maw: { ink: [0.8, 0.14, 0.02], light: [0.3, 0.1, 0, 0.04], glow: [0, 0.42], emit: [1.0, 0.16, 0.025] },
   eye: { ink: [0.45, 0.12, 0.02], light: [0.3, 0, 0, 0.05], glow: [0, 1.0], emit: [0.85, 0.17, 0.02] },
@@ -191,6 +212,8 @@ export function createDragonMaterials(U) {
       seamAxis: 'y',
       seed: 23.7,
     }),
+    // skull, brow and jaw: the neck's surface, its own (finer) ASCII-art scales
+    head: mat('head', { ...OBSIDIAN, levels: NECK_LEVELS, cell: [0.17, 0.21], altChance: 0.1, seamAxis: 'y', seed: 61.7 }),
     // sternum plate + belly strip: molten plates, fissures running down the keel
     belly: mat('belly', { ...LAVA, levels: BELLY_LEVELS, cell: [0.24, 0.22], seamAxis: 'y', gain: 1.1, inkGlow: 0.6, seed: 5.1 }),
     // throat strip under the neck: lava that charges before the breath / roar
@@ -610,7 +633,7 @@ export function buildDrake(U) {
   // ============================================================ head (spec §2.1)
   const head = joint(parent, 0, 0, A.neckLen, 'head');
   // long wedge skull: flat-topped snout, broad occiput
-  mesh(head, limbGeometry({ length: SKULL.len, r0: SKULL.r0, r1: SKULL.r1, sx: 1.0, sy: SKULL.sy, bulge: SKULL.bulge, radial: 16, rings: 7 }), mats.neck, 0, SKULL.y0, SKULL.z0);
+  mesh(head, limbGeometry({ length: SKULL.len, r0: SKULL.r0, r1: SKULL.r1, sx: 1.0, sy: SKULL.sy, bulge: SKULL.bulge, radial: 16, rings: 7 }), mats.head, 0, SKULL.y0, SKULL.z0);
   const skullTop = (z) => SKULL.y0 + skullR(z) * SKULL.sy;
   const skullBot = (z) => SKULL.y0 - skullR(z) * SKULL.sy;
   const browG = [], hornsG = [], teethG = [];
@@ -657,7 +680,7 @@ export function buildDrake(U) {
     [0.66, 0.1, -0.02],
   ].forEach(([len, r, z]) => hornsG.push(spike(len, r, 0, skullTop(z) - 0.02, z, 0.95, 0, 0.14, 5, 0.55)));
   hornsG.push(spike(0.24, 0.06, 0, 0.14, 1.18, 0.5, 0, 0.1));
-  batch(head, mats.neck, browG);
+  batch(head, mats.head, browG);
   batch(head, mats.bone, hornsG);
   batch(head, mats.teeth, teethG);
   // the maw: glowing roof of the mouth (shows through the teeth: the jaw rests a little open)
@@ -673,7 +696,7 @@ export function buildDrake(U) {
   const mouth = joint(head, 0, -0.12, 1.3, 'mouth');
   // hinged lower jaw: lower teeth, jaw-line spikes, chin spike, the glowing floor of the mouth
   const jaw = joint(head, 0, -0.15, 0.05, 'jaw');
-  mesh(jaw, limbGeometry({ length: JAW.len, r0: JAW.r0, r1: JAW.r1, sx: JAW.sx, sy: JAW.sy, radial: 12, rings: 5 }), mats.neck, 0, JAW.y0, 0);
+  mesh(jaw, limbGeometry({ length: JAW.len, r0: JAW.r0, r1: JAW.r1, sx: JAW.sx, sy: JAW.sy, radial: 12, rings: 5 }), mats.head, 0, JAW.y0, 0);
   const lowTeeth = [], jawSpikes = [];
   for (const s of [1, -1]) {
     const LOW = [0.18, 0.13, 0.11, 0.1, 0.1, 0.085, 0.085, 0.07];
@@ -765,14 +788,15 @@ export function buildDrake(U) {
     const toe = joint(meta, 0, 0, A.meta, 'toe');
     // foot pad sits ON the ground (the toe joint is at ground level, nose ~8° down)
     mesh(toe, ellipsoidGeometry(0.46, 0.16, 0.5, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, 0.13, 0.12);
-    // heavy talons rooted at the toe tips, splayed wide, arcing out and hooking down so the tips
-    // touch the ground in front of the toes: big curved sickles with pale tips (the reference)
+    // heavy talons rooted at the toe tips, splayed wide, rising and then hooking down hard so the
+    // tips touch the ground in front of the toes: big curved sickles with pale tips (the reference;
+    // flatter ones read as rakes from the side)
     const claws = [];
     [
       [-0.45, 0.76],
       [0, 0.88],
       [0.45, 0.76],
-    ].forEach(([yaw, len]) => claws.push(horn(len, 0.14, Math.sin(yaw) * 0.36, 0.15, 0.34 + Math.cos(yaw) * 0.16, -0.24, yaw, -0.5, 6)));
+    ].forEach(([yaw, len]) => claws.push(horn(len * 0.9, 0.16, Math.sin(yaw) * 0.36, 0.15, 0.34 + Math.cos(yaw) * 0.16, -0.45, yaw, -0.85, 6)));
     claws.push(horn(0.55, 0.11, -s * 0.4, 0.15, 0.05, -0.12, -s * 1.1, -0.4, 5)); // inner claw
     claws.push(horn(0.5, 0.09, 0, 0.16, -0.3, -0.3, Math.PI, -0.15, 5)); // heel spur
     batch(toe, mats.claw, claws);
@@ -809,8 +833,8 @@ export function buildDrake(U) {
     const paw = joint(hand, 0, 0, A.hand, 'paw');
     // paw: wider than the leg (the painting's feet), its pad on the ground (paw joint = ground level)
     mesh(paw, ellipsoidGeometry(0.48, 0.16, 0.44, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, 0.12, 0.1);
-    // four massive ivory claws rooted at the toe tips, splayed ±0.5 rad, arcing out and hooking down
-    // so the tips touch the ground in front of the toes (they used to sink ~0.3 under it);
+    // four massive claws rooted at the toe tips, splayed ±0.5 rad, rising and then hooking down hard
+    // (eagle talons, not rakes) so the tips touch the ground in front of the toes;
     // inner dewclaw at the wrist, back and down
     const cl = [];
     [
@@ -818,7 +842,7 @@ export function buildDrake(U) {
       [0.17, 0.76],
       [-0.17, 0.76],
       [-0.5, 0.64],
-    ].forEach(([yaw, len]) => cl.push(horn(len, 0.14, Math.sin(s * yaw) * 0.44, 0.15, 0.3 + Math.cos(yaw) * 0.16, -0.2, s * yaw, -0.48, 6)));
+    ].forEach(([yaw, len]) => cl.push(horn(len * 0.92, 0.16, Math.sin(s * yaw) * 0.44, 0.15, 0.3 + Math.cos(yaw) * 0.16, -0.42, s * yaw, -0.82, 6)));
     batch(paw, mats.claw, cl);
     // inner dewclaw and a wrist spike back and out (one batch)
     batch(hand, mats.claw, [horn(0.28, 0.06, -s * 0.2, -0.12, 0.08, 2.4, -s * 0.35, 0, 5), horn(0.3, 0.06, s * 0.12, -0.24, 0.05, 1.9, s * 0.4, 0.05, 5, 0.5)]);
