@@ -41,27 +41,32 @@ const FONT_4X6 = {
   '\\': [8, 8, 4, 2, 1, 1],
 };
 
-/** Density ramp of the wyrm letters (sorted sparse -> dense by lit pixels at build time). */
-export const WYRM_CHARS = " .:';!iv1723459680A@BM";
-/** Stroke glyphs after the ramp, in screen-direction order: horizontal, rising, vertical, falling. */
+/**
+ * The wyrm's letters in three sets, one per brightness tier of a cell (art pass, wyrmCell): light
+ * glyphs for the charcoal hide, digits for lit scales, round full digits for rims and lava. Inside a
+ * tier the cell's own hash picks the letter, so a letter only changes when its cell changes tier:
+ * a single density ramp (22 steps) re-lettered most cells every frame while the wyrm breathed. The
+ * reference is a field of whole digits whose brightness, not their density, draws the dragon.
+ */
+export const WYRM_SETS = { dim: '17iv!;r27', mid: '2345968017', bright: '96805A@3' };
+/** Stroke glyphs after the sets, in screen-direction order: horizontal, rising, vertical, falling. */
 export const WYRM_STROKES = '-/|\\';
 
 /** Letter cell of the wyrm art grid at integer scale s: a 4 x 6 glyph + 1 px column / 2 px row gaps. */
 export const wyrmArtCell = (s) => [5 * s, 8 * s];
 
 /**
- * Pixel-exact single-row atlas: WYRM_CHARS sorted sparse -> dense (count = ramp length), then the 4
+ * Pixel-exact single-row atlas: a blank, the WYRM_SETS dim / mid / bright letters, then the 4
  * WYRM_STROKES. Each glyph scaled by `s`, one pixel in from the cell's top-left. Returns
- * { texture, count, total }.
+ * { texture, sets: [mid start, bright start, stroke start] (atlas columns; dim starts at 1), total }.
  */
 export function createWyrmArtAtlas(s = 1) {
   s = Math.max(1, Math.round(s) || 1);
   const [cw, ch] = wyrmArtCell(s);
-  const lit = (rows) => rows.reduce((n, r) => n + (r & 1) + ((r >> 1) & 1) + ((r >> 2) & 1) + ((r >> 3) & 1), 0);
-  const ramp = [...WYRM_CHARS]
-    .map((c, i) => ({ rows: FONT_4X6[c] ?? FONT_4X6[' '], i }))
-    .sort((a, b) => lit(a.rows) - lit(b.rows) || a.i - b.i);
-  const glyphs = [...ramp, ...[...WYRM_STROKES].map((c) => ({ rows: FONT_4X6[c] }))];
+  const row = (str) => [...str].map((c) => ({ rows: FONT_4X6[c] ?? FONT_4X6[' '] }));
+  const { dim, mid, bright } = WYRM_SETS;
+  const glyphs = [...row(' '), ...row(dim), ...row(mid), ...row(bright), ...row(WYRM_STROKES)];
+  const sets = [1 + dim.length, 1 + dim.length + mid.length, 1 + dim.length + mid.length + bright.length];
   const canvas = document.createElement('canvas');
   canvas.width = glyphs.length * cw;
   canvas.height = ch;
@@ -69,8 +74,9 @@ export function createWyrmArtAtlas(s = 1) {
   const on = (rows, x, y) => y >= 0 && y < 6 && x >= 0 && x < 4 && (rows[y] & (8 >> x)) !== 0;
   glyphs.forEach(({ rows }, col) => {
     // a soft halo on the stroke's neighbours (the reference's letters are anti-aliased, not 1 px
-    // hairlines); never into the right gap column, so letters stay apart
-    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    // hairlines: at 0.12 the hide read as sparse wire text, at 0.24 as the reference's dense, soft
+    // digit field); never into the right gap column, so letters stay apart
+    ctx.fillStyle = 'rgba(255,255,255,0.24)';
     for (let y = -1; y <= 6; y++) {
       for (let x = 0; x < 4; x++) {
         if (on(rows, x, y)) continue;
@@ -88,5 +94,5 @@ export function createWyrmArtAtlas(s = 1) {
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
-  return { texture: tex, count: ramp.length, total: glyphs.length };
+  return { texture: tex, sets, total: glyphs.length };
 }

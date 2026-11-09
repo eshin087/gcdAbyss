@@ -125,12 +125,14 @@ export class Pipeline {
         // x = brightest letter, y = brightness gamma (dim charcoal body, bright rims), z = v below
         // which a cell prints nothing (the black gaps between scales), w = how much each stroke
         // pixel takes its own source pixel instead of the cell average (crisp shapes through text)
-        uWyrmTone: { value: new THREE.Vector4(1.05, 1.0, 0.022, 0.85) },
-        // glyph pick: x / y = ramp index at v 0 / 1 (letters only loosely follow brightness: the
-        // reference prints whole digits even in the dark), z = per-cell jitter (indices), w = samples
-        // (of 4) a stroke code needs to turn the cell into a stroke glyph
-        uWyrmGlyph: { value: new THREE.Vector4(5, 30, 6, 1) },
-        uWyrmAtlas: { value: new THREE.Vector2(22, 26) }, // ramp count, glyphs in the atlas row
+        uWyrmTone: { value: new THREE.Vector4(0.95, 1.3, 0.022, 0.85) },
+        // glyph pick: x / y = cell value v where the letter set steps dim -> mid -> bright (the cell's
+        // hash picks the letter inside its set, so letters hold still while the wyrm moves), z = per-
+        // cell dither of those steps (no contour lines), w = samples (of 4) a stroke code needs to
+        // turn the cell into a stroke glyph
+        uWyrmGlyph: { value: new THREE.Vector4(0.12, 0.42, 0.08, 1) },
+        // atlas columns (wyrmGlyphs.js): mid set start, bright set start, stroke start, glyphs in the row
+        uWyrmAtlas: { value: new THREE.Vector4(10, 20, 28, 32) },
         uWyrmOutline: { value: 1 }, // 1: silhouette cells draw their edge as a stroke glyph
       },
       vertexShader: FS_VERT,
@@ -165,7 +167,7 @@ export class Pipeline {
         uniform vec2 uArtEdge;
         uniform vec4 uWyrmTone;
         uniform vec4 uWyrmGlyph;
-        uniform vec2 uWyrmAtlas;
+        uniform vec4 uWyrmAtlas;
         uniform float uWyrmOutline;
         varying vec2 vUv;
 
@@ -262,23 +264,27 @@ export class Pipeline {
         }
 
         // ---- the wyrm (FLAG.ART): thin one-pixel letters on black (wyrmGlyphs.js atlas in tArt).
-        // The letter is picked per cell (its average source: a dark cell prints nothing, the glyph
-        // only loosely follows brightness: the owner's reference prints whole digits even in the dark
-        // parts), but its strokes take brightness and hue from their OWN pixel of the source (cp,
-        // blended by uWyrmTone.w): in the reference a bright scale edge cuts crisply through the
-        // letters, so the shapes survive the text. Brightness goes through a black point and a gamma
-        // (dim charcoal hide, bright rims); saturated HDR sources (lava, eyes) bloom.
+        // The letter is picked per cell: its average source picks a letter SET (a dark cell prints
+        // nothing; dim / mid / bright sets, the steps dithered per cell), the cell's own hash picks the
+        // letter inside it, so the letters hold still while the wyrm moves under them (the owner's
+        // reference prints whole digits even in the dark parts). Its strokes take brightness and hue
+        // from their OWN pixel of the source (cp, blended by uWyrmTone.w): in the reference a bright
+        // scale edge cuts crisply through the letters, so the shapes survive the text. Brightness
+        // goes through a black point and a gamma (dim charcoal hide, bright rims); saturated HDR
+        // sources (lava, eyes) bloom.
         // stroke >= 0: the material marked this cell as a scale rim / thin part running in that screen
         // direction (0 '-', 1 '/', 2 '|', 3 '\\'): draw the stroke glyph, the reference's edge-shaped
         // letters that outline every scale
         vec3 wyrmCell(vec3 c, vec3 cp, vec2 acell, vec2 local, float stroke) {
           float v = 1.0 - exp(-max(luma(c) - uArtBlack.y, 0.0) * uArtLum.y);
           float h = hash12(acell * 1.37 + 11.0);
-          float n = uWyrmAtlas.x;
-          float idx = clamp(floor(mix(uWyrmGlyph.x, uWyrmGlyph.y, v) + (h - 0.5) * uWyrmGlyph.z + 0.5), 1.0, n - 1.0);
-          if (stroke >= 0.0) idx = n + stroke;
+          float d = (hash12(acell * 0.71 + 3.7) - 0.5) * uWyrmGlyph.z;
+          float s0 = v < uWyrmGlyph.x + d ? 1.0 : v < uWyrmGlyph.y + d ? uWyrmAtlas.x : uWyrmAtlas.y;
+          float s1 = v < uWyrmGlyph.x + d ? uWyrmAtlas.x : v < uWyrmGlyph.y + d ? uWyrmAtlas.y : uWyrmAtlas.z;
+          float idx = s0 + min(floor(h * (s1 - s0)), s1 - s0 - 1.0);
+          if (stroke >= 0.0) idx = uWyrmAtlas.z + stroke;
           if (v < uWyrmTone.z) idx = 0.0;
-          float m = texture2D(tArt, vec2((idx + local.x) / uWyrmAtlas.y, local.y)).a;
+          float m = texture2D(tArt, vec2((idx + local.x) / uWyrmAtlas.w, local.y)).a;
           vec3 s = mix(c, cp, uWyrmTone.w);
           float vp = 1.0 - exp(-max(luma(s) - uArtBlack.y, 0.0) * uArtLum.y);
           float mx = max(max(s.r, s.g), s.b);
@@ -350,6 +356,9 @@ export class Pipeline {
               float gy = (amask.z + amask.w) - (amask.x + amask.y);
               edgeS = mod(floor(mod(atan(gx, -gy), 3.14159265) / 0.7853982 + 0.5), 4.0);
             }
+            // a horizontal edge prints a letter, not '-': long dash runs along the wing tops, the
+            // tail and the toes read as ruled lines, not as the reference's lettered outlines
+            if (edgeS == 0.0) edgeS = -1.0;
           }
           // a cell needs 2 of 4 samples on the wyrm, or 1 when it draws a stroke (an outline, or a
           // stroke-coded spike / claw / horn tip that would otherwise vanish between the samples)
@@ -564,8 +573,8 @@ export class Pipeline {
       this.artCell.set(artW, artH);
       this.art = createWyrmArtAtlas(ws);
       this.asciiMat.uniforms.tArt.value = this.art.texture;
-      this.asciiMat.uniforms.uArtCount.value = this.art.count;
-      this.asciiMat.uniforms.uWyrmAtlas.value.set(this.art.count, this.art.total);
+      this.asciiMat.uniforms.uArtCount.value = this.art.sets[2];
+      this.asciiMat.uniforms.uWyrmAtlas.value.set(...this.art.sets, this.art.total);
     }
     const hs = Math.max(1, Math.floor(H / 1080));
     const [heroW, heroH] = pixelArtCell(hs);
