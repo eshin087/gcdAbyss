@@ -18,8 +18,12 @@ import { solveTwoBone } from './rig/ik.js';
 const NU = 10; // samples along the fingers
 const NV = 13; // samples across a panel (enough for the tears of the trailing edge)
 const PANELS = 4;
-/** Trailing-edge scallop per panel (fraction pulled toward the wrist / elbow): one deep arc each. */
-export const SAG = [0.42, 0.4, 0.34, 0.22];
+/**
+ * Trailing-edge scallop per panel (fraction pulled toward the wrist / elbow): one arc each. Round 2:
+ * shallower (was 0.42 / 0.40 / 0.34 / 0.22): the reference's sails are full, their trailing edges torn
+ * rather than cut away, and the deeper arcs left thin spokes from the game camera (+8 % membrane).
+ */
+export const SAG = [0.3, 0.28, 0.24, 0.16];
 // extra pull toward the wrist / elbow per trailing-edge sample: mostly a smooth scallop with two or
 // three irregular rips per panel (never periodic: a regular sawtooth read as feathers / a saw blade);
 // deep enough to notch the silhouette like the reference's torn sails (the shader adds holes)

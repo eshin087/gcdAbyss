@@ -187,7 +187,7 @@ export const WYRM_ART = {
   // orange-yellow sparks)
   // (round 2: the reference's sails glow orange along the finger bones and carry more sparks: a wider,
   // hotter bone streak and denser specks)
-  membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.085, 2.0, 0.62], boneGlow: [0.75, 0.1, 1.3], emit: [1.0, 0.45, 0.1], under: UNDER },
+  membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.085, 2.0, 0.62], boneGlow: [0.65, 0.1, 1.05], emit: [1.0, 0.45, 0.1], under: UNDER },
   // finger bones: charcoal lines with pale outlines, a little ember along them
   wingBone: { ...LIT, ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
   // dorsal / tail blades: charcoal with pale edges and tips, molten red at the root only (the
