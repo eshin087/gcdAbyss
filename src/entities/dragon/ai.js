@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TUNING, SCALE } from './tuning.js';
-import { ATTACKS, PHASE2_ROAR, roarFx, roarPose } from './attacks.js';
+import { ATTACKS, PHASE2_ROAR, PHASE3_ROAR, roarFx, roarPose, perPhase } from './attacks.js';
 import { resetPose } from './rig/anim.js';
 import { POSTURE } from '../../combat/rules.js';
 import { clamp, damp, angleDiff, lerp, smoothstep } from '../../core/math.js';
@@ -14,6 +14,7 @@ const REST = TUNING.rest; // resting body language (wings HALF, jaw open)
 const rand = (a, b) => a + Math.random() * (b - a);
 const ATTACK_NAMES = new Set(Object.keys(ATTACKS));
 const NO_BEATS = [];
+const PL = TUNING.plunged;
 
 // ------------------------------------------------------------------ death performance
 // A timed collapse (s since the killing blow) instead of one smoothed blend, so the parts land one
@@ -263,6 +264,140 @@ export const SEQ = {
   },
 
   phase2: PHASE2_ROAR,
+  phase3: PHASE3_ROAR,
+
+  /**
+   * Plunged (contract 2): the hero's head-stab slams the head down to the ground, it thrashes, then it
+   * rises. Airborne it first falls (`fall`) and crash-lands (dust ring, shake), then the same. An
+   * execution on a broken wyrm (`heavy`) is heavier and longer. The head stays on its joints (the
+   * hero rides Dragon.plungePoint) the whole time. Options come from Brain.plunged().
+   */
+  plunged: {
+    name: 'plunged',
+    phases: (d) => {
+      const o = d.brain.plungeOpts ?? {};
+      const X = o.heavy ? PL.exec : PL;
+      const list = [];
+      // the fall takes longer from higher up (~0.6 s from 8 m)
+      if (o.air) list.push(['fall', PL.fall * clamp(Math.sqrt(Math.max(0.5, o.alt ?? 0) / 8), 0.6, 1.3)]);
+      list.push(['slam', X.slam], ['thrash', X.thrash], ['rise', X.rise]);
+      return list;
+    },
+    start(d, a) {
+      const o = d.brain.plungeOpts ?? {};
+      a.air = !!o.air;
+      a.alt0 = Math.max(0, o.alt ?? 0);
+      a.heavy = !!o.heavy;
+      a.slammed = false;
+      a.crashed = false;
+      a.side = Math.random() < 0.5 ? -1 : 1; // which way the thrash starts
+      d.throat = 0;
+      if (!a.air) d.state = 'staggered';
+      // a foot caught mid-step plants where it is (as the recoil does)
+      const G = d.rig.gait;
+      for (let i = 0; i < 4; i++) if (G.limbs[i].stepping) G.plantAt(i, G.limbs[i].pos);
+    },
+    enter(d, a, phase) {
+      if (phase !== 'slam' || !a.air || a.crashed) return;
+      // the crash landing: the whole body hits the ground
+      a.crashed = true;
+      const g = d.game, p = d.position;
+      d.state = 'staggered';
+      d.emit('dragon:land', { x: p.x, z: p.z });
+      g.shake?.(PL.crashShake);
+      g.world?.gust?.(p.x, p.z, 2.0, 20 * S);
+      d.fx.dustRing(p.x, p.z, 2.4 * S, 60, 1.6);
+      d.hitstop(0.07);
+    },
+    update(d, a, dt) {
+      const pose = d.pose, t = d.time;
+      pose.eyes = 0.65;
+      pose.lookDown = 1.2;
+      pose.tailLift = 0;
+      if (a.phase === 'fall') {
+        // knocked out of the air: the wings flail lopsided, the nose pitches down, the legs reach
+        const u = a.k;
+        pose.alt = a.alt0 * (1 - u * u);
+        pose.airborne = u < 0.7 ? 1 : 0.3;
+        pose.airReach = u > 0.45 ? 1 : 0;
+        pose.spread[0] = 0.9;
+        pose.spread[1] = 0.55;
+        pose.spreadRate = 7;
+        pose.flap = 0.45;
+        pose.flapHz = 3.4;
+        pose.pitch = 0.28 + 0.08 * Math.sin(t * 9);
+        pose.roll = 0.16 * Math.sin(t * 6.5);
+        pose.bodyRate = 7;
+        pose.head = d.rootPt(pose.headTarget, 0, 2.4, 4.4);
+        pose.headRate = 9;
+        pose.jaw = 0.85;
+        pose.tailWave = 0.25;
+        return;
+      }
+      const heavy = a.heavy;
+      if (a.phase === 'slam') {
+        // the head is driven into the ground in front, the forelegs buckle, the wings fling up
+        pose.head = d.rootPt(pose.headTarget, 0.25 * a.side, heavy ? 0.5 : 0.6, heavy ? 4.3 : 4.5);
+        pose.headRate = heavy ? 18 : 15;
+        pose.lower = heavy ? 0.55 : 0.45;
+        pose.pitch = heavy ? 0.4 : 0.34;
+        pose.bodyRate = 12;
+        pose.elbowsOut = 0.9;
+        pose.jaw = 0.85;
+        pose.jawRate = 20;
+        pose.spread[0] = pose.spread[1] = 0.85;
+        pose.spreadRate = 10;
+        pose.tailWave = 0.2;
+        pose.stanceH = 0.3;
+        if (!a.slammed && a.k > 0.5) {
+          a.slammed = true;
+          const h = d.rig.pt.head;
+          d.fx.dustRing(h.x, h.z, 1.2 * S, 26, 1.0);
+          d.emit('dragon:step', { x: h.x, z: h.z, heavy: true });
+          d.game.shake?.(heavy ? 0.45 : 0.3);
+        }
+      } else if (a.phase === 'thrash') {
+        // pinned and furious: the head thrashes side to side on the ground, the jaw snaps, the wings
+        // beat erratically, the body rocks; an execution weakens as it goes
+        const w = heavy ? 1 - a.k * 0.85 : 1 - a.k * 0.5;
+        const sw = Math.sin(a.t * 14.5) * a.side;
+        pose.head = d.rootPt(pose.headTarget, sw * 1.35 * w, 0.62 + Math.abs(Math.sin(a.t * 9.2)) * 0.55 * w, 4.4);
+        pose.headRate = 11;
+        pose.jaw = 0.35 + 0.5 * Math.abs(Math.sin(a.t * 12.5)) * w;
+        pose.jawRate = 26;
+        pose.lower = heavy ? 0.5 : 0.42;
+        pose.pitch = heavy ? 0.36 : 0.32;
+        pose.roll = 0.09 * sw * w;
+        pose.bodyRate = 8;
+        pose.elbowsOut = 0.8;
+        pose.spread[0] = pose.spread[1] = 0.7;
+        pose.spreadRate = 6;
+        pose.flap = 0.32 * w;
+        pose.flapHz = 3.6;
+        pose.tailWave = 0.32 * w;
+        pose.stanceH = 0.3;
+        d.fx.stunStars(dt, d.rig.pt.head);
+      } else {
+        // it tears the head free and rises, shaking it
+        const e = smoothstep(0, 1, a.k);
+        pose.head = d.rootPt(pose.headTarget, Math.sin(a.t * 11) * 0.4 * (1 - e), lerp(0.7, 4.6, e), lerp(4.4, 3.3, e));
+        pose.headRate = 6;
+        pose.lookDown = lerp(1.2, 0.6, e);
+        pose.jaw = 0.3;
+        pose.lower = 0.42 * (1 - e);
+        pose.pitch = 0.32 * (1 - e);
+        pose.bodyRate = 5;
+        pose.elbowsOut = 0.8 * (1 - e);
+        pose.spread[0] = pose.spread[1] = lerp(0.7, REST.spread, e);
+        pose.spreadRate = 4;
+        pose.restep = 1;
+        pose.tailLift = e > 0.6 ? 1 : 0;
+      }
+    },
+    end(d) {
+      if (d.state === 'airborne' || (d.state === 'staggered' && !d.broken)) d.state = 'combat';
+    },
+  },
 
   taunt: {
     name: 'taunt',
@@ -347,8 +482,28 @@ export const SEQ = {
   },
 };
 
-// actions a posture break / ordinary stagger may NOT interrupt
-const NO_BREAK = new Set(['intro', 'phase2', 'death', 'stagger', 'postureBreak', 'taunt']);
+// actions a posture break / ordinary stagger may NOT interrupt (a break waits for the plunge reaction)
+const NO_BREAK = new Set(['intro', 'phase2', 'phase3', 'death', 'stagger', 'postureBreak', 'taunt', 'plunged']);
+/** Actions a plunge (contract 2) may NOT cancel: the damage still lands, the reaction doesn't play. */
+export const NO_PLUNGE = new Set(['intro', 'phase2', 'phase3', 'death']);
+// a pending phase transition waits for these to end
+const NO_TRANSITION = new Set(['intro', 'phase2', 'phase3', 'death', 'plunged']);
+
+/**
+ * Selection weight of any ATTACKS entry, generic (the dragon-fire attacks register with the same
+ * fields): `phase` = first phase (on the def or TUNING.attacks[name]), `weight` = a number, a
+ * per-phase array [P1, P2, P3] or a function of (d, sense) returning either, `air` = usable while
+ * airborne (ground attacks never are). 0 = not now.
+ */
+export function attackWeight(def, name, d, s) {
+  const spec = TUNING.attacks[name];
+  if ((d.phase ?? 1) < (def.phase ?? spec?.phase ?? 1)) return 0;
+  if (d.state === 'airborne' && !def.air) return 0;
+  let w = def.weight ?? spec?.weight;
+  if (typeof w === 'function') w = w(d, s);
+  w = perPhase(w, d.phase);
+  return Number.isFinite(w) && w > 0 ? w : 0;
+}
 
 export class Brain {
   constructor(d) {
@@ -366,8 +521,9 @@ export class Brain {
     this.cooldowns = {};
     this.history = [];
     this.idleTimer = 1.0;
-    this.pendingPhase2 = false;
+    this.pendingPhase = 0; // the phase to transition into once allowed (0 = none)
     this.pendingBreak = false;
+    this.plungeOpts = null;
     this.sleepPuff = rand(1.5, 3);
     this.snortTimer = rand(3, 6);
     this.jawTwitch = 0;
@@ -413,7 +569,7 @@ export class Brain {
       if (this.history.length > 3) this.history.length = 3;
     }
     if (!interrupted) {
-      const gap = TUNING.idleGap[this.d.phase === 2 ? 1 : 0];
+      const gap = perPhase(TUNING.idleGap, this.d.phase);
       this.idleTimer = rand(gap[0], gap[1]);
     }
   }
@@ -495,6 +651,7 @@ export class Brain {
     if (!a) return true;
     if (NO_BREAK.has(a.name)) return a.name === 'stagger' && !d.broken; // a break upgrades a stagger
     if (a.name === 'leap' && a.phase !== 'recovery') return false;
+    if (a.def?.noBreak?.(a)) return false; // a string hit that can't be cut (the pounce's hop)
     return true;
   }
 
@@ -508,9 +665,36 @@ export class Brain {
     else this.pendingBreak = true;
   }
 
-  /** Parried melee swing: cancel it with a recoil. */
+  /** Parried melee swing (a single attack or a string's last hit): cancel it with a recoil. */
   recoil() {
     this.startAction(SEQ.recoil);
+  }
+
+  /**
+   * A plunge landed (Dragon.onPlunge, contract 2; the caller already checked NO_PLUNGE): cancel the
+   * running action and play the plunged reaction. `opts` = { air, alt, heavy }. An airborne wyrm
+   * falls from where it was hit: a flight's end() sees `d.crashing` and must not land it elsewhere.
+   */
+  plunged(opts) {
+    const d = this.d;
+    this.queued = null;
+    this.plungeOpts = opts;
+    const px = d.position.x, pz = d.position.z, yaw = d.yaw;
+    if (this.action) {
+      d.crashing = !!opts.air;
+      try {
+        this.stopAction(true);
+      } finally {
+        d.crashing = false;
+      }
+    }
+    if (opts.air) {
+      d.position.x = px;
+      d.position.z = pz;
+      d.yaw = yaw;
+      d.state = 'airborne';
+    } else if (d.state === 'airborne') d.state = 'combat';
+    return this.startAction(SEQ.plunged);
   }
 
   beginCombat() {
@@ -555,20 +739,25 @@ export class Brain {
     // wings mantled HALF like the painting's tall sails (both phases: at 0.3 the sails were edge-on
     // from the game camera and read as two white lances); phase 2 opens the jaw wider
     if (d.state !== 'sleeping' && d.state !== 'dead') {
-      pose.jaw = REST.jaw[d.phase === 2 ? 1 : 0];
+      pose.jaw = perPhase(REST.jaw, d.phase);
       pose.spread[0] = pose.spread[1] = REST.spread;
     }
     for (const k in this.cooldowns) this.cooldowns[k] = Math.max(0, this.cooldowns[k] - dt);
 
     // a full posture meter breaks as soon as allowed (e.g. right after landing a leap)
     if (this.pendingBreak && !d.broken && this.canStagger()) this.startAction(SEQ.postureBreak);
-    // phase 2 interrupts whatever the boss is doing once it is back on the ground (never a break).
-    // Checked before the decision loop so a fresh attack is not announced and cancelled the same frame.
-    // With the Lab AI off it waits (the damaging roar would be an attack of its own; debug.phase2 forces it).
-    if (this.pendingPhase2 && this.aiEnabled && !d.broken && (d.state === 'combat' || d.state === 'staggered')) {
-      this.pendingPhase2 = false;
+    // a phase transition interrupts whatever the boss is doing once it is back on the ground (never a
+    // break, a plunge reaction or another transition). Checked before the decision loop so a fresh
+    // attack is not announced and cancelled the same frame. With the Lab AI off it waits (the
+    // damaging roar would be an attack of its own; debug.phase2 / phase3 force it).
+    const next = d.phase + 1;
+    if (
+      this.pendingPhase >= next && next <= 3 && this.aiEnabled && !d.broken &&
+      (d.state === 'combat' || d.state === 'staggered') && !NO_TRANSITION.has(this.action?.name)
+    ) {
+      this.pendingPhase = 0;
       this.queued = null;
-      this.startAction(SEQ.phase2);
+      this.startAction(next >= 3 ? SEQ.phase3 : SEQ.phase2);
     }
 
     switch (d.state) {
@@ -588,6 +777,8 @@ export class Brain {
         }
         if (!this.action && d.state === 'combat') this._combat(dt);
     }
+    // a deflected (parried, not last) string hit: the struck part is knocked back (visual only)
+    d.applyDeflectKnock?.(dt);
 
     // hit flinch: head knocked along the blow direction
     if (d.flinch > 0.001 && d.state !== 'sleeping' && d.state !== 'dying' && d.state !== 'dead') {
@@ -648,14 +839,14 @@ export class Brain {
     this.idleTimer -= dt;
     // approach when far, turn in place otherwise
     const far = s.dist > 8.5 * S;
-    const ws = TUNING.walkSpeed[d.phase === 2 ? 1 : 0];
+    const ws = perPhase(TUNING.walkSpeed, d.phase);
     const want = far && s.absAng < 1.2 ? ws * (s.dist > 14 * S ? 1 : 0.75) : 0;
     this.walkSpeed = damp(this.walkSpeed, want, 3, dt);
     d.turnToward(s.yawTo, d.turnRate, dt);
     if (this.walkSpeed > 0.05) d.moveForward(this.walkSpeed, dt);
     else pose.speed = Math.max(pose.speed, 1);
     pose.tailWave = 0.08 + this.walkSpeed * 0.02;
-    pose.lower = d.phase === 2 ? 0.03 : 0.15; // combat idle a little lower than standing tall; phase 2 stands tall
+    pose.lower = d.phase >= 2 ? 0.03 : 0.15; // combat idle a little lower than standing tall; phases 2-3 stand tall
     if (this.walkSpeed > 0.5) pose.spread[0] = pose.spread[1] = Math.min(pose.spread[0], REST.walkSpread); // tucked while walking
     this._idleLife(dt);
 
@@ -683,14 +874,24 @@ export class Brain {
     }
   }
 
+  /**
+   * Weighted pick over every ATTACKS entry (attackWeight: phase, weight, air; cooldowns; the last two
+   * picks are damped). Melee stays allowed while hazards burn: the fight layers.
+   */
   _choose(s) {
     const d = this.d, c = this._cands;
     c.length = 0;
     let total = 0;
     for (const name in ATTACKS) {
       const def = ATTACKS[name];
-      if ((this.cooldowns[name] ?? 0) > 0) continue;
-      let w = def.weight(d, s);
+      if (!def || (this.cooldowns[name] ?? 0) > 0) continue;
+      let w;
+      try {
+        w = attackWeight(def, name, d, s);
+      } catch (err) {
+        console.error('[dragon] weight failed', name, err);
+        w = 0;
+      }
       if (!(w > 0)) continue;
       if (this.history[0] === name) w *= 0.3;
       else if (this.history[1] === name) w *= 0.65;
