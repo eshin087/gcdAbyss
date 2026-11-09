@@ -222,17 +222,33 @@ export const SEQ = {
   recoil: {
     name: 'recoil',
     phases: () => [['recoil', TUNING.recoilTime]],
-    start(d) {
+    start(d, a) {
       d.throat = 0;
+      // where the parry caught the head, and where the blow throws it (up and back over the withers)
+      a.h0 = new THREE.Vector3().copy(d.rig.pt.head);
+      a.h1 = new THREE.Vector3();
+      // a foot caught mid-step by the parry plants where it is: its home (led far ahead by the lunge)
+      // swings back with the recoil's slide, and the swing used to land there, metres back, in one frame
+      const G = d.rig.gait;
+      for (let i = 0; i < 4; i++) if (G.limbs[i].stepping) G.plantAt(i, G.limbs[i].pos);
     },
     update(d, a, dt) {
       // head and shoulders snap back, the forefeet hop back once (the body slides back a little)
       const pose = d.pose, f = d.fwd;
       const e = 1 - a.k * a.k; // snap back, ease out
-      pose.headRate = a.k < 0.35 ? 16 : 5;
-      pose.headOffset.x -= f.x * 1.7 * S * e;
-      pose.headOffset.z -= f.z * 1.7 * S * e;
-      pose.headOffset.y += 0.9 * S * e;
+      // the head is thrown back along a smooth arc (out of the caught position, up and back in
+      // ~0.2 s, a dazed shake), then released to the stance. It used to chase an offset from the
+      // rest shape while that shape blended in: the neck chain flipped between solutions, the head
+      // jumping 2.7 m and the neck tip turning 137° in one frame
+      if (a.k < 0.72) {
+        d.rootPt(a.h1, 0, 5.4, 1.9);
+        const u = 1 - Math.pow(1 - Math.min(1, a.k / 0.36), 3); // ease-out
+        pose.head = pose.headTarget.lerpVectors(a.h0, a.h1, u);
+        const daze = a.k > 0.3 ? Math.sin((a.k - 0.3) * 30) * (1 - (a.k - 0.3) / 0.42) * 0.22 * S : 0;
+        pose.head.x += d.fwd.z * daze;
+        pose.head.z -= d.fwd.x * daze;
+        pose.headRate = 20;
+      } else pose.headRate = 4;
       pose.jaw = 0.55 * e + 0.1;
       pose.jawRate = 20;
       pose.pitch = -0.14 * e;

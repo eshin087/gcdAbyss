@@ -33,6 +33,8 @@ const MIN_DUR = 0.13; // fastest step (s): the spin's scramble
 const SETTLE_DIST = 0.24;
 const SETTLE_DUR = 0.42;
 const SETTLE_GAP = 0.75;
+// a contact that leaves the ground eases to its home at this rate (1/s) instead of snapping there
+const FREE_RATE = 10;
 
 function makeLimb(name, side, hind) {
   return {
@@ -64,6 +66,7 @@ function makeLimb(name, side, hind) {
     // the contact without that offset (what pos was before it existed): the shoulders' scapula glide
     // follows this one, so the offset can't feed back into the reach and the step decisions
     posRef: new THREE.Vector3(),
+    wasFree: false,
   };
 }
 
@@ -193,16 +196,21 @@ export class Gait {
       }
     }
 
-    // free contacts follow their home (re-plant there when they come back down)
+    // free contacts follow their home (re-plant there when they come back down). They ease there
+    // (FREE_RATE) instead of snapping: a paw lifted off a plant far from its home (a forefoot left
+    // behind by a lunge, then hopped off the ground by a parry recoil) jumped 1 m in one frame
+    const fk = 1 - Math.exp(-FREE_RATE * dt);
     for (const l of limbs) {
       if (l.free) {
-        l.plant.copy(l.home);
-        l.pos.copy(l.home);
-        l.posRef.copy(l.home);
+        if (l.wasFree) l.pos.lerp(l.home, fk);
+        else l.pos.y = 0;
+        l.plant.set(l.pos.x, 0, l.pos.z);
+        l.posRef.copy(l.pos);
         l.off.set(0, 0, 0);
         l.stepping = false;
         l.lift = 0;
       }
+      l.wasFree = l.free;
     }
 
     const restance = this.stepScale < 0.8;
