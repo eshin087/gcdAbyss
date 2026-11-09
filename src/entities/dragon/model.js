@@ -580,14 +580,16 @@ export function buildDrake(U) {
     mesh(j, limbGeometry({ length: A.neckLen + 0.12, r0, r1, sy: 0.92, radial: 14, rings: 4 }), mats.neck, 0, 0, -0.06);
     // lava throat: under the neck only (narrower, set low; overlapping segments make it continuous)
     mesh(j, limbGeometry({ length: A.neckLen + 0.14, r0: r0 * 0.78, r1: r1 * 0.78, sx: 0.7, sy: 0.7, radial: 12, rings: 3 }), mats.throat, 0, -r0 * 0.45, -0.07);
-    // dorsal crest: two tall back-swept spines per segment, the reference's spiky mane
+    // dorsal crest: two tall back-swept spines per segment (the reference's spiky mane) and a
+    // splayed pair beside them, one batch per segment
     const crest = [];
     for (let q = 0; q < 2; q++) crest.push(spike(THREE.MathUtils.lerp(0.8, 0.58, t) * (q ? 0.82 : 1), 0.14, 0, r0 * 0.86, A.neckLen * (0.22 + 0.5 * q), 0.72, 0, 0.2, 5, 0.38));
+    for (const s of [1, -1]) crest.push(spike(THREE.MathUtils.lerp(0.5, 0.32, t), 0.08, s * r0 * 0.5, r0 * 0.72, A.neckLen * 0.45, 0.7, -s * 0.65, 0.14, 5, 0.45));
     batch(j, mats.spine, crest);
     // the head study's mane: 3 rows of long pointed blade scales per side (±40°, ±70°, ±100° around
     // the neck), 2 per row per segment, rows offset half a plate, all pointing down and back toward
-    // the body, tips lifted ~23° so the profile serrates; a splayed spike pair above them
-    const sh = [], lat = [];
+    // the body, tips lifted ~23° so the profile serrates
+    const sh = [];
     for (const s of [1, -1]) {
       [0.7, 1.22, 1.75].forEach((ang, row) => {
         for (let q = 0; q < 2; q++) {
@@ -595,10 +597,8 @@ export function buildDrake(U) {
           sh.push(shingle(0.58 - row * 0.07, 0.14 - row * 0.015, r0 * 0.93, s * ang, z, 0.4, 0.92, 0.3));
         }
       });
-      lat.push(spike(THREE.MathUtils.lerp(0.5, 0.32, t), 0.08, s * r0 * 0.5, r0 * 0.72, A.neckLen * 0.45, 0.7, -s * 0.65, 0.14, 5, 0.45));
     }
     batch(j, mats.neck, sh);
-    batch(j, mats.bone, lat);
     neck.push(j);
     parent = j;
   }
@@ -713,12 +713,9 @@ export function buildDrake(U) {
     const saw = [spike(0.8 - t * 0.5, 0.2 - t * 0.11, 0, r0 * 0.84, A.tailLen * 0.5, -0.5, 0, -0.22, 5, 0.36)];
     for (const s of [1, -1]) saw.push(spike(0.48 - t * 0.28, 0.08 - t * 0.035, s * r0 * 0.62, r0 * 0.6, A.tailLen * 0.2, -0.55, -s * 0.75, -0.14, 5, 0.42));
     if (t > 0.4) saw.push(spike(0.42 - t * 0.2, 0.08 - t * 0.03, 0, -r0 * 0.8, A.tailLen * 0.5, -0.85, Math.PI, -0.12, 5, 0.4));
+    // and a flat pair straight out the sides (one batch per segment, all molten-rooted)
+    if (i < 14) for (const s of [1, -1]) saw.push(spike(0.4 - t * 0.26, 0.07 - t * 0.03, s * r0 * 0.8, r0 * 0.22, A.tailLen * 0.45, -0.75, -s * 1.3, -0.08, 5, 0.45));
     batch(j, mats.spine, saw);
-    if (i < 14) {
-      const side = [];
-      for (const s of [1, -1]) side.push(spike(0.4 - t * 0.26, 0.07 - t * 0.03, s * r0 * 0.8, r0 * 0.22, A.tailLen * 0.45, -0.75, -s * 1.3, -0.08, 5, 0.45));
-      batch(j, mats.bone, side);
-    }
     tail.push(j);
     parent = j;
   }
@@ -805,8 +802,6 @@ export function buildDrake(U) {
     batch(forearm, mats.bone, fs);
     const hand = joint(forearm, 0, 0, A.forearm, 'hand');
     mesh(hand, limbGeometry({ length: A.hand + 0.04, r0: 0.27, r1: 0.22, radial: 10, rings: 2, flip: true }), mats.limbs);
-    // a wrist spike back and out
-    batch(hand, mats.bone, [horn(0.3, 0.06, s * 0.12, -0.24, 0.05, 1.9, s * 0.4, 0.05, 5, 0.5)]);
     const paw = joint(hand, 0, 0, A.hand, 'paw');
     // paw: wider than the leg (the painting's feet), its pad on the ground (paw joint = ground level)
     mesh(paw, ellipsoidGeometry(0.48, 0.16, 0.44, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, 0.12, 0.1);
@@ -821,7 +816,8 @@ export function buildDrake(U) {
       [-0.5, 0.64],
     ].forEach(([yaw, len]) => cl.push(horn(len, 0.14, Math.sin(s * yaw) * 0.44, 0.15, 0.3 + Math.cos(yaw) * 0.16, -0.2, s * yaw, -0.48, 6)));
     batch(paw, mats.claw, cl);
-    batch(hand, mats.claw, [horn(0.28, 0.06, -s * 0.2, -0.12, 0.08, 2.4, -s * 0.35, 0, 5)]);
+    // inner dewclaw and a wrist spike back and out (one batch)
+    batch(hand, mats.claw, [horn(0.28, 0.06, -s * 0.2, -0.12, 0.08, 2.4, -s * 0.35, 0, 5), horn(0.3, 0.06, s * 0.12, -0.24, 0.05, 1.9, s * 0.4, 0.05, 5, 0.5)]);
     arms.push({ side: s, shoulder, humerus, forearm, hand, paw });
   }
 
