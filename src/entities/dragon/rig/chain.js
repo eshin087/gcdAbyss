@@ -24,6 +24,40 @@ export function aimJoint(joint, dir, parentWorldQ, outWorld) {
   return outWorld.copy(parentWorldQ).multiply(joint.quaternion);
 }
 
+const _qd = new THREE.Quaternion();
+const _qp = new THREE.Quaternion();
+const _pz = new THREE.Vector3();
+/**
+ * aimJoint with twist continuity. The minimal rotation from +Z (aimJoint's convention: the roll the
+ * model's spikes were authored for) is singular when the bone points back along its parent's -Z (a
+ * folded or drooping wing's humerus, a finger lying back along the forearm, a foreleg reaching far
+ * behind): there its twist can spin ~180° in one frame, flipping every spike, claw and child joint.
+ * Near that cone the joint instead swings minimally from LAST frame's local rotation (parallel
+ * transport, always continuous) and eases back to the authored roll as the bone leaves it, so a
+ * still pose always settles on exactly the aimJoint roll. `snap` = take the authored roll at once.
+ */
+export function aimJointStable(joint, dir, parentWorldQ, outWorld, snap = false) {
+  _qi.copy(parentWorldQ).invert();
+  _v.copy(dir).applyQuaternion(_qi);
+  const l = _v.length();
+  if (l > 1e-6 && Number.isFinite(l)) {
+    _v.multiplyScalar(1 / l);
+    _qd.setFromUnitVectors(Z, _v);
+    // conditioning of the authored roll: 1 for bones within ~80° of +Z, 0 beyond ~140°
+    const t = Math.min(1, Math.max(0, (_v.z + 0.75) / 0.95));
+    const w = snap ? 1 : t * t * (3 - 2 * t);
+    if (w < 0.999) {
+      _pz.set(0, 0, 1).applyQuaternion(joint.quaternion);
+      if (_pz.dot(_v) > -0.9) {
+        _qp.setFromUnitVectors(_pz, _v).multiply(joint.quaternion);
+        joint.quaternion.copy(_qp).slerp(_qd, w);
+        if (!Number.isFinite(joint.quaternion.x + joint.quaternion.y + joint.quaternion.z + joint.quaternion.w)) joint.quaternion.copy(_qd);
+      } else joint.quaternion.copy(_qd); // a reversal in one frame (teleport): nothing to continue
+    } else joint.quaternion.copy(_qd);
+  }
+  return outWorld.copy(parentWorldQ).multiply(joint.quaternion);
+}
+
 /** Clamp unit vector `d` to within `maxAngle` of unit vector `ref` (in place). */
 export function constrainDir(d, ref, maxAngle) {
   const c = d.dot(ref);
