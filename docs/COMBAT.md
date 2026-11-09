@@ -137,3 +137,13 @@ defence timings in `TUNE` (`player.js`).
     and the resting wings are mantled HALF in both phases (wrists ~7.5 up, ~14 m), so the two wing
     hurt spheres (wrist, finger-1 knuckle) sit higher and further out; they were already above the
     hero's sword band, and every melee band / AI range re-checks unchanged in the sims.
+  - Reference match (2026-11-08; no timing, tell, damage or reach number changed; ADR-024): the
+    hero's attack active frames are bit-identical to v0.4's poses (192 hit-tested frames compared);
+    the wyrm's attack spheres stay within a few cm on their active frames (round 2 vs round 1 within
+    4 mm, the rake paw 2.3 cm). First contact is identical for bite, claw combo and charge probes;
+    three swipe placements that missed in v0.4 now land (+33 ms); the tail sweep's median contact is
+    −50 ms (v0.4 −58.5) and it no longer lands before its red flash (0 of 24 probes; v0.4: 5). Hurt
+    volumes that moved: the arched resting tail lifts its first spheres to ~3–4.5 m (a hero behind
+    the wyrm hits hips and legs more, the tail less); the resting head (lower, on the painting's S)
+    keeps its sphere above the sword band (bottom ~5.9 m vs ~4 m). The 1.3× drawn head, the longer
+    distal finger bones and the thicker drawn tail are visual only.

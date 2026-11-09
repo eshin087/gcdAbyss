@@ -5,6 +5,118 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-08 — Session 5: the reference match (wyrm and hero look and motion)
+**Owner:** "i want you to focus on making the dragon and character look as identical and good as
+the attached reference images and make sure the animations and movement look great." Attached: a
+red-black ASCII dragon and the "Shadow Swordsman" ASCII line-art hero.
+
+**How:** two rounds, each with four worktree agents (dragon look, hero look, dragon motion, hero
+motion), merged into `look/reference-match` (draft PR #4).
+- **Round 1** (`main..f66017b`): each build agent was followed by an independent reviewer that scored
+  it and added a polish pass. Scores after polish: dragon look 6, dragon motion 7, hero look 6, hero
+  motion 7.5 (out of 10).
+- **Round 2** (merges `ca69453`, `fc44cf4`, `c8f61c9`, `419a6ca`, from the lead's review of round 1)
+  was **stopped early** because the owner wanted to wrap up:
+  - hero look (self-score 6) and hero motion (7) finished and reported, tests passing
+  - dragon look and dragon motion were stopped near the end, before their final self-report; their
+    commits are merged (the commit messages are the record) and the full suite passes on the merge
+  - none of round 2's review / polish passes completed; the hero ones were stopped mid-way and their
+    unfinished edits discarded (saved as `scratchpad/look/hero-look-polish-unfinished.patch`)
+- **Lead fixes after the merge:** the blade's halo dots and tip streak sit on the drawn point
+  (`DIM.drawnTip ?? DIM.steelTip` in `player/fx.js`); the dead generic `artCell()` pass function,
+  its `uArtCount` uniform and the unused `createArtAtlas` import are gone from `pipeline.js`.
+
+**Done — the wyrm:**
+- **Letters (ADR-018):** a thin one-pixel 4x6 font in 5x8 cells (`wyrmGlyphs.js`; 3x5 in 4x6 cells
+  under 900 px tall). The v0.4 bold browser font filled its cells and printed a "silver blob".
+  Letter sets by brightness tier with a per-cell letter, so letters hold still; stroke pixels take
+  their own source pixel; structure codes in alpha (`0.5 + 0.01 × code`) and marching-squares
+  silhouette strokes keep spikes, claws and torn edges.
+- **Art source** (`wyrm` material option): charcoal shingle scales with bright free edges lit by a
+  camera-fixed key light, greyed moonlight, molten cracks along the scale gaps on the undersides only
+  (round 2; round 1's voronoi net drew red worms over the back), gold-rimmed orange chest and throat
+  scales, crimson mottled sails with holes, torn edges, hot bone streaks and ember specks (`aEdge`,
+  new `aBone`). Round 2: hide outlines by letter brightness only (rim strokes printed chevron noise),
+  cooler cracks on the legs and tail.
+- **Shape:** a 1.3× head (visual only, about the mouth) held low with the jaw open in a snarl, eagle
+  feet with hooked talons, legs ~15 % thicker, a heavier tail, spiky crest / frills / saw tail,
+  longer distal finger bones and fuller sails.
+- **Motion:** flip-free joints and IK, feet planted through turns, the tail sweep's spin, the roar
+  and the walk (turning in place 1.41 → 0.01 m of foot slide; roar / intro 0.7–2.6 → 0–0.33 m), the
+  stomp's paws on the impact frame, the
+  painting's resting display (HALF sails fitted to read broad from every game-camera yaw, an S-neck
+  with the head low, a stalking stance, the arched tail, idle life). Round 2 (ADR-025): the shown
+  neck spreads a strike down its length with the head pinned to the measured solve, the bite eases
+  into its strike over the last windup frames (`headLead`), a head-aim turn limit except where
+  spheres ride on the head (`headExact`), a parry recoil on an arc, swinging feet that absorb home
+  jumps, a tail that can't fold over, and a death that falls with weight (feet planted, wings
+  crumpling onto the ground).
+
+**Done — the hero:**
+- **Ink-line art (ADR-019):** part ids in alpha (`HERO_ART`, `HERO_INK`), bright lines on
+  silhouettes, depth steps and part edges over dim, dense letters. Round 2 traces the lines per
+  pixel (ADR-020: no letter-grid staircase), and at the game camera he is a dark figure with a dim
+  cool rim, bright armour and a crisp cyan blade, cut out of the grass by a dark halo (ADR-021).
+- **Blade (ADR-022):** drawn 1.64 m (`DIM.drawnTip` 1.45; the animator keeps `DIM.steelTip` 1.17)
+  with a ridge line and serrations; drawn up to 0.65 m nearer the camera at the game camera, so the
+  low guard reads from behind.
+- **Model:** coat drapes with folds and a lavender torn zone, wider hems, kite greaves, a bigger
+  spiky pauldron, a fuller mop, the face shows, more key light and contrast.
+- **Motion:** speed-matched gait and a world-space foot planner, blade blending round the outside
+  of the body (ADR-023), the portrait's wide contrapposto idle, light 1 cocking over the right
+  shoulder, the slam's gather-and-raise windup, finish holds, the charge's coil with a coat updraft,
+  a two-step thrust dash, the roll's intended sliding kneel with dust and sparks, one continuous
+  slash crescent, a snappier turn, sprint hair blow-back, quiet guard taps, a shorter stagger jolt, a
+  flask swig that reads from behind.
+
+**Decisions:** ADR-018 … ADR-025. The common rule (ADR-024): look and motion polish never moves a
+hit-tested frame. Hero attack active frames are bit-identical; the wyrm's attack spheres stay
+within a few cm; visual size changes hang off the gameplay joints.
+
+**Verification:**
+- Deterministic headless captures on a real GPU (the real-time loop frozen, `Math.random` seeded,
+  audio off), compared with the references by pixel statistics (luma shares, ink / bright %,
+  white / orange / red mix) and by eye: the reference angles, side, front, back and head views, the
+  1080p game camera, a live fight, and per-action strips. The owner got before / after images for
+  both rounds.
+  - wyrm, reference view: lit-ink colour mix white 43 / orange 23 / red 35 % (painting 41 / 22 / 37)
+  - hero, reference view: mean luma 106 (reference 108), 37 % of pixels above 120 (38 %)
+  - hero at the game camera, facing away: mean 113 → 80 (the scaled reference is 56)
+- Gameplay, per frame in seeded Lab runs: the hero's blade matrix and hit points on 192 hit-tested
+  frames, 0 differ; the wyrm's attack spheres within a few cm (round 2: ≤ 4 mm, the rake 2.3 cm);
+  first contact unchanged except three swipe placements that now land, and the tail sweep no longer
+  lands before its red flash (0 of 24 probes; v0.4: 5). COMBAT.md has the numbers.
+- `npm test`: ALL PASSED (glyph check bad=0) on the merged code; `npm run build`: OK (1293 KB).
+
+**Open issues / next:**
+- **Process:** no round-2 review pass ran; the round-2 dragon work has no self-report. Review it (or
+  have the owner play the PR preview) before merging.
+- **Determinism:** captures of the merged code are no longer bit-identical run to run (two runs of
+  `scratchpad/look/steps_final.mjs` differ by small pose and timing amounts), so a time or random
+  source leaks into the sim. Find it before trusting before / after compares again.
+- **FX:** stray `"` glyph particles show left of the hero in a back view; source unknown.
+- **Hero:**
+  - the coat still reads as separate flat panels with outlines, not one ragged drape with holes
+  - proportions are round 1's; the hair is straight clumps; the face has no nose, mouth or shadow
+  - at the game camera he is still brighter than the scaled reference (80–97 vs 56: blade glow,
+    rim, the armour column), and the capital fill letters can read as text
+  - the halo does not darken the wyrm's letters; the reference-angle idle is near frontal
+  - strike key poses are limited by the bit-identical rule; light 1's loop is fast (a longer
+    windup would be a tuning call); light 2 has no free-arm choreography; the knockdown's blade
+    swings wide; the thrust's legs hide under the coat at 36 m
+  - the foot-slide metrics were not re-run on the merged wide idle
+- **Wyrm:**
+  - at the reference angle the sails sit lower than the painting's, and with the hero straight
+    ahead the far wing is a sliver behind the neck
+  - in melee at 16:9 the head, neck and wings are mostly off the top of the screen (boss camera)
+  - some fast motions still jump far per frame (charge thigh, bite neck); close-ups show large
+    flat scales; letters change on ~39 % of lit cells per frame at idle
+- **Tooling:** the capture and per-frame compare tools (deterministic boot, blade compare, hitbox
+  compare) live in the session scratchpad; move them into the repo.
+- **Next:** the owner reviews PR #4's preview; on approval, merge and release.
+
+---
+
 ## 2026-11-02 — Session 4b: the hero shows his details in game
 **Owner:** "everything is perfect but the main character isn't showing the details like it does in
 your preview pictures", with a screenshot (~13 rows of dense `MMBM` letters) and the reference again.

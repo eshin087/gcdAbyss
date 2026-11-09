@@ -33,12 +33,38 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Carved-glyph stones and half-sunk flagstones
 - [x] Lab model viewer + builder specs from the sheets (docs/art)
 - [x] Four-legged drake rebuild (art score 2 → 6) and closer hero (2.5 → 4.5)
-- [ ] Next look round: hero hair mass, the blade read from behind at the game camera, small
-      details (straps, boots)
+- [x] Next look round: hero hair mass, the blade read from behind at the game camera, small
+      details (straps, boots) — done in the reference match below (fuller mop, the blade drawn
+      nearer from behind, kite greaves); straps unchanged
 - [x] Owner approval; released as v0.3.0
 - [x] Classic ASCII-art creatures (screen-grid conversion, owner's references); hero drawn bigger and leaned (ADR-017)
 - [~] Phone support: touch controls, phone camera, Lab toggle (released; needs a real-device check)
 - [x] Owner approval; released as v0.4.0
+
+## M1.6 — Reference match (2026-11-08, PR #4, `look/reference-match`)
+- [x] Wyrm as the owner's red-black ASCII dragon: thin pixel font, letter sets, art source, shape (ADR-018)
+- [x] Hero as ink-line art: per-pixel lines, a dark figure + halo at the game camera, longer drawn
+      blade with a depth pull (ADR-019 … ADR-022)
+- [x] Wyrm motion: flip-free rig, planted feet, the painting's resting display, idle life, strike
+      lead, parry arc, weighted death (ADR-025)
+- [x] Hero motion: world-planted feet, blade paths, portrait idle, new windups, two-step dash,
+      sliding kneel, crescent trails (ADR-023)
+- [x] Gameplay unchanged: hit-tested frames identical / within cm (ADR-024); `npm test` + build green
+- [ ] Independent review pass on round 2 (stopped early; the dragon branches have no self-report)
+- [ ] Owner approval of the PR preview; merge and release
+- Follow-ups:
+  - [ ] Find the time / random leak that makes deterministic captures differ run to run
+  - [ ] Stray `"` glyph particles left of the hero in a back view
+  - [ ] Hero coat as one wide ragged drape with burn holes and blotches
+  - [ ] Hero proportions, curved hair strands and wisps, face lines (nose, mouth, eye shadow)
+  - [ ] Hero at the game camera: tone down the armour column and glow (still brighter than the
+        reference), capitals that read as text; the halo over the wyrm's letters
+  - [ ] Stronger strike key poses (needs a hit-volume decision, ADR-024); light 2 choreography;
+        the knockdown's wide blade swing; re-run hero foot metrics on the wide idle
+  - [ ] Wyrm sails at the reference angle and the far wing with the hero straight ahead
+  - [ ] Boss camera in melee: the wyrm's head and wings sit off the top of the screen
+  - [ ] Wyrm letter boil (temporal buffer), close-up scale LOD, fast single-frame jumps
+  - [ ] Move the capture / per-frame compare tools from the scratchpad into the repo
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
@@ -62,7 +88,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 ## Tech debt / ideas
 - [ ] Front-on reach: at ×1.25 the wyrm's chest sits above sword height, so only the overhead
       combo hit lands from straight ahead (flanks/behind are fine) — consider a lunge or hitbox lift
-- [ ] Hero readability at default zoom (~4 cells wide): consider a stronger rim or a ground ring
+- [x] Hero readability at default zoom (~4 cells wide): consider a stronger rim or a ground ring
+      (drawn bigger and leaned, ADR-017; a dark figure with a rim and a halo, ADR-021)
 - [ ] Separate freeze vs slow-mo timers in `game.hitstop` (today actors guard against it)
 - [ ] Merge static dragon parts (spikes/horns/claws) to cut draw calls (~100 meshes today)
 - [ ] Dissolve-aware shadow material for dying creatures

@@ -4,6 +4,49 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
+The wyrm and the hero are matched to the owner's two reference images (a red-black ASCII dragon and
+the "Shadow Swordsman" line art), and both move better. Gameplay is unchanged: attack timings,
+hitboxes, damage and parry windows are the same (the hero's attack frames are bit-identical).
+
+### Added
+- **Hero moves:** the roll ends in a sliding kneel with dust, torn grass and sparks off the dragging
+  blade; the charged thrust dashes in two real steps; the charge's updraft lifts the coat and hair;
+  light 1 cocks the blade over the shoulder; finishes hold for a beat.
+- **Wyrm life:** breathing sails, weight shifts, a wing rouse and a stalking stance while it waits;
+  wings that turn toward you when you circle it; a death that falls with weight (it rears, buckles,
+  thuds onto its side, the head slaps down last and the wings crumple).
+
+### Changed
+- **The wyrm looks like the reference dragon:**
+  - thin pixel digits on black instead of bold letters (finer letters on screens under 900 px tall)
+  - a charcoal scaled hide, molten cracks glowing on the undersides, an orange-lit chest and throat
+  - crimson torn sails with glowing bones and embers, fuller and readable from every side
+  - a bigger, fierce head held low with the jaws open, eagle feet, heavier legs and tail, a crest,
+    frills and a saw tail
+- **The hero looks like the line-art reference:**
+  - bright ink outlines that follow every curve over dim, dense letters
+  - at the game camera a dark figure with a cool rim and a crisp cyan blade, cut out of the grass
+  - a longer blade (gem to point ~70 % of his height) that stays visible from behind
+  - a coat that drapes with folds and a lavender torn hem, kite greaves, a spiky pauldron, fuller
+    hair, and his face shows
+- **Hero motion:** the portrait's wide idle with the blade low; feet stay planted while moving and
+  turning; the blade swings round his body instead of through his legs; the slam's windup reads from
+  behind; slash trails are one smooth crescent; a snappier turn, hair that blows back in a sprint,
+  and a flask swig you can see from behind.
+- **Wyrm motion:** feet stay planted through turns, the tail sweep and the roar; the bite eases into
+  its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
+
+### Fixed
+- Wyrm: wings and limbs flipping round in one frame, feet sliding or floating, the stomp's paws
+  landing before the slam, toes under the ground when lying down, the tail folding over itself.
+- The wyrm's tail sweep can no longer land before its red warning flash.
+- Hero: feet skating, the blade whipping through the legs and the ground, the blade spinning round
+  him between light 1 and light 2, the front foot skidding in the thrust, guard taps shuffling the
+  feet, the blade's glow sitting short of its point.
+
+### Removed
+- The red crack "worms" over the wyrm's back and the dash outlines along its wings and tail.
+- Dead code in the ASCII pass (the generic `artCell` letter path and `uArtCount`).
 
 ## [0.4.0] - 2026-11-02
 The hero and the wyrm are drawn as classic ASCII art (the owner's reference images). The game is

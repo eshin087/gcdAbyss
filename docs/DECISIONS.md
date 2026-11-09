@@ -209,3 +209,173 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - The moon shadow is cast by the leaned, scaled body.
   - New code that reads hero joint positions for gameplay must use `player.unlean()`.
 
+## ADR-018 — The wyrm prints in a thin pixel font: letter sets by brightness, structure in alpha (2026-11-08)
+- **Context:** the owner asked for the dragon and hero to look "as identical and good as" his two
+  reference images. The dragon reference is thin, anti-aliased digits on black whose brightness
+  draws charcoal scales, orange cracks and crimson sails; scale outlines cut through the letters. The
+  v0.4 wyrm printed as a "silver blob": a 7 px bold browser font filled its 4x7 cells, one colour per
+  cell dissolved shapes into digit noise, thin spikes vanished (a cell needed 2 of 4 samples), and a
+  22-step density ramp re-lettered ~60 % of the lit cells every frame at idle.
+- **Decision:**
+  - The wyrm gets its own pixel font (`wyrmGlyphs.js`): one-pixel 4x6 glyphs with a soft halo in 5x8
+    cells, mostly digits; 3x5 glyphs in 4x6 cells under 900 px tall.
+  - A cell's brightness picks a letter SET (dim / mid / bright) and the cell's hash picks the letter
+    inside it. Each stroke pixel takes brightness and hue from its own source pixel.
+  - The material encodes structure in alpha: `0.5 + 0.01 × stroke code` (the screen direction of a
+    thin part's outline). Coded cells and silhouette cells (marching squares on the 4 samples) print
+    `/ | \` strokes; one sample is enough for a stroke cell.
+  - A dedicated art source (`wyrm` material option): shingle scales with bright free edges, molten
+    cracks along the scale gaps on down-facing surfaces, torn crimson membranes (`aEdge`, `aBone`),
+    a key light fixed to the camera and greyed moonlight.
+  - Round 2: the hide's scale outlines come from letter brightness only (rim strokes printed a field
+    of chevrons at the game camera); strokes stay on thin parts and the silhouette.
+- **Consequences:**
+  - Supersedes ADR-015's single `ART_CHARS` ramp for the wyrm (the generic `artCell` path is gone).
+  - Alpha 0.50–0.54 is the wyrm's stroke-code window (ARCHITECTURE.md alpha contract).
+  - Letters still change on ~39 % of the lit cells per frame at idle (v0.4: 34 %); going lower needs
+    a temporal buffer.
+  - About +0.3 ms per frame on an RTX 4090 at 1080p (round 1).
+
+## ADR-019 — The hero is ink-line ASCII art (2026-11-08)
+- **Context:** the hero reference is anime line art turned into ASCII: a dim, dense letter fill
+  inside bright ink strokes along every silhouette and panel edge (29 % bright / 59 % dim lit
+  pixels). The v0.4 hero (ADR-017's key light, edge darkening and black depth gaps) was a uniform
+  light-grey letter field (81 % bright / 18 % dim) and, at the 36 m camera, a pale column of text.
+- **Decision:**
+  - Hero materials write a PART ID into alpha (`HERO_ART`: `0.4632 + (part × 2 + aPart) × 0.0006`)
+    instead of a flag.
+  - The art pass draws bright ink lines on the silhouette, on the nearer side of depth steps and on
+    part edges (the higher part draws), over dim fill letters.
+  - All per-part look data lives in one table (`HERO_INK` in `player/model.js`: fill, line tint and
+    gain, fill gain, line style, far values), packed into shared uniforms.
+  - The source is an opt-in `heroArt` material block, compiled only for the hero (the wyrm's shader
+    is unchanged).
+- **Consequences:**
+  - Supersedes ADR-017's hero shading (`uArtHeroKey` / `uArtHeroEdge` are left declared but have no
+    effect) and its black depth gaps. ADR-017's size and lean stay.
+  - Part ids need a half-float scene target; the 8-bit fallback collapses them (rare on WebGL2).
+  - A new hero part needs a `HERO_INK` entry; parts layered on top get higher ids.
+  - GPU cost stayed within noise on an RTX 4090.
+
+## ADR-020 — The hero's ink lines are traced per pixel (2026-11-08)
+- **Context:** round 1 drew one centred stroke glyph (`| - / \`) per 4x6 letter cell. Every diagonal
+  and curve stair-stepped, which read as "boxy, robotic". The reference's lines are continuous
+  ~2 px strokes with dotted rag edges.
+- **Decision:** each hero pixel is classified against its 1-px neighbours: silhouette, depth step
+  (the nearer side draws; a slope predictor skips curved and grazing surfaces), part edge (the higher
+  part), piece edge (sub-id, up close). Lines are one font pixel wide with a dimmer second pixel up
+  close, and break at the letter spacing so a contour reads as a chain of stroke glyphs; per part
+  they are per-cell strokes, dotted (tails, hair) or unbroken (blade, gem). The letter grid only
+  picks the fill letters.
+- **Consequences:**
+  - About 9 extra texture fetches per hero pixel (17 up close); GPU time stayed within noise.
+  - The `PIXEL_LINES` atlas row is no longer sampled.
+  - The lines are no longer quantised to the letter grid. Accepted: the reference's are not either.
+
+## ADR-021 — At the game camera the hero is a dark figure cut out by a halo (2026-11-08)
+- **Context:** at ~125–150 px tall almost every cell sat on an edge, so the hero read as a grey or
+  white wireframe (mean luma 104–113, 43–51 % of pixels above 120). The reference scaled to that size
+  is a dark figure (mean 56, 56 % below 50) with silver armour, pale lavender tails, a pale face and a
+  cyan blade. A round-1 switch to heavy strokes at 14 m popped exactly at the phone camera's minimum
+  distance.
+- **Decision:**
+  - A distance LOD by view depth (6 → 20 m, dithered per cell, no pop): a one-letter outline, piece
+    edges drop out, cloth inner lines turn into dark seams (`farLine`), each part gets a far fill gain
+    (`farFill`: cloth dark, armour bright), the silhouette is a dim cool rim, the blade's HDR is
+    capped to a tight line.
+  - A dark halo round him darkens the world grid next to his figure (two rings of taps round his
+    screen position), fading in from 8 to 20 m.
+- **Consequences:**
+  - Facing away (the usual fight view): mean luma 113 → 80, above-120 share 51 → 24 %. Still brighter
+    than the scaled reference (80–97 vs 56).
+  - The halo only darkens the world grid; over the wyrm's letters he has no cut-out.
+  - The far look is a judgment call the owner should confirm in play (`uHeroLod.w`, `farFill` tune it
+    live).
+
+## ADR-022 — The drawn blade is decoupled from gameplay: a longer point and a depth pull (2026-11-08)
+- **Context:** the portrait's blade runs from the gem to the point over ~70 % of his height; ours
+  was ~56–60 %. Lengthening `DIM.steelTip` raised the slam's blade by 28 cm at the end of the hit
+  segment on its impact frame. From behind at the game camera the low guard lay just behind his legs
+  and in the grass: only a glow at his boot showed.
+- **Decision:**
+  - Three lengths: `DIM.drawnTip` 1.45 (the drawn point), `DIM.steelTip` 1.17 (what the animator
+    poses and clamps; unchanged), the hit segment 0.16 → 1.5 (+ `REACH.tipExt` 0.4; unchanged).
+  - `heroArt.pull`: at the game camera the blade, point and gem are drawn up to 0.65 m nearer the
+    camera along their own view rays (`BLADE_PULL`: none under 10 m, full from 24 m): the same pixels,
+    a nearer depth, so the blade shows over his legs and the grass.
+- **Consequences:**
+  - Every attack's active frames stay bit-identical; the drawn point stays inside the hit segment.
+  - FX on the point must use `DIM.drawnTip ?? DIM.steelTip`.
+  - The pulled blade draws over parts of his body it is really behind. Accepted for readability;
+    close-ups are unaffected.
+
+## ADR-023 — The hero's feet are planned in world space; blade directions blend round the outside (2026-11-08)
+- **Context:** the feet skated in every moving clip (run 0.8 m/s, combo 2.3 m/s with 12 m/s peaks):
+  the stride did not match the speed and idle and gait feet were blended. The blade whipped through
+  the legs and the ground on every side change: a component lerp passes through straight down (tip
+  jumps of 0.67–0.75 m per frame, the blade inside a thigh for 1–29 frames per clip), and
+  cross-fades re-chose their way round every frame (a ~350° spin between light 1 and light 2).
+- **Decision:**
+  - Stride and cycle length follow the speed, so a stance foot moves at the drawn ground speed; a
+    foot planner holds planted feet in world space through starts, stops, curves and turns, and
+    standing feet re-plant with short steps.
+  - The drawn heading follows a critically damped spring (visual only); attacks and guards use the
+    gameplay facing.
+  - Blade directions blend by azimuth and elevation round the outside of the body; a fade keeps last
+    frame's way round; outside attacks the blade is pushed out of the leg capsules before the ground
+    clamp.
+- **Consequences:**
+  - Planted-foot slide ~0.03 m/s; 0 frames of blade inside the body in every clip.
+  - A standing 180° turn trails the gameplay yaw by up to ~0.2 s (visual only).
+  - Where the gameplay root keeps moving (the roll's 4–6 m/s), feet slide; the roll's kneel was made
+    an intended slide with dust instead.
+
+## ADR-024 — Look and motion polish never moves a hit-tested frame (2026-11-08)
+- **Context:** two rounds of four agents reshaped poses and silhouettes on a fight whose timings,
+  reaches and windows are balanced and tested (COMBAT.md). The look wanted a bigger head, longer
+  blade and longer wings; the motion wanted new windup paths and key poses.
+- **Decision:**
+  - Hero: attack **active frames stay bit-identical**. A path that reshapes a windup reaches the
+    clip's own pose by windup − 1/30 s and hands its channels back; recovery shaping starts at
+    windup + active + 0.035 s (the frame after the window is still hit-tested); active-frame shaping
+    uses only non-blade channels. Proof: a per-frame compare of `sword.matrixWorld` and the hit points
+    against the previous build (round 2: 192 frames, 0 differ).
+  - Dragon: attack hit spheres on active frames stay within a few cm of the baseline, measured per
+    frame in seeded Lab runs, and first-contact timing is re-measured per ability (round 1 vs v0.4:
+    mostly 2–6 cm, a few frames up to ~13 cm on the charge's 3.2 m chest sphere; round 2 vs round 1:
+    ≤ 4 mm except the rake's 2.3 cm).
+  - Visual size changes hang off gameplay joints instead of moving them: the 1.3× head on `headVis`
+    about the mouth, longer distal finger bones with the knuckles fixed, a thicker drawn tail over the
+    unchanged chain clearance, the hero's longer drawn blade.
+  - Cosmetic randomness in code the integration sims run uses the animator's own noise, never
+    `Math.random` (the sims seed it and the wyrm's AI rolls on it).
+- **Consequences:**
+  - Gameplay (hitboxes, timings, balance) is unchanged; `npm test` stays the gate.
+  - Strike key poses can't get stronger holds on active frames without a hit-volume decision or
+    decoupling the sword's world matrix from the body.
+  - Every motion change needs the per-frame compare run. The tools live in the session scratchpad,
+    not in the repo yet.
+
+## ADR-025 — The wyrm's shown motion is separate from its measured motion (2026-11-08)
+- **Context:** FABRIK moves a chain's tip first, so the bite's 1.8 m strike step turned the last
+  neck segment 75° in one frame while the base barely moved; the strike had no acceleration (an
+  exponential approach from a still coil); the head's aim flipped 30–90° in a frame when the look
+  target passed under it. Letting the painting's resting S shape the one neck chain changed how the
+  next windup coiled it (the bite's head ended ~0.8 m short).
+- **Decision:**
+  - Two neck solves: `_neckSim`, the measured one every attack's head path and hit spheres were tuned
+    on, and `neck`, the shown chain (the resting S at rest; while an attack drives the head it swings
+    toward the measured head, spreading the step down its length). The head joint is pinned to the
+    measured solve.
+  - `pose.headLead` lets the last three windup frames lead the SHOWN head into the strike (no hit
+    test runs in a windup).
+  - `pose.headExact` marks the frames whose hit spheres ride on the snout or mouth; there the head
+    aims exactly, elsewhere its aim turns at most 11 rad/s.
+  - `pose.tailLegacy`: the tail sweep runs the v0.4 tail solve its spheres were measured on; the new
+    tail limits apply everywhere else.
+- **Consequences:**
+  - Worst neck joint per frame: bite 75 → 37°, parry recoil 137 → 46°; attack spheres within ~1 cm.
+  - New attacks with head-borne hit volumes must set `headExact` on those frames, and polish must
+    never edit the measured solve.
+  - The neck hurt spheres ride on the shown chain, so they can differ from the measured neck.
+
