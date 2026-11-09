@@ -114,9 +114,9 @@ export class Pipeline {
         // runs, over a dim, dense letter fill.
         // ink: x / y = line brightness in dark / lit cells, z = how much of the part's hue a line keeps
         // (0 = white), w = fill left on the far side of a depth step (the dark gap beside a line)
-        uHeroInk: { value: new THREE.Vector4(0.5, 0.72, 0.65, 0.3) },
+        uHeroInk: { value: new THREE.Vector4(0.62, 0.9, 0.62, 0.3) },
         // fill: x / y = letter brightness at the dark / lit end, z / w = letter-ramp position there
-        uHeroFill: { value: new THREE.Vector4(0.024, 0.46, 0.28, 1.0) },
+        uHeroFill: { value: new THREE.Vector4(0.02, 0.36, 0.27, 1.0) },
         // inner lines are dimmer than the silhouette: brightness × x at a depth step, × y at a part edge,
         // × z between pieces of one part
         uHeroLine: { value: new THREE.Vector3(0.9, 0.75, 0.55) },
@@ -126,7 +126,7 @@ export class Pipeline {
         // camera is 24–54 m, phones 14–34 m; the Lab's close-ups 1.5–5 m), z = fill brightness there,
         // w = line brightness there (parts whose ink gain is > 1.5 keep theirs: blade, gem, flask).
         // Far away the creases and piece edges drop out (dithered per cell) and part edges dim.
-        uHeroLod: { value: new THREE.Vector4(6.0, 20.0, 2.4, 0.6) },
+        uHeroLod: { value: new THREE.Vector4(6.0, 20.0, 2.9, 0.5) },
         // look-dev: 1 = show the hero's raw art source (fill) instead of letters, 2 = only the ink
         // lines, 3 = the ink lines coloured by class (silhouette, depth step, part edge, crease, piece)
         uHeroDebug: { value: 0 },

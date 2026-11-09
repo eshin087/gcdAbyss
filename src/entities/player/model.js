@@ -520,11 +520,12 @@ function hairGeometries() {
   const S = {};
   for (const c of HAIR_CLUSTERS) S[c.name] = { mass: [], tip: [] };
   // clump: length, half-width, half-thickness, root, direction, curl-toward, curl amount
-  // ink-line sub-ids: the fringe locks alternate (each one outlined over the face); the rest of the
-  // mop takes one id, so it reads as one mass whose strands show only where they overlap
+  // ink-line sub-ids: the locks of the mop alternate, so the art pass draws a strand line where one
+  // overlaps the next (they radiate from the crown whorl: the reference's strand lines); the fringe
+  // takes one id (alternating fringe ids drew parallel bars over the face)
   let lock = 0;
   const clump = (name, L, w, th, base, dir, bend, curl = 0.18, taper = 0.85) => {
-    const k = name === 'fringe' ? lock++ % 2 : 0;
+    const k = name === 'fringe' ? 0 : lock++ % 2;
     for (const [t0, t1, key] of [[0, 0.6, 'mass'], [0.6, 1, 'tip']]) {
       S[name][key].push(sub(orientTo(clumpGeometry(L, w, th, { t0, t1, curl, taper, rows: key === 'mass' ? 3 : 2 }), base, dir, bend), k));
     }
@@ -562,17 +563,18 @@ function hairGeometries() {
       clump(side(az), L0 + j(0.025), 0.026, 0.012, capPoint(az, el, 0.95), [m[0], m[1] * 1.15, m[2]], [-rad[0], -rad[1], -rad[2]], curl + j(0.05), 0.6);
     }
   }
-  // ragged flicks out sideways and back at temple / ear height (the jagged side edges), drooping
+  // ragged flicks out sideways and back at temple / ear height (the jagged side edges), drooping;
+  // thin, so up close they print as the reference's dotted wisps rather than solid spikes
   for (const az of [1.45, 1.8, 2.15, 2.5, -1.5, -1.85, -2.2, -2.55, 2.85, -2.9]) {
     const el = 0.22 + j(0.12);
     const rad = radial(az, el);
-    clump(side(az), 0.075 + j(0.015), 0.018, 0.009, capPoint(az + j(0.06), el, 0.9), [rad[0] * 0.75, -0.6 + j(0.12), rad[2] * 0.75 - 0.15], [0, 1, 0], 0.3, 0.8);
+    clump(side(az), 0.075 + j(0.015), 0.012, 0.008, capPoint(az + j(0.06), el, 0.9), [rad[0] * 0.75, -0.6 + j(0.12), rad[2] * 0.75 - 0.15], [0, 1, 0], 0.3, 0.8);
   }
-  // crown: strands standing up and out at 30–60° and curling back (the reference's jagged, bed-head
-  // top edge), longest toward the hero's right
+  // crown: thin strands standing up and out at 30–60° and curling back (the reference's wispy,
+  // bed-head top edge, not a crown of broad spikes), longest toward the hero's right
   for (const [az, el, L] of [[0.45, 1.25, 0.07], [-0.55, 1.2, 0.085], [2.8, 1.3, 0.06], [1.4, 1.1, 0.065], [-1.35, 1.05, 0.08], [-0.1, 1.38, 0.07], [2.1, 1.2, 0.06]]) {
     const ox = Math.sin(az), oz = Math.cos(az);
-    clump('crown', L + j(0.012), 0.016, 0.008, capPoint(az, el, 0.88), [ox * 0.85 + j(0.2), 0.55, oz * 0.3 - 0.5], [ox * 0.4, -0.4, -1], 0.6, 0.85);
+    clump('crown', L + j(0.012), 0.009, 0.006, capPoint(az, el, 0.88), [ox * 0.85 + j(0.2), 0.55, oz * 0.3 - 0.5], [ox * 0.4, -0.4, -1], 0.6, 0.85);
   }
   // nape locks down to the collar top, tips flicking out
   for (let i = 0; i < 7; i++) {
@@ -764,7 +766,7 @@ export const HERO_INK = {
   skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8 },
   eye: { part: 2, fill: [0.3, 0.26, 0.5], rim: 0, line: [0.85, 0.8, 1.0, 0.8] },
   shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85] },
-  lining: { part: 4, fill: [0.08, 0.075, 0.19], line: [0.75, 0.72, 1.0, 0.85] },
+  lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85] },
   collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85] },
   pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9] },
   coat: { part: 6, fill: [0.175, 0.165, 0.155] },
@@ -773,12 +775,14 @@ export const HERO_INK = {
   hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true },
   piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1] },
   leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9] },
-  // the reference's hair is a blue-violet dotted mass, lighter at the top and the strand ends
-  hair: { part: 11, fill: [0.1, 0.085, 0.24], rim: 0.9, line: [0.7, 0.64, 1.0, 1.0], fillGain: 2.6, dotted: true },
-  hairTip: { part: 11, fill: [0.15, 0.12, 0.36], rim: 0.9, line: [0.7, 0.64, 1.0, 1.0], fillGain: 2.6, dotted: true },
-  // the reference's armour is the brightest mass on him: grey plates with white glints
-  armor: { part: 12, fill: [0.25, 0.25, 0.28], spec: 1.0, specPow: 20, line: [1, 1, 1, 1.15], fillGain: 1.8 },
-  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.2], fillGain: 1.8 },
+  // the reference's hair: near-neutral dark letters (lit mean ≈ rgb 103 99 113) with violet-white
+  // strands on the outer edges and tips, not a navy cap; the tips carry the violet
+  hair: { part: 11, fill: [0.085, 0.08, 0.12], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true },
+  hairTip: { part: 11, fill: [0.2, 0.16, 0.4], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true },
+  // the reference's armour: dark steel plates whose bright white edges and glints make it the
+  // brightest thing on him (a light grey fill read as flat paper cut-outs up close)
+  armor: { part: 12, fill: [0.25, 0.25, 0.28], spec: 1.0, specPow: 20, line: [1, 1, 1, 1.3], fillGain: 1.2 },
+  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05 },
   bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6 },
   welt: { part: 15, fill: [0.3, 0.31, 0.36] },
   trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3 },
