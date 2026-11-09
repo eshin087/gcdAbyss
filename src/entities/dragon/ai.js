@@ -533,6 +533,7 @@ export class Brain {
 
   _combat(dt) {
     const d = this.d, g = d.game, s = d.sense, pose = d.pose;
+    pose.idle = 1; // no attack running: the rig's idle life (breathing wings, weight shifts) may play
     const playerDown = g.player?.alive === false || g.state === 'dead';
     if (playerDown) {
       // stop, turn to the fallen player, roar once

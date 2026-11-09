@@ -24,6 +24,40 @@ export function aimJoint(joint, dir, parentWorldQ, outWorld) {
   return outWorld.copy(parentWorldQ).multiply(joint.quaternion);
 }
 
+const _qd = new THREE.Quaternion();
+const _qp = new THREE.Quaternion();
+const _pz = new THREE.Vector3();
+/**
+ * aimJoint with twist continuity. The minimal rotation from +Z (aimJoint's convention: the roll the
+ * model's spikes were authored for) is singular when the bone points back along its parent's -Z (a
+ * folded or drooping wing's humerus, a finger lying back along the forearm, a foreleg reaching far
+ * behind): there its twist can spin ~180° in one frame, flipping every spike, claw and child joint.
+ * Near that cone the joint instead swings minimally from LAST frame's local rotation (parallel
+ * transport, always continuous) and eases back to the authored roll as the bone leaves it, so a
+ * still pose always settles on exactly the aimJoint roll. `snap` = take the authored roll at once.
+ */
+export function aimJointStable(joint, dir, parentWorldQ, outWorld, snap = false) {
+  _qi.copy(parentWorldQ).invert();
+  _v.copy(dir).applyQuaternion(_qi);
+  const l = _v.length();
+  if (l > 1e-6 && Number.isFinite(l)) {
+    _v.multiplyScalar(1 / l);
+    _qd.setFromUnitVectors(Z, _v);
+    // conditioning of the authored roll: 1 for bones within ~80° of +Z, 0 beyond ~140°
+    const t = Math.min(1, Math.max(0, (_v.z + 0.75) / 0.95));
+    const w = snap ? 1 : t * t * (3 - 2 * t);
+    if (w < 0.999) {
+      _pz.set(0, 0, 1).applyQuaternion(joint.quaternion);
+      if (_pz.dot(_v) > -0.9) {
+        _qp.setFromUnitVectors(_pz, _v).multiply(joint.quaternion);
+        joint.quaternion.copy(_qp).slerp(_qd, w);
+        if (!Number.isFinite(joint.quaternion.x + joint.quaternion.y + joint.quaternion.z + joint.quaternion.w)) joint.quaternion.copy(_qd);
+      } else joint.quaternion.copy(_qd); // a reversal in one frame (teleport): nothing to continue
+    } else joint.quaternion.copy(_qd);
+  }
+  return outWorld.copy(parentWorldQ).multiply(joint.quaternion);
+}
+
 /** Clamp unit vector `d` to within `maxAngle` of unit vector `ref` (in place). */
 export function constrainDir(d, ref, maxAngle) {
   const c = d.dot(ref);
@@ -51,8 +85,9 @@ export class Chain {
   /**
    * joints: Object3D[] (each child of the previous), len: segment length,
    * minY: number | number[] (per point, ground clearance), maxBend / baseBend in radians.
+   * groundGlide / stableTwist: see enforce() / apply() (the tail uses both; the neck keeps v0.4's)
    */
-  constructor(joints, len, { minY = 0.3, maxBend = 0.5, baseBend = 0.9 } = {}) {
+  constructor(joints, len, { minY = 0.3, maxBend = 0.5, baseBend = 0.9, groundGlide = false, stableTwist = false } = {}) {
     this.joints = joints;
     this.n = joints.length;
     this.len = len;
@@ -65,6 +100,10 @@ export class Chain {
     this.minY = Array.isArray(minY) ? minY : new Array(this.n + 1).fill(minY);
     this.maxBend = maxBend;
     this.baseBend = baseBend;
+    // ground contact keeps each segment's length and heading over the ground (see enforce); off = the
+    // v0.4 lift-and-restretch the neck's lying / stunned poses were tuned with
+    this.groundGlide = groundGlide;
+    this.stableTwist = stableTwist;
     this.baseAxis = new THREE.Vector3(0, 0, 1);
     this._q = new THREE.Quaternion();
     this._q2 = new THREE.Quaternion();
@@ -73,16 +112,23 @@ export class Chain {
   /**
    * Rest polyline from `origin`, angles in `frameQ`:
    *   yaw_i = yaw0 + yawStep*i + yawCurve*i*i + waveAmp*sin(wavePhase - i*0.5)*(i/n)
-   *   pitch_i = pitch0 + pitchStep*i + pitchCurve*i*i   (pitchCurve < 0 with pitchStep > 0 = S-curve)
+   *   pitch_i = pitch0 + pitchStep*i + pitchCurve*i*i - dipAmp*exp(-((i - dipAt) / dipWidth)^2)
+   *   (pitchCurve < 0 with pitchStep > 0 = S-curve; the dip bends a stretch of segments around dipAt
+   *   down and lets the ones after it level out again: a carried tail arching down to the ground)
    * yawCurve > 0 makes a lateral HOOK (straight at the base, curling ever tighter toward the tip);
    * a constant yawStep makes a circle.
    */
-  buildRest(origin, frameQ, { pitch0 = 0, pitchStep = 0, pitchCurve = 0, yaw0 = 0, yawStep = 0, yawCurve = 0, waveAmp = 0, wavePhase = 0 }) {
+  buildRest(origin, frameQ, { pitch0 = 0, pitchStep = 0, pitchCurve = 0, yaw0 = 0, yawStep = 0, yawCurve = 0, waveAmp = 0, wavePhase = 0, dipAmp = 0, dipAt = 0, dipWidth = 1 }) {
     const r = this.rest;
     r[0].copy(origin);
+    const dip = dipAmp !== 0 && dipWidth > 1e-3;
     for (let i = 0; i < this.n; i++) {
       const yaw = yaw0 + yawStep * i + yawCurve * i * i + waveAmp * Math.sin(wavePhase - i * 0.5) * (i / this.n);
-      const pitch = pitch0 + pitchStep * i + pitchCurve * i * i;
+      let pitch = pitch0 + pitchStep * i + pitchCurve * i * i;
+      if (dip) {
+        const u = (i - dipAt) / dipWidth;
+        pitch -= dipAmp * Math.exp(-u * u);
+      }
       frameDir(_d, yaw, pitch, frameQ);
       if (i === 0) this.baseAxis.copy(_d);
       r[i + 1].copy(r[i]).addScaledVector(_d, this.len);
@@ -159,12 +205,30 @@ export class Chain {
       p[i + 1].copy(p[i]).addScaledVector(_d, len);
       const minY = this.minY[i + 1];
       if (p[i + 1].y < minY) {
-        p[i + 1].y = minY;
-        _d.subVectors(p[i + 1], p[i]);
-        const l2 = _d.length();
-        if (l2 > 1e-6) {
-          _d.multiplyScalar(1 / l2);
-          p[i + 1].copy(p[i]).addScaledVector(_d, len);
+        // onto the ground, keeping the segment's length and its heading over the ground. (Lifting the
+        // end straight up and re-stretching the segment along the new direction pushed it back under
+        // the ground whenever the lift had shortened it: the next segment then had to point back up
+        // out of it, folding the chain ~130°, and unfolding flipped the rest of it 180° in a frame.)
+        const dy = minY - p[i].y;
+        let hx = p[i + 1].x - p[i].x, hz = p[i + 1].z - p[i].z;
+        let hl = Math.hypot(hx, hz);
+        if (hl < 1e-4 * len) {
+          hx = ref.x;
+          hz = ref.z;
+          hl = Math.hypot(hx, hz);
+        }
+        if (this.groundGlide && dy < len && hl > 1e-6) {
+          const h = Math.sqrt(len * len - dy * dy) / hl;
+          p[i + 1].set(p[i].x + hx * h, minY, p[i].z + hz * h);
+          _d.subVectors(p[i + 1], p[i]).multiplyScalar(1 / len);
+        } else {
+          p[i + 1].y = minY;
+          _d.subVectors(p[i + 1], p[i]);
+          const l2 = _d.length();
+          if (l2 > 1e-6) {
+            _d.multiplyScalar(1 / l2);
+            p[i + 1].copy(p[i]).addScaledVector(_d, len);
+          }
         }
       }
       this.dirs[i].copy(_d);
@@ -172,11 +236,18 @@ export class Chain {
     }
   }
 
-  /** Write joint rotations from `dirs`. parentQ = world quaternion of joints[0].parent. Returns last joint world quat. */
+  /**
+   * Write joint rotations from `dirs`. parentQ = world quaternion of joints[0].parent. Returns last joint
+   * world quat. stableTwist: aimJointStable instead of aimJoint. The bend limits keep every segment
+   * within ~35° of the one before, where the two are identical, but the ground clamp in enforce() can
+   * fold a segment back on itself (a tail slapped into the ground): there the minimal rotation flipped
+   * the roll of that joint and everything after it ~180° in one frame.
+   */
   apply(parentQ, out) {
     this._q.copy(parentQ);
     for (let i = 0; i < this.n; i++) {
-      aimJoint(this.joints[i], this.dirs[i], this._q, this._q2);
+      if (this.stableTwist) aimJointStable(this.joints[i], this.dirs[i], this._q, this._q2);
+      else aimJoint(this.joints[i], this.dirs[i], this._q, this._q2);
       this._q.copy(this._q2);
     }
     return out.copy(this._q);
