@@ -28,6 +28,11 @@ const BOUND = [
 ];
 const REACH_SOFT = 0.92; // a planted foot past this fraction of its leg's reach wants to step
 const MIN_DUR = 0.13; // fastest step (s): the spin's scramble
+// settling while standing (Gait.settle): a foot further than SETTLE_DIST (x scale) from its spot
+// steps there, SETTLE_DUR s per step, SETTLE_GAP s from one lift-off to the next
+const SETTLE_DIST = 0.24;
+const SETTLE_DUR = 0.42;
+const SETTLE_GAP = 0.75;
 
 function makeLimb(name, side, hind) {
   return {
@@ -67,6 +72,8 @@ export class Gait {
     this.turnRate = 0; // |root yaw rate| (rad/s, set by the rig): turning in place trots the feet round
     this.dYaw = 0; // this frame's root yaw change (rad, set by the rig) and the pivot (root position)
     this.pivot = new THREE.Vector3();
+    this.settle = 0; // 0..1 (set by the rig): standing still and idle, stray feet step back to their spots
+    this._settleT = 0;
   }
 
   /**
@@ -137,6 +144,7 @@ export class Gait {
   update(dt, speed) {
     const limbs = this.limbs;
     const sc = this.scale;
+    this._settleT = Math.max(0, this._settleT - dt);
     const threshold = (0.45 + Math.min(speed, 20) * 0.06) * sc * Math.max(0.2, this.stepScale);
     // turning in place (no real ground speed): quick diagonal pairs carry the feet round the root
     // (not while an attack re-stances the feet: those keep the measured quick 4-beat re-plant)
@@ -240,6 +248,24 @@ export class Gait {
         if (pick >= 0) {
           this._start(limbs[pick], dur, speed);
           this.seq = (WALK.indexOf(pick) + 1) % 4;
+        } else if (this.settle > 0.5 && nAir === 0 && this._settleT <= 0) {
+          // standing still: square the stance up, one unhurried step at a time, for the foot left
+          // furthest from its spot (a turn or a stop leaves the feet wherever the last steps put them;
+          // the idle stance moves the homes less than a stride)
+          let far = -1, farD = SETTLE_DIST * sc;
+          for (let i = 0; i < 4; i++) {
+            const l = limbs[i];
+            if (l.free || l.stepping || l.lock) continue;
+            const dd = this._disp(l);
+            if (dd > farD) {
+              far = i;
+              farD = dd;
+            }
+          }
+          if (far >= 0) {
+            this._start(limbs[far], SETTLE_DUR, speed, false);
+            this._settleT = SETTLE_GAP;
+          }
         }
       }
     } else {

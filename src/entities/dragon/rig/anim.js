@@ -250,7 +250,14 @@ export const REST_POSE = {
   neck: { pitch0: 2.05, pitchStep: -0.42, pitchCurve: -0.006 },
   lookDown: 0.32,
   headDip: 0.12,
-  stance: { frontOut: 0.15, frontFwd: 0.22, hindOut: 0.12, hindBack: -0.15 },
+  stance: {
+    frontOut: 0.15, frontFwd: 0.22, hindOut: 0.12, hindBack: -0.15,
+    // standing idle (not walking, turning or attacking): extra fore / aft per foot, the painting's
+    // stalking stance (its far forefoot reaches ahead, the near hind foot braces back), and the body
+    // sinks `crouch` between the spread legs
+    stalk: { frontL: 0.4, frontR: -0.12, hindL: 0.1, hindR: -0.3 },
+    crouch: 0.12,
+  },
   sweep: { bias: 0, look: 0.5, max: 0.5, arm: 0.4 },
   // the painting's tail: carried off the rump about level for a third of its length, then arching
   // down (steepest ~60° around segment 7) and levelling out to land almost tangent on the ground
@@ -299,6 +306,7 @@ export class Rig {
     this._rouseT = 4.5; // s of quiet until the first one
     this._rouseN = 0;
     this._br = 0; // breath (-1..1), shared with the neck / wings
+    this._stalk = 0; // 0..1 the idle stalking stance (REST_POSE.stance.stalk / crouch)
     this._lookT = V();
     const tailMin = [0, ...model.tailRadii.map((r) => (r * 0.8 + 0.05) * S)];
     this.tail = new Chain(model.tail, A.tailLen * S, { minY: tailMin, maxBend: 0.56, baseBend: 0.8, groundGlide: true, stableTwist: true });
@@ -528,6 +536,10 @@ export class Rig {
     // the wings rouse only while it stands and watches (not mid-stride or mid-turn)
     s.still = sm(s.still, clamp(2 - pose.speed, 0, 1) * (Math.abs(this.yawRate) < 0.4 ? 1 : 0), 3);
     this._updateRouse(dt, iw * s.rest * s.still);
+    // standing and watching it stalks (REST_POSE.stance.stalk): a diagonal pair of feet reaches and the
+    // body sinks a little between the spread legs (which also gives the reaching forefoot its reach)
+    this._stalk = s.still * iw * (1 - lying);
+    lower += REST_POSE.stance.crouch * this._stalk;
 
     const bob = -0.07 * hindLift + br * 0.03 - 0.025 * (0.5 + 0.5 * Math.sin(t * 0.53)) * iw;
     m.hips.position.set(0, A.hipY - lower + bob + s.alt / S, A.hipZ);
@@ -796,10 +808,14 @@ export class Rig {
     const home = (out, x, z) => out.set(P.x + x * hc + z * hs, 0, P.z - x * hs + z * hc);
     // the combat stance plants all four feet a little wider and longer than the anatomy's homes
     const st = REST_POSE.stance;
+    // standing and watching, it stalks: one diagonal pair reaches (left fore forward, right hind back)
+    // as in the painting; it squares up again to walk, turn or attack
+    const stalk = this._stalk;
     for (let k = 0; k < 2; k++) {
       const side = m.legs[k].side;
       const l = gait.limbs[k];
-      home(l.home, side * (lerp(A.footHome[0], 1.5, lying) + (s.stanceH + st.hindOut) * awake) * S, (lerp(A.footHome[2], -0.95, lying) + (s.strideH + st.hindBack) * awake) * S);
+      const stagger = (side > 0 ? st.stalk.hindL : st.stalk.hindR) * stalk;
+      home(l.home, side * (lerp(A.footHome[0], 1.5, lying) + (s.stanceH + st.hindOut) * awake) * S, (lerp(A.footHome[2], -0.95, lying) + (s.strideH + st.hindBack) * awake + stagger) * S);
       l.home.addScaledVector(pose.vel, lead);
       l.home.y = 0;
       // (off the ground as soon as the body has left it: a leap's take-off used to drag the planted
@@ -810,7 +826,8 @@ export class Rig {
     for (let k = 0; k < 2; k++) {
       const side = m.arms[k].side;
       const l = gait.limbs[2 + k];
-      home(l.home, side * (lerp(A.handHome[0], 1.35, lying) + (s.stanceF + st.frontOut) * awake) * S, (lerp(A.handHome[2], 3.15, lying) + (s.strideF + st.frontFwd) * awake) * S);
+      const stagger = (side > 0 ? st.stalk.frontL : st.stalk.frontR) * stalk;
+      home(l.home, side * (lerp(A.handHome[0], 1.35, lying) + (s.stanceF + st.frontOut) * awake) * S, (lerp(A.handHome[2], 3.15, lying) + (s.strideF + st.frontFwd) * awake + stagger) * S);
       l.home.addScaledVector(pose.vel, lead);
       l.home.y = 0;
       l.free = s.airborne > 0.3 || s.rear > 0.35 || s.pawW[k] > 0.35;
@@ -849,6 +866,7 @@ export class Rig {
       l.reach = Math.hypot(tx, tz) / maxH;
     }
     gait.stepScale = 1 - 0.65 * s.restep;
+    gait.settle = stalk * (1 - s.restep);
     gait.turnRate = Math.abs(this.yawRate) * awake;
     gait.dYaw = (this._dYaw || 0) * awake * (1 - s.airborne);
     gait.pivot.copy(this.d.position);
