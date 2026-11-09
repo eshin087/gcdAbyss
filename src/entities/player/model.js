@@ -49,10 +49,16 @@ export const DIM = {
   gripBack: 0.08, // grip runs from −gripBack …
   guard: 0.1, // … to the crossguard
   gem: 0.17, // the violet gem on the forte, inside its cage
-  forte: 0.35, // end of the dark gunmetal forte under the gem cage (glyph blade from here on)
-  steelTip: 1.17, // the visible steel point (1.36 m of steel, pommel tip at −0.19)
+  forte: 0.25, // end of the dark gunmetal forte under the gem cage (the cyan glyph blade from here on)
+  // the steel length the animator poses with (anim.js keeps this point on the grass and out of the
+  // legs; the integration test checks it): unchanged, so every attack's hit segment stays the same
+  steelTip: 1.17,
+  // the DRAWN point: 1.64 m of steel (pommel tip at −0.19). The owner's reference draws the blade
+  // from the gem to the point ≈ 70 % of his height. Visual only (the hit segment below is unchanged
+  // and the point stays inside it); the idle stance (anim.js IDLE_SW) rests this point on the grass
+  drawnTip: 1.45,
   bladeBase: 0.16, // hit segment along +Z (hilt side) …
-  bladeTip: 1.5, // … to here (+ REACH.tipExt): the cyan glow, not steel, covers the last 0.33 m
+  bladeTip: 1.5, // … to here (+ REACH.tipExt 0.4): gameplay reach, independent of the drawn steel
 };
 
 /** Idle-stance reference heights (m) of the joints the meshes hang on. */
@@ -299,8 +305,10 @@ function kiteGeometry(x, y, z, { zNeg = 1, yPos = 1, guv = 'xy' } = {}) {
  * half of the blade is exactly one glyph column (chevrons pointing to the tip), with cell seams
  * on the edges and the centre ridge (the material draws column seams only: seamAxis 'y').
  */
-function bladeGeometry(len, hw0, hw1, tipFrac, th, cellW) {
-  const g = new THREE.BoxGeometry(1, 1, 1, 2, 2, 18);
+function bladeGeometry(len, hw0, hw1, tipFrac, th, cellW, half = 0) {
+  // half −1 / +1: only that side of the centre ridge (the two halves get different ink-line sub-ids,
+  // so the art pass draws the reference's bright ridge line between them)
+  const g = half ? new THREE.BoxGeometry(0.5, 1, 1, 1, 2, 18).translate(half * 0.25, 0, 0) : new THREE.BoxGeometry(1, 1, 1, 2, 2, 18);
   const pos = g.attributes.position;
   const guv = new Float32Array(pos.count * 2);
   for (let i = 0; i < pos.count; i++) {
@@ -1379,21 +1387,26 @@ export function buildHero(U) {
   // rails; the glyph blade starts above it, and its last 0.15 m (the point) is the brightest steel.
   const sword = joint(body);
   {
-    const z0 = 0.125, L = DIM.steelTip - z0, hw0 = 0.0475, hw1 = 0.04, tipF = 0.14;
+    const tipZ = DIM.drawnTip;
+    const z0 = 0.125, L = tipZ - z0, hw0 = 0.0475, hw1 = 0.04, tipF = 0.14;
     const hwAt = (z) => hw0 + (hw1 - hw0) * Math.min(1, (z - z0) / (L * (1 - tipF)));
-    const zT = DIM.steelTip - L * tipF; // where the point's taper starts
-    mesh(sword, bladeGeometry(DIM.forte - z0 + 0.004, hw0, hwAt(DIM.forte), 0, 0.012, 0.045), M.armor, 0, 0, z0);
-    mesh(sword, bladeGeometry(zT - DIM.forte + 0.002, hwAt(DIM.forte), hw1, 0, 0.012, 0.045), M.blade, 0, 0, DIM.forte);
-    const tip = bladeGeometry(DIM.steelTip - zT, hw1, hw1, 0.999, 0.012, 0.045);
-    mesh(sword, tip, M.bladeTip, 0, 0, zT);
+    const zT = tipZ - L * tipF; // where the point's taper starts
+    for (const h of [-1, 1]) {
+      const k = h > 0 ? 1 : 0;
+      mesh(sword, sub(bladeGeometry(DIM.forte - z0 + 0.004, hw0, hwAt(DIM.forte), 0, 0.012, 0.045, h), k), M.armor, 0, 0, z0);
+      mesh(sword, sub(bladeGeometry(zT - DIM.forte + 0.002, hwAt(DIM.forte), hw1, 0, 0.012, 0.045, h), k), M.blade, 0, 0, DIM.forte);
+      mesh(sword, sub(bladeGeometry(tipZ - zT, hw1, hw1, 0.999, 0.012, 0.045, h), k), M.bladeTip, 0, 0, zT);
+    }
     // the reference's jagged edge: flat saw teeth along both edges, raking toward the point and
-    // growing toward it (the art pass outlines them in the blade's cyan)
+    // growing toward it, the biggest (lightning-like notches) on the last third (the art pass
+    // outlines them in the blade's cyan)
     const teeth = [];
     for (const s of [-1, 1]) {
-      for (let t = 0; t < 4; t++) {
-        const z = 0.5 + t * 0.165 + (s > 0 ? 0.07 : 0);
+      for (let t = 0; t < 6; t++) {
+        const z = 0.52 + t * 0.15 + (s > 0 ? 0.075 : 0);
         if (z > zT - 0.02) continue;
-        teeth.push(spike(0.03 + t * 0.006, 0.014, [s * (hwAt(z) - 0.006), 0, z], [s * 0.78, 0, 0.62], [0, 0, 1], 0.25, 4, 0.3));
+        const k = t / 5;
+        teeth.push(spike(0.026 + 0.03 * k * k, 0.013 + 0.004 * k, [s * (hwAt(z) - 0.006), 0, z], [s * 0.74, 0, 0.67], [0, 0, 1], 0.25, 4, 0.3));
       }
     }
     mesh(sword, mergeGeometries(teeth), M.blade);
@@ -1421,7 +1434,7 @@ export function buildHero(U) {
       ring(0.019, 0.019, 0.007, 8).rotateX(Math.PI / 2).translate(0, 0, -0.095),
       kiteGeometry(0.038, 0.016, 0.062, { guv: 'xz' }).translate(0, 0, DIM.gem),
     ];
-    for (const s of [-1, 1]) sv.push(place(limbGeometry({ length: 0.25, r0: 0.008, r1: 0.005, radial: 5, rings: 2, capSegs: 1 }), s * 0.054, 0, DIM.guard + 0.01, 0, s * -0.035, 0));
+    for (const s of [-1, 1]) sv.push(place(limbGeometry({ length: 0.2, r0: 0.008, r1: 0.005, radial: 5, rings: 2, capSegs: 1 }), s * 0.054, 0, DIM.guard + 0.01, 0, s * -0.045, 0));
     mesh(sword, mergeGeometries(sv), M.trim);
   }
   // the gem: two half-gems proud of both flats by 0.018 m (0.07 m long so it stays a cell) on the
