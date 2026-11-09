@@ -1229,7 +1229,7 @@ function healPose(p, A) {
   // reads from behind (the game camera) as well, not only the flask's glow at the mouth
   to3(p, P.lP, 0.95, 0.35, -0.15, drink);
   p[P.hdX] = lerp(p[P.hdX], -0.5, drink);
-  p[P.spX] = lerp(p[P.spX], -0.08, drink);
+  p[P.spX] = lerp(p[P.spX], -0.02, drink);
   p[P.hdY] = lerp(p[P.hdY], 0, raise);
   // the sword arm keeps what the legs are doing (the low ready guard standing, trailing walking):
   // swinging it forward-down for the drink only added two blade swings to a sip
