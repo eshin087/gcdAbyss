@@ -207,19 +207,16 @@ export const pixelArtCell = (s) => [4 * s, 6 * s];
  * along every panel edge and silhouette). Unlike the letters they fill the whole 4x6 cell, rows top →
  * bottom, 4 bits each (8 = left … 1 = right), so a run of them joins into one continuous stroke:
  * diagonals step 1 px across per 1.5 px down, the slope of a cell's diagonal. Order is fixed (the art
- * pass indexes it, the hero branch in pipeline.js): thin | - / \ (a 1 px core with a dimmer 1 px
- * edge, the reference's anti-aliased ink), then 2 px heavy | - / \ (the silhouette at the game
- * camera), then a dot for a one-cell sliver. Each entry: [core rows, soft-edge rows].
+ * pass indexes it, the hero branch in pipeline.js): | - / \ (a 1 px core with a dimmer 1 px edge,
+ * the reference's anti-aliased ink), then a dot for a one-cell sliver. Each entry: [core rows,
+ * soft-edge rows]. (No heavier strokes: at the game camera a 2 px outline turned the ~12-letter-wide
+ * figure into a wireframe.)
  */
 export const PIXEL_LINES = [
   [[4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2, 2]], // |
   [[0, 0, 15, 0, 0, 0], [0, 0, 0, 15, 0, 0]], // -
   [[1, 2, 2, 4, 4, 8], [0, 1, 4, 2, 8, 4]], // /
   [[8, 4, 4, 2, 2, 1], [4, 2, 2, 1, 1, 0]], // \
-  [[12, 12, 12, 12, 12, 12], []], // heavy |
-  [[0, 15, 15, 0, 0, 0], []], // heavy -
-  [[3, 3, 6, 6, 12, 12], []], // heavy /
-  [[12, 12, 6, 6, 3, 3], []], // heavy \
   [[0, 0, 4, 0, 0, 0], [0, 4, 10, 4, 0, 0]], // dot
 ];
 const LINE_SOFT = 0.4; // brightness of a line glyph's soft edge pixels

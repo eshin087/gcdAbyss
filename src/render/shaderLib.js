@@ -55,9 +55,8 @@ export function createSharedUniforms() {
     // gain (> 1 glows under bloom: the cyan blade edges, the violet gem)
     uHeroPartInk: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },
     // ... x = the brightness of each part's letter fill (the pale face reads lighter than the coat),
-    // y = 1: its silhouette takes the heavy 2 px stroke at the game camera (0: the hair stays fine),
-    // z = 1: its edges are bright DOTS (sparse letters), not strokes (the torn tails, the hair)
-    uHeroPartFill: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector3(1, 1, 0)) },
+    // y = 1: its edges are bright DOTS (sparse letters), not strokes (the torn tails, the hair)
+    uHeroPartFill: { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector2(1, 0)) },
   };
 }
 
