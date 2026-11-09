@@ -4,7 +4,7 @@ import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../..
 import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE } from './model.js';
-import { HeroAnimator } from './anim.js';
+import { HeroAnimator, ROLL_SLIDE } from './anim.js';
 import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
 
@@ -147,7 +147,7 @@ export class Player {
     };
 
     this.anim = new HeroAnimator(this.rig, this);
-    this.anim.onFootstep = (side) => this._footstep(side);
+    this.anim.onFootstep = (side, dust) => this._footstep(side, dust);
     this.fx = new PlayerFx(game, this.rig);
     // camera lean (model.js LEAN): visual only; hits and the dragon's aim use unleaned positions
     this.lean = installLean(this.object3d);
@@ -990,7 +990,7 @@ export class Player {
     if (!def) return false;
     const light = def.kind === 'light';
     this.atk = {
-      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, lunge: null, travel: 0,
+      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, lunge: null, travel: 0,
       pending: light && this.lmb.held, // still held: may become a charge (the swing waits at the coil)
       damage: fin(def.damage, 30), poise: fin(def.poise, 12), charge: 0,
     };
@@ -1055,7 +1055,7 @@ export class Player {
   _releaseThrust(holdT) {
     const st = thrustStats(holdT);
     this.atk = {
-      def: THRUST, t: 0, hit: false, prevT: 0, gust: false, impact: false, pending: false,
+      def: THRUST, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, pending: false,
       lunge: 0, travel: st.travel, damage: st.damage, poise: st.poise, charge: st.k,
     };
     this.releaseK = st.k;
@@ -1407,6 +1407,11 @@ export class Player {
       if (t >= W && prevT <= end + 0.04) {
         this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, d.kind, crit);
         if (!a.hit && prevT <= end) this._tryHit(a);
+        // the sweep's snap flares the coat tails (cosmetic: the animator's own noise, not the RNG)
+        if (d.kind === 'light' && !a.flared) {
+          a.flared = true;
+          this.anim.kickCoat(0.32, this.anim.noise);
+        }
       }
       if (d.kind === 'thrust') {
         if (!a.gust && t >= W) {
@@ -1438,6 +1443,7 @@ export class Player {
     const x = this._tip.x, z = this._tip.z;
     if (!Number.isFinite(x + z)) return;
     this.fx.slamShards(x, z, this.critTimer > 0);
+    this.anim.kickCoat(0.6, this.anim.noise); // the impact's blast throws the coat tails out
     g.world?.gust?.(x, z, 1.1, 4.5);
     g.shake?.(d.shake * 0.6);
     this._emit('player:slam', { x, z });
@@ -1486,12 +1492,15 @@ export class Player {
   }
 
   // ------------------------------------------------------------------ fx / visuals
-  _footstep(side) {
+  /** A foot touches down (the gait's planner, the thrust dash's steps): `dust` (0..1, optional)
+   *  kicks up a puff of its own size (the dash's bounding steps). */
+  _footstep(side, dust = 0) {
     const leg = side < 0 ? this.rig.legs.R : this.rig.legs.L;
     leg.foot.getWorldPosition(this._v);
     const sprint = this.state === 'sprint';
     this._emit('player:footstep', { x: this._v.x, z: this._v.z, sprint });
-    if (sprint) this.fx.dust(this._v.x, this._v.z, 2, 0.4);
+    if (dust > 0) this.fx.dust(this._v.x, this._v.z, Math.round(3 + 5 * dust), 0.5 + 0.6 * dust);
+    else if (sprint) this.fx.dust(this._v.x, this._v.z, 2, 0.4);
   }
 
   _updateFx(dt) {
@@ -1505,6 +1514,24 @@ export class Player {
       else this.healLight.set?.(p.x, 1.3, p.z);
     }
     const sw = this.sweep;
+    // the roll's sliding kneel (the root still carries 4-6 m/s through it): dust and torn grass
+    // off the shin and the planted foot, cold sparks off the point dragging behind
+    if (this.state === 'roll' && !this.rollBack && dt > 0) {
+      const t = this.stateT, S = ROLL_SLIDE;
+      const k = smoothstep(S[0] - 0.02, S[0] + 0.03, t) * (1 - smoothstep(S[1] - 0.05, S[1], t));
+      const gx = this.groundVel.x, gz = this.groundVel.z, sp = Math.hypot(gx, gz);
+      if (k > 0.01 && sp > 0.3) {
+        const dx = gx / sp, dz = gz / sp;
+        this.rig.legs.R.shin.getWorldPosition(this._v);
+        this.fx.skid(dt, 0, this._v.x, this._v.z, dx, dz, sp, k);
+        this.rig.legs.L.foot.getWorldPosition(this._v);
+        this.fx.skid(dt, 1, this._v.x, this._v.z, dx, dz, sp, 0.55 * k);
+        if (sw.valid) {
+          sw.point(1, this._v);
+          if (this._v.y < 0.14) this.fx.scrape(dt, this._v.x, this._v.y, this._v.z, dx, dz, sp * k);
+        }
+      }
+    }
     if (sw.valid) {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);

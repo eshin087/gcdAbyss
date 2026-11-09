@@ -32,6 +32,7 @@ export const P = {
 const N = 52;
 const ENTRY_EASE = 0.85; // an easeOut cross-fade (attack entries) arrives at this fraction of its time
 const TURN_LAG_MAX = 1.4; // rad: how far the drawn heading may trail the gameplay yaw in a fast turn
+const TURN_K = 650; // stiffness (1/s²) of the critically damped spring the drawn heading follows
 const ANGLES = [P.pitch, P.yaw, P.roll];
 const ANK = DIM.ankle;
 const LEG_IDX = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rK, P.rK + 1, P.rK + 2, P.lK, P.lK + 1, P.lK + 2, P.footFlat, P.rFy, P.lFy, P.rFf, P.lFf];
@@ -543,6 +544,189 @@ function thrustPose(p, A, t, W, Ac) {
   to3(p, P.rK, -0.2, -0.3, 1, e);
 }
 
+// ---------------------------------------------------------------- light 1: the windup loop
+// From the low ready guard (blade down-left across the legs) the cross-fade into light 1's coil
+// swept the steel ~220° round the FRONT at knee height in 5 frames: a flick that read as a second,
+// backward swing before the real one. Light 1 now cocks OVER THE RIGHT SHOULDER: the hand lifts
+// the blade up in front of the right chest, the point swings up and back over the shoulder and
+// drops into the coil at the right hip — a vertical loop that reads as the windup, in a different
+// plane from the strike. Hand + point follow one Catmull-Rom path (shoulder-relative, body axes)
+// from wherever the blade was to the coil, arriving at rest by LOOP.T; from then on the coil code
+// runs untouched, so the blade is bit-identical from well before the first active frame (the frame
+// before it is the hit sweep's start). Entries already behind-right (out of a run) take the direct
+// way (L → 0: the via points collapse onto the straight path).
+const LOOP = {
+  T: 0.1, // s: arrival at the coil (light windup 0.14: two 30 fps frames of margin before it)
+  k: [0, 0.38, 0.68, 1], // spline knots
+  h1: [-0.05, -0.3, 0.17], d1: [-0.33, 0.82, 0.47], // hand up before the right ribs, point up (right, front)
+  h2: [-0.15, -0.2, -0.08], d2: [-0.66, 0.4, -0.64], // hand at the shoulder, point up-back over it
+  len: 1.17, // steel length used to place the point
+};
+const LP_H = [0, 0, 0, 0].map(() => new Float32Array(3)); // hand keys
+const LP_T = [0, 0, 0, 0].map(() => new Float32Array(3)); // point keys
+const LP_OUT = new Float32Array(6);
+const LP_N = 24;
+const LP_S = new Float32Array(LP_N + 1); // cumulative point-path length at u = i / LP_N
+// the twist into the coil waits for the blade to go up (the arm lifts, then the body winds as the
+// steel drops behind the shoulder): the loop times these channels itself, like the hand / blade
+const LOOP_TWIST = [P.pelvY, P.spY, P.hdY, P.spZ, P.pelvZ];
+const LOOP_CH = [P.rH, P.rH + 1, P.rH + 2, P.swD, P.swD + 1, P.swD + 2, ...LOOP_TWIST];
+/** Catmull-Rom (non-uniform keys `ks`, zero end tangents) through key arrays K at u ∈ [0, 1] → o[off..]. */
+function crPath(K, ks, u, o, off) {
+  let j = 0;
+  while (j < 2 && u > ks[j + 1]) j++;
+  const t0 = ks[j], t1 = ks[j + 1], h = Math.max(1e-6, t1 - t0);
+  const s = clamp((u - t0) / h, 0, 1), s2 = s * s, s3 = s2 * s;
+  const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+  for (let c = 0; c < 3; c++) {
+    const m0 = j === 0 ? 0 : (K[j + 1][c] - K[j - 1][c]) / (ks[j + 1] - ks[j - 1]);
+    const m1 = j === 2 ? 0 : (K[j + 2][c] - K[j][c]) / (ks[j + 2] - ks[j]);
+    o[off + c] = h00 * K[j][c] + h10 * h * m0 + h01 * K[j + 1][c] + h11 * h * m1;
+  }
+}
+/** Path keys 0 (the entry pose F) and 3 (the clip's own pose p) of the hand / point splines. */
+function pathEnds(F, p, Ln) {
+  const dl0 = Math.hypot(F[P.swD], F[P.swD + 1], F[P.swD + 2]) || 1;
+  const dl3 = Math.hypot(p[P.swD], p[P.swD + 1], p[P.swD + 2]) || 1;
+  for (let c = 0; c < 3; c++) {
+    LP_H[0][c] = F[P.rH + c];
+    LP_T[0][c] = F[P.rH + c] + (F[P.swD + c] / dl0) * Ln;
+    LP_H[3][c] = p[P.rH + c];
+    LP_T[3][c] = p[P.rH + c] + (p[P.swD + c] / dl3) * Ln;
+  }
+}
+/** Hand + blade along the key splines (LP_H / LP_T, knots ks) → p's rH / swD. `prof` = how far
+ *  along: with `arc` the fraction of the REAL point's path length (hand + steel along the hand →
+ *  spline direction: the spline's own point cuts in near the hand, where the blade then swung half
+ *  a loop in one frame), else the spline parameter itself (the knots time the segments). */
+function bladePath(p, ks, prof, Ln, arc) {
+  let u = prof;
+  if (arc) {
+    let px = LP_T[0][0], py = LP_T[0][1], pz = LP_T[0][2];
+    LP_S[0] = 0;
+    for (let i = 1; i <= LP_N; i++) {
+      crPath(LP_H, ks, i / LP_N, LP_OUT, 0);
+      crPath(LP_T, ks, i / LP_N, LP_OUT, 3);
+      const dx = LP_OUT[3] - LP_OUT[0], dy = LP_OUT[4] - LP_OUT[1], dz = LP_OUT[5] - LP_OUT[2];
+      const k = Ln / (Math.hypot(dx, dy, dz) || 1);
+      const qx = LP_OUT[0] + dx * k, qy = LP_OUT[1] + dy * k, qz = LP_OUT[2] + dz * k;
+      LP_S[i] = LP_S[i - 1] + Math.hypot(qx - px, qy - py, qz - pz);
+      px = qx;
+      py = qy;
+      pz = qz;
+    }
+    const want = prof * LP_S[LP_N];
+    let i = 1;
+    while (i < LP_N && LP_S[i] < want) i++;
+    const seg = LP_S[i] - LP_S[i - 1];
+    u = (i - 1 + (seg > 1e-6 ? clamp((want - LP_S[i - 1]) / seg, 0, 1) : 1)) / LP_N;
+  }
+  crPath(LP_H, ks, u, LP_OUT, 0);
+  crPath(LP_T, ks, u, LP_OUT, 3);
+  v3(p, P.rH, LP_OUT[0], LP_OUT[1], LP_OUT[2]);
+  setLen(p, P.swD, LP_OUT[3] - LP_OUT[0], LP_OUT[4] - LP_OUT[1], LP_OUT[5] - LP_OUT[2], 1);
+}
+/** Light 1's windup loop (see LOOP): rewrites the target's hand / blade / twist channels for
+ *  t < LOOP.T and hands them to update() (A.pathCh) so the clip's cross-fade leaves them alone. */
+function loopWindup(p, A, t) {
+  if (!(t < LOOP.T)) return;
+  const F = A.from;
+  const az = Math.atan2(F[P.swD], F[P.swD + 2]);
+  // the loop where the straight way from the entry blade to the coil would cross the legs (entries
+  // in front or to the left); entries behind-right (a run's trailing blade) go straight there
+  const L = smoothstep(-0.8, -0.35, az) * (1 - smoothstep(1.95, 2.35, az));
+  const Ln = LOOP.len;
+  pathEnds(F, p, Ln);
+  for (let k = 1; k <= 2; k++) {
+    const f = LOOP.k[k], h = k === 1 ? LOOP.h1 : LOOP.h2, d = k === 1 ? LOOP.d1 : LOOP.d2;
+    for (let c = 0; c < 3; c++) {
+      const hs = lerp(LP_H[0][c], LP_H[3][c], f), ts = lerp(LP_T[0][c], LP_T[3][c], f);
+      LP_H[k][c] = lerp(hs, h[c], L);
+      LP_T[k][c] = lerp(ts, h[c] + d[c] * Ln, L);
+    }
+  }
+  // an eased, even pace along the real point's path: out of the guard, over the shoulder, settling
+  // into the coil
+  bladePath(p, LOOP.k, Math.pow(smoothstep(0, 1, t / LOOP.T), 0.8), Ln, true);
+  const wT = smoothstep(0.25, 1, t / LOOP.T);
+  for (const c of LOOP_TWIST) p[c] = F[c] + (p[c] - F[c]) * wT;
+  A.pathCh = LOOP_CH;
+}
+
+// ---------------------------------------------------------------- the slam's windup
+// The combo finisher's windup was the clip's long cross-fade (0.34 s) from light 2's finish onto
+// a raise straight up the middle: from behind (the game camera) the blade vanished behind the
+// head for most of it, then popped out hanging down the back. It now has its own anticipation:
+// GATHER (the body dips and coils right, both hands draw the blade down-back past the right hip:
+// a spring loading), RAISE (the body rises onto it, the blade sweeps up the RIGHT side past the
+// head, where the camera sees it), then over the top into the apex (the blade hanging down the
+// back, torso arched). Arrives on the slam's own pose by SLAM_WU.T, so the apex and everything
+// after it are untouched (blade bit-identical); the step in still comes from lungeFeet.
+const SLAM_WU = {
+  T: 0.36, // s (windup 0.4): from here the slam pose runs as before
+  k: [0, 0.32, 0.7, 1], // knots: gather 0.115 s, raise 0.25 s, apex
+  h1: [-0.19, -0.36, 0.02], d1: [-0.52, -0.42, -0.74], // gather: hands at the right hip, point down-back-right (clear of the right shin)
+  h2: [-0.1, 0.12, 0.1], d2: [-0.38, 0.92, -0.08], // raise: hands by the right temple, blade up the right side
+  // body keys at the gather / raise: [bodyY, spX, spY, pelvY, hdX, hdY, spZ]
+  b1: [-0.2, 0.32, -0.34, -0.2, 0.12, 0.38, 0.06],
+  b2: [-0.05, -0.08, -0.12, -0.1, -0.22, 0.14, 0.04],
+};
+const SLAM_BODY = [P.bodyY, P.spX, P.spY, P.pelvY, P.hdX, P.hdY, P.spZ];
+const SLAM_CH = [P.rH, P.rH + 1, P.rH + 2, P.swD, P.swD + 1, P.swD + 2, P.twoHand, ...SLAM_BODY];
+const SB_K = [0, 0, 0, 0].map(() => new Float32Array(1));
+function slamWindup(p, A, t) {
+  if (!(t < SLAM_WU.T)) return;
+  const F = A.from, S = SLAM_WU, Ln = LOOP.len;
+  pathEnds(F, p, Ln);
+  for (let c = 0; c < 3; c++) {
+    LP_H[1][c] = S.h1[c];
+    LP_T[1][c] = S.h1[c] + S.d1[c] * Ln;
+    LP_H[2][c] = S.h2[c];
+    LP_T[2][c] = S.h2[c] + S.d2[c] * Ln;
+  }
+  const u = t / S.T;
+  bladePath(p, S.k, u, Ln, false);
+  // the body follows the same knots (a scalar Catmull-Rom per channel)
+  for (let j = 0; j < SLAM_BODY.length; j++) {
+    const c = SLAM_BODY[j];
+    SB_K[0][0] = F[c];
+    SB_K[1][0] = S.b1[j];
+    SB_K[2][0] = S.b2[j];
+    SB_K[3][0] = p[c];
+    crScalar(SB_K, S.k, u, p, c);
+  }
+  // the off hand joins the grip as the blade is drawn back
+  p[P.twoHand] = lerp(F[P.twoHand], 1, smoothstep(0, 0.28, u));
+  A.pathCh = SLAM_CH;
+}
+// The light sweeps' finish: after the frames the hit test still reads (the one after the active
+// window), the follow-through snaps up into the rising finish within `rise` s and holds it until
+// `home` of the recovery, then goes home quicker (pose-to-pose timing instead of one long ease).
+const FINISH = { after: 0.035, rise: 0.04, home: 0.55 };
+/** Light 1's body around the blade (none of it moves the blade): the free hand reaches for the
+ *  target as the steel drops into the coil (the line of the attack), swings back hard against the
+ *  sweep (counter-rotation) and stays out behind for balance through the finish; the rear heel
+ *  peels as the hips drive round (the toe pivots). */
+function lightOneBody(p, A, t, W, Ac) {
+  const reach = smoothstep(0.03, W - 0.02, t) * (1 - smoothstep(W, W + Ac * 0.85, t));
+  const fling = smoothstep(W + Ac * 0.25, W + Ac + 0.03, t);
+  to3(p, P.lH, 0.05, -0.15, 0.42, reach);
+  to3(p, P.lP, 0.75, -0.35, -0.3, reach);
+  to3(p, P.lH, 0.3, -0.3, -0.22, fling);
+  to3(p, P.lP, 0.9, -0.2, 0.25, fling);
+  p[P.rFf] = lerp(p[P.rFf], 0.3, smoothstep(W - 0.02, W + Ac * 0.6, t));
+}
+/** crPath for one channel: keys K[i][0] → o[off]. */
+function crScalar(K, ks, u, o, off) {
+  let j = 0;
+  while (j < 2 && u > ks[j + 1]) j++;
+  const t0 = ks[j], t1 = ks[j + 1], h = Math.max(1e-6, t1 - t0);
+  const s = clamp((u - t0) / h, 0, 1), s2 = s * s, s3 = s2 * s;
+  const m0 = j === 0 ? 0 : (K[j + 1][0] - K[j - 1][0]) / (ks[j + 1] - ks[j - 1]);
+  const m1 = j === 2 ? 0 : (K[j + 2][0] - K[j][0]) / (ks[j + 2] - ks[j]);
+  o[off] = (2 * s3 - 3 * s2 + 1) * K[j][0] + (s3 - 2 * s2 + s) * h * m0 + (-2 * s3 + 3 * s2) * K[j + 1][0] + (s3 - s2) * h * m1;
+}
+
 /** Light sweeps, the slam and the thrust. Windup coils (the cross-fade carries the body into the
  *  coil; the slam raises the blade up past the head through its windup), the active frames sweep
  *  the arc a0 → a1, recovery follows through (the light sweeps RISE to elev2) then eases back to
@@ -585,7 +769,11 @@ function attackPose(p, A) {
       u = e;
       el = lerp(e0, e1, u);
     } else {
-      const f = easeOutCubic(clamp((t - W - Ac) / (R * 0.45), 0, 1));
+      let f = easeOutCubic(clamp((t - W - Ac) / (R * 0.45), 0, 1));
+      // the sweeps snap up into their rising finish and HOLD it (a 4-frame pose hold, then a
+      // quicker way home): the first recovery frames still follow the old ease, because the frame
+      // just after the active window is still hit-tested (the sweep runs from the last active one)
+      if (!slam) f += (1 - f) * smoothstep(W + Ac + FINISH.after, W + Ac + FINISH.after + FINISH.rise, t);
       ang = lerp(k.a1, k.a2, f);
       lunge = 1;
       u = 1;
@@ -593,19 +781,31 @@ function attackPose(p, A) {
     }
     if (slam) slamPose(p, A, ang, lunge);
     else slashH(p, A, ang, el, lunge);
+    if (d.combo === 1 && !slam && t < W) loopWindup(p, A, t);
+    else if (slam && t < W) slamWindup(p, A, t);
+    if (d.combo === 1 && !slam) lightOneBody(p, A, t, W, Ac);
+    if (slam && t > W + Ac + FINISH.after) {
+      // the blow's weight settles: the body sinks a little further over the planted blade and the
+      // head bows, then the old follow-through hold and rise take over (after the hit-tested frames)
+      const s = smoothstep(W + Ac + FINISH.after, W + Ac + 0.09, t) * (1 - smoothstep(W + Ac + 0.16, W + Ac + 0.3, t));
+      p[P.bodyY] -= 0.05 * s;
+      p[P.spX] += 0.06 * s;
+      p[P.hdX] += 0.18 * s;
+    }
   }
   // footwork: the lunge is a real step (feet never skate with the root)
-  if (k.kind === 'thrust') lungeFeet(p, A, W - 0.02, W + 0.08, 0.5, false); // the dash skids on
+  if (k.kind === 'thrust') dashFeet(p, A, W);
   else if (k.kind === 'slam') lungeFeet(p, A, W - 0.16, W + Ac * 0.5, 0.25, true);
   else lungeFeet(p, A, 0.03, W + Ac * 0.45, 0.22, true);
   const rec = (t - W - Ac) / R;
-  if (rec > 0.45) {
+  const home = k.kind === 'h' ? FINISH.home : 0.45; // the sweeps hold their finish a beat longer
+  if (rec > home) {
     // back toward the ready stance: the rear foot stays planted, the front foot draws back home in
     // a recovery step (the foot planner settles the rest), and the sword hand comes round in FRONT
     // of the chest (a straight blend of the shoulder offsets ran it through the torso)
     for (let j = 0; j < FOOT_CH.length; j++) FOOT_KEEP[j] = p[FOOT_CH[j]];
     guard(SCRATCH, A);
-    const b = smoothstep(0.45, 1, rec);
+    const b = smoothstep(home, 1, rec);
     blend(p, p, SCRATCH, b);
     for (let j = 0; j < FOOT_CH.length; j++) p[FOOT_CH[j]] = FOOT_KEEP[j];
     p[P.rH + 2] += 0.24 * Math.sin(Math.PI * b);
@@ -652,11 +852,105 @@ function lungeFeet(p, A, t0, t1, drag, plant) {
   p[P.lF + 2] = fz;
   p[P.lFy] = lerp(E[7], p[P.lFy], e);
 }
+/** The thrust's dash (2.2-3.6 m of root travel in ~0.25 s) as TWO bounding steps instead of a
+ *  front foot skidding the whole way: the rear (right) foot pushes off and swings through to land
+ *  under the body mid-dash; the front (left) foot leaves the grass just before it lands (a short
+ *  flight) and reaches into the lunge, landing as the dash dies out. Each foot is held on its world
+ *  spot from touchdown; the rear one, left behind by the rest of the dash, stretches out and drags
+ *  its toe once the leg is straight. Landing times follow the charge (the dash is longer, so the
+ *  rear foot lands later to leave ~1 m of travel after it). Touchdowns are footsteps (+ dust). */
+const DASH = {
+  rLand: [0.175, 0.215], // s: rear foot touchdown (no charge → full charge)
+  lLift: 0.06, // s before that the front foot leaves the grass
+  lLand: 0.275, // s: front foot touchdown (the dash is ~93 % done)
+  rSpot: [-0.16, 0.2], lSpot: [0.15, 0.58], // touchdown spots (model x, z)
+  rReach: -0.5, // model z: the stretched rear leg drags its toe from here on
+};
+function dashFeet(p, A, W) {
+  const t = A.t, E = A.entry, tr = A.trav;
+  const k = clamp(A.releaseK, 0, 1);
+  const tR1 = lerp(DASH.rLand[0], DASH.rLand[1], k), tL0 = tR1 - DASH.lLift, tL1 = DASH.lLand;
+  const m0 = A.mark(0, W), m1 = A.mark(1, tL0), m2 = A.mark(2, tR1), m3 = A.mark(3, tL1);
+  // rear (right) foot
+  let x, y, z, fl;
+  if (t < W) {
+    x = E[0] - tr.x;
+    y = Math.max(ANK, E[1]);
+    z = E[2] - tr.z;
+    fl = 1;
+  } else if (t < tR1) {
+    const u = (t - W) / (tR1 - W), e = u * u * (3 - 2 * u);
+    x = lerp(E[0] - m0.x, DASH.rSpot[0], e);
+    z = lerp(E[2] - m0.z, DASH.rSpot[1], e);
+    y = ANK + 0.22 * Math.sin(Math.PI * Math.pow(u, 0.75)); // the knee drives up and through
+    fl = lerp(0.2, 0.85, smoothstep(0.55, 1, u)); // toe pushes off, the sole comes level to land
+  } else {
+    x = DASH.rSpot[0] - (tr.x - m2.x);
+    z = DASH.rSpot[1] - (tr.z - m2.z);
+    y = ANK;
+    fl = 1;
+    if (z < DASH.rReach) {
+      // stretched: the toe drags behind the lunge (the ankle rises as the straight leg tilts)
+      y += 0.35 * (DASH.rReach - z);
+      z = DASH.rReach - 0.4 * (DASH.rReach - z);
+      fl = 0.25;
+    }
+  }
+  p[P.rF] = x;
+  p[P.rF + 1] = y;
+  p[P.rF + 2] = z;
+  p[P.rFf] = fl;
+  p[P.rFy] = lerp(E[6], 0, smoothstep(W, W + 0.06, t));
+  // front (left) foot
+  if (t < tL0) {
+    x = E[3] - tr.x;
+    y = Math.max(ANK, E[4]);
+    z = E[5] - tr.z;
+    fl = 1 - 0.6 * smoothstep(tL0 - 0.05, tL0, t); // heel peels as the push-off comes
+  } else if (t < tL1) {
+    const u = (t - tL0) / (tL1 - tL0), e = u * u * (3 - 2 * u);
+    x = lerp(E[3] - m1.x, DASH.lSpot[0], e);
+    z = lerp(E[5] - m1.z, DASH.lSpot[1], e);
+    y = ANK + 0.16 * Math.sin(Math.PI * u);
+    fl = lerp(0.4, 0.9, smoothstep(0.5, 1, u));
+  } else {
+    x = DASH.lSpot[0] - (tr.x - m3.x);
+    z = DASH.lSpot[1] - (tr.z - m3.z);
+    y = ANK;
+    fl = 1;
+  }
+  p[P.lF] = x;
+  p[P.lF + 1] = y;
+  p[P.lF + 2] = z;
+  p[P.lFf] = fl;
+  p[P.lFy] = lerp(E[7], 0, smoothstep(tL0, tL0 + 0.06, t));
+  // touchdowns: footsteps with a puff of dust (the planner's footstep hook)
+  const st = A.dashStep;
+  if (t >= tR1 && !(st & 1)) {
+    A.dashStep = st | 1;
+    if (A.onFootstep) A.onFootstep(-1, 0.6);
+  }
+  if (t >= tL1 && !(A.dashStep & 2)) {
+    A.dashStep |= 2;
+    if (A.onFootstep) A.onFootstep(1, 0.9);
+  }
+}
+
 /** Charge: sink into the low coiled stance, blade drawn back and level; deepens with the charge,
  *  trembles when full. The legs can still walk (slowly). */
 function chargePose(p, A) {
   const k = clamp(A.chargeK, 0, 1);
   chargeStance(p, A, k, smoothstep(0, 0.25, A.t));
+  // the spring winds tighter as the charge builds: lower, more twisted away, leaning in, the eyes
+  // held on the target (chargeStance itself is also the thrust's base pose: left untouched). The
+  // coat and hair lift in the charge's updraft (A.updraft, the cloth / hair sims).
+  const s = smoothstep(0, 0.25, A.t) * k;
+  p[P.bodyY] -= 0.045 * s;
+  p[P.spX] += 0.07 * s;
+  p[P.spY] -= 0.12 * s;
+  p[P.pelvY] -= 0.05 * s;
+  p[P.hdY] += 0.14 * s;
+  p[P.hdX] -= 0.06 * s;
   if (k >= 0.999) {
     const q = Math.sin(A.time * 47) * 0.012;
     p[P.bodyX] += q;
@@ -684,8 +978,13 @@ function blockPose(p, A) {
   v3(p, P.swF, -0.1, 1, 0.5);
   v3(p, P.lH, 0.05, -0.1, 0.3);
   v3(p, P.lP, 0.7, -0.5, -0.4);
-  v3(p, P.rF, -0.19, ANK, -0.18);
-  v3(p, P.lF, 0.15, ANK, 0.2);
+  // a tap of the guard (a parry attempt) keeps the feet where they are; held, the stance settles
+  // into the block's after ~0.2 s (each tap used to cost two settle steps in and two out again)
+  const E = A.entry, fw = smoothstep(0.16, 0.4, A.t);
+  v3(p, P.rF, lerp(E[0], -0.19, fw), ANK, lerp(E[2], -0.18, fw));
+  v3(p, P.lF, lerp(E[3], 0.15, fw), ANK, lerp(E[5], 0.2, fw));
+  p[P.rFy] = lerp(E[6], p[P.rFy], fw);
+  p[P.lFy] = lerp(E[7], p[P.lFy], fw);
   p[P.footFlat] = 0.92;
   const r = A.recoil;
   if (r > 0.001) {
@@ -766,25 +1065,34 @@ function guardBreakPose(p, A) {
 // Dodge keys (§4.5, the sheet's 0.55 s frames mapped onto the 0.6 s roll): 01 crouch 0.0,
 // 02 launch 0.09, 03 tuck 0.2, 04 roll 0.32, 05 kneel 0.44, 06 recover 0.6. Hands / sword in body
 // axes; feet in model space (the tuck uses body points instead).
+// The kneel is a SLIDE: the root still carries 4-6 m/s out of the roll (gameplay), so the kneel
+// travels ~1 m. It is posed as an intended sliding kneel (0.42-0.54): the right shin flat on the
+// grass, the left foot planted ahead with the free hand braced on that knee, the torso upright
+// against the momentum, the blade trailing back-down on the right with its point dragging in the
+// grass; player.js kicks dust off the knee and the foot and sparks off the dragging point. The
+// recover (06) rises into the sheet's low guard: the blade still trailing back-down (the run's
+// own carry, so rolling out into a run doesn't swing it) and the free fist up.
 const ROLL = {
-  y: [0, -0.24, 0.05, -0.27, 0.09, -0.16, 0.2, -0.36, 0.32, -0.5, 0.44, -0.4, 0.6, -0.15],
-  sp: [0, 0.55, 0.09, 0.42, 0.2, 0.95, 0.33, 0.95, 0.44, 0.3, 0.6, 0.42],
-  hd: [0, 0.05, 0.09, -0.1, 0.2, 0.75, 0.33, 0.75, 0.44, 0.0, 0.6, -0.25],
-  rH: [0, -0.04, -0.42, -0.1, 0.09, -0.1, -0.36, -0.14, 0.2, -0.08, -0.38, 0.06, 0.33, -0.08, -0.38, 0.06, 0.44, 0.03, -0.42, 0.2, 0.6, -0.02, -0.46, 0.08],
-  lH: [0, 0.0, -0.42, 0.35, 0.09, 0.0, -0.3, 0.45, 0.2, 0.06, -0.3, 0.2, 0.33, 0.06, -0.3, 0.2, 0.44, 0.1, -0.4, 0.25, 0.6, 0.06, -0.3, 0.3],
+  y: [0, -0.24, 0.05, -0.27, 0.09, -0.16, 0.2, -0.36, 0.32, -0.5, 0.42, -0.43, 0.54, -0.41, 0.6, -0.2],
+  sp: [0, 0.55, 0.09, 0.42, 0.2, 0.95, 0.33, 0.95, 0.42, 0.2, 0.54, 0.14, 0.6, 0.34],
+  hd: [0, 0.05, 0.09, -0.1, 0.2, 0.75, 0.33, 0.75, 0.42, 0.08, 0.54, 0.1, 0.6, -0.12],
+  rH: [0, -0.04, -0.42, -0.1, 0.09, -0.1, -0.36, -0.14, 0.2, -0.08, -0.38, 0.06, 0.33, -0.08, -0.38, 0.06, 0.42, -0.13, -0.42, -0.04, 0.54, -0.13, -0.43, -0.06, 0.6, -0.04, -0.45, -0.12],
+  lH: [0, 0.0, -0.42, 0.35, 0.09, 0.0, -0.3, 0.45, 0.2, 0.06, -0.3, 0.2, 0.33, 0.06, -0.3, 0.2, 0.42, 0.0, -0.48, 0.34, 0.54, 0.0, -0.48, 0.36, 0.6, -0.05, -0.14, 0.36],
   // the blade in BODY axes, so it turns over with him: trailing back-down at the hip → swung out
   // to his right side as he launches → held out there, flat (an axle the ball rolls round: the
-  // point circles beside him instead of flipping through the ground) → swept forward-down for the
-  // kneel, the point on the grass ahead → easing toward the ready stance (dirLerp: round the
-  // outside, never through the legs)
-  sw: [0, -0.2, -0.4, -0.89, 0.09, -0.72, -0.28, -0.63, 0.2, -0.86, -0.14, -0.49, 0.32, -0.86, -0.14, -0.49, 0.44, 0.12, -0.55, 0.83, 0.6, 0.42, -0.66, 0.62],
+  // point circles beside him instead of flipping through the ground) → trailing back-down for the
+  // slide, the point dragging in the grass → the low guard's carry (round the outside, never
+  // through the legs)
+  sw: [0, -0.2, -0.4, -0.89, 0.09, -0.72, -0.28, -0.63, 0.2, -0.86, -0.14, -0.49, 0.32, -0.86, -0.14, -0.49, 0.42, -0.42, -0.48, -0.77, 0.54, -0.36, -0.52, -0.77, 0.6, -0.2, -0.55, -0.8],
   // body pitch (rad, piecewise linear so the turn never stalls): crouch, the 65° launch, the
   // 110° ball, 220° over the shoulder (blade flat along the ground behind), upright at the kneel
   pitch: [0, 0, 0.09, 0.45, 0.2, 1.9, 0.32, 3.85, 0.44, TAU, 0.6, TAU],
-  rF: [0, -0.14, ANK + 0.03, -0.32, 0.09, -0.12, 0.3, -0.62, 0.36, -0.13, ANK + 0.05, -0.36, 0.44, -0.13, ANK + 0.02, -0.4, 0.6, -0.16, ANK, -0.38],
-  lF: [0, 0.12, ANK, 0.3, 0.36, 0.13, ANK + 0.05, 0.32, 0.44, 0.13, ANK, 0.35, 0.6, 0.14, ANK, 0.32],
-  rK: [0, -0.3, 0, 1, 0.36, -0.2, 0.3, 1, 0.44, -0.1, -0.4, 1, 0.6, -0.35, 0, 1],
+  rF: [0, -0.14, ANK + 0.03, -0.32, 0.09, -0.12, 0.3, -0.62, 0.36, -0.13, ANK + 0.05, -0.36, 0.44, -0.14, ANK + 0.01, -0.44, 0.54, -0.14, ANK, -0.46, 0.6, -0.16, ANK, -0.38],
+  lF: [0, 0.12, ANK, 0.3, 0.36, 0.13, ANK + 0.05, 0.32, 0.44, 0.15, ANK, 0.38, 0.6, 0.14, ANK, 0.32],
+  rK: [0, -0.3, 0, 1, 0.36, -0.2, 0.3, 1, 0.44, -0.1, -0.5, 1, 0.54, -0.1, -0.5, 1, 0.6, -0.35, 0, 1],
 };
+/** The slide window of the forward roll (s): player.js kicks skid dust / point sparks in it. */
+export const ROLL_SLIDE = [0.42, 0.58];
 /** Direction keys k = [t0, x, y, z, ...] → p[i..i+2], each span eased and blended by dirLerp. */
 function kdir(p, i, t, k) {
   const n = k.length / 4;
@@ -917,8 +1225,11 @@ function healPose(p, A) {
   to3(p, P.lH, -0.15, 0.08, 0.28, raise);
   to3(p, P.lH, -0.18, 0.15, 0.19, drink);
   to3(p, P.lP, 0.7, -0.5, -0.3, raise);
-  p[P.hdX] = lerp(p[P.hdX], -0.38, drink);
-  p[P.spX] = lerp(p[P.spX], 0.0, drink);
+  // the swig: the elbow lifts out to the side and the head and shoulders tip back, so the drink
+  // reads from behind (the game camera) as well, not only the flask's glow at the mouth
+  to3(p, P.lP, 0.95, 0.35, -0.15, drink);
+  p[P.hdX] = lerp(p[P.hdX], -0.5, drink);
+  p[P.spX] = lerp(p[P.spX], -0.02, drink);
   p[P.hdY] = lerp(p[P.hdY], 0, raise);
   // the sword arm keeps what the legs are doing (the low ready guard standing, trailing walking):
   // swinging it forward-down for the drink only added two blade swings to a sip
@@ -937,7 +1248,9 @@ function staggerPose(p, A) {
   p[P.bodyZ] -= 0.08 * k;
   to3(p, P.rH, -0.25, -0.3, 0.3, k);
   to3(p, P.lH, 0.3, -0.25, 0.25, k);
-  dirTo(p, P.swD, -0.7, -0.25, 0.6, k);
+  // the blow jolts the blade up and out from wherever the guard holds it (~40°): a fixed target
+  // out to the right swung it ~110° across the legs and back with the low ready guard
+  dirTo(p, P.swD, p[P.swD] - 0.45, p[P.swD + 1] + 0.5, p[P.swD + 2] + 0.25, k);
   p[P.lF + 2] -= 0.2 * k;
 }
 
@@ -1141,6 +1454,12 @@ const STREAM_K = [55, 40], STREAM_C = [6, 4.5], STREAM_LAG = [0.3, 0.4], STREAM_
 const STREAM_A = 2.6, STREAM_B = 1.3;
 const TWO_HAND_GRIP = 0.11; // m down the grip from the sword hand to the off hand (two-handed)
 const PAULDRON_FOLLOW = 0.35; // how much of the sword arm's swing the shoulder armour follows
+// the thrust charge's updraft (× A.updraft 0..1): extra outward flare of the coat panels and the
+// torn strips (rad), and an upward pull on the hair tips (m of tip displacement)
+const UPDRAFT_COAT = 0.3, UPDRAFT_STRIP = 0.35, UPDRAFT_HAIR = 0.12;
+// hair blow-back: rad per m/s of the tips' own along-ground speed (head axes): ~20° at the sprint
+const HAIR_DRAG = 0.06;
+
 // hair cluster springs (rotation vector, head space)
 const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4;
 // idle breeze on the coat: extra outward flare per panel (back-left blows out the most)
@@ -1177,6 +1496,15 @@ export class HeroAnimator {
     this.chargeK = 0;
     this.releaseK = 0;
     this.recoil = 0;
+    this.pathCh = null; // channels this frame's target drives itself, past the cross-fade (windup paths)
+    this.updraft = 0; // the charge's updraft on the coat and hair (0..1, eased)
+    // the animator's own noise (0..1) for cosmetic kicks that must not draw on the game's RNG stream
+    // (the integration sims seed Math.random; the wyrm's AI rolls on it)
+    this._ns = 0x2545f491;
+    this.noise = () => {
+      this._ns = (Math.imul(this._ns, 1664525) + 1013904223) >>> 0;
+      return this._ns / 4294967296;
+    };
     this.onFootstep = null;
     // gait drivers (update): cycle parameters, model-space acceleration, banking, strafe hip turn
     this.gait = { beta: 0.62, exc: 0.11, off: 0, lift: 0.05, kick: 0, peel: 0.02, len: 0.35 };
@@ -1202,7 +1530,8 @@ export class HeroAnimator {
     this.clipX = 0;
     this.clipZ = 0;
     this.trav = { x: 0, z: 0 };
-    this.marks = [{ set: false, x: 0, z: 0 }, { set: false, x: 0, z: 0 }];
+    this.marks = [0, 1, 2, 3].map(() => ({ set: false, x: 0, z: 0 }));
+    this.dashStep = 0; // the thrust dash's touchdowns already stepped (bits: rear, front)
     this.entry = new Float32Array([-0.25, ANK, 0.15, 0.13, ANK, -0.03, -0.4, 0.22]);
     this.leanF = 0; // acceleration lean (rad), a critically damped spring on the smoothed acceleration
     this.leanFV = 0;
@@ -1241,6 +1570,7 @@ export class HeroAnimator {
     this.clipZ = fin(pp?.z);
     this.trav.x = this.trav.z = 0;
     for (const M of this.marks) M.set = false;
+    this.dashStep = 0;
     // where the feet are as the clip starts (model space): push-offs keep them on these spots
     const E = this.entry, c0 = this.cur;
     E[0] = c0[P.rF];
@@ -1295,6 +1625,7 @@ export class HeroAnimator {
     this.key = 'loco';
     this.accF = this.accS = this.bank = this.turnV = this.strafeYaw = this.turnLag = this.visYawV = 0;
     this.leanF = this.leanFV = this.leanS = this.leanSV = 0;
+    this.updraft = 0;
     this.visYaw = fin(this.player.yaw);
     this.cycOn = false;
     this._pv.init = false;
@@ -1345,22 +1676,23 @@ export class HeroAnimator {
     for (const st of this.streamState) st.vel.set(0, 0, 0);
   }
 
-  /** Throw the coat panels outward (Ghostep reappear, guard break). */
-  kickCoat(power = 1) {
+  /** Throw the coat panels outward (Ghostep reappear, guard break, the slam's impact). `rnd` (0..1
+   *  noise) defaults to Math.random; new kicks pass this.noise so they leave the game's RNG alone. */
+  kickCoat(power = 1, rnd = Math.random) {
     const k = clamp(fin(power), 0, 3);
     for (let i = 0; i < this.coatState.length; i++) {
       const st = this.coatState[i];
-      st[0].vx -= k * (3 + 1.5 * Math.random());
-      st[1].vx -= k * (4 + 2 * Math.random());
-      st[1].vz += k * (Math.random() - 0.5) * 3;
+      st[0].vx -= k * (3 + 1.5 * rnd());
+      st[1].vx -= k * (4 + 2 * rnd());
+      st[1].vz += k * (rnd() - 0.5) * 3;
       for (const c of this.stripState[i]) {
-        c.vx -= k * (3 + 3 * Math.random());
-        c.vz += k * (Math.random() - 0.5) * 4;
+        c.vx -= k * (3 + 3 * rnd());
+        c.vz += k * (rnd() - 0.5) * 4;
       }
     }
     for (const st of this.streamState) {
-      st.segs[0].vx += k * (Math.random() - 0.5) * 6;
-      st.segs[1].vx += k * (Math.random() - 0.5) * 8;
+      st.segs[0].vx += k * (rnd() - 0.5) * 6;
+      st.segs[1].vx += k * (rnd() - 0.5) * 8;
     }
   }
 
@@ -1405,6 +1737,8 @@ export class HeroAnimator {
     if (sp > 0.2) this.backW = damp(this.backW, 1 - smoothstep(-0.75, -0.15, this.mz), 6, dt);
     this.sprintW = damp(this.sprintW, pl.state === 'sprint' ? 1 : 0, 6, dt);
     this.swordW = damp(this.swordW, this.moveW, 7, dt);
+    // the charge's updraft (0..1): lifts the coat tails and the hair as the thrust charges
+    this.updraft = damp(this.updraft, this.key === 'charge' ? clamp(fin(pl.chargeK), 0, 1) : 0, 5, dt);
     // acceleration (model space) for the lean into starts / the sit-back on stops, and the turn rate
     // of the velocity heading for banking into curves
     const P0 = this._pv;
@@ -1434,9 +1768,11 @@ export class HeroAnimator {
     }
     const strafe = sp > 0.6 ? 0.5 * this.mx * clamp((this.mz + 0.2) / 0.25, -1, 1) * (1 - 0.5 * Math.abs(this.mz)) : 0;
     this.strafeYaw = damp(this.strafeYaw, strafe, 8, dt);
-    // the visual heading trails the (snappy) gameplay yaw: hips lag, the head leads (walking clips)
+    // the visual heading trails the (snappy) gameplay yaw: hips lag, the head leads (walking clips).
+    // A standing 180° flip peaks at ~63° of lag and is half way round in 0.1 s (it trailed by up to
+    // 76° and took ~0.27 s to settle: it read a touch slow behind the instant aim)
     const dy = wrapAngle(fin(pl.yaw) - this.visYaw);
-    this.visYawV += (dy * 420 - this.visYawV * 2 * Math.sqrt(420)) * dt;
+    this.visYawV += (dy * TURN_K - this.visYawV * 2 * Math.sqrt(TURN_K)) * dt;
     this.visYaw = wrapAngle(this.visYaw + clamp(this.visYawV, -30, 30) * dt);
     if (Math.abs(wrapAngle(fin(pl.yaw) - this.visYaw)) > TURN_LAG_MAX) this.visYaw = wrapAngle(fin(pl.yaw) - Math.sign(dy) * TURN_LAG_MAX);
     this.turnLag = clamp(wrapAngle(this.visYaw - fin(pl.yaw)), -TURN_LAG_MAX, TURN_LAG_MAX);
@@ -1460,6 +1796,7 @@ export class HeroAnimator {
       this.trav.x = tx * c - tz * s;
       this.trav.z = tx * s + tz * c;
     }
+    this.pathCh = null;
     POSES[this.key](this.target, this);
     if (this.blendT < this.blendDur) {
       this.blendT += dt;
@@ -1467,6 +1804,11 @@ export class HeroAnimator {
       // attack entries (easeOut) get there early and hold the coil, but start from rest: an
       // ease-out cubic jumped the blade a third of the way (~80° round the body) in its first frame
       blend(this.cur, this.from, this.target, this.easeOut ? smoothstep(0, ENTRY_EASE, u) : u * u * (3 - 2 * u), this.fadeMem);
+      if (this.pathCh) {
+        // a windup path (light 1's loop, the slam's raise) already starts from the entry pose: the
+        // channels it drives are final
+        for (const c of this.pathCh) this.cur[c] = this.target[c];
+      }
     } else {
       this.cur.set(this.target);
     }
@@ -1910,7 +2252,7 @@ export class HeroAnimator {
       for (let s = 0; s < 2; s++) {
         const c = st[s];
         const lag = COAT_LAG[s] * (1 + COAT_LAG_V * vs);
-        const fl = (D.flap ? 0.05 : D.flare ?? COAT_FLARE) + (breeze + (IDLE_FLARE[i] ?? 0) * (s ? 0.7 : 1)) * still + Math.sin(this.time * 9 + i * 1.7 + s * 1.3) * 0.07 * flut;
+        const fl = (D.flap ? 0.05 : D.flare ?? COAT_FLARE) + (breeze + (IDLE_FLARE[i] ?? 0) * (s ? 0.7 : 1)) * still + Math.sin(this.time * 9 + i * 1.7 + s * 1.3) * 0.07 * flut + UPDRAFT_COAT * this.updraft * (s ? 1.3 : 1);
         let hx = _g.x + nx * fl - _v.x * lag;
         let hy = _g.y - _v.y * lag * 0.5;
         let hz = _g.z + nz * fl - _v.z * lag;
@@ -2053,7 +2395,8 @@ export class HeroAnimator {
       const ca = Math.cos(S.rest), sa = Math.sin(S.rest);
       _w.set(sa, 0, ca).applyQuaternion(_q0); // this strip's outward, world
       const ph = this.time * (2.6 + 4.6 * Math.min(1, flut)) + S.phase;
-      const fl = STRIP_FLARE + (0.08 + 0.25 * flut) * Math.sin(ph) + 0.12 * still * Math.sin(this.time * 2.618 + S.phase);
+      const up = this.updraft;
+      const fl = STRIP_FLARE + (0.08 + 0.25 * flut + 0.18 * up) * Math.sin(ph) + 0.12 * still * Math.sin(this.time * 2.618 + S.phase) + UPDRAFT_STRIP * up;
       _v.set(_w.x * fl - vel.x * lag, -1 - vel.y * lag * 0.5, _w.z * fl - vel.z * lag).normalize().applyQuaternion(_qInv2);
       const lx = _v.x * ca - _v.z * sa, lz = _v.x * sa + _v.z * ca; // into the strip's rest frame
       const tA = clamp(Math.atan2(-lz, -_v.y), STRIP_A[0], STRIP_A[1]);
@@ -2185,10 +2528,11 @@ export class HeroAnimator {
       S.prev.copy(_w);
       _v.copy(S.vel).applyQuaternion(_qInv);
       _d.set(C.tip[0], C.tip[1], C.tip[2]).normalize();
-      // desired tip displacement: against the motion + sag relative to upright
-      const wx = -_v.x * 0.03 + _g.x * 0.25;
-      const wy = -_v.y * 0.03 + (_g.y + 1) * 0.25;
-      const wz = -_v.z * 0.03 + _g.z * 0.25;
+      // desired tip displacement: against the motion + sag relative to upright. The along-ground
+      // drag blows the locks back ~20° at the sprint (the sheet's), ~13° at the run
+      const wx = -_v.x * HAIR_DRAG + _g.x * 0.25;
+      const wy = -_v.y * 0.03 + (_g.y + 1) * 0.25 + UPDRAFT_HAIR * this.updraft;
+      const wz = -_v.z * HAIR_DRAG + _g.z * 0.25;
       // rotation vector moving the tip by w: d × w
       _axis.set(_d.y * wz - _d.z * wy, _d.z * wx - _d.x * wz, _d.x * wy - _d.y * wx);
       // a breeze through the locks (stronger standing still): two slow sways per cluster
