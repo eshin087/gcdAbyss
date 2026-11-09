@@ -99,13 +99,13 @@ const LAVA = {
  * shows the molten fissures from the start (chest, throat, undersides strongest, sparse on the back).
  */
 export const GLOW = {
-  scales: [0.3, 0.7, 0], // sparse embers in the hide's fissures; phase 2: the cracks wake up
+  scales: [0.35, 0.7, 0], // sparse embers in the hide's fissures; phase 2: the cracks wake up
   limbs: [0.32, 0.7, 0], // legs, tail, wing arm: as scales (fissures run along the limb)
   neck: [0.32, 0.7, 0.3], // the throat strip carries the molten S and its charge
   belly: [0.5, 1.0, 0.3],
   throat: [0.65, 0.9, 1.2],
   lava: [0.5, 1.0, 0],
-  membrane: [0.3, 0.8, 0.3], // embers along the bones and in specks
+  membrane: [0.35, 0.8, 0.3], // embers along the bones and in specks
   wingBone: [0.15, 0.35, 0],
   spine: [0.3, 0.8, 0],
   bone: [0.08, 0.5, 0],
@@ -122,13 +122,13 @@ export const GLOW = {
  *   scale [w, h] · tone [gap, body, rim, rimW] · ink · light [gain, key, fresnel, floor]
  *   vein [strength, share, width, plate] · glow [gaps, all] · under [r, g, b, k] · membrane
  */
-const UNDER = [1.0, 0.3, 0.06, 0.55]; // lava light from below: the orange spill under jaw and belly
+const UNDER = [1.0, 0.3, 0.06, 0.8]; // lava light from below: the orange spill under jaw and belly
 const HIDE_ART = {
   scale: [0.42, 0.32],
-  tone: [0.0, 0.17, 1.7, 0.24],
+  tone: [0.0, 0.13, 1.8, 0.24],
   ink: [0.34, 0.31, 0.29],
   light: [1.0, 0.55, 0.25, 0.03],
-  vein: [1.6, 0.32, 0.06, 1.1],
+  vein: [2.2, 0.45, 0.06, 1.1],
   under: UNDER,
 };
 const LAVA_ART = {
@@ -149,20 +149,21 @@ export const WYRM_ART = {
   belly: { ...LAVA_ART, scale: [0.56, 0.4] },
   throat: { ...LAVA_ART, scale: [0.4, 0.3], glow: [3.4, 0.16] },
   lava: LAVA_ART,
-  membrane: { ink: [0.75, 0.07, 0.045], light: [1.0, 0.4, 0.2, 0.03], membrane: [0.6, 0.03, 2.2, 0.5], under: UNDER },
-  // finger bones: grey scaled lines, a little ember along them
-  wingBone: { ink: [0.3, 0.29, 0.28], light: [1.0, 0.5, 0.35, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', under: UNDER },
+  // deep crimson, blotched, torn: [mottle, ember specks, tear noise frequency, trailing-edge tears]
+  membrane: { ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], under: UNDER },
+  // finger bones: charcoal lines with pale outlines, a little ember along them
+  wingBone: { ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
   // dorsal / tail blades: charcoal with pale tips, molten at the root (the reference's orange-lit
   // tail spikes)
-  spine: { ink: [0.3, 0.27, 0.25], light: [1.0, 0.5, 0.5, 0.02], tip: [0.05, 0.4, 0.35, 1.2], strokes: 'axis', under: UNDER },
-  // horns, head / limb spikes: dark obsidian, bright edges and tips
-  bone: { ink: [0.32, 0.3, 0.29], light: [1.0, 0.5, 0.6, 0.02], tip: [0.0, 0.45, 0.3, 0], strokes: 'axis', under: UNDER },
+  spine: { ink: [0.3, 0.27, 0.25], light: [1.0, 0.5, 0.5, 0.02], tip: [0.05, 0.45, 0.3, 2.0], strokes: 'axis', under: UNDER },
+  // horns, head / limb spikes: dark obsidian, outlined in strokes, bright tips
+  bone: { ink: [0.32, 0.3, 0.29], light: [1.0, 0.5, 0.6, 0.02], tip: [0.0, 0.45, 0.3, 0], strokes: 'axis', strokeEdge: 0.18, under: UNDER },
   // talons: dark roots curving into bright ivory tips
-  claw: { ink: [0.5, 0.47, 0.43], light: [1.0, 0.5, 0.5, 0.03], tip: [0.05, 0.45, 0.25, 0], strokes: 'axis', under: UNDER },
-  teeth: { ink: [0.85, 0.83, 0.78], light: [1.0, 0.6, 0.3, 0.12], strokes: 'axis', under: UNDER },
-  // fire inside the mouth: deep red-orange, so the white fangs read against it
-  maw: { ink: [1.0, 0.25, 0.04], light: [0.4, 0.2, 0, 0.05], glow: [0, 0.75], emit: [1.0, 0.2, 0.03] },
-  eye: { ink: [1.0, 0.4, 0.06], light: [0.3, 0, 0, 0.05], glow: [0, 1.0], emit: [1.5, 0.38, 0.05] },
+  claw: { ink: [0.42, 0.4, 0.37], light: [1.0, 0.5, 0.5, 0.03], tip: [0.05, 0.5, 0.2, 0], strokes: 'axis', strokeEdge: 0, under: UNDER },
+  teeth: { ink: [0.85, 0.83, 0.78], light: [1.0, 0.6, 0.3, 0.12], strokes: 'axis', strokeEdge: 0, under: UNDER },
+  // fire inside the mouth: deep red-orange and dimmer than the fangs, so the white teeth read on it
+  maw: { ink: [0.8, 0.14, 0.02], light: [0.3, 0.1, 0, 0.04], glow: [0, 0.42], emit: [1.0, 0.16, 0.025] },
+  eye: { ink: [0.45, 0.12, 0.02], light: [0.3, 0, 0, 0.05], glow: [0, 1.0], emit: [0.85, 0.17, 0.02] },
 };
 
 /** Brightness of the smooth source the creature ASCII-art pass converts (see FLAG.ART). */
@@ -206,7 +207,7 @@ export function createDragonMaterials(U) {
       gain: 2.0,
       rim: 0.2,
       outline: 0,
-      inkGlow: 0.32, // the sail reads red from both sides (a bat wing is translucent; the backlit side was empty)
+      inkGlow: 0.2, // the sail reads red from both sides (a bat wing is translucent; the backlit side was empty)
       emissive: [1.0, 0.3, 0.05],
       glowMask: 0.7,
       side: THREE.DoubleSide,
@@ -520,16 +521,24 @@ export function buildDrake(U) {
     bodyGUV(capsule(chest, mats.scales, inChest(s * 0.88, 3.62, 1.08), inChest(s * 1.0, 2.72, 1.82), { r0: 0.4, r1: 0.47, bulge: 0.06, sx: 0.78 }), 0);
   }
 
-  // dorsal blade row (orange spine line): over the withers + between the wing roots 0.6-0.75,
-  // mid-back 0.5, rump 0.45, spacing 0.42; chest-mounted ahead of z 0.3, hips-mounted behind
+  // dorsal blade row (orange spine line): tall back-swept blades from the withers to the rump, the
+  // tallest over the shoulders, with a lower splayed pair every other blade (the reference's spiny
+  // back reads in the silhouette from every side); chest-mounted ahead of z 0.3, hips behind
   const spineChest = [], spineHips = [], flankChest = [], flankHips = [];
-  const DORSAL = [0.72, 0.75, 0.66, 0.55, 0.5, 0.5, 0.47, 0.45, 0.42];
+  const DORSAL = [0.95, 1.08, 1.02, 0.94, 0.86, 0.8, 0.74, 0.68, 0.63, 0.58, 0.54, 0.5];
   DORSAL.forEach((len, i) => {
-    const z = 1.15 - i * 0.42;
-    const y = backY(z) - 0.06;
+    const z = 1.3 - i * 0.33;
+    const y = backY(z) - 0.08;
     const onChest = z > 0.3;
     const at = onChest ? inChest(0, y, z) : inHips(0, y, z);
-    (onChest ? spineChest : spineHips).push(spike(len, 0.2, at[0], at[1], at[2], 0.87, 0, 0.12, 5, 0.35));
+    (onChest ? spineChest : spineHips).push(spike(len, 0.2, at[0], at[1], at[2], 0.6, 0, 0.24, 5, 0.38));
+    if (i % 2 === 1) {
+      for (const s of [1, -1]) {
+        const zz = z - 0.16, yy = backY(zz) - 0.2;
+        const a2 = zz > 0.3 ? inChest(s * 0.3, yy, zz) : inHips(s * 0.3, yy, zz);
+        (zz > 0.3 ? flankChest : flankHips).push(spike(len * 0.5, 0.1, a2[0], a2[1], a2[2], 0.75, -s * 0.6, 0.12, 5, 0.45));
+      }
+    }
   });
   // small flank rows over the shoulders and the rump
   for (const z of [1.5, 1.05, -1.25, -1.7, -2.15]) {
@@ -571,20 +580,25 @@ export function buildDrake(U) {
     mesh(j, limbGeometry({ length: A.neckLen + 0.12, r0, r1, sy: 0.92, radial: 14, rings: 4 }), mats.neck, 0, 0, -0.06);
     // lava throat: under the neck only (narrower, set low; overlapping segments make it continuous)
     mesh(j, limbGeometry({ length: A.neckLen + 0.14, r0: r0 * 0.78, r1: r1 * 0.78, sx: 0.7, sy: 0.7, radial: 12, rings: 3 }), mats.throat, 0, -r0 * 0.45, -0.07);
-    batch(j, mats.spine, [spike(THREE.MathUtils.lerp(0.55, 0.4, t), 0.15, 0, r0 * 0.86, A.neckLen * 0.5, 0.87, 0, 0.1, 5, 0.35)]);
+    // dorsal crest: two tall back-swept spines per segment, the reference's spiky mane
+    const crest = [];
+    for (let q = 0; q < 2; q++) crest.push(spike(THREE.MathUtils.lerp(0.8, 0.58, t) * (q ? 0.82 : 1), 0.14, 0, r0 * 0.86, A.neckLen * (0.22 + 0.5 * q), 0.72, 0, 0.2, 5, 0.38));
+    batch(j, mats.spine, crest);
     // the head study's mane: 3 rows of long pointed blade scales per side (±40°, ±70°, ±100° around
     // the neck), 2 per row per segment, rows offset half a plate, all pointing down and back toward
-    // the body, tips lifted ~15° so the profile serrates
-    const sh = [];
+    // the body, tips lifted ~23° so the profile serrates; a splayed spike pair above them
+    const sh = [], lat = [];
     for (const s of [1, -1]) {
       [0.7, 1.22, 1.75].forEach((ang, row) => {
         for (let q = 0; q < 2; q++) {
           const z = 0.12 + q * 0.23 + (row % 2) * 0.115;
-          sh.push(shingle(0.5 - row * 0.06, 0.14 - row * 0.015, r0 * 0.93, s * ang, z, 0.26, 0.92, 0.3));
+          sh.push(shingle(0.58 - row * 0.07, 0.14 - row * 0.015, r0 * 0.93, s * ang, z, 0.4, 0.92, 0.3));
         }
       });
+      lat.push(spike(THREE.MathUtils.lerp(0.5, 0.32, t), 0.08, s * r0 * 0.5, r0 * 0.72, A.neckLen * 0.45, 0.7, -s * 0.65, 0.14, 5, 0.45));
     }
     batch(j, mats.neck, sh);
+    batch(j, mats.bone, lat);
     neck.push(j);
     parent = j;
   }
@@ -601,15 +615,24 @@ export function buildDrake(U) {
     browG.push(place(ellipsoidGeometry(0.16, 0.1, 0.42, { widthSegs: 8, heightSegs: 6 }), s * 0.25, 0.25, 0.45, 0, s * 0.2, 0, 'YXZ'));
     // main horns: sabres back along the skull line, tips curving up (~26° above it overall; a
     // steeper root made two vertical posts from the front)
-    hornsG.push(horn(1.5, 0.15, s * 0.2, 0.3, -0.02, -0.22, Math.PI - s * 0.3, 0.3, 7)); // a V from the front, not two posts
+    hornsG.push(horn(1.7, 0.15, s * 0.2, 0.3, -0.02, -0.24, Math.PI - s * 0.3, 0.34, 7)); // a V from the front, not two posts
     // secondary horns
-    hornsG.push(horn(0.85, 0.1, s * 0.3, 0.12, 0.0, -0.1, Math.PI - s * 0.45, 0.15, 6));
+    hornsG.push(horn(1.0, 0.1, s * 0.3, 0.12, 0.0, -0.12, Math.PI - s * 0.45, 0.18, 6));
     // cheek (jugal) horns: straight back, behind and below the eye
-    hornsG.push(horn(0.65, 0.09, s * 0.38, -0.02, 0.3, 0.08, Math.PI - s * 0.5, 0, 6));
-    // nape ruff: 4 blades per side
-    for (let k = 0; k < 4; k++) {
-      hornsG.push(horn(0.55 - k * 0.07, 0.07, s * (0.22 + 0.07 * k), 0.05 - 0.1 * k, -0.1, -0.15 + 0.25 * k, Math.PI - s * (0.35 + 0.22 * k), 0.12, 5, 0.6));
+    hornsG.push(horn(0.75, 0.09, s * 0.38, -0.02, 0.3, 0.08, Math.PI - s * 0.5, 0, 6));
+    // nape frill: 6 blades per side fanning back from the occiput, top to cheek (the reference's
+    // crest of back-swept spikes)
+    for (let k = 0; k < 6; k++) {
+      hornsG.push(horn(0.78 - k * 0.07, 0.075, s * (0.18 + 0.055 * k), 0.12 - 0.075 * k, -0.08, -0.32 + 0.17 * k, Math.PI - s * (0.28 + 0.16 * k), 0.16, 5, 0.55));
     }
+    // brow spikes over the eye and a cheek frill down to the jaw hinge, all swept back
+    hornsG.push(horn(0.34, 0.05, s * 0.29, 0.3, 0.6, -0.45, Math.PI - s * 0.22, 0.12, 5, 0.6));
+    hornsG.push(horn(0.26, 0.04, s * 0.3, 0.27, 0.8, -0.4, Math.PI - s * 0.2, 0.1, 5, 0.6));
+    [
+      [0.5, 0.42, -0.1, 0.42],
+      [0.42, 0.4, -0.2, 0.28],
+      [0.34, 0.37, -0.28, 0.14],
+    ].forEach(([len, x, y, z]) => hornsG.push(horn(len, 0.06, s * x, y, z, 0.25, Math.PI - s * 0.62, 0.08, 5, 0.55)));
     // upper teeth: 9 per side, long separate needles, irregular, hooked slightly back (fang in front;
     // x1.4 the sheet's lengths so each fang reads against the lit maw)
     const UP = [0.22, 0.14, 0.11, 0.13, 0.1, 0.11, 0.085, 0.1, 0.085];
@@ -620,15 +643,16 @@ export function buildDrake(U) {
       teethG.push(horn(L, k === 0 ? 0.05 : 0.035, s * r * 0.78, skullBot(z) + 0.03, z, Math.PI / 2 + 0.14, 0, 0, 4));
     });
   }
-  // crown: 5 midline spikes snout -> occiput, plus a nose horn
+  // crown: 6 midline spikes snout -> occiput, plus a nose horn
   [
-    [0.1, 0.04, 0.95],
-    [0.16, 0.05, 0.75],
-    [0.24, 0.06, 0.55],
-    [0.33, 0.08, 0.35],
-    [0.42, 0.09, 0.12],
-  ].forEach(([len, r, z]) => hornsG.push(spike(len, r, 0, skullTop(z) - 0.02, z, 0.95, 0, 0.1, 5, 0.55)));
-  hornsG.push(spike(0.18, 0.06, 0, 0.14, 1.18, 0.5, 0, 0.1));
+    [0.14, 0.04, 0.95],
+    [0.22, 0.05, 0.76],
+    [0.32, 0.06, 0.57],
+    [0.44, 0.08, 0.38],
+    [0.58, 0.09, 0.18],
+    [0.66, 0.1, -0.02],
+  ].forEach(([len, r, z]) => hornsG.push(spike(len, r, 0, skullTop(z) - 0.02, z, 0.95, 0, 0.14, 5, 0.55)));
+  hornsG.push(spike(0.24, 0.06, 0, 0.14, 1.18, 0.5, 0, 0.1));
   batch(head, mats.neck, browG);
   batch(head, mats.bone, hornsG);
   batch(head, mats.teeth, teethG);
@@ -654,13 +678,14 @@ export function buildDrake(U) {
       const L = len * (1 + 0.25 * jit(k * 3 + (s > 0 ? 7 : 11)));
       lowTeeth.push(horn(L, k === 0 ? 0.045 : 0.032, s * jawR(z) * JAW.sx * 0.78, JAW.y0 + jawR(z) * JAW.sy - 0.02, z, -(Math.PI / 2 + 0.1), 0, 0, 4));
     });
-    // jaw-line spikes: down and back, growing toward the hinge
+    // jaw-line spikes: down and back, growing toward the hinge (a spiky jaw frill)
     [
-      [0.16, 0.7],
-      [0.23, 0.5],
-      [0.3, 0.3],
-      [0.37, 0.1],
-    ].forEach(([len, z]) => jawSpikes.push(horn(len, 0.05, s * jawR(z) * JAW.sx * 0.9, JAW.y0 - jawR(z) * JAW.sy * 0.6, z, 0.9, Math.PI - s * 0.25, 0, 5, 0.6)));
+      [0.2, 0.75],
+      [0.28, 0.56],
+      [0.36, 0.38],
+      [0.44, 0.2],
+      [0.5, 0.02],
+    ].forEach(([len, z]) => jawSpikes.push(horn(len, 0.055, s * jawR(z) * JAW.sx * 0.9, JAW.y0 - jawR(z) * JAW.sy * 0.6, z, 0.85, Math.PI - s * 0.3, 0.06, 5, 0.6)));
   }
   jawSpikes.push(horn(0.2, 0.05, 0, JAW.y0 - 0.08, 1.0, 1.3, 0, 0, 5));
   batch(jaw, mats.teeth, lowTeeth);
@@ -683,20 +708,27 @@ export function buildDrake(U) {
     tailRadii.push(r0);
     mesh(j, limbGeometry({ length: A.tailLen + 0.08, r0, r1, sy: 0.9, radial: 12, rings: 3, flip: TAIL_FLIP }), mats.limbs, 0, 0, -0.04);
     if (i < 11) mesh(j, limbGeometry({ length: A.tailLen + 0.04, r0: r0 * 0.94, r1: r1 * 0.94, sx: 0.8, sy: 0.74, radial: 10, rings: 2, flip: TAIL_FLIP }), mats.lava, 0, -r0 * 0.34, -0.02);
-    batch(j, mats.spine, [spike(0.55 - t * 0.45, 0.2 - t * 0.12, 0, r0 * 0.84, A.tailLen * 0.5, -0.87, 0, -0.1, 5, 0.35)]);
-    if (i < 13) {
+    // a saw of tall back-swept blades along the top (molten roots: the reference's orange-lit tail
+    // spikes), splayed blades down both sides and, past the middle, under the tail toward the tip
+    const saw = [spike(0.8 - t * 0.5, 0.2 - t * 0.11, 0, r0 * 0.84, A.tailLen * 0.5, -0.5, 0, -0.22, 5, 0.36)];
+    for (const s of [1, -1]) saw.push(spike(0.48 - t * 0.28, 0.08 - t * 0.035, s * r0 * 0.62, r0 * 0.6, A.tailLen * 0.2, -0.55, -s * 0.75, -0.14, 5, 0.42));
+    if (t > 0.4) saw.push(spike(0.42 - t * 0.2, 0.08 - t * 0.03, 0, -r0 * 0.8, A.tailLen * 0.5, -0.85, Math.PI, -0.12, 5, 0.4));
+    batch(j, mats.spine, saw);
+    if (i < 14) {
       const side = [];
-      for (const s of [1, -1]) side.push(spike(0.3 - t * 0.24, 0.07 - t * 0.03, s * r0 * 0.8, r0 * 0.22, A.tailLen * 0.45, -0.75, -s * 1.3, 0, 5, 0.45));
+      for (const s of [1, -1]) side.push(spike(0.4 - t * 0.26, 0.07 - t * 0.03, s * r0 * 0.8, r0 * 0.22, A.tailLen * 0.45, -0.75, -s * 1.3, -0.08, 5, 0.45));
       batch(j, mats.bone, side);
     }
     tail.push(j);
     parent = j;
   }
   const tailTip = joint(parent, 0, 0, A.tailLen, 'tailTip');
+  // the tip: a long blade with a fan of barbs (the reference's spiked tail end)
   batch(tailTip, mats.spine, [
-    horn(0.6, 0.11, 0, 0, -0.08, 0, 0, 0, 5, 0.4),
-    horn(0.2, 0.06, 0, 0, -0.2, 0, 0.6, 0, 5, 0.5),
-    horn(0.2, 0.06, 0, 0, -0.2, 0, -0.6, 0, 5, 0.5),
+    horn(0.75, 0.11, 0, 0, -0.08, 0, 0, 0, 5, 0.4),
+    horn(0.32, 0.06, 0, 0, -0.22, -0.2, 0.62, 0.05, 5, 0.5),
+    horn(0.32, 0.06, 0, 0, -0.22, -0.2, -0.62, 0.05, 5, 0.5),
+    horn(0.26, 0.05, 0, 0.04, -0.3, -0.75, 0, 0.05, 5, 0.5),
   ]);
 
   // ============================================================ hind legs (spec §2.5)
@@ -719,23 +751,29 @@ export function buildDrake(U) {
     batch(thigh, mats.bone, tb);
     const shin = joint(thigh, 0, 0, A.thigh, 'shin');
     mesh(shin, limbGeometry({ length: A.shin + 0.06, r0: 0.46, r1: 0.29, radial: 12, rings: 4, flip: true }), mats.limbs);
+    // a row of small spikes down the back of the shin (shin frame: +Y forward, -Y back, +Z down)
+    batch(shin, mats.bone, [
+      horn(0.26, 0.06, 0, -0.36, 0.35, 1.95, 0, 0.05, 5, 0.5),
+      horn(0.22, 0.05, 0, -0.32, 0.7, 1.95, 0, 0.05, 5, 0.5),
+      horn(0.18, 0.05, 0, -0.29, 1.0, 1.95, 0, 0.05, 5, 0.5),
+    ]);
     const meta = joint(shin, 0, 0, A.shin, 'meta');
     mesh(meta, limbGeometry({ length: A.meta + 0.05, r0: 0.29, r1: 0.23, radial: 10, rings: 3, flip: true }), mats.limbs);
-    // two spikes back off the hock (meta frame: -Y = back, -Z = up)
-    batch(meta, mats.bone, [horn(0.35, 0.08, 0, -0.18, 0.05, 2.15, 0, 0.05, 5, 0.5), horn(0.25, 0.06, 0, -0.17, 0.25, 2.0, 0, 0, 5, 0.5)]);
+    // three spikes back off the hock (meta frame: -Y = back, -Z = up)
+    batch(meta, mats.bone, [horn(0.48, 0.09, 0, -0.18, 0.05, 2.15, 0, 0.08, 5, 0.5), horn(0.34, 0.07, 0, -0.17, 0.25, 2.0, 0, 0.05, 5, 0.5), horn(0.22, 0.05, 0, -0.16, 0.45, 1.9, 0, 0, 5, 0.5)]);
     const toe = joint(meta, 0, 0, A.meta, 'toe');
     // foot pad sits ON the ground (the toe joint is at ground level, nose ~8° down)
     mesh(toe, ellipsoidGeometry(0.46, 0.16, 0.5, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, 0.13, 0.12);
-    // heavy ivory talons rooted at the toe tips, splayed wide, arcing out and hooking down so the
-    // tips touch the ground in front of the toes
+    // heavy talons rooted at the toe tips, splayed wide, arcing out and hooking down so the tips
+    // touch the ground in front of the toes: big curved sickles with pale tips (the reference)
     const claws = [];
     [
-      [-0.45, 0.6],
-      [0, 0.7],
-      [0.45, 0.6],
-    ].forEach(([yaw, len]) => claws.push(horn(len, 0.13, Math.sin(yaw) * 0.36, 0.14, 0.34 + Math.cos(yaw) * 0.16, -0.14, yaw, -0.32, 6)));
-    claws.push(horn(0.45, 0.1, -s * 0.4, 0.14, 0.05, -0.05, -s * 1.1, -0.28, 5)); // inner claw
-    claws.push(horn(0.4, 0.09, 0, 0.16, -0.3, -0.25, Math.PI, -0.1, 5)); // heel spur
+      [-0.45, 0.76],
+      [0, 0.88],
+      [0.45, 0.76],
+    ].forEach(([yaw, len]) => claws.push(horn(len, 0.14, Math.sin(yaw) * 0.36, 0.15, 0.34 + Math.cos(yaw) * 0.16, -0.24, yaw, -0.5, 6)));
+    claws.push(horn(0.55, 0.11, -s * 0.4, 0.15, 0.05, -0.12, -s * 1.1, -0.4, 5)); // inner claw
+    claws.push(horn(0.5, 0.09, 0, 0.16, -0.3, -0.3, Math.PI, -0.15, 5)); // heel spur
     batch(toe, mats.claw, claws);
     legs.push({ side: s, hip, thigh, shin, meta, toe });
   }
@@ -760,11 +798,15 @@ export function buildDrake(U) {
       [0.7, 0.0, 2.27, 0.0],
       [0.55, 0.14, 2.1, s * 0.14],
       [0.4, 0.28, 1.95, -s * 0.12],
-    ].forEach(([len, z, p, x]) => fs.push(horn(len, 0.13, x, -0.3, z, p, 0, -0.08, 5, 0.42)));
-    for (let k = 0; k < 4; k++) fs.push(horn(0.27 - k * 0.04, 0.06, 0, -0.33 + k * 0.02, 0.45 + k * 0.2, 1.25, 0, 0, 5, 0.5));
+    ].forEach(([len, z, p, x]) => fs.push(horn(len * 1.2, 0.13, x, -0.3, z, p, 0, -0.1, 5, 0.42)));
+    for (let k = 0; k < 5; k++) fs.push(horn(0.32 - k * 0.04, 0.06, 0, -0.33 + k * 0.02, 0.4 + k * 0.2, 1.25, 0, 0.04, 5, 0.5));
+    // outer-side spikes down the forearm
+    for (let k = 0; k < 3; k++) fs.push(horn(0.24 - k * 0.04, 0.05, s * 0.34, -0.05, 0.35 + k * 0.32, 1.0, s * 1.2, 0.04, 5, 0.5));
     batch(forearm, mats.bone, fs);
     const hand = joint(forearm, 0, 0, A.forearm, 'hand');
     mesh(hand, limbGeometry({ length: A.hand + 0.04, r0: 0.27, r1: 0.22, radial: 10, rings: 2, flip: true }), mats.limbs);
+    // a wrist spike back and out
+    batch(hand, mats.bone, [horn(0.3, 0.06, s * 0.12, -0.24, 0.05, 1.9, s * 0.4, 0.05, 5, 0.5)]);
     const paw = joint(hand, 0, 0, A.hand, 'paw');
     // paw: wider than the leg (the painting's feet), its pad on the ground (paw joint = ground level)
     mesh(paw, ellipsoidGeometry(0.48, 0.16, 0.44, { widthSegs: 10, heightSegs: 6 }), mats.limbs, 0, 0.12, 0.1);
@@ -773,11 +815,11 @@ export function buildDrake(U) {
     // inner dewclaw at the wrist, back and down
     const cl = [];
     [
-      [0.5, 0.5],
-      [0.17, 0.6],
-      [-0.17, 0.6],
-      [-0.5, 0.5],
-    ].forEach(([yaw, len]) => cl.push(horn(len, 0.13, Math.sin(s * yaw) * 0.44, 0.14, 0.3 + Math.cos(yaw) * 0.16, -0.1, s * yaw, -0.32, 6)));
+      [0.5, 0.64],
+      [0.17, 0.76],
+      [-0.17, 0.76],
+      [-0.5, 0.64],
+    ].forEach(([yaw, len]) => cl.push(horn(len, 0.14, Math.sin(s * yaw) * 0.44, 0.15, 0.3 + Math.cos(yaw) * 0.16, -0.2, s * yaw, -0.48, 6)));
     batch(paw, mats.claw, cl);
     batch(hand, mats.claw, [horn(0.28, 0.06, -s * 0.2, -0.12, 0.08, 2.4, -s * 0.35, 0, 5)]);
     arms.push({ side: s, shoulder, humerus, forearm, hand, paw });
@@ -796,30 +838,31 @@ export function buildDrake(U) {
     const humerus = joint(wroot, 0, 0, 0, 'wingHumerus');
     mesh(humerus, limbGeometry({ length: A.wingHumerus + 0.08, r0: 0.3, r1: 0.27, bulge: 0.03, radial: 10, rings: 4 }), mats.limbs);
     const hs = [];
-    for (let k = 0; k < 5; k++) hs.push(horn(0.25, 0.06, 0, 0.24, 0.25 + k * 0.27, -1.3, 0, 0, 5, 0.5));
+    for (let k = 0; k < 5; k++) hs.push(horn(0.34 - k * 0.02, 0.07, 0, 0.24, 0.25 + k * 0.27, -1.25, 0, 0.06, 5, 0.5));
     batch(humerus, mats.bone, hs);
     const forearm = joint(humerus, 0, 0, A.wingHumerus, 'wingForearm');
     mesh(forearm, limbGeometry({ length: A.wingForearm + 0.06, r0: 0.27, r1: 0.22, radial: 10, rings: 5 }), mats.limbs);
     const ser = [];
-    for (let k = 0; k < 5; k++) ser.push(horn(0.24 - k * 0.02, 0.06, 0, 0.22, 0.3 + k * 0.5, -1.3, 0, 0, 5, 0.5)); // trailing spikes
-    for (let k = 0; k < 5; k++) ser.push(horn(0.12, 0.04, 0, -0.2, 0.3 + k * 0.5, 1.4, 0, 0, 4)); // leading serrations
+    for (let k = 0; k < 5; k++) ser.push(horn(0.36 - k * 0.03, 0.07, 0, 0.22, 0.3 + k * 0.5, -1.25, 0, 0.06, 5, 0.5)); // trailing spikes
+    for (let k = 0; k < 6; k++) ser.push(horn(0.2, 0.045, 0, -0.2, 0.25 + k * 0.42, 1.3, 0, 0.04, 4)); // leading serrations
     batch(forearm, mats.bone, ser);
     const wrist = joint(forearm, 0, 0, A.wingForearm, 'wrist');
     mesh(wrist, ellipsoidGeometry(0.24, 0.22, 0.28, { widthSegs: 8, heightSegs: 6 }), mats.limbs);
-    batch(wrist, mats.spine, [horn(0.45, 0.09, 0, 0.12, 0.05, -2.2, 0, 0.1, 5, 0.5), horn(0.3, 0.07, s * 0.15, 0.05, 0.1, -0.6, s * 1.2, 0, 5, 0.5)]);
+    batch(wrist, mats.spine, [horn(0.62, 0.1, 0, 0.12, 0.05, -2.2, 0, 0.12, 5, 0.5), horn(0.42, 0.08, s * 0.15, 0.05, 0.1, -0.6, s * 1.2, 0.06, 5, 0.5)]);
     const fingers = [], distal = [];
     A.fingers.forEach((len, k) => {
       const kn = A.knuckle[k];
       const l0 = len * kn, l1 = len - l0;
       const f = joint(wrist, 0, 0, 0, `finger${k}`);
-      const rMid = 0.07;
-      batch(f, mats.wingBone, [limbGeometry({ length: l0, r0: 0.1, r1: rMid, radial: 6, rings: 4, capSegs: 2 })]);
+      // slender finger bones (the reference's are thin lines next to the thick wing arm)
+      const rMid = 0.05;
+      batch(f, mats.wingBone, [limbGeometry({ length: l0, r0: 0.075, r1: rMid, radial: 6, rings: 4, capSegs: 2 })]);
       const fd = joint(f, 0, 0, l0, `finger${k}d`);
-      const tip = k === 0 ? horn(0.4, 0.06, 0, 0, l1 - 0.04, 0, 0, 0, 5) : null;
-      batch(fd, mats.wingBone, tip ? [limbGeometry({ length: l1, r0: rMid, r1: 0.045, radial: 6, rings: 4, capSegs: 2 }), tip] : [limbGeometry({ length: l1, r0: rMid, r1: 0.045, radial: 6, rings: 4, capSegs: 2 })]);
-      // knuckle bump + a small spike
-      batch(fd, mats.bone, [place(ellipsoidGeometry(0.09, 0.09, 0.11, { widthSegs: 6, heightSegs: 4 }), 0, 0, 0), horn(0.15, 0.04, 0, 0.06, 0, -1.2, 0, 0, 4)]);
-      if (k > 0) batch(fd, mats.claw, [horn(k === 3 ? 0.25 : 0.28, 0.05, 0, 0, l1 - 0.03, 0.25, 0, -0.25, 5)]);
+      const tip = k === 0 ? horn(0.5, 0.05, 0, 0, l1 - 0.04, 0, 0, 0, 5) : null;
+      batch(fd, mats.wingBone, tip ? [limbGeometry({ length: l1, r0: rMid, r1: 0.03, radial: 6, rings: 4, capSegs: 2 }), tip] : [limbGeometry({ length: l1, r0: rMid, r1: 0.03, radial: 6, rings: 4, capSegs: 2 })]);
+      // knuckle bump + a back-swept spike
+      batch(fd, mats.bone, [place(ellipsoidGeometry(0.08, 0.08, 0.1, { widthSegs: 6, heightSegs: 4 }), 0, 0, 0), horn(0.3, 0.045, 0, 0.06, 0, -1.15, 0, 0.06, 4)]);
+      if (k > 0) batch(fd, mats.claw, [horn(k === 3 ? 0.34 : 0.38, 0.05, 0, 0, l1 - 0.03, 0.3, 0, -0.35, 5)]);
       fingers.push(f);
       distal.push(fd);
     });
