@@ -611,8 +611,10 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vec3 V = normalize(uCamPos - vW);
         float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
         float key = max(dot(n, normalize(V + vec3(0.0, 0.7, 0.0))), 0.0);
+        // the lava's light comes from below but wraps up the flanks (the reference's lower scales are
+        // rimmed orange, the upper ones silver)
         vec3 light = lightAt(vW, n, 0.25, sh) + vec3(1.0, 0.95, 0.9) * key * uWLight.y + uMoonColor * fres * uWLight.z
-          + uWLight.w + uWUnder.rgb * uWUnder.a * max(-n.y, 0.0);
+          + uWLight.w + uWUnder.rgb * uWUnder.a * clamp((0.35 - n.y) / 1.35, 0.0, 1.0);
         // 'down' scales (uWShape.x 1: the barrel) hang from the dorsal line toward the belly like
         // roof tiles: rows run along the body, tips toward larger |aGUV x| (around the body)
         vec2 gp = uWShape.x > 0.5 ? vec2(vG.y, -abs(vG.x)) : vG;

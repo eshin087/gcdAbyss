@@ -125,7 +125,7 @@ export class Pipeline {
         // x = brightest letter, y = brightness gamma (dim charcoal body, bright rims), z = v below
         // which a cell prints nothing (the black gaps between scales), w = how much each stroke
         // pixel takes its own source pixel instead of the cell average (crisp shapes through text)
-        uWyrmTone: { value: new THREE.Vector4(1.3, 1.0, 0.022, 0.85) },
+        uWyrmTone: { value: new THREE.Vector4(1.05, 1.0, 0.022, 0.85) },
         // glyph pick: x / y = ramp index at v 0 / 1 (letters only loosely follow brightness: the
         // reference prints whole digits even in the dark), z = per-cell jitter (indices), w = samples
         // (of 4) a stroke code needs to turn the cell into a stroke glyph

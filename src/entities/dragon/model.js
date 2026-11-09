@@ -144,7 +144,7 @@ export const WYRM_ART = {
   // barrel (torso, ribcage, rump, haunches, shoulders: aGUV around the body axis, bodyGUV below):
   // roof-tile scales hanging from the dorsal line, [along the body, around it]
   scales: { ...HIDE_ART, scaleDir: 'down', scale: [0.48, 0.34] },
-  limbs: { ...HIDE_ART, scale: [0.3, 0.23], vein: [1.6, 0.3, 0.055, 0.9] },
+  limbs: { ...HIDE_ART, scale: [0.25, 0.19], vein: [2.0, 0.38, 0.055, 0.85] },
   neck: { ...HIDE_ART, scale: [0.28, 0.21], vein: [1.8, 0.35, 0.055, 0.85] },
   belly: { ...LAVA_ART, scale: [0.56, 0.4] },
   throat: { ...LAVA_ART, scale: [0.4, 0.3], glow: [3.4, 0.16] },
@@ -155,11 +155,11 @@ export const WYRM_ART = {
   wingBone: { ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
   // dorsal / tail blades: charcoal with pale tips, molten at the root (the reference's orange-lit
   // tail spikes)
-  spine: { ink: [0.3, 0.27, 0.25], light: [1.0, 0.5, 0.5, 0.02], tip: [0.05, 0.45, 0.3, 2.0], strokes: 'axis', under: UNDER },
+  spine: { ink: [0.42, 0.36, 0.32], light: [1.0, 0.35, 1.5, 0.02], tip: [0.05, 0.5, 0.35, 3.0], strokes: 'axis', under: UNDER },
   // horns, head / limb spikes: dark obsidian, outlined in strokes, bright tips
-  bone: { ink: [0.32, 0.3, 0.29], light: [1.0, 0.5, 0.6, 0.02], tip: [0.0, 0.45, 0.3, 0], strokes: 'axis', strokeEdge: 0.18, under: UNDER },
+  bone: { ink: [0.44, 0.42, 0.41], light: [1.0, 0.35, 1.6, 0.02], tip: [0.0, 0.5, 0.35, 0], strokes: 'axis', strokeEdge: 0.18, under: UNDER },
   // talons: dark roots curving into bright ivory tips
-  claw: { ink: [0.42, 0.4, 0.37], light: [1.0, 0.5, 0.5, 0.03], tip: [0.05, 0.5, 0.2, 0], strokes: 'axis', strokeEdge: 0, under: UNDER },
+  claw: { ink: [0.62, 0.59, 0.54], light: [1.0, 0.55, 0.5, 0.04], tip: [0.05, 0.5, 0.35, 0], strokes: 'axis', strokeEdge: 0, under: UNDER },
   teeth: { ink: [0.85, 0.83, 0.78], light: [1.0, 0.6, 0.3, 0.12], strokes: 'axis', strokeEdge: 0, under: UNDER },
   // fire inside the mouth: deep red-orange and dimmer than the fangs, so the white teeth read on it
   maw: { ink: [0.8, 0.14, 0.02], light: [0.3, 0.1, 0, 0.04], glow: [0, 0.42], emit: [1.0, 0.16, 0.025] },
