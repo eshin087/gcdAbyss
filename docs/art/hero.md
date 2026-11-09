@@ -8,6 +8,27 @@ art as closely as the glyph renderer allows.
 Owner feedback that prompted this spec: *"The character hair and outfit doesn't look like the
 images. Try to get it accurately as close as possible."*
 
+> **Lean reference match (2026-11-09, ADR-034) — read this first.** The owner's later six-view ASCII
+> turnaround and single-figure image supersede parts of this spec. The code (`model.js` `BODY`,
+> `COAT_PANELS`, `hairGeometries`, the collar, the pauldron, the sword; `anim.js` `guard`) is the
+> source of truth where they differ:
+> - **§1 proportions:** a lean V, measured on the turnaround's silhouettes in fractions of his height
+>   H: shoulders ≈ 0.24 H across, chest ≈ 0.18 H, belted waist ≈ 0.12 H, thighs ≈ 0.06 H (chest
+>   0.34 m over a 0.23 m waist on the same bones).
+> - **§2.1 hair:** distinct, asymmetric pointed locks in layers (crown spikes, top, two back layers
+>   hanging toward the nape with lifted points, nape flicks, side locks, a jagged fringe), not a mop.
+> - **§2.3 collar:** flared, lower behind (a wide band), rising to points beside the jaw in front, a
+>   turned-over rim.
+> - **§2.4 coat:** two back tails split by a vent from just under the belts, each flaring to a
+>   ragged hem that slopes down to its outer point, narrow side panels, two front panels; no flap,
+>   no closed skirt; the legs show from every side.
+> - **§2.6 / §2.12 back:** a yoke whose seams dip to a four-point star, a centre seam, a baldric from
+>   the right shoulder to the left hip, two belts.
+> - **§2.11 sword:** the single-figure image's (broad at the guard, one long taper, hooked barbs,
+>   lightning notches, a guard swept up round a violet four-point star gem at the guard's heart).
+> - **§4 idle:** the sword hangs at his right side, out and forward-down (the turnaround), not the
+>   portrait's diagonal across his front.
+
 ## 0. Sources, conventions, method
 
 | Sheet | File (session image folder) | What it shows |

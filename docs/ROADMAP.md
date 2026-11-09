@@ -58,9 +58,11 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Stray `"` glyph particles left of the hero in a back view
   - [ ] Hero coat as one wide ragged drape with burn holes and blotches
   - [ ] Hero proportions, curved hair strands and wisps, face lines (nose, mouth, eye shadow)
-        (proportions: the broad build in M1.7)
-  - [ ] Hero at the game camera: tone down the armour column and glow (still brighter than the
-        reference), capitals that read as text; the halo over the wyrm's letters
+        (proportions: the broad build in M1.7, then the lean build in M1.8; spiky pointed locks in
+        M1.8; face lines open)
+  - [~] Hero at the game camera: tone down the armour column and glow (still brighter than the
+        reference), capitals that read as text; the halo over the wyrm's letters (M1.8: armour and
+        blade glow toned down; still brighter than the reference)
   - [ ] Stronger strike key poses (needs a hit-volume decision, ADR-024); light 2 choreography;
         the knockdown's wide blade swing; re-run hero foot metrics on the wide idle
   - [ ] Wyrm sails at the reference angle and the far wing with the hero straight ahead
@@ -87,8 +89,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] Human playtest of the difficulty (target 3–5 min for a player who knows the moves; a
       near-perfect bot wins in ~2.5 min)
 - Follow-ups:
-  - [ ] Hero mass at the game camera (the skirt dominates); the low idle guard from behind shows
-        only the point
+  - [x] Hero mass at the game camera (the skirt dominates); the low idle guard from behind shows
+        only the point (M1.8: the lean build, the tails, the sword hung at his right side)
   - [ ] Coat-crossing frames near the hilt; the torn strips and streamers vs the blade; the block's
         free hand on the flat
   - [ ] A real tail thrust for the tail lash (a tail-raise control in the rig)
@@ -97,6 +99,31 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] A red windup glow for the meteor cast
   - [ ] Teach the probe bot to heal (its death rates are pessimistic)
   - [ ] Capture the phase-3 eruption chase
+
+## M1.8 — Lean reference match (2026-11-09, `look/lean-hero`)
+- [x] Look-dev: every reference angle at once (a live sheet incl. the gameplay camera), a
+      turntable, a solid render through the ASCII pass, source and line looks (ADR-035)
+- [x] Lean swordsman proportions measured on the six-view sheet (ADR-034, supersedes ADR-031's
+      broad build); no bone, grip target or hit segment changed
+- [x] Spiky hair of distinct pointed locks (crown, back layers, nape, sides, a jagged fringe)
+- [x] Flared collar with a turned rim; layered spiked right pauldron; shaped upper back (yoke,
+      four-point star, centre seam), baldric, two belts; banded calves
+- [x] Coat as two tails split by a vent + narrow side panels + front panels (`skew`, `slant`,
+      piping); the legs show from every side
+- [x] The single-figure image's sword (barbs, notches, a guard swept up round a violet star gem)
+- [x] The idle hangs the sword at his right side; near half-turns of the blade go round the front
+- [x] Game-camera shading: a tight blade glow, quieter armour, readable lavender tails
+- [x] `npm test` + build green; captures from every angle and the gameplay camera, every move
+- [ ] Owner review of the PR preview; merge
+- Follow-ups:
+  - [ ] At the game camera he is still brighter than the scaled reference (mean luma 74 vs 55),
+        mostly the one-pixel silhouette line
+  - [ ] Fuller hair volume (the reference's mop is bigger); the dotted lavender rag along the
+        tails' outer edges; face lines (nose, mouth)
+  - [ ] Decide on the sleeve streamers (not in the new references)
+  - [ ] Cosmetic FX draw on the shared `Math.random` (the seeded wyrm AI rolls on it): give FX
+        their own stream
+  - [ ] Move the headless capture harness (DevTools + `__tick`) into the repo
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
