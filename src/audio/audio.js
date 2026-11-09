@@ -571,7 +571,7 @@ export class AudioEngine {
     let want = null;
     if (to === 'title' || to === 'explore') want = 'ambient';
     else if (to === 'bossIntro') want = 'none';
-    else if (to === 'boss') want = this.game.dragon?.phase === 2 ? 'boss2' : 'boss';
+    else if (to === 'boss') want = this.game.dragon?.phase >= 2 ? 'boss2' : 'boss';
     else if (to === 'dead') want = 'death';
     else if (to === 'victory') want = 'victory';
     if (want) this._autoMusic(want);
@@ -732,6 +732,21 @@ export class AudioEngine {
       this.play('phase2', this._atDragon({ roar: !roared }));
       this._last.set('roar', now);
       if (this.musicMode === 'boss' || this.game.state === 'boss') this._autoMusic('boss2');
+    });
+    on('dragon:phase3', () => {
+      // the white-hot phase: the enraged sting again (it claims the roar slot like phase 2), and the
+      // phase-2 music if the Lab jumped straight here
+      const now = this.ctx.currentTime;
+      const last = this._last.get('roar');
+      const roared = last !== undefined && now >= last && now - last < 0.3;
+      this.play('phase2', this._atDragon({ roar: !roared }));
+      this._last.set('roar', now);
+      if (this.musicMode === 'boss' || this.musicMode === 'boss2' || this.game.state === 'boss') this._autoMusic('boss2');
+    });
+    on('dragon:plunged', (d) => {
+      // the blade in its skull: the body-slam thump and a pained roar (an execution: the break's)
+      this._painPending = false;
+      this.play(d.execution ? 'postureBreak' : 'dragonPain', this._atDragon({ roar: true }));
     });
     on('dragon:death', () => {
       this._painPending = false;

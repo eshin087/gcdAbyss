@@ -683,6 +683,7 @@ export class Lab {
     button(grid, 'Start fight', () => this._startFight()).title = 'skip the intro, straight into combat';
     button(grid, 'Reset', () => this._resetFight()).title = 'dragon back to sleep at the nest (mid-fight: flow -> explore, player to the bonfire)';
     button(grid, 'Phase 2', () => this._fightAction('phase2'));
+    button(grid, 'Phase 3', () => this._fightAction('phase3')).title = 'the phase-3 transition roar: hotter, faster wyrm (opens with the nova when the AI runs)';
     button(grid, 'Stagger', () => this._fightAction('stagger'));
     button(grid, 'Posture break', () => this._fightAction('postureBreak'));
     button(grid, 'Kill', () => this._fightAction('kill'), 'danger');
