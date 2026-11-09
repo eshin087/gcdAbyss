@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
 import { FS_VERT, HERO_PARTS } from './shaderLib.js';
-import { createGridAtlas, createArtAtlas, createPixelArtAtlas, pixelArtCell, GRID_COLS, GRID_ROW } from './glyphs.js';
+import { createGridAtlas, createPixelArtAtlas, pixelArtCell, GRID_COLS, GRID_ROW } from './glyphs.js';
 import { createWyrmArtAtlas, wyrmArtCell, wyrmArtScale } from './wyrmGlyphs.js';
 import { HERO_ART } from './materials.js';
 
@@ -107,7 +107,6 @@ export class Pipeline {
         uFar: { value: 200 },
         tArt: { value: null },
         uArtCell: { value: this.artCell },
-        uArtCount: { value: 22 },
         tHeroArt: { value: null },
         uHeroCell: { value: this.heroCell },
         uHeroCount: { value: 22 }, // letters in the hero atlas' top row (sparse → dense)
@@ -208,7 +207,6 @@ export class Pipeline {
         uniform float uFar;
         uniform sampler2D tArt;
         uniform vec2 uArtCell;
-        uniform float uArtCount;
         uniform sampler2D tHeroArt;
         uniform vec2 uHeroCell;
         uniform float uHeroCount;
@@ -307,27 +305,6 @@ export class Pipeline {
 
         bool isArt(float a) { return a > 0.46 && a < 0.55; }
         bool isHero(float a) { return a > 0.46 && a < 0.49; } // FLAG.ART_HERO = 0.48, FLAG.ART = 0.5
-
-        // ---- ASCII art (hero / wyrm): the creature's crisp render is the source image of a fine grid.
-        // Each cell averages 4 samples; a letter from the density-sorted ART_CHARS ramp is picked by
-        // brightness (plus per-cell jitter for the images' letter variety) and keeps the source hue
-        // (white scales, orange lava, red wings, cyan blade) on a black backing.
-        vec3 artCell(vec3 c, vec2 acell, vec2 local, float hero) {
-          float lum = max(luma(c) - mix(uArtBlack.y, uArtBlack.x, hero), 0.0);
-          float v = 1.0 - exp(-lum * mix(uArtLum.y, uArtLum.x, hero));
-          float jit = (hash12(acell * 1.37 + 11.0) - 0.5) * mix(uArtDither.y, uArtDither.x, hero);
-          float n = hero > 0.5 ? uHeroCount : uArtCount;
-          float idx = clamp(floor(v * (n - 1.0) + 0.5 + jit), 1.0, n - 1.0);
-          vec2 auv = vec2((idx + local.x) / n, local.y);
-          float m = hero > 0.5 ? texture2D(tHeroArt, auv).a : texture2D(tArt, auv).a;
-          float mx = max(max(c.r, c.g), c.b);
-          vec3 hue = c / max(mx, 1e-4);
-          // saturated emissive parts (lava, the cyan blade, eyes) stay HDR so they bloom; bright but
-          // colourless parts (claws, teeth) don't, or they swell into glowing orbs
-          float sat = (mx - min(min(c.r, c.g), c.b)) / max(mx, 1e-4);
-          vec3 fg = hue * mix(mix(uArtMin.y, uArtMin.x, hero), uArtMax, v) * mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat));
-          return fg * m;
-        }
 
         // ---- the wyrm (FLAG.ART): thin one-pixel letters on black (wyrmGlyphs.js atlas in tArt).
         // The letter is picked per cell: its average source picks a letter SET (a dark cell prints
@@ -844,7 +821,6 @@ export class Pipeline {
       this.artCell.set(artW, artH);
       this.art = createWyrmArtAtlas(wa.s, wa.small);
       this.asciiMat.uniforms.tArt.value = this.art.texture;
-      this.asciiMat.uniforms.uArtCount.value = this.art.sets[2];
       this.asciiMat.uniforms.uWyrmAtlas.value.set(...this.art.sets, this.art.total);
     }
     const hs = Math.max(1, Math.floor(H / 1080));
