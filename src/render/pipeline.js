@@ -132,16 +132,16 @@ export class Pipeline {
         // ... and each part's letter-fill brightness (x), heavy-silhouette flag (y), dotted-edge flag (z)
         uHeroPartFill: U.uHeroPartFill ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector3(1, 1, 0)) },
         // per creature kind: x = hero (FLAG.ART_HERO), y = wyrm / other (FLAG.ART)
-        // hero: his source (key-lit, U.uArtHeroKey) sits around luma 0.15–0.45 in moonlight and by the
-        // fire alike; black point + gentle curve spread it over the whole ramp, dim to dense
+        // hero: uArtLum.x / uArtBlack.x map his flat art fill (HERO_INK) to the light value v that picks
+        // his fill letters and brightness (uHeroFill); uArtMin.x is unused since the ink-line pass
         uArtLum: { value: new THREE.Vector2(3.0, 4.5) }, // brightness -> ramp position: 1 - exp(-luma * k)
         uArtBlack: { value: new THREE.Vector2(0.04, 0.0) }, // source luma treated as black (contrast)
         uArtMin: { value: new THREE.Vector2(0.14, 0.3) }, // glyph value at the dark end of the ramp
         uArtMax: { value: 0.8 }, // glyph value at the bright end (tone-maps to white without bloom haloes)
         uArtDither: { value: new THREE.Vector2(2.6, 1.6) }, // per-cell ramp jitter (letters): variety
-        // relative depth jump inside a cell that marks a part boundary (arm over coat, leg over leg):
-        // such cells go black, the reference images' dark gaps between parts (0 = off). The hero's is
-        // low (0.004 = 0.14 m at the 36 m camera, ~1 letter of depth), or no gap ever opens in game.
+        // relative depth jump that marks a part boundary (arm over coat, leg over leg). Wyrm (.y): cells
+        // spanning it go black (0 = off). Hero (.x): beyond the slope a neighbour predicts, it draws an
+        // ink line on the nearer side and a dim gap on the far one (0.004 = 0.14 m at the 36 m camera).
         uArtEdge: { value: new THREE.Vector2(0.004, 0.0) },
       },
       vertexShader: FS_VERT,
