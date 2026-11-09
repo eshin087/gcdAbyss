@@ -185,7 +185,9 @@ export const WYRM_ART = {
   // deep crimson, blotched, torn: [mottle, ember specks, tear noise frequency, trailing-edge tears]
   // (its embers and bone streaks glow orange, not the hide's red-orange: the reference's sails carry
   // orange-yellow sparks)
-  membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], emit: [1.0, 0.45, 0.1], under: UNDER },
+  // (round 2: the reference's sails glow orange along the finger bones and carry more sparks: a wider,
+  // hotter bone streak and denser specks)
+  membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.085, 2.0, 0.62], boneGlow: [0.75, 0.1, 1.3], emit: [1.0, 0.45, 0.1], under: UNDER },
   // finger bones: charcoal lines with pale outlines, a little ember along them
   wingBone: { ...LIT, ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
   // dorsal / tail blades: charcoal with pale edges and tips, molten red at the root only (the

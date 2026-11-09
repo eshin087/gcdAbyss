@@ -214,6 +214,8 @@ function surfaceFeatures(o, cell) {
  *   under: [r,g,b,k]     warm light from below on down-facing surfaces (lava light under the jaw)
  *   membrane: [mottle, specks, tears, edgeTears]  wing membranes only (needs aEdge / aBone): dark
  *                        mottling, ember specks, holes, a ragged trailing edge
+ *   boneGlow: [width, base, hot]  membranes: the orange streaks along the finger bones, `width` model
+ *                        units out from a bone, emissive `base` + `hot` x uGlow (default [0.3, 0.05, 0.9])
  */
 function wyrmFeatures(w, defines, uniforms) {
   const v = (a, n, d) => (Array.isArray(a) && a.length === n && a.every(Number.isFinite) ? a : d);
@@ -244,6 +246,7 @@ function wyrmFeatures(w, defines, uniforms) {
   if (w.membrane != null) {
     defines.SG_WYRM_MEMBRANE = '';
     uniforms.uWMem = { value: new THREE.Vector4(...v(w.membrane, 4, [0.5, 0.03, 0.1, 0.4])) };
+    uniforms.uWMemBone = { value: new THREE.Vector3(...v(w.boneGlow, 3, [0.3, 0.05, 0.9])) };
   }
 }
 
@@ -603,6 +606,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec4 uWUnder;
   #ifdef SG_WYRM_MEMBRANE
       uniform vec4 uWMem;
+      uniform vec3 uWMemBone;
       varying float vEdge;
       varying float vBone;
   #endif
@@ -740,10 +744,10 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         // flat field), darker toward the torn edge, embers along the bones, sparse ember specks
         float mo = wNoise(vG * 0.75 + 11.3) * 0.65 + wNoise(vG * 2.4 + 3.1) * 0.35;
         col *= mix(1.0 - uWMem.x, 1.0 + 0.5 * uWMem.x, smoothstep(0.32, 0.68, mo)) * (1.0 - 0.45 * smoothstep(0.5, 1.0, vEdge));
-        float bone = 1.0 - smoothstep(0.0, 0.3, vBone);
+        float bone = 1.0 - smoothstep(0.0, uWMemBone.x, vBone);
         vec2 sq = vG / 0.075;
         float spk = step(1.0 - uWMem.y, hash12(floor(sq) + uSeed)) * step(0.36, mo) * (1.0 - smoothstep(0.22, 0.45, length(fract(sq) - 0.5))); // round embers, not squares
-        col += uWEmit * (spk * (0.3 + 0.9 * hot) + bone * bone * (0.05 + 0.9 * hot));
+        col += uWEmit * (spk * (0.3 + 0.9 * hot) + bone * bone * (uWMemBone.y + uWMemBone.z * hot));
   #endif
         if (uWVein.x > 0.0 && hot > 0.001) {
           float vn = wVeins(vG / uWVein.w, uWVein.y, uWVein.z / uWVein.w);
