@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COMMON_GLSL } from './shaderLib.js';
+import { COMMON_GLSL, HERO_PARTS } from './shaderLib.js';
 import { gi } from './glyphs.js';
 
 // Material families (see STYLE.md):
@@ -21,6 +21,14 @@ import { gi } from './glyphs.js';
 //   0.6          LEAF     blobby foliage ramp
 //   1.0          STONE    letter ramp + edge outlines
 export const FLAG = { NONE: 0.0, ART_HERO: 0.48, ART: 0.5, LEAF: 0.6, STONE: 1.0 };
+/**
+ * Hero ink-line art (materials with `heroArt`): instead of FLAG.ART_HERO they write a PART ID into
+ * alpha, a0 + id × step (id = part × 2 + the geometry's aPart sub-id 0/1), still inside the pass's
+ * hero window (0.46, 0.49). The art pass draws a bright ink line wherever two neighbouring cells
+ * show different parts (the higher id draws it) or a depth step (the nearer side draws it). Step 0.0006
+ * is ≥ 2 half-float ulps there; parts 0..19 (each part's line tint: U.uHeroPartInk).
+ */
+export const HERO_ART = { a0: 0.4632, step: 0.0006, parts: HERO_PARTS };
 export const ASCII_SETS = { scales: 0, strands: 1, plates: 2, smooth: 3 };
 /**
  * Surface-glyph defaults per `ascii` set: 4-glyph ramp (dark → bright) and cell size in aGUV
@@ -143,6 +151,20 @@ function surfaceFeatures(o, cell) {
     throw new Error(`surface glyph crack: 'grid' | 'voronoi', got ${JSON.stringify(crack)}`);
   } else if (seamAxis === 'y') defines.SG_SEAM_Y = '';
   else if (seamAxis === 'x') defines.SG_SEAM_X = '';
+  // the hero's ink-line art source (see SG_HERO_ART in the fragment shader)
+  if (o.heroArt != null) {
+    const h = o.heroArt;
+    const part = Math.round(h.part ?? 0);
+    if (!(part >= 0 && part < HERO_ART.parts)) throw new Error(`surface glyph heroArt.part: 0..${HERO_ART.parts - 1}, got ${h.part}`);
+    defines.SG_HERO_ART = '';
+    defines.HERO_A0 = HERO_ART.a0.toFixed(4);
+    defines.HERO_AS = HERO_ART.step.toFixed(4);
+    uniforms.uArtFill = { value: new THREE.Color(...(h.fill ?? [0.1, 0.1, 0.11])) };
+    uniforms.uArtSpec = { value: new THREE.Vector2(h.spec ?? 0, h.specPow ?? 20) };
+    uniforms.uArtRim = { value: h.rim ?? 1 };
+    uniforms.uArtGlowK = { value: h.glow ?? 0 };
+    uniforms.uArtPart = { value: part * 2 };
+  }
   return { defines, uniforms };
 }
 
@@ -158,6 +180,8 @@ const SHARED = [
 ];
 // shared by surface-glyph materials only (declared in their own shader, not COMMON_GLSL)
 const SURFACE_SHARED = ['uArtSolid', 'uArtHeroEdge', 'uArtHeroKey'];
+// ... and by the hero's ink-line art source only (`heroArt`)
+const HERO_ART_SHARED = ['uCamRight', 'uCamUp', 'uArtHeroLight', 'uArtHeroRim'];
 
 /**
  * Geometry attributes required: position, normal, aCol (vec3 albedo, linear), aFlag (float),
@@ -296,6 +320,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
     uniforms: {
       ...pickShared(U, SHARED),
       ...pickShared(U, SURFACE_SHARED),
+      ...(o.heroArt != null ? pickShared(U, HERO_ART_SHARED) : {}),
       ...feat.uniforms,
       uAsciiSet: { value: asciiSet },
       uBase: { value: new THREE.Color(...(o.base ?? [0.016, 0.014, 0.016])) },
@@ -330,6 +355,10 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
 #ifdef SG_AXIS
       varying vec3 vNO;
 #endif
+#ifdef SG_HERO_ART
+      attribute float aPart;
+      varying float vPart;
+#endif
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vW = wp.xyz;
@@ -337,6 +366,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vG = aGUV;
 #ifdef SG_AXIS
         vNO = normal; // object space: glowAxis / inkAxis stay glued to the part
+#endif
+#ifdef SG_HERO_ART
+        vPart = aPart;
 #endif
         gl_Position = projectionMatrix * viewMatrix * wp;
       }
@@ -390,6 +422,18 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec3 uGlowAxis;
       uniform float uGlowBias;
       uniform vec2 uGlowRange;
+#endif
+#ifdef SG_HERO_ART
+      uniform vec3 uArtFill;
+      uniform vec2 uArtSpec;
+      uniform float uArtRim;
+      uniform float uArtGlowK;
+      uniform float uArtPart;
+      uniform vec3 uCamRight;
+      uniform vec3 uCamUp;
+      uniform vec4 uArtHeroLight;
+      uniform vec3 uArtHeroRim;
+      varying float vPart;
 #endif
 #ifdef SG_INK_AXIS
       uniform vec3 uInkAxis;
@@ -548,6 +592,25 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float edgeL = pow(1.0 - facing, 6.0);
         col += uMoonColor * edgeL * uOutline * (0.35 + 0.65 * sh) * (1.0 - heroArt);
         col *= 1.0 - heroArt * uArtHeroEdge * (1.0 - facing) * (1.0 - facing);
+#ifdef SG_HERO_ART
+        // The hero's ink-line art source (the owner's reference: anime line art turned into ASCII):
+        // a dim, flat fill per part (a soft key light from the camera's upper left + a share of the
+        // scene light, so fire warms him and the moon cools him), white glints on metal, and a cool
+        // blue-lavender rim on the screen's left. The art pass draws the bright ink lines itself, at
+        // the part edges this material encodes in alpha (see HERO_ART).
+        vec3 kd = normalize(V - uCamRight * 0.55 + uCamUp * 0.8);
+        float kn = max(dot(n, kd), 0.0);
+        vec3 fillC = uArtFill * (uArtHeroLight.x + uArtHeroLight.y * kn + L * uArtHeroLight.z);
+        // glints from a light well off the view axis (upper left), only where the surface curves
+        // (normal change per metre: domes, rims, cylinders): the reference's streaks of white on
+        // the armour, never a whole flat plate lit up
+        vec3 gd = normalize(V * 0.3 - uCamRight * 0.7 + uCamUp * 0.65);
+        float curv = length(fwidth(vN)) / max(length(fwidth(vW)), 1e-5);
+        fillC += vec3(pow(max(dot(n, normalize(gd + V)), 0.0), uArtSpec.y) * uArtSpec.x * uArtHeroLight.w * smoothstep(2.0, 7.0, curv));
+        fillC += uArtHeroRim * (pow(1.0 - facing, 2.0) * smoothstep(0.05, 0.75, dot(n, -uCamRight)) * uArtRim);
+        fillC = fillC * uTint + inkC * uInkGlow * uArtGlowK;
+        col = mix(col, fillC, heroArt);
+#endif
 
         // molten seams: thin hot cracks between scale rows/columns, the glyphs stay readable
 #ifdef SG_VORONOI
@@ -578,13 +641,19 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         col += vec3(1.0, 0.92, 0.85) * uFlash * (0.25 + 0.75 * m);
         col += uWarn.rgb * uWarn.a * (0.08 + 0.9 * m + rim * 2.5);
         col = applyFog(col, vW);
+#ifdef SG_HERO_ART
+        gl_FragColor = vec4(col, HERO_A0 + (uArtPart + floor(vPart + 0.5)) * HERO_AS);
+#else
         gl_FragColor = vec4(col, uFlag);
+#endif
       }
     `,
     side: o.side ?? THREE.FrontSide,
     blending: THREE.NoBlending,
   });
   if (Object.keys(feat.defines).length) mat.defines = feat.defines;
+  // a hero geometry without the aPart attribute reads sub-id 0
+  if (o.heroArt != null) mat.defaultAttributeValues = { ...mat.defaultAttributeValues, aPart: [0] };
   return mat;
 }
 
