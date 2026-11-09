@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
 import { FS_VERT, HERO_PARTS } from './shaderLib.js';
 import { createGridAtlas, createArtAtlas, createPixelArtAtlas, pixelArtCell, GRID_COLS, GRID_ROW } from './glyphs.js';
-import { createWyrmArtAtlas, wyrmArtCell } from './wyrmGlyphs.js';
+import { createWyrmArtAtlas, wyrmArtCell, wyrmArtScale } from './wyrmGlyphs.js';
 import { HERO_ART } from './materials.js';
 
 // Frame pipeline:
@@ -713,13 +713,14 @@ export class Pipeline {
       this.asciiMat.uniforms.tGrid.value = this.grid.texture;
     }
     // the wyrm's ASCII art: thin 4x6 pixel letters in 5x8 cells (x2 from 1620 px tall), the owner's
-    // reference grid (~5 x 7.5 px letters on its 1024 px image)
-    const ws = Math.max(1, Math.round(H / 1080));
-    const [artW, artH] = wyrmArtCell(ws);
+    // reference grid (~5 x 7.5 px letters on its 1024 px image); under 900 px tall 3x5 letters in 4x6
+    // cells (at 720p the 5x8 grid printed the wyrm in coarse letters next to the hero's 4x6 grid)
+    const wa = wyrmArtScale(H);
+    const [artW, artH] = wyrmArtCell(wa.s, wa.small);
     if (!this.art || artW !== this.artCell.x || artH !== this.artCell.y) {
       this.art?.texture.dispose();
       this.artCell.set(artW, artH);
-      this.art = createWyrmArtAtlas(ws);
+      this.art = createWyrmArtAtlas(wa.s, wa.small);
       this.asciiMat.uniforms.tArt.value = this.art.texture;
       this.asciiMat.uniforms.uArtCount.value = this.art.sets[2];
       this.asciiMat.uniforms.uWyrmAtlas.value.set(...this.art.sets, this.art.total);
