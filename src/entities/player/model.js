@@ -736,23 +736,12 @@ const LEATHER_LEVELS = [":'", "=:", ":=", "=#="];
  */
 export const GLYPH_SCALE = { refDist: 12, min: 0.15, farZoom: 0.45 };
 
-/**
- * The sword's depth pull at the game camera (m, `pull` parts: the blade, its point, the gem): seen
- * from the 36 m camera his low guard puts the steel just behind his own legs when he faces away,
- * and the grass covers its point; drawn this much nearer (along each view ray: the same pixels),
- * it shows through both. Fades in from `near` to `far` m of view distance (none in close-ups).
- */
-export const BLADE_PULL = { m: 0.65, near: 10, far: 24 };
-
 /** Set every hero material's glyph cell (and glyph zoom) for a camera `dist` metres away. Returns
  *  the scale k (1 = the game camera). No allocation. */
 export function setHeroGlyphScale(mats, dist) {
   const k = Math.min(1, Math.max(GLYPH_SCALE.min, (Number.isFinite(dist) ? dist : GLYPH_SCALE.refDist) / GLYPH_SCALE.refDist));
   const near = (1 - k) / (1 - GLYPH_SCALE.min); // 0 at the game camera … 1 in a close-up
-  const pf = Math.min(1, Math.max(0, ((Number.isFinite(dist) ? dist : 0) - BLADE_PULL.near) / (BLADE_PULL.far - BLADE_PULL.near)));
-  const pull = BLADE_PULL.m * pf * pf * (3 - 2 * pf);
   for (const m of mats) {
-    if (m.uniforms.uArtPull) m.uniforms.uArtPull.value = pull;
     const ud = m.userData;
     const b = ud?.cell;
     if (!b) continue;
@@ -843,9 +832,10 @@ export const ART_GAIN = 1.1;
 // reference scaled down is a DARK figure (black coat, dark pants and hair) with bright silver
 // armour, pale lavender tails, a pale face and the cyan blade, so cloth drops and metal rises.
 // `farLine` = how much light its inner lines keep there (0: a dark seam, the cloth; 1: the armour).
-// `solid` = unbroken ink lines (the blade, the gem); `pull` = drawn nearer at the game camera
-// (BLADE_PULL); `open` = its letters stay lit beside an edge (no dark channel or depth-step gap:
-// the face, a small pale patch walled in by the fringe and the collar, would print dim).
+// `solid` = unbroken ink lines (the blade, the gem); `open` = its letters stay lit beside an edge (no
+// dark channel or depth-step gap: the face, a small pale patch walled in by the fringe and the
+// collar, would print dim). The blade is depth-tested like every other part (round 3 removed the
+// game-camera depth pull: the sword showed through his back and legs).
 export const HERO_INK = {
   skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 2.2, farFill: 0.8, open: true },
   eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
@@ -872,9 +862,9 @@ export const HERO_INK = {
   trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.7, farFill: 1.2 },
   // the reference's blade: dark steel between two glowing cyan edges and a bright ridge line (the
   // fill letters stay dim up close; far away the whole blade reads as one bright cyan line)
-  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
-  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
-  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1, pull: true },
+  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0 },
+  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0 },
+  gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1 },
   flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
 
