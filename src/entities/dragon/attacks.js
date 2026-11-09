@@ -161,6 +161,22 @@ function biteAim(d, a, reach) {
   a.goal.y = Math.max(0.75 * S, a.goal.y);
 }
 
+const _lead = { target: V(), goal: V() };
+/**
+ * The last frames of a bite's windup lead the SHOWN head into the strike (pose.headLead: no hit test
+ * runs in a windup, the measured head waits for the active phase): 12 / 30 / 55 % of the strike's
+ * first step, so the head accelerates into the snap instead of jumping its whole first step (~1.8 m)
+ * in one frame. The active frames, and every sphere on them, are untouched.
+ */
+function strikeLead(d, a, dt, reach) {
+  const left = (a.dur - a.t) / Math.max(1e-4, dt); // frames until the strike
+  const f = left < 1.5 ? 0.55 : left < 2.5 ? 0.3 : left < 3.5 ? 0.12 : 0;
+  if (f <= 0) return;
+  biteAim(d, _lead, reach); // the goal the active phase is about to lock
+  const k = 1 - Math.exp(-18 * Math.max(dt, 1e-4)); // the strike's first step (biteActive's head rate)
+  d.pose.headLead.subVectors(_lead.goal, d.rig.headPos).multiplyScalar(k * f);
+}
+
 /**
  * Bite windup (four-legged, docs/art/dragon.md §5): the forelegs plant a little wider, the shoulders
  * sink, the neck coils back into a tight S (head cocked up and back over the neck base), the throat
@@ -179,6 +195,7 @@ function biteWindup(d, a, dt) {
   pose.spread[0] = pose.spread[1] = k < 0.75 ? 0.6 : REST_SPREAD;
   pose.spreadRate = 6;
   d.throat = 0.3 * k;
+  strikeLead(d, a, dt, T.bite.reach);
 }
 
 /** The neck uncoils and the shoulders drive forward off the planted hind feet; the jaw snaps at k 0.62. */
@@ -457,6 +474,7 @@ const clawCombo = {
         pose.spread[0] = pose.spread[1] = REST_SPREAD + 0.12 * Math.sin(Math.PI * a.k);
         pose.spreadRate = 8;
         d.throat = 0.25 * a.k;
+        strikeLead(d, a, dt, CC.hits[2].reach);
         break;
       }
       case 'active3':

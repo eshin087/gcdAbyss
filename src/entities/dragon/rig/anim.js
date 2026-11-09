@@ -135,6 +135,7 @@ export function createPose() {
     lookRate: 7,
     lookDown: 0.14, // max nose-down head pitch (rad): the head stays near level unless an attack frees it (rest: REST_POSE)
     headExact: false, // the head aims exactly (no turn-rate limit): hit spheres ride on the snout / mouth
+    headLead: new THREE.Vector3(), // world offset of the SHOWN head only (a strike easing in before its active frames)
     jaw: 0, // 0..1 (1 = 0.7 rad open)
     jawRate: 12,
     pitch: 0, // + = nose down
@@ -194,6 +195,7 @@ export function resetPose(p) {
   p.lookRate = 7;
   p.lookDown = 0.14;
   p.headExact = false;
+  p.headLead.set(0, 0, 0);
   p.jaw = 0;
   p.jawRate = 12;
   p.pitch = 0;
@@ -757,8 +759,9 @@ export class Rig {
     if (s.rest < NECK_SWING_REST) {
       if (!snap && this._swingAt === this._frame - 1) {
         // last frame's shape, the base moved with the body and the head's step spread down the chain
-        // (point i takes i/n of it), drawn toward the measured shape, then the segments re-laid
-        const B = neck.p[0], E = neck.p[n], sw = this._swingP;
+        // (point i takes i/n of it), drawn toward the measured shape, then the segments re-laid. A
+        // strike may lead the shown head ahead of the measured one in its windup (pose.headLead)
+        const B = neck.p[0], E = this._v[5].copy(neck.p[n]).add(pose.headLead), sw = this._swingP;
         const db = this._v[3].subVectors(B, sw[0]), dh = this._v[4].subVectors(E, sw[n]).sub(db);
         for (let i = 0; i <= n; i++) vis.p[i].copy(sw[i]).add(db).addScaledVector(dh, i / n).lerp(neck.p[i], NECK_FOLLOW);
         vis.p[0].copy(B);
@@ -770,8 +773,8 @@ export class Rig {
       this._swingAt = this._frame;
     }
     vis.apply(qNeckBase, this._qNeckEnd);
-    // (pinned: the head is placed as if the measured chain were shown)
-    const pin = this._swingAt === this._frame;
+    // (pinned: the head is placed as if the measured chain were shown; not while a strike leads it)
+    const pin = this._swingAt === this._frame && pose.headLead.lengthSq() < 1e-8;
     const hc = pin ? neck : vis;
     const qEnd = pin ? neck.endQuat(qNeckBase, this._qNeckEndM) : this._qNeckEnd;
 
