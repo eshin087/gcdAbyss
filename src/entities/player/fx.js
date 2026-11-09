@@ -105,6 +105,7 @@ export class PlayerFx {
     this.tipAcc = 0;
     this.skidAcc = [0, 0]; // per sliding contact (skid)
     this.scrapeAcc = 0;
+    this.plAcc = 0; // the plunge's hang motes / ride embers
   }
 
   get add() {
@@ -361,18 +362,26 @@ export class PlayerFx {
     this.dust(x, z, 6 + Math.round(8 * k), 0.8 + 0.8 * k);
   }
 
-  /** Parry: bright white-gold burst at the blade (blue-tinted for blue tells) + a ring of streaks. */
-  parry(x, y, z, blue) {
+  /**
+   * Parry (deflect): a bright white-gold clash at the blade (blue-tinted for blue tells) + a ring of
+   * streaks. `chain` = the deflect chain count (player.deflect): each deflect in rhythm clashes
+   * bigger and brighter, with a crossed pair of sparking streaks; (dx, dz) = toward the blow.
+   */
+  parry(x, y, z, blue, chain = 1, dx = 0, dz = 0) {
     const fx = this.add;
-    if (!fx) return;
+    if (!fx || !Number.isFinite(x + y + z)) return;
     const c0 = blue ? COL.parryBlue : COL.parry, c1 = blue ? COL.parryBlueEnd : COL.parryEnd;
-    for (let i = 0; i < 26; i++) {
+    const n = Math.max(1, Math.min(6, Number.isFinite(chain) ? chain : 1));
+    const k = 1 + 0.16 * (n - 1);
+    const fdx = Number.isFinite(dx) ? dx : 0, fdz = Number.isFinite(dz) ? dz : 0;
+    for (let i = 0; i < Math.round(26 * k); i++) {
       const a = (i / 26) * Math.PI * 2 + R(-0.12, 0.12);
-      const sp = R(3, 7);
+      const sp = R(3, 7) * (0.9 + 0.1 * k);
       fx.spawn({
         x, y, z,
-        vx: Math.cos(a) * sp, vy: R(-1, 3.5), vz: Math.sin(a) * sp,
-        life: R(0.16, 0.34), size: R(0.18, 0.3), sizeEnd: 0.04,
+        // the clash sprays back toward the blow and up
+        vx: Math.cos(a) * sp + fdx * 2, vy: R(-1, 3.5) + 0.5 * (n - 1), vz: Math.sin(a) * sp + fdz * 2,
+        life: R(0.16, 0.34) * (0.9 + 0.1 * k), size: R(0.18, 0.3), sizeEnd: 0.04,
         glyph: '+x*×', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -6, drag: 3.5, spin: R(-8, 8),
       });
     }
@@ -380,14 +389,35 @@ export class PlayerFx {
       const a = (i / 8) * Math.PI * 2;
       fx.spawn({
         x: x + Math.cos(a) * 0.15, y, z: z + Math.sin(a) * 0.15,
-        vx: Math.cos(a) * 9, vy: 0, vz: Math.sin(a) * 9,
+        vx: Math.cos(a) * 9 * k, vy: 0, vz: Math.sin(a) * 9 * k,
         life: 0.12, size: 0.3, sizeEnd: 0.1, stretch: 2.5, rot: -a,
         glyph: '-', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, drag: 10,
       });
     }
-    fx.spawn({ x, y, z, life: 0.12, size: 1.6, sizeEnd: 0.3, glyph: '*', color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
-    fx.spawn({ x, y, z, life: 0.16, size: 1.1, sizeEnd: 2.0, glyph: '°', color: c0, colorEnd: c1, alpha: 0.8, alphaEnd: 0 });
-    this._light({ x, y, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5, radius: 7, life: 0.2, fade: 0.18 });
+    if (n >= 2) {
+      // a chained deflect: two crossed streaks of steel light through the contact (an X on screen,
+      // laid along the rendering camera's axes)
+      const rx = CAM ? CAM[0] : 1, ry = CAM ? CAM[1] : 0, rz = CAM ? CAM[2] : 0;
+      const ux = CAM ? CAM[4] : 0, uy = CAM ? CAM[5] : UP_Y, uz = CAM ? CAM[6] : UP_Z;
+      for (let d = 0; d < 2; d++) {
+        const s = d ? -0.785 : 0.785, cs = Math.cos(s), sn = Math.sin(s);
+        for (let j = -3; j <= 3; j++) {
+          if (!j) continue;
+          const o = j * 0.12 * k;
+          fx.spawn({
+            x: x + o * (cs * rx + sn * ux), y: y + o * (cs * ry + sn * uy), z: z + o * (cs * rz + sn * uz),
+            life: 0.1 + 0.02 * Math.abs(j), size: 0.26, sizeEnd: 0.08,
+            glyph: '-', rot: s, stretch: 2.2, color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0,
+          });
+        }
+      }
+    }
+    // (the core flash stays compact: the wyrm's own parry burst lands on the same spot, and two big
+    // blooms hid the hero's deflect snap for a few frames)
+    fx.spawn({ x, y, z, life: 0.1, size: 1.25 * k, sizeEnd: 0.25, glyph: '*', color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
+    fx.spawn({ x, y, z, life: 0.14, size: 0.8 * k, sizeEnd: 1.6 * k, glyph: '°', color: c0, colorEnd: c1, alpha: 0.6, alphaEnd: 0 });
+    // (the light barely grows with the chain: the wyrm's own parry light lands on top of it)
+    this._light({ x, y, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5 * (1 + 0.05 * (n - 1)), radius: 7, life: 0.2, fade: 0.18 });
   }
 
   /** Blocked blow: '#' sparks thrown off the guard, away from the attacker (nx, nz). */
@@ -448,26 +478,7 @@ export class PlayerFx {
   ghostep(segs, nSegs, ox, oz, nx, nz) {
     const fx = this.add;
     if (!fx) return;
-    // afterimage: strokes along each bone, oriented to the bone's screen direction
-    for (let s = 0; s < nSegs; s++) {
-      const k = s * 6;
-      const ax = segs[k], ay = segs[k + 1], az = segs[k + 2];
-      const dx = segs[k + 3] - ax, dy = segs[k + 4] - ay, dz = segs[k + 5] - az;
-      const len = Math.hypot(dx, dy, dz);
-      if (!(len > 1e-3) || !Number.isFinite(len)) continue;
-      const rot = alongRot(dx, dy, dz);
-      const n = Math.max(1, Math.round(len / 0.11));
-      for (let i = 0; i <= n; i++) {
-        const f = i / n;
-        fx.spawn({
-          x: ax + dx * f, y: ay + dy * f, z: az + dz * f,
-          vx: R(-0.15, 0.15), vy: R(0.05, 0.35), vz: R(-0.15, 0.15),
-          life: R(0.45, 0.65), size: R(0.2, 0.26), sizeEnd: 0.12,
-          glyph: '|', rot: rot + R(-0.15, 0.15), color: COL.ghost, colorEnd: COL.ghostEnd,
-          alpha: 0.9, alphaEnd: 0, drag: 1.5, flicker: 0.25,
-        });
-      }
-    }
+    this._afterimage(fx, segs, nSegs);
     // streak from the old spot to the new one
     const sx = nx - ox, sz = nz - oz;
     const dist = Math.hypot(sx, sz);
@@ -499,6 +510,199 @@ export class PlayerFx {
     }
     fx.spawn({ x: nx, y: 0.95, z: nz, life: 0.18, size: 1.8, sizeEnd: 0.4, glyph: '|', color: COL.ghostCore, colorEnd: COL.ghost, alpha: 1, alphaEnd: 0 });
     this._light({ x: nx, y: 1.1, z: nz, color: [0.55, 0.75, 1.3], intensity: 3.2, radius: 6, life: 0.5, fade: 0.45, fadeIn: 0.02 });
+  }
+
+  /** The cold blue-white afterimage: strokes along each bone of the pose sampled before a blink
+   *  (`segs`: flat [ax, ay, az, bx, by, bz, ...] world segments), oriented to their screen direction. */
+  _afterimage(fx, segs, nSegs) {
+    for (let s = 0; s < nSegs; s++) {
+      const k = s * 6;
+      const ax = segs[k], ay = segs[k + 1], az = segs[k + 2];
+      const dx = segs[k + 3] - ax, dy = segs[k + 4] - ay, dz = segs[k + 5] - az;
+      const len = Math.hypot(dx, dy, dz);
+      if (!(len > 1e-3) || !Number.isFinite(len + ax + ay + az)) continue;
+      const rot = alongRot(dx, dy, dz);
+      const n = Math.max(1, Math.round(len / 0.11));
+      for (let i = 0; i <= n; i++) {
+        const f = i / n;
+        fx.spawn({
+          x: ax + dx * f, y: ay + dy * f, z: az + dz * f,
+          vx: R(-0.15, 0.15), vy: R(0.05, 0.35), vz: R(-0.15, 0.15),
+          life: R(0.45, 0.65), size: R(0.2, 0.26), sizeEnd: 0.12,
+          glyph: '|', rot: rot + R(-0.15, 0.15), color: COL.ghost, colorEnd: COL.ghostEnd,
+          alpha: 0.9, alphaEnd: 0, drag: 1.5, flicker: 0.25,
+        });
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ the plunge (player.js)
+  /**
+   * The plunge's blink: the afterimage at the dodge spot (ox, oz), a cold streak rising from it to
+   * the hang point above the head (nx, ny, nz: the root there) and the reappear burst round him.
+   */
+  plungeBlink(segs, nSegs, ox, oz, nx, ny, nz) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(ox + oz + nx + ny + nz)) return;
+    this._afterimage(fx, segs, nSegs);
+    // the rising streak, laid along the 3D path (it reads as the way he went)
+    const sx = nx - ox, sy = ny + 0.4, sz = nz - oz;
+    const dist = Math.hypot(sx, sy, sz);
+    if (dist > 0.3 && dist < 60) {
+      const rot = alongRot(sx, sy, sz) + Math.PI / 2;
+      const n = Math.min(70, Math.round(dist / 0.16));
+      for (let i = 0; i <= n; i++) {
+        const f = i / n;
+        fx.spawn({
+          x: ox + sx * f + R(-0.1, 0.1), y: 0.9 + sy * f + R(-0.1, 0.1), z: oz + sz * f + R(-0.1, 0.1),
+          vx: (sx / dist) * R(0.3, 1.2), vy: (sy / dist) * R(0.3, 1.2), vz: (sz / dist) * R(0.3, 1.2),
+          life: R(0.25, 0.5) * (0.45 + 0.55 * f), size: R(0.18, 0.26), sizeEnd: 0.05, stretch: 1.5,
+          glyph: '-=~·', rot: rot + R(-0.1, 0.1), color: COL.ghost, colorEnd: COL.ghostEnd,
+          alpha: 0.85, alphaEnd: 0, drag: 2.5,
+        });
+      }
+    }
+    // reappear: motes collapsing onto him + a cold core flash
+    const cy = ny + 1.0;
+    for (let i = 0; i < 20; i++) {
+      const a = (i / 20) * Math.PI * 2, r = R(0.7, 1.1);
+      const ex = Math.cos(a) * r, ey = R(-0.6, 0.7), ez = Math.sin(a) * r;
+      fx.spawn({
+        x: nx + ex, y: cy + ey, z: nz + ez, vx: -ex * 2.4, vy: -ey * 2.4, vz: -ez * 2.4,
+        life: R(0.28, 0.4), size: R(0.14, 0.22), sizeEnd: 0.04,
+        glyph: '·+°', color: COL.ghost, colorEnd: COL.ghostEnd, alpha: 1, alphaEnd: 0, drag: 2, flicker: 0.3,
+      });
+    }
+    // (short: it runs in the slow-mo, and a long flare hid him for most of the hang)
+    fx.spawn({ x: nx, y: cy, z: nz, life: 0.1, size: 1.7, sizeEnd: 0.4, glyph: '+', color: COL.ghostCore, colorEnd: COL.ghost, alpha: 1, alphaEnd: 0, rot: 0.785 });
+    this._light({ x: nx, y: cy, z: nz, color: [0.55, 0.78, 1.4], intensity: 3, radius: 6, life: 0.3, fade: 0.25, fadeIn: 0.02 });
+  }
+
+  /** The hang at the apex: cold motes drawn in onto him (x, y, z: his chest). */
+  plungeHang(dt, x, y, z) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    this.plAcc += dt * 60;
+    while (this.plAcc >= 1) {
+      this.plAcc -= 1;
+      const a = Math.random() * Math.PI * 2, r = R(0.6, 1.2);
+      const ex = Math.cos(a) * r, ey = R(-0.7, 0.9), ez = Math.sin(a) * r;
+      const life = R(0.16, 0.26);
+      fx.spawn({
+        x: x + ex, y: y + ey, z: z + ez, vx: -ex / life, vy: -ey / life, vz: -ez / life,
+        life, size: R(0.09, 0.15), sizeEnd: 0.03, glyph: "·'.+", color: COL.charge, colorEnd: COL.chargeEnd, alpha: 0.85, alphaEnd: 0.1,
+      });
+    }
+  }
+
+  /**
+   * The blade meets the head (x, y, z: the wound): a white-cyan flash, cold crystal shards fanned
+   * up and out, molten blood thrown up from the wyrm, a shock ring round the skull, two lights.
+   * (dx, dz) = his spring-off side; exec: the execution (bigger, gold-white).
+   */
+  plungeImpact(x, y, z, dx, dz, exec = false) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    const k = exec ? 1.35 : 1;
+    const c0 = exec ? COL.parry : COL.shard, c1 = exec ? COL.parryEnd : COL.shardEnd;
+    fx.spawn({ x, y: y + 0.3, z, life: 0.16, size: 3.2 * k, sizeEnd: 0.6, glyph: '*', color: COL.flash, colorEnd: COL.trailCore, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
+    fx.spawn({ x, y: y + 0.2, z, life: 0.3, size: 1.4 * k, sizeEnd: 4.2 * k, glyph: '°', color: COL.trailCore, colorEnd: COL.shardEnd, alpha: 0.85, alphaEnd: 0 });
+    // the crystal fan: kite shards up and out all round
+    const nS = Math.round(16 * k);
+    for (let i = 0; i < nS; i++) {
+      const a = (i / nS) * Math.PI * 2 + R(-0.15, 0.15), up = R(0.35, 1.25), sp = R(3.5, 7) * k;
+      const vx = Math.cos(a) * sp * Math.cos(up), vy = Math.sin(up) * sp, vz = Math.sin(a) * sp * Math.cos(up);
+      fx.spawn({
+        x: x + Math.cos(a) * 0.25, y: y + 0.1, z: z + Math.sin(a) * 0.25, vx, vy, vz,
+        life: R(0.4, 0.7), size: R(0.2, 0.42) * k, sizeEnd: 0.06, stretch: 0.6,
+        glyph: 'A^V', rot: alongRot(vx, vy, vz), spin: R(-2, 2),
+        color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -12, drag: 1.1,
+      });
+    }
+    // molten blood: hot embers thrown up out of the wound, falling back
+    for (let i = 0; i < Math.round(26 * k); i++) {
+      const a = Math.random() * Math.PI * 2, sp = R(1.5, 6);
+      fx.spawn({
+        x, y: y + 0.1, z, vx: Math.cos(a) * sp * 0.6 + dx * 1.2, vy: R(3, 9), vz: Math.sin(a) * sp * 0.6 + dz * 1.2,
+        life: R(0.4, 0.85), size: R(0.15, 0.3), sizeEnd: 0.05,
+        glyph: "*^~'", color: COL.flame, colorEnd: COL.flameEnd, alpha: 1, alphaEnd: 0, gravity: -14, drag: 0.8, spin: R(-5, 5),
+      });
+    }
+    // the shock ring round the skull
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      fx.spawn({
+        x: x + Math.cos(a) * 0.4, y: y + 0.15, z: z + Math.sin(a) * 0.4, vx: Math.cos(a) * 7 * k, vz: Math.sin(a) * 7 * k,
+        life: 0.28, size: 0.28, sizeEnd: 0.1, stretch: 1.6, glyph: '-~', rot: -a, color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, drag: 6,
+      });
+    }
+    // white-gold sparks off the steel
+    this.sparks(x, y + 0.2, z, dx, dz, true, exec);
+    // (kept small: a big light here turns the whole wyrm's ASCII art white)
+    this._light({ x, y: y + 0.6, z, color: [0.7, 0.95, 1.5], intensity: 3 * k, radius: 6, life: 0.25, fade: 0.22 });
+    this._light({ x, y: y + 0.3, z, color: [1.4, 0.5, 0.15], intensity: 2.2 * k, radius: 5, life: 0.6, fade: 0.5 });
+  }
+
+  /** Riding the head: embers spurting from the wound round the buried blade (k 0..1 = strength). */
+  plungeRide(dt, x, y, z, dx, dz, k = 1) {
+    const fx = this.add;
+    if (!fx || !(k > 0) || !Number.isFinite(x + y + z)) return;
+    this.plAcc += dt * 70 * k;
+    while (this.plAcc >= 1) {
+      this.plAcc -= 1;
+      const a = Math.random() * Math.PI * 2, sp = R(0.5, 2.5);
+      const cold = Math.random() < 0.25;
+      fx.spawn({
+        x: x + R(-0.15, 0.15), y: y + R(0, 0.2), z: z + R(-0.15, 0.15),
+        vx: Math.cos(a) * sp - dx * 0.8, vy: R(2, 6), vz: Math.sin(a) * sp - dz * 0.8,
+        life: R(0.3, 0.6), size: R(0.12, 0.24), sizeEnd: 0.04,
+        glyph: cold ? "·'" : "*^~'", color: cold ? COL.crit : COL.flame, colorEnd: cold ? COL.critEnd : COL.flameEnd,
+        alpha: 1, alphaEnd: 0, gravity: -11, drag: 1, spin: R(-4, 4),
+      });
+    }
+  }
+
+  /** The blade ripped out of the head as he springs off: a gout of embers and a cold flick. */
+  plungeRip(x, y, z, dx, dz) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    for (let i = 0; i < 18; i++) {
+      const sp = R(2, 6);
+      fx.spawn({
+        x, y: y + 0.2, z, vx: dx * sp + R(-1.5, 1.5), vy: R(3, 7), vz: dz * sp + R(-1.5, 1.5),
+        life: R(0.35, 0.7), size: R(0.15, 0.28), sizeEnd: 0.05,
+        glyph: "*^~'", color: COL.flame, colorEnd: COL.flameEnd, alpha: 1, alphaEnd: 0, gravity: -13, drag: 0.8, spin: R(-5, 5),
+      });
+    }
+    fx.spawn({ x, y: y + 0.4, z, life: 0.12, size: 1.3, sizeEnd: 0.3, glyph: '*', color: COL.trailCore, colorEnd: COL.trail, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
+    this._light({ x, y: y + 0.5, z, color: [1.3, 0.55, 0.2], intensity: 3, radius: 6, life: 0.3, fade: 0.25 });
+  }
+
+  /** Touchdown in front of the head: a dust ring, a low cold ring, a puff where he slides. */
+  plungeLand(x, z, dx, dz) {
+    const fa = this.alpha, fx = this.add;
+    if (!Number.isFinite(x + z)) return;
+    if (fa) {
+      for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * Math.PI * 2;
+        fa.spawn({
+          x: x + Math.cos(a) * 0.3, y: 0.06, z: z + Math.sin(a) * 0.3,
+          vx: Math.cos(a) * 2.2 + dx * 1.2, vy: R(0.1, 0.5), vz: Math.sin(a) * 2.2 + dz * 1.2,
+          life: R(0.45, 0.7), size: R(0.16, 0.24), sizeEnd: 0.4,
+          glyph: '.,:', color: COL.dust, colorEnd: COL.dustEnd, alpha: 0.85, alphaEnd: 0, drag: 3,
+        });
+      }
+    }
+    if (fx) {
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        fx.spawn({
+          x: x + Math.cos(a) * 0.2, y: 0.08, z: z + Math.sin(a) * 0.2, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3,
+          life: 0.26, size: 0.18, sizeEnd: 0.06, glyph: '-~', rot: -a, color: COL.trail, colorEnd: COL.trailEnd, alpha: 0.85, alphaEnd: 0, drag: 5,
+        });
+      }
+    }
+    this.dust(x, z, 8, 1.1);
   }
 
   /** Charging: cold motes drawn in toward the blade, and past half charge jagged cyan lightning
@@ -753,5 +957,6 @@ export class PlayerFx {
     this.tipAcc = 0;
     this.skidAcc[0] = this.skidAcc[1] = 0;
     this.scrapeAcc = 0;
+    this.plAcc = 0;
   }
 }

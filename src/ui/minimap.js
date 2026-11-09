@@ -220,7 +220,7 @@ export class Minimap {
       c.arc(mx, my, 3.5 + pulse * 8, 0, TAU);
       c.stroke();
       c.globalAlpha = 1;
-      c.fillStyle = d.phase === 2 ? '#ff8a3d' : '#ff4a2e';
+      c.fillStyle = d.phase >= 3 ? '#ffd08a' : d.phase === 2 ? '#ff8a3d' : '#ff4a2e';
       c.beginPath();
       c.arc(mx, my, 3.4, 0, TAU);
       c.fill();

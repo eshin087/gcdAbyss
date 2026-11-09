@@ -379,3 +379,167 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     never edit the measured solve.
   - The neck hurt spheres ride on the shown chain, so they can differ from the measured neck.
 
+## ADR-026 — Enemy combos are data-driven strings; a parry deflects a hit without ending the string (2026-11-09)
+- **Context:** the owner asked for Sekiro / Phantom Blade Zero combos where several parries in a row
+  are possible: a flow of exchanges. Until now a parry cancelled any melee attack with a recoil, so
+  the one multi-hit attack (the claw combo) ended at its first parry.
+- **Decision:**
+  - A string is data: `TUNING.attacks[name].hits[]`, each hit a `kind` (a performance in `KINDS`)
+    with its own tell, windup (+ an optional random hold that baits an early parry), active, impact,
+    damage, knockback and an optional `chance`. `makeString` builds the action with one tell beat
+    per hit.
+  - A parried hit that is not the string's last is deflected: its posture damage and a 0.14 s visual
+    knock-back, no timing change; the next hit comes on schedule. Parrying the last hit (or a single
+    melee attack) recoils as before. `dragon:parried` gains `{hit, last}`; `combat:deflectChain
+    {count}` fires from the second parry in a row.
+  - Data rules, tested: the first windup ≥ 0.7 s, ≥ 0.45 s from impact to impact, every contact
+    within ±85 ms of its flash + lead.
+  - A red hit inside a string must be dodged; a perfect dodge of it plunges and ends the string.
+- **Consequences:**
+  - Seven strings today (claw combo, rending flurry, hesitant maw, wing buffet, tail lash, pounce,
+    frenzy); new enemies get combos from data plus kinds.
+  - Posture comes mostly from parry chains, so the meter grew (560 / 640 / 720 per phase).
+  - The AI picks a string by its first hit's band: later hits can whiff a hero who stands still.
+
+## ADR-027 — A perfect dodge of the wyrm becomes a plunge onto its head (2026-11-09)
+- **Context:** Ghostep (ADR-008) blinked the hero 3.2 m behind the attacker. Behind a 7.5 m-tall wyrm
+  the player could not see himself and lost his bearings. The owner asked for the hero to appear on
+  top of the dragon and stab down into its head, automatically on every perfect dodge in range.
+- **Decision:**
+  - An attacker that offers `plungePoint(out)` and `onPlunge(o)` gets the plunge on a perfect dodge
+    with its head within `DEFENSE.plunge.range` (30 m), unless the hit forbids it (`takeHit`
+    `plunge: false`): vanish, hang 5 m above the head, dive, one `onPlunge` (90 final damage, 40
+    posture), ride the head down, backflip to a visible landing in front of it toward where he came
+    from, then the crit window. Invulnerable throughout; the camera keeps both on screen.
+  - Out of range or forbidden: the slow-mo and crits in place, no teleport. Attackers without the
+    API keep the v0.2 blink behind them.
+  - While the wyrm is posture-broken, an attack near its head (9 m) starts the same move as an
+    execution (260 final damage), which spends the break.
+  - The attacker plays its own `plunged` reaction (the head slammed down, a thrash, the rise; in the
+    air a crash first) and keeps its head on its joints for the rider.
+- **Consequences:**
+  - Supersedes ADR-008's "blink behind" for the wyrm; `player:perfectDodge` and `player:ghostep`
+    still fire.
+  - The hero's `position.y` is no longer always 0 (the plunge's lift); hits and body circles are
+    skipped meanwhile.
+  - The camera rig got a general keep-in-view request (`cameraRig.keep`).
+  - The plunge is a large damage source (90 per perfect dodge): the damage is final (no head ×1.5)
+    and the HP was raised to match (ADR-033).
+  - The airborne crash is reached in play by perfect-dodging fire the wyrm breathes or spits from the
+    air (the burning pass's stream, the hover barrage's shells: hazards spawned with `plunge: true`,
+    ADR-029), and by the dive's crash landing.
+
+## ADR-028 — Three boss phases behind HP gates; a new phase's abilities unlock one by one (2026-11-09)
+- **Context:** the owner wants a 3–5 min, hard fight in three phases. ADR-009's gate covered one
+  transition at 50 %. When a phase unlocked several new abilities at once, they all came right after
+  the roar.
+- **Decision:**
+  - Phases start at `TUNING.phaseAt` [1, 0.66, 0.33] of max HP. Every threshold is a gate: while the
+    AI runs, damage clamps there until the transition starts. `brain.pendingPhase` holds the next
+    transition; it waits for the intro, another transition, the death or a plunge reaction, and never
+    starts while the wyrm is broken.
+  - Each transition is a scripted roar (a red shock ring) that clears every hazard and heats the
+    wyrm up; phase 3 opens with the Inferno nova.
+  - Per-phase tuning as `[P1, P2, P3]` arrays read with `perPhase`: time scale, turn, walk, idle
+    gap, posture max, glow, embers, jaw, attack weights.
+  - `enterPhase(n)` gives the abilities phase n unlocks staggered opening cooldowns
+    (`TUNING.unlockStagger` [2, 2.5, 2] s, in a random order).
+- **Consequences:**
+  - Extends ADR-009 to every gate. `dragon:phase3` and `dragon:phase {n}` join `dragon:phase2`.
+  - Each phase reads as a step up, and the nova's 2.5 s charge announces phase 3.
+  - The transition roars always run at phase-1 timings.
+
+## ADR-029 — Fire hazards are world threats that run on their own (2026-11-09)
+- **Context:** the owner wanted epic fire spells: meteor rain, eruptions, flame walls and rings, an
+  inferno nova. If each spell were one long action, the wyrm would stand still while it rains;
+  layering threats needs them to live apart from the current action.
+- **Decision:**
+  - A pooled `Hazards` system on the dragon (`hazards.js`): circles, strips, rings, walls and pillar
+    lines, plus rain and chase emitters. `dragon.update` runs it every frame (guarded); it is cleared
+    on reset, death and every phase change, and allocates nothing per frame.
+  - Every hazard shows a red ground warning from spawn to impact and deals one red blow through
+    `dragon.hitPlayer` (default `plunge: false`): block and parry fail, i-frames or moving away avoid
+    it, and a perfect dodge gives the slow-mo in place (dodging a meteor must not put you on the
+    wyrm's head). Fire the wyrm itself breathes or spits from the air (the burning pass's stream, the
+    hover barrage's shells) spawns with `plunge: true`: perfect-dodging it plunges onto the flier.
+  - A hazard either announces itself (`combat:tell` / `combat:flash` with `hazard: true`) or is
+    covered by the spawning attack's own tell, re-timed from the hazard's geometry (`timeTo`).
+  - The AI may start melee while hazards burn. Hit caps per group limit what a rain or a chase can
+    deal (meteors ≤ 3 hits). The HUD's red screen edge skips hazard flashes (a meteor rain pulsed the
+    whole screen); audio plays a lighter cue.
+- **Consequences:**
+  - The fight layers: a string while meteors fall.
+  - `hazards.js` lives in the dragon module; a second enemy that casts hazards would move it to a
+    shared place.
+
+## ADR-030 — The wyrm flies only inside single attacks (2026-11-09)
+- **Context:** the owner wanted flying attacks and fire from the air, and chose short flights over
+  an extended flight phase.
+- **Decision:**
+  - Each flight is one action: take off, attack from the air, land (the burning pass, the sky dive,
+    the hover barrage). In the air `state === 'airborne'` (the leap's convention): no body circles,
+    staggers wait, and the hurt spheres ride the drawn body, out of sword reach; only the plunge
+    reaches the head.
+  - The AI never picks an attack while airborne (`attackWeight`'s `air` flag exists; nothing sets
+    it).
+  - Flight poses are rig pose fields (`hover`, `glide`, `dive`, `altRate`) and two wing keys
+    (GLIDE, DIVE). Hover points sit beside the hero so the flier stays on screen, and the flow asks
+    the camera to keep its head and body in view.
+- **Consequences:**
+  - No flight-phase AI or aerial targeting to maintain; flights stay ≤ 16 m up and in the bound.
+  - A plunge mid-flight crashes the wyrm where it was hit (`d.crashing`), but every blow dealt in
+    flight comes from a hazard, so in play the plunge always meets a grounded wyrm.
+
+## ADR-031 — The hero gets girth, not longer bones; his blade is depth-tested again (2026-11-09)
+- **Context:** the owner found the hero "too lanky / skinny", and the sword always showed and clipped
+  through him, even through his back from behind. ADR-022's depth pull drew the blade up to 0.65 m
+  nearer the camera so the low guard would read from behind; it also drew it over parts of his body
+  that are really in front of it.
+- **Decision:**
+  - The mass comes from mesh radii and widths (`BODY` in `player/model.js`): chest 0.50 × 0.27 m,
+    waist 0.31, hips 0.34, thick arms and legs, shoulder joints ±0.21. Bone lengths drive the IK, the
+    foot planner and the blade's hit segment, so they stay.
+  - The sword hand aims from the old shoulder spot (`DIM.gripShoulder`, `rig.arms.R.anchor`).
+  - The depth pull is removed (`heroArt.pull`, `SG_HERO_PULL`, `uArtPull`, `BLADE_PULL`): the blade
+    is depth-tested like every other part.
+  - The coat yields to the steel: each panel hangs inside the sword hand and the blade or drapes over
+    them, latched per panel.
+- **Consequences:**
+  - Supersedes ADR-022's depth pull; its three blade lengths stay.
+  - From behind only the steel beside his silhouette shows: the low idle guard shows just its point.
+  - Not bit-identical (ADR-024): the hit segment moved by ≤ 2.5 cm on some active frames; the REACH
+    table is unchanged.
+  - At the game camera the extra mass reads only modestly; the coat skirt dominates the outline.
+
+## ADR-032 — A successful deflect re-arms the parry at once (2026-11-09)
+- **Context:** strings put a blow every ~0.45 s. The anti-mash rule (RMB must be up `parryRearm`
+  0.25 s before a press counts) failed a player who held the guard a moment after each deflect,
+  which is natural because holding keeps blocking. The parry freeze also stretches real time while
+  `parryRearm` counts game time.
+- **Decision:** a successful parry sets `player.rmb.chain`: the next press counts as soon as RMB has
+  been released. Every press clears it, so a press that parries nothing needs the full re-arm again.
+- **Consequences:**
+  - A string can be deflected blow by blow with the guard held between taps (DEFLECT scenario: two
+    blows 0.3 s apart with taps held 0.2 s, both parried).
+  - Mashing still fails (the PARRY scenario's mashed RMB).
+  - Player-side only: enemies need nothing.
+
+## ADR-033 — Difficulty is set by measurement: the probe bot (2026-11-09)
+- **Context:** the target is a 3–5 min fight for a player who knows the moves, hard enough that a
+  skilled player dies several times while learning it. Guessed numbers had missed before (v0.2's
+  god-mode bot won in ~20 s of combat), and on the melee branch the god-mode bot won in 75–90 s with
+  ~35 % of the HP from emulated plunges.
+- **Decision:**
+  - Tune against the integration bots: `win` (god mode, answers every tell) for fight length and
+    phase timing, and the opt-in `probe` scenario (a mortal bot that answers a share of the tells,
+    `ABYSS_SKILL`; reseed with `ABYSS_SEED`) for danger, at several skills.
+  - The lead's retune: HP 4200 → 4500, the plunge's damage final (no head ×1.5), AI weights toward
+    the strings and the fire attacks, the unlock stagger.
+  - Record the measurements in COMBAT.md "Current numbers" whenever the balance changes.
+- **Consequences:**
+  - Measured (probe at 4200 HP): a 95 % bot wins in 145–150 s, an 85 % bot wins 1 of 3, a 70 % bot
+    always dies; the god-mode bot at 4500 HP wins in 157.5 s.
+  - The bots heal poorly and never learn, so the death rates are pessimistic; a human playtest still
+    decides.
+  - `probe` is not part of `npm test`'s `all` run.
+

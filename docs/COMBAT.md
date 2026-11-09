@@ -2,41 +2,77 @@
 
 ABYSS is an action RPG, not a stamina-gated soulslike. Fights are about **reading tells** and
 answering them with **block, parry or a perfectly timed dodge** — inspired by Phantom Blade Zero's
-attack tells, read from the enemy itself rather than from HUD text. Numbers live in
-`src/combat/rules.js` (shared) and each actor's `tuning`.
+attack tells, read from the enemy itself rather than from HUD text, and by Sekiro's deflect
+exchanges: an enemy's combo is met blow by blow. Numbers live in `src/combat/rules.js` (shared) and
+each actor's `tuning`.
 
 ## Core rules
 1. **No stamina.** Attacking, rolling, sprinting and blocking are free; pacing comes from attack
    recovery, roll recovery and the enemy's patterns.
 2. **Every enemy attack has a tell** declared in its data: `normal`, `blue` or `red`
-   (`TELL` in `rules.js`). Tells are **read from the attacker, never from HUD text or icons** (no
-   PARRY / DODGE labels, no marks or rings over the enemy, no off-screen arrows). Every hit has a
-   **timing cue ~0.35 s before impact** (`combat:flash`). Windups are long enough to react to
-   (≥ 0.7 s in phase 1 for melee). How each tell looks: see *Tell presentation* below.
+   (`TELL` in `rules.js`); every hit of a combo string has its own. Tells are **read from the
+   attacker, never from HUD text or icons** (no PARRY / DODGE labels, no marks or rings over the
+   enemy, no off-screen arrows). Every hit has a **timing cue ~0.35 s before impact**
+   (`combat:flash`). Windups are long enough to react to (≥ 0.7 s in phase 1 for melee, the first
+   hit of a string included; a string's next hit lands ≥ 0.45 s after the previous one). How each
+   tell looks: see *Tell presentation* below.
 3. **Answers**
    | Tell | Block (hold RMB) | Parry (tap RMB just before impact) | Dodge (Space) |
    |---|---|---|---|
-   | `normal` — white glint | −80 % dmg, small pushback | full negate, posture dmg | i-frames; perfect → Ghostep |
-   | `blue` — big white glint (heavy blow) | −50 % dmg, big pushback | full negate, **big** posture dmg | i-frames; perfect → Ghostep |
-   | `red` — red glow + red flash | **fails** (full dmg, knockdown) | **fails** | **only answer**; perfect → Ghostep |
-   Attacks may override parry/block (a fire stream is blockable but not parryable).
+   | `normal` — white glint | −80 % dmg, small pushback | full negate, posture dmg; a string goes on | i-frames; perfect → plunge |
+   | `blue` — big white glint (heavy blow) | −50 % dmg, big pushback | full negate, **big** posture dmg; a string goes on | i-frames; perfect → plunge |
+   | `red` — red glow + red flash | **fails** (full dmg, knockdown) | **fails** | **only answer**; perfect → plunge (a fire hazard: in place) |
+
+   Attacks may override parry/block (a fire stream is blockable but not parryable). "Perfect →
+   plunge" needs an attacker with a head to stab (the wyrm) within range; otherwise a perfect dodge
+   gives the slow-mo and the crit window where you dodged (rule 5).
 4. **Parry** = RMB pressed ≤ `parryWindow` (0.22 s) before impact, attacker within the front arc.
-   Mashing is prevented: RMB must be released `parryRearm` (0.25 s) before a new press counts.
-   Holding RMB after the press keeps blocking.
-5. **Perfect dodge** = a dodge started ≤ `perfectDodgeWindow` (0.2 s) before impact → **Ghostep**:
-   the player blinks behind the attacker, time slows (×0.3 for 0.6 s), and for 1.6 s the player's
-   hits crit (×1.8). A dodge outside the window is a normal i-frame dodge. A dodge with no
-   direction held is a **backstep** (shorter i-frames 0.03–0.22 s). Streams (fire breath) only
-   Ghostep when the roll starts into them; rolling out of one is a plain dodge.
-6. **Posture.** Enemies have a posture meter (gold bar under the boss HP). Parries and weapon hits
-   fill it; at max the enemy is **broken** for 3.2 s (open: ×2.2 crits). It recovers after 3 s
-   without posture damage.
-7. **Phase gate.** While the AI runs the fight, phase-1 damage stops at the phase-2 threshold until
-   the transition starts, so burst crits can't skip phase 2 (damage numbers still show).
-8. **Fairness checklist for every new attack:** tell type set · windup ≥ 0.7 s (melee) and
-   readable from the animation alone (parryable hits get no colour before the glint) · flash
-   ~0.35 s before impact · hitbox matches the visual · recovery window to punish · no unavoidable
-   chip (AoE red attacks show a red ground ring).
+   Mashing is prevented: RMB must be released `parryRearm` (0.25 s) before a new press counts —
+   **except right after a successful parry**: a deflect re-arms at once, so the next press counts as
+   soon as RMB was released, even when the guard was held between blows (ADR-032). A press that
+   parries nothing needs the full re-arm again, so mashing still fails. Holding RMB after the press
+   keeps blocking; between parries in rhythm the guard stays up (~0.3–0.6 s).
+5. **Perfect dodge** = a dodge started ≤ `perfectDodgeWindow` (0.2 s) before impact:
+   - against the wyrm, with its head within `DEFENSE.plunge.range` (30 m) → **the plunge** (below):
+     you appear above its head and drive the blade in (ADR-027);
+   - out of range, or against a hit that forbids it (`plunge: false`: the fire spells' hazards —
+     meteors, pillars, rings, walls; fire breathed or spat from the air, the burning pass's stream
+     and the hover barrage's shells, does allow it: the hero lands on the flying wyrm, which crashes) →
+     **slow-mo + crits in place**: time slows (×0.3 for 0.6 s) and for 1.6 s your hits crit (×1.8),
+     with no teleport;
+   - against an attacker with no head to plunge into (future enemies) → the v0.2 **Ghostep**: a
+     blink 3.2 m behind it (within 12 m), the same slow-mo and crits. The blink behind the wyrm is
+     retired: players lost sight of themselves behind it.
+
+   A dodge outside the window is a normal i-frame dodge. A dodge with no direction held is a
+   **backstep** (shorter i-frames 0.03–0.22 s). Streams (fire breath) only count as a perfect dodge
+   when the roll starts into them; rolling out of one is a plain dodge.
+6. **Posture.** Enemies have a posture meter (gold bar under the boss HP). Parries fill it most (26 /
+   48 per normal / blue parry, against 5 / 16 per light / heavy weapon hit; the plunge adds 40); at
+   max the enemy is **broken** for 3.2 s (open: ×2.2 crits). It recovers after 3 s without posture
+   damage. **Execution:** while the wyrm is broken, attack with its head within 9 m → the plunge as
+   an execution (260 damage, no slow-mo); it spends the break.
+7. **Phases and gates.** The wyrm has three phases: P1 100–66 %, P2 66–33 %, P3 33–0 % of its HP.
+   While the AI runs the fight, damage stops at the next phase's threshold until its transition
+   starts, so burst crits can't skip a phase (damage numbers still show). Each transition is a
+   scripted roar (a red shock ring) that clears every fire hazard; the new phase's abilities then
+   come in one by one, and phase 3 opens with the Inferno nova (ADR-028).
+8. **Strings and the deflect chain.** A string is one attack of several hits. Parrying a hit that is
+   not the string's last **deflects** it: its posture damage applies, the struck paw or head is
+   knocked back (visual only), and the next hit comes on schedule. Parrying the **last** hit (or a
+   single melee attack) recoils the wyrm: the punish window. A red hit inside a string must be
+   dodged; a perfect dodge of it plunges and ends the string (ADR-026).
+9. **Hazards** are world threats that live on their own (meteors, lava pillars, burning strips, fire
+   rings and walls), so the wyrm can keep fighting while they burn. Each shows a red ground warning
+   from spawn to impact. They are red: block and parry fail, i-frames or leaving the area avoid them,
+   and a perfect dodge of one never plunges (slow-mo + crits in place). A burning strip's lingering
+   fire deals small blockable contact ticks, never while you roll (ADR-029).
+10. **Fairness checklist for every new attack:** tell type set (per hit for strings) · windup
+    ≥ 0.7 s (melee; a string's first hit) and readable from the animation alone (parryable hits get
+    no colour before the glint) · flash ~0.35 s before impact · string follow-ups ≥ 0.45 s apart ·
+    hitbox matches the visual · recovery window to punish · no unavoidable damage (AoE red attacks
+    and hazards show a red ground ring until impact; every hazard can be dodged with i-frames or by
+    moving).
 
 ## Tell presentation
 ```
@@ -46,6 +82,8 @@ red    body glows red, 0.1 ramping to 0.38   body spike 1.6, gone in 0.25 s
        audio: low brass sting                red screen-edge flash, ~0.25 s
 normal animation only (faint audio tick)     white glint + bright ting
 blue   animation only (blade 'shing')        white glint x1.5 (size, brightness)
+hazard red ground warning from its spawn     its ring flares, red glyphs + a red light
+       audio: a lighter hazard cue           no screen-edge flash
 ```
 - **Dodge-only (`red`) — the attacker warns.** It glows red through the windup (creature material
   uniform `uWarn`: hot red `[1.0, 0.12, 0.05]`, strength ramps from 0.1 at the tell to 0.38 at the
@@ -53,26 +91,41 @@ blue   animation only (blade 'shing')        white glint x1.5 (size, brightness)
   burst and red light at the striking part). Audio: a low brass sting at windup start, a sharp
   crack on the cue. Area attacks also show a red glyph danger ring on the ground until impact. The
   HUD only adds a brief red screen-edge vignette on the cue (fades in ~0.25 s, stronger on the
-  attacker's side) — nothing during the windup. Numbers: `TELL_STYLE.red.warn` in `rules.js`.
+  attacker's side) — nothing during the windup. Numbers: `TELL_STYLE.red.warn` in `rules.js`. In a
+  string every hit is its own beat: a red hit glows through its own windup only.
 - **Parryable (`normal`, `blue`) — the animation is the tell.** No colour coding during the windup
   (audio: a faint tick, or a blade "shing" for `blue`). On the cue a brief **white glint** (star
   core, four-point sparkle, a few short rays, a small white light) pops at the striking part with a
   short bright "ting". `blue` (heavy, big-posture) gets a ~1.5× larger, brighter glint
   (`TELL_STYLE.blue.glint`) and a richer ting — still white, never blue.
-- The glow clears the moment the windup is cancelled: stagger, posture break, parry recoil, death,
-  reset, or a Lab interrupt replacing the attack.
-- After-the-fact feedback (PARRY / DEFLECT / GHOSTEP / GUARD BROKEN call-outs, white/gold parry
-  sparks) is not a tell and stays.
+- **Hazards warn on the ground.** A ring of red `•` dots and `!` marks (an inner ring closes in as
+  the impact nears), `>` chevrons down the path of a fire strip or wall, a hot red ring where a
+  flame ring will ignite. Meteors and chase pillars announce themselves (their own `combat:tell` /
+  `combat:flash` with `hazard: true`): audio plays a lighter cue (no brass sting, no music dip) and
+  the HUD skips the red screen edge, so a meteor rain doesn't pulse the screen. The other hazards
+  are covered by the spawning attack's own tell (the wyrm glows red through that windup). The
+  meteor cast itself has no tell: it deals nothing, and each meteor warns for itself.
+- The glow clears the moment the windup is cancelled: stagger, posture break, parry recoil, the
+  plunge's reaction, death, reset, or a Lab interrupt replacing the attack.
+- After-the-fact feedback (PARRY / DEFLECT / DEFLECT ×N / GHOSTEP / EXECUTION / GUARD BROKEN
+  call-outs, white/gold parry sparks, the clang that climbs with a deflect chain) is not a tell and
+  stays.
 
 ## Contract (summary — full signatures in ARCHITECTURE.md)
 - Attacker → defender: `defender.takeHit({ damage, from, knockback, knockdown, kind, burn, tell,
-  parryable, blockable, attack, attacker })` returns a `RESULT` (`hit` / `blocked` / `parried` /
-  `dodged` / `perfectDodge` / `ignored`).
-- On `parried` the attacker calls its own parry reaction (recoil + posture damage); on
-  `perfectDodge` the defender performs Ghostep using `attacker.position` / `yaw`.
-- Attackers announce tells via events: `combat:tell` at windup start, `combat:flash` at the
+  parryable, blockable, attack, attacker, plunge })` returns a `RESULT` (`hit` / `blocked` /
+  `parried` / `dodged` / `perfectDodge` / `ignored`). `plunge: false` keeps a perfect dodge of that
+  hit from becoming the plunge (fire hazards).
+- On `parried` the attacker calls its own parry reaction: a deflect for a string's non-final hit
+  (posture + a knock-back; `dragon:parried {hit, last}`, `combat:deflectChain {count}`), a recoil
+  (posture + the punish window) for its last hit or a single melee attack.
+- On `perfectDodge` the defender plunges onto an attacker that offers `plungePoint(out)` /
+  `onPlunge(o)` (in range, allowed by the hit), takes the slow-mo in place when it can't, and
+  Ghosteps behind an attacker without that API.
+- Attackers announce tells via events: `combat:tell` at windup start (per hit), `combat:flash` at the
   timing cue. The attacker draws its own tell in the world (red windup glow via `uWarn`, white
-  glint / red burst on the flash); audio plays the cues; the HUD adds only the red edge flash.
+  glint / red burst on the flash, red ground rings for areas and hazards); audio plays the cues; the
+  HUD adds only the red edge flash (not for hazards).
 
 ## Player moveset (owner concept sheet "Combat key poses")
 Numbers live in `src/entities/player/combat.js` (`LIGHT`, `THRUST`, `CHARGE`, `REACH`); movement /
@@ -99,8 +152,172 @@ defence timings in `TUNE` (`player.js`).
   in** toward a hurt surface within 4.8 m and 0.8 rad of the facing (lunge stretched by ≤ 1.3 m).
   Result (`npm test` → scenario REACH): light 1, light 2, the slam and the thrust all connect from
   the front of an idle wyrm from contact out to 3.5 m from its chest surface.
+- The broad build (2026-11-09) kept the bones: the REACH table is unchanged; the hit segment moved
+  by ≤ 2.5 cm on some active frames (ARCHITECTURE.md, animator).
+- Not in the table: **the plunge** (a perfect dodge of the wyrm) and **the execution** (an attack
+  near a broken wyrm's head), below. A flying wyrm is out of sword reach: only the plunge gets there.
 
-## Current numbers (v0.2, "approachable RPG")
+## The plunge and the execution (2026-11-09, ADR-027)
+A perfect dodge of the wyrm (any tell, except a fire hazard) with its head within 30 m:
+1. **Vanish** (0.05 s): a cold afterimage at the dodge spot; the ×0.3 slow-mo starts (0.6 s real).
+2. **Hang** (0.13 s, inside the slow-mo): he reappears 5 m above the head, 0.3 m out toward his
+   landing side, coiled in a reverse grip. (The 58° camera sees height at about half scale: at the
+   design's 2–3 m he was drawn on top of the head.)
+3. **Dive** (0.14 s): accelerating onto the head as time snaps back.
+4. **Impact:** 90 damage to the head, final (no head or break multiplier; the phase gate holds),
+   +40 posture; a 0.13 s (real) hitstop at ×0.03 and a heavy shake. The wyrm's `plunged` reaction
+   cancels its attack (not a phase transition or its death): the head is slammed to the ground, it
+   thrashes and rises (1.35 s). A wyrm hit in the air falls (~0.6 s, longer from higher up) and
+   crash-lands first.
+5. **Ride** (0.42 s): he holds his place on the skull as it is slammed down.
+6. **Flip** (0.5–0.85 s, apex +1.7 m): a backflip to a landing you can see, 4.5–12 m in front of
+   the head toward where you came from (≥ 0.8 m clear of the body, inside the arena).
+7. **Land** (0.34 s, free to act after 0.12 s): the crit window (1.6 s, ×1.8) opens with 0.2 s of
+   i-frames.
+
+The whole move is invulnerable (every hit is ignored) and takes ~1.6–1.9 s of game time (~2.2 s
+real). The camera keeps the hero and the head on screen throughout.
+**Execution:** while the wyrm is posture-broken, an attack press with its head within 9 m starts
+the same move at the hang (no slow-mo, no perfect-dodge events): 260 damage (final), a heavier
+reaction (slam 0.35, thrash 1.15, rise 0.5 = 2.0 s), and the break is spent (the meter starts over).
+An EXECUTION call-out shows it. A plunge that lands during a transition roar (or the wake-up) only
+deals its damage; a dying wyrm can't be plunged. Numbers: `DEFENSE.plunge` (`rules.js`),
+`TUNING.plunged` (dragon).
+
+## Strings and the deflect chain (2026-11-09, ADR-026)
+**Strings** (`attacks.js` `makeString`, data in `tuning.js` `TUNING.attacks[name].hits`): an attack
+of N hits, each with its own kind (performance), tell, windup (+ an optional random `hold` that baits
+an early parry), active, impact, damage and knockback; a hit with `chance` < 1 may be rolled out.
+Every hit announces itself (`combat:tell` at its windup start) and flashes `flashLead` (0.35 s)
+before its real impact, holds included. Data rules (checked by `npm test` → STRINGS, all phases): a
+tell per hit, the first windup ≥ 0.7 s, the flash after the tell, ≥ `minHitGap` 0.45 s from one
+impact to the next (time to release and re-press RMB). The seven strings are in *Current numbers*.
+**Verifier** (`npm test` → TIMING): every string and single melee attack, started through the AI's
+own start path from every placement the AI picks it at (phases 1–3, the hero standing still), lands
+each contact within ±85 ms of its flash + lead (worst 67 ms on the merged build), and every pick
+lands its first hit. Later hits can whiff a hero who doesn't move (the TIMING table counts them).
+
+**Deflect chain** (contract 1): parrying a hit that is not its string's last does not cancel the
+string: the posture damage applies (`POSTURE.parry`), the struck paw / head is knocked back for
+0.14 s (visual only) and the next hit comes on schedule. Parrying the last hit (or a single melee
+attack) recoils the wyrm as before (the punish window). `dragon:parried` carries `{hit, last}`;
+`combat:deflectChain {count}` fires from the 2nd parry in a row within one string (a hit that lands
+or is blocked resets the count; dodges keep it) and shows as "DEFLECT ×N" over the hero. On the
+hero's side each parry in rhythm (≤ 1.1 s apart) snaps the blade to the other side, slides him back
+0.16 m (×1.6 for blue), grows the clash and raises the clang two semitones; the next tap counts at
+once (rule 4). A red hit inside a string can't be parried or blocked: dodge it (a perfect dodge →
+the plunge, which cancels the string). Rending flurry parried hit by hit: `dragon:parried` [0, f],
+[1, f], [2, f], [3, true], chain 2 → 3 → 4, +148 posture, no damage (STRINGS scenario).
+
+## Three phases (2026-11-09, ADR-028)
+P1 100–66 %, P2 66–33 %, P3 33–0 % of 4500 HP, each threshold a gate until its transition roar
+(always phase-1 timings; the red shock ring, 12 damage, which also clears the hazards). Later phases
+speed the windups and recoveries up (the swings keep their speed), turn and walk faster, idle less,
+grow the posture meter and glow hotter: phase 3 burns white-hot (crack glow 0.8, 50 body embers /
+s) and opens with the Inferno nova. A pending transition waits for a plunge reaction to finish. A
+new phase's abilities unlock one by one (opening cooldowns 2 + 2.5 × i + 0–2 s, in a random order),
+not all at once after the roar.
+
+## Fire attacks and hazards (2026-11-09, ADR-029, ADR-030)
+- **Short flights** (take off, attack from the air, land, all inside one attack; no flight phase):
+  the **Burning pass** (a low pass over you breathing fire down; the ground it passes burns for
+  2.5 s), the **Sky dive** (climbs, hovers beside you while a red ring tracks you, dives onto the
+  spot: the crash landing is the blow) and the **Hover barrage** (3–5 fireballs from the air, each
+  landing in a red ring). Flying, the wyrm is out of sword reach; its body circles are off.
+- **Spells:** **Meteor rain** (a background hazard: meteors fall for ~5 s while the wyrm keeps
+  fighting; every 3rd one is led onto you), **Fire eruptions** (lava pillars in a line toward you;
+  in phase 3 they may chase you instead), **Flame ring** (expands from the wyrm: roll through it or
+  be beyond 20 m), **Flame wall** (sweeps across the arena: roll through it), **Inferno nova** (a
+  2.5 s charge, then an arena-sized blast: flee beyond 22 m or perfect-dodge it).
+- Every blow is red. Hazard-dealt blows never plunge; the dive's crash and the nova's blast may (the
+  wyrm is on the ground for both).
+- Flash timing (`npm test` → FIRE): every blow lands within 17 ms of its flash + lead.
+
+## Current numbers (v0.5 "epic wyrm fight", 2026-11-09)
+Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`.
+S = `SCALE` 1.875 (model units → metres).
+
+**Player:** HP 160, 5 flasks (+70 HP, 0.85 s), roll 0.6 s (i-frames 0.04–0.4 s), backstep 0.4 s
+(0.03–0.22 s), the moveset above. Parry window 0.22 s, re-arm 0.25 s (skipped right after a
+deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s at ×1.8.
+
+**The wyrm:**
+- HP 4500. Phase gates at 66 % (2970 HP) and 33 % (1485 HP).
+- Per phase [P1, P2, P3]: windups and recoveries × [1, 0.85, 0.78] (the swings, the flights'
+  airborne parts, the nova's charge and the transition roars keep their timings); turn [70, 110,
+  125] °/s; walk [3.0, 4.1, 4.6] m/s; idle gap [1.3–2.1, 0.9–1.5, 0.4–0.8] s; posture max [560, 640,
+  720]; crack glow [0, 0.5, 0.8]; body embers [0, 22, 50] / s.
+- Posture (`POSTURE`, unchanged since v0.2): parry 26 / 48 (normal / blue), weapon hit 5 / 16
+  (light / heavy, ×1.25 on the head), regen after 3 s at 14 / s, break 3.2 s with ×2.2 crits. The
+  plunge adds 40. A near-perfect defender breaks it about every 30–60 s.
+- The plunge 90, the execution 260 (final damage). Reactions 1.35 s / 2.0 s (+ ~0.6 s fall in the air).
+- Weapon-hit part multipliers: head 1.5, neck 1.15, body 1, tail 0.8, wing 0.9, leg 1.
+- Opening cooldowns after the intro: breath 7, fireball 5, charge 4, leap 10 s. A new phase's
+  abilities: 2 + 2.5 × i + 0–2 s (random order; the nova opener is not delayed).
+
+**Single attacks** (N normal, B blue, R red; P1 times; weight = AI weight, per phase where an array):
+
+| Attack (phase ≥) | Tell | Windup / active / recovery (s) | Damage | Weight / cooldown | Notes |
+|---|---|---|---|---|---|
+| Bite (1) | B | 0.75 / 0.2 / 0.8 | 24 | 1.5 / 1.2 | |
+| Claw swipe (1) | N | 0.8 / 0.25 / 0.7 | 20 | 2.6 / 1.6 | foreleg rake |
+| Tail sweep (1) | R | 0.9 (≥ 0.76) / 0.45 / 0.9 | 32 | 2.4 / 2.5 | spin 200°; the windup floor keeps it after its flash in P3 |
+| Stomp (1) | R | 1.0 / 0.15 / 1.0 | 34 | 1.4 / 3 | ring r 4.5 × S |
+| Fire breath (1) | N, blockable, not parryable | 1.1 / 1.8 (P2+ 2.4, sweeping 70°) / 1.0 | 5 per 0.15 s + burn | [2.2, 2.64, 2.64] / 8 | AI band 4.5–16 × S |
+| Fireball (1) | N | 0.9 / 0.35 (P2+ 0.9: 3 shells) / 0.9 | 22, r 3 m | [2.5, 3, 3] / 6.5 | |
+| Charge (1) | R | 0.9 / 1.0 / 1.1 | 36 | 2 / 6 | |
+| Leap slam (2) | R | 0.8 / air 1.8 / 1.2 | 40, r 6 × S | 1.8 / 13 | |
+| Roar ring (transitions) | R | 1.2 / 1.6 / 0.6 | 12, r 7 × S | never picked | |
+
+**Strings** (hits: tell; P1 windup / active / impact s; damage):
+
+| String (phase ≥) | Hits | Recovery / cooldown | Weight [P1, P2, P3] | AI band (× S from the root) |
+|---|---|---|---|---|
+| Claw combo (1) | claw (N; 0.8 / 0.25 / 0.15; 16) · claw (N; 0.55 / 0.25 / 0.15; 16) · lunge bite (B; 0.6 / 0.24 / 0.05; 22) | 1.0 / 5 | [2.4, 2.4, 2.0] | 2.4–5.4, ≤ 0.9 rad off the nose |
+| Rending flurry (1) | claw (N; 0.75; 16) · claw (N; 0.45; 16) · overhead claw (B; 0.62 / 0.24 / 0.22; 22) · lunge bite (B; 0.55 / 0.24 / 0.05; 24) | 1.1 / 7 | [3.0, 2.8, 2.4] | 2.4–5.4, ≤ 0.9 |
+| Hesitant maw (1) | reared bite (B; 0.85 + hold 0.25–0.9 / 0.2 / 0.06; 24) · 50 %: quick bite (B; 0.5 / 0.2 / 0.06; 20) | 0.9 / 6 | [2.4, 2.2, 2.0] | 3.5–6.5, ≤ 0.65 |
+| Wing buffet (1) | wing slam (N; 0.8 / 0.3 / 0.25; 18, kb 5) · pivot + the other wing (B; 0.9 / 0.3 / 0.25; 22, kb 7) | 1.0 / 6 | [2.2, 2.4, 2.4] | 6.8–8.3, any side up to 2.6 rad |
+| Tail lash (2) | claw (N; 0.75; 18) · pivot + tail lash (R; 1.0 / 0.36 / 0.245; 26) · tail sweep (R; 0.9 / 0.45 / 0.2 + flank 0.1; 30) | 1.0 / 8 | [0, 2.6, 2.4] | 2.4–5.4, ≤ 0.9 |
+| Pounce (2) | a hop onto the hero (R, ground ring r 3.3 × S; 0.8 / 0.6 / 0.6 = the landing; 30, knockdown) · bite (B; 0.55 / 0.2 / 0.06; 22) | 1.0 / 7 | [0, 2.2, 2.4] | 6–13, ≤ 1.0 |
+| Frenzy (3) | claw (N; 0.75; 16) · claw (N; 0.5; 16) · bite (N; 0.55; 18) · 60 %: claw (N; 0.5; 16) · a delayed claw (N; 0.5 + hold 0.3–0.75; 18) · bite (B; 0.55; 24) · stomp (R, ground ring; 0.85; 36) | 1.2 / 12 | [0, 0, 3.4] | 2.4–5.4, ≤ 0.9 |
+
+**Fire attacks** (`tuningFire.js`; every blow red; sizes in world metres):
+
+| Ability (phase ≥) | P1 timing (s) | Damage | Size | Weight [P1, P2, P3] / cooldown | AI gate |
+|---|---|---|---|---|---|
+| Burning pass `skyStrafe` (1) | windup 1.0 · takeoff 0.75 · pass 1.9 (7 m up) · land 1.05 | front 26 + burn 2, kb 4; the burning ground 4 per 0.25 s (blockable) | strip 4.6 m wide from 10 m out to 3 m short of the landing (24–40 m along the line), burns 2.5 s | [0.9, 1.4, 1.2] / 16 | 7–34 m |
+| Sky dive `diveBomb` (2) | windup 0.8 · climb 1.1 · hover 1.2 (13 m up, 9 m beside the target; the tell) · dive 0.5 · recovery 1.4 | 34, knockdown, burn 1, kb 7; a perfect dodge may plunge | r 7.5 | [0, 1.6, 1.4] / 15 | any distance |
+| Hover barrage `hoverBarrage` (2) | windup 0.8 · rise 1.0 (9 m up, 13 m beside you) · 3–5 shells 0.5 s apart, each ringing 0.4 s before its spit · land 1.2 | 15 each, burn 1.2, kb 2.5; ≤ 2 hits | r 3.2 | [0, 1.4, 1.2] / 13 | any distance |
+| Meteor rain `meteorRain` (2) | windup 1.0 · cast 0.7 · recovery 0.8; impacts from 1.3 s over 5 s, rings 1.5 s (led ones 1.1 s), a 0.75 s visible fall | 18 each, burn 1.5, kb 3; ≤ 3 hits | r 3.4; 8–11 meteors (P3 11–14), every 3rd led onto you, the rest 4–14 m round you | [0, 1.3, 1.4] / 24 | not while a rain falls |
+| Fire eruptions `eruptions` (2) | windup 0.9 · slam 0.2 · recovery 1.5; pillar k erupts 0.65 + 0.11 k after the slam | 20, burn 1.2, kb 4 | r 2.4; ≤ 9 pillars 3.4 m apart from 5.5 m out to 7 m past you; P3 chase (60 %): a pillar under you every 0.42 s for 3 s, each ringing 0.7 s, ≤ 2 hits | [0, 1.5, 1.4] / 11 | 6–28 m, ≤ 1.3 rad |
+| Flame ring `flameRing` (2) | windup 1.1 · cast 0.25 · recovery until the ring has run (≥ 1.85) | 24, burn 2, kb 4 | from 3 m round the wyrm to 20 m at 10 m/s, band 2.2 m | [0, 1.4, 1.2] / 12 | ≤ 14 m |
+| Flame wall `flameWall` (3) | windup 1.2 · cast 0.3 · recovery until the sweep ends (≥ 3.15) | 28, burn 2, kb 5 | 40 m long × 2.4 m thick, springs up 4 m ahead, sweeps 30 m at 10 m/s | [0, 0, 1.6] / 14 | any |
+| Inferno nova `nova` (3) | charge 2.5 in every phase · blast 0.45 · recovery 1.6 | 70, knockdown, burn 3, kb 10; a perfect dodge may plunge | r 22 | [0, 0, 0.7] / 32 | also the P3 opener |
+
+**AI pick shares at close range** (weights summed over what can be picked; lead's measurement after
+the retune): P1 strings ~60 %, bite / stomp ~40 %; P2 strings ~39 %, fire and flights ~35 %, singles
+~25 %; P3 strings ~42 %, fire ~41 %.
+
+**Difficulty (measured, ADR-033).** Integration bots (`tests/integration/integ.mjs`): `win` is a
+god-mode defender that answers every tell; the opt-in `probe` is a mortal bot that answers a share
+of them (`ABYSS_SKILL`, default 0.8; `node tests/integration/integ.mjs . probe`) and fights until it
+wins or dies. The probe runs were at 4200 HP, before the last bump to 4500 (+~7 % fight length).
+
+| Bot | Result |
+|---|---|
+| probe, 95 % of tells | wins in 145–150 s |
+| probe, 85 % | wins 1 of 3 (129 s), dies 2 of 3 |
+| probe, 70 % | always dies |
+| `win` (god mode) at 4500 HP | 157.5 s; P2 at 51 s, P3 at 91 s; 44 of 46 parries, 26 deflect chains (longest ×5), 24 plunges, posture breaks at 25 s and 87 s |
+
+The bots heal poorly, so the probe's death rates are pessimistic. Target: 3–5 min for a player who
+knows the moves, several deaths while learning it. A human playtest is still needed.
+
+## Earlier numbers (v0.2 "approachable RPG" … the reference match) — superseded
+*Superseded 2026-11-09 by "Current numbers" above: HP 1500 → 4500, one phase gate at 50 % → three
+phases, every attack's damage, the posture meter (120 / 140 → 560 / 640 / 720), the claw combo (now
+a string). The geometry and timing measurements below (reaches, AI ranges, first contact against
+the flash) still describe the single attacks; they are kept as history.*
 - Player: HP 160, 5 flasks (+70 HP), roll 0.6 s with i-frames 0.04–0.4 s, light combo 30/32 + slam
   58, charged thrust 70–110 by charge (moveset table above).
 - Cinder Wyrm: HP 1500, see `src/entities/dragon/tuning.js` for every attack's tell and timings.

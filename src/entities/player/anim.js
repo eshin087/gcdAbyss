@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, damp, easeOutCubic, easeInOutSine, wrapAngle, TAU } from '../../core/math.js';
-import { DIM, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
+import { DIM, BODY, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
 
 // Procedural animation for the Wanderer, keyed to the owner's concept sheets ("Movement" / "Combat
 // key poses"). Every frame a target POSE (a flat Float32Array) is built for the current clip as a
@@ -11,7 +11,8 @@ import { DIM, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
 //
 // Pose spaces:
 //   body space  — origin at the waist pivot, axes of the `body` joint (rolls and falls with it).
-//   hand targets (rH/lH) are OFFSETS from each shoulder, in body axes (|offset| <= reach 0.55).
+//   hand targets (rH/lH) are OFFSETS from each shoulder, in body axes (|offset| <= reach 0.55); the
+//   sword hand's from its round-2 shoulder spot (rig.arms.R.anchor, model.js DIM.gripShoulder).
 //   foot targets (rF/lF) are MODEL space (ground-relative); poses that need feet to follow the
 //   body (roll tuck, lying down) map body-space points through their own body transform.
 
@@ -393,10 +394,12 @@ function loco(p, A) {
   // forward and low in front of him (A.backW, eased, so turning from a backpedal into a run swings
   // it round the right side over ~0.3 s): trailed "behind" it swung into the direction of travel,
   // and the low ready guard lies across the legs, which swing through it when walking backward.
+  // (round 3: the hand trails OUT beside the coat, not under it, and the blade angles out past the
+  // tails: the grip used to ride inside the skirt and the steel came out through the cloth)
   const amp = 0.05 * cs * mz, ws = A.swordW, bw = A.backW;
-  to3(p, P.rH, lerp(lerp(-0.02, -0.06, s), -0.02, bw), lerp(lerp(-0.49, -0.38, s) + 0.012 * st, -0.38, bw), lerp(lerp(-0.12 + amp, -0.3, s), 0.3, bw), ws);
-  to3(p, P.rP, lerp(-0.6, -0.8, bw), lerp(lerp(-0.3, 0.2, s), -0.3, bw), lerp(-1, -0.5, bw), ws);
-  dirLerp(SW_T, 0, lerp(-0.2, -0.14, s), lerp(-0.6, -0.22, s) - 0.03 * st * (1 - s), lerp(-0.77, -0.96, s), -0.15, -0.22, 1, bw);
+  to3(p, P.rH, lerp(lerp(-0.12, -0.15, s), -0.02, bw), lerp(lerp(-0.48, -0.37, s) + 0.012 * st, -0.38, bw), lerp(lerp(-0.1 + amp, -0.28, s), 0.3, bw), ws);
+  to3(p, P.rP, lerp(-0.75, -0.85, bw), lerp(lerp(-0.3, 0.2, s), -0.3, bw), lerp(-0.85, -0.5, bw), ws);
+  dirLerp(SW_T, 0, lerp(-0.42, -0.36, s), lerp(-0.56, -0.2, s) - 0.03 * st * (1 - s), lerp(-0.71, -0.91, s), -0.15, -0.22, 1, bw);
   dirTo(p, P.swD, SW_T[0], SW_T[1], SW_T[2], ws);
   to3(p, P.swF, lerp(-0.3, 0, bw), 1, lerp(0, 0.2, bw), ws);
   // free arm swings opposite the legs: ahead of the belt (run) → a pumping fist chin ↔ hip (sprint)
@@ -1001,21 +1004,7 @@ function blockPose(p, A) {
   walkLegs(p, A);
 }
 
-/** Parry: from the guard, a sharp outward flick of the blade (to the right and up), the body
- *  turning with it, then settling back. */
-function parryPose(p, A) {
-  blockPose(p, A);
-  const t = A.t;
-  const f = t < 0.06 ? easeOutCubic(t / 0.06) : 1 - smoothstep(0.06, 0.3, t);
-  dirTo(p, P.swD, -0.55, 0.8, 0.5, f);
-  to3(p, P.swF, 0, 0.3, 1, f);
-  to3(p, P.rH, -0.05, -0.08, 0.4, f);
-  to3(p, P.lH, 0.22, -0.32, 0.02, f);
-  p[P.spY] -= 0.4 * f;
-  p[P.pelvY] -= 0.15 * f;
-  p[P.spX] -= 0.05 * f;
-  p[P.hdY] += 0.3 * f;
-}
+// (the parry clip: deflectPose in the PLUNGE + DEFLECT block below)
 
 /** Ghostep: reappear crouched low behind the attacker, off hand braced on the ground, blade swept
  *  back ready for the counter; rise into a forward guard. */
@@ -1348,13 +1337,246 @@ function deathPose(p, A) {
   to3(p, P.lH, 0.32, -0.05, 0.12, limp);
 }
 
+// ================================================================ PLUNGE + DEFLECT (plunge agent)
+// One block for the perfect-dodge plunge (player.js state 'plunge', DEFENSE.plunge) and the
+// deflect chain. The plunge clip follows the player's phase (player.plungeAnim: phase, u = 0..1
+// through it); player._plungePhase re-enters the clip with a short cross-fade at each change, so
+// each phase's pose only has to read well by itself. The root is the hero's ground point carried
+// up into the air (position.y): feet targets stay root-relative, the ground clamps are world-space.
+//   HANG  coiled at the apex above the head: knees tucked, both fists high on the hilt in a reverse
+//         grip, the blade hanging point-down in front of him, winding tighter
+//   DIVE  driving down onto it: the fists punch down to the sternum, the blade straight down
+//         below his tucked feet (the point leads)
+//   RIDE  crouched on the skull, right knee down, both fists on the buried hilt, leaning over it;
+//         a twist of the blade, then he pulls and coils to spring off
+//   FLIP  the blade ripped out, a full backflip (knees to the chest, the blade along his right
+//         side so it turns with him), opening feet-first for the landing
+//   LAND  a deep three-point crouch (free hand on the grass, the blade trailing low on his
+//         right, eyes up on the wyrm), rising into the fighting stance
+// The deflect (parry clip) snaps the blade into the blow on alternating sides (player.deflect.side)
+// with a small rock back and is back in the guard by ~0.17 s; between parries in rhythm the
+// walking clips keep the guard up (player.guardHold).
+const PLN = { VANISH: 0, HANG: 1, DIVE: 2, RIDE: 3, FLIP: 4, LAND: 5 }; // = player.js PL
+const PL_FLIP_PITCH = [0, 0, 0.1, 0.22, 0.2, -0.35, 0.52, -3.2, 0.8, -5.75, 0.94, -6.283185307179586, 1, -6.283185307179586];
+const SCR_GUARD = new Float32Array(N);
+const GUARD_CH = [P.rH, P.rH + 1, P.rH + 2, P.rP, P.rP + 1, P.rP + 2, P.lH, P.lH + 1, P.lH + 2, P.lP, P.lP + 1, P.lP + 2, P.swF, P.swF + 1, P.swF + 2, P.spX, P.spY, P.spZ, P.hdX, P.hdY, P.pelvY];
+
+/** The shared airborne base: every channel the plunge poses read, upright, arms down. */
+function plBase(p, A) {
+  guard(p, A);
+  p[P.bodyX] = 0;
+  p[P.bodyZ] = 0;
+  p[P.yaw] = 0;
+  p[P.roll] = 0;
+  p[P.pelvX] = 0;
+  p[P.pelvY] = 0;
+  p[P.pelvZ] = 0;
+  p[P.spY] = 0;
+  p[P.spZ] = 0;
+  p[P.hdY] = 0;
+  p[P.hdZ] = 0;
+  p[P.rFy] = p[P.lFy] = 0;
+  p[P.rFf] = p[P.lFf] = 1;
+  p[P.flask] = 0;
+}
+
+/** Knees tucked up under him (k 0..1), feet root-relative. */
+function plTuck(p, k) {
+  to3(p, P.rF, -0.13, 0.46, 0.06, k);
+  to3(p, P.lF, 0.14, 0.56, 0.2, k);
+  to3(p, P.rK, -0.25, 0.35, 1, k);
+  to3(p, P.lK, 0.25, 0.4, 1, k);
+  p[P.footFlat] = lerp(p[P.footFlat], 0.15, k);
+}
+
+function plHang(p, A, u) {
+  plBase(p, A);
+  const w = smoothstep(0, 1, u), br = Math.sin(A.time * 9) * 0.01;
+  p[P.bodyY] = -0.1 - 0.06 * w;
+  p[P.pitch] = 0.16 + 0.12 * w; // leaning out over the head below
+  p[P.spX] = -0.12 - 0.08 * w + br; // the chest opens under the raised fists
+  p[P.hdX] = 0.5; // eyes down on the head
+  // both fists high over his head on the hilt (reverse grip): the blade hangs point-down in
+  // front of him, clear of the face; they lift a little higher as the coil tightens
+  v3(p, P.rH, 0.13, 0.4 + 0.07 * w, 0.24);
+  v3(p, P.rP, -0.9, 0.25, -0.3);
+  v3(p, P.lP, 0.9, 0.25, -0.3);
+  v3(p, P.swD, 0.02, -1, 0.22 - 0.06 * w);
+  v3(p, P.swF, 1, 0, 0);
+  p[P.twoHand] = 1;
+  v3(p, P.rF, -0.12, ANK, 0.05);
+  v3(p, P.lF, 0.12, ANK, 0.05);
+  plTuck(p, 0.75 + 0.25 * w);
+}
+
+function plDive(p, A, u) {
+  plBase(p, A);
+  const e = easeOutCubic(clamp(u * 2.2, 0, 1)); // the fists drive down in the first half
+  p[P.bodyY] = -0.12;
+  p[P.pitch] = 0.28 - 0.12 * e; // upright as he drops onto it
+  p[P.spX] = lerp(-0.2, 0.22, e);
+  p[P.hdX] = 0.55;
+  v3(p, P.rH, 0.12, lerp(0.47, -0.16, e), lerp(0.24, 0.34, e));
+  v3(p, P.rP, -0.85, -0.2, -0.45);
+  v3(p, P.lP, 0.85, -0.2, -0.45);
+  v3(p, P.swD, 0.02, -1, lerp(0.16, 0.04, e));
+  v3(p, P.swF, 1, 0, 0);
+  p[P.twoHand] = 1;
+  v3(p, P.rF, -0.12, ANK, 0.05);
+  v3(p, P.lF, 0.12, ANK, 0.05);
+  plTuck(p, 1);
+  // the legs open a touch for the landing at the end
+  to3(p, P.rF, -0.16, 0.3, -0.2, smoothstep(0.6, 1, u));
+}
+
+function plRide(p, A, u, h) {
+  plBase(p, A);
+  // the head's thrash shakes him (cosmetic, his own clock); a twist of the buried blade mid-ride
+  const sh = Math.sin(A.time * 31) * 0.02 + Math.sin(A.time * 17.3) * 0.015;
+  const land = 1 - smoothstep(0, 0.12, u); // the impact's compression
+  const coil = smoothstep(0.66, 1, u); // pulling the blade, coiling to spring
+  const twist = Math.sin(Math.PI * smoothstep(0.25, 0.6, u));
+  p[P.bodyY] = -0.5 - 0.06 * land + 0.1 * coil + sh;
+  p[P.bodyZ] = 0.04;
+  p[P.pitch] = 0.26 + 0.08 * land - 0.1 * coil;
+  p[P.spX] = 0.4 + 0.12 * land - 0.2 * coil;
+  p[P.spY] = 0.18 * twist;
+  p[P.pelvY] = -0.1 * twist;
+  p[P.hdX] = 0.3 - 0.45 * coil; // eyes on the blade, then up at the landing ahead of his back
+  p[P.hdY] = -0.15 * twist;
+  // both fists on the buried hilt, the blade straight down into the skull
+  v3(p, P.rH, 0.12, -0.36 + 0.16 * coil, 0.36);
+  v3(p, P.rP, -0.85, -0.2, -0.45);
+  v3(p, P.lP, 0.85, -0.2, -0.45);
+  v3(p, P.swD, 0.02 + 0.08 * twist, -1, 0.06);
+  v3(p, P.swF, 1, 0, 0.3 * twist);
+  p[P.twoHand] = 1;
+  // right knee down on the skull, the left foot planted forward
+  v3(p, P.rF, -0.14, ANK + 0.02, -0.4);
+  v3(p, P.lF, 0.17, ANK, 0.26);
+  v3(p, P.rK, -0.15, -0.35, 1);
+  v3(p, P.lK, 0.25, 0.15, 1);
+  p[P.footFlat] = 0.7;
+  p[P.rFf] = 0.4;
+}
+
+function plFlip(p, A, u) {
+  plBase(p, A);
+  p[P.pitch] = lin(u, PL_FLIP_PITCH); // a full turn backward (wraps to upright for the landing)
+  const rip = smoothstep(0, 0.14, u); // the blade comes out of the head
+  const tuck = smoothstep(0.12, 0.3, u) * (1 - smoothstep(0.72, 0.9, u));
+  const open = smoothstep(0.78, 1, u); // feet-first for the landing
+  p[P.bodyY] = -0.2 + 0.1 * rip - 0.12 * tuck;
+  p[P.spX] = lerp(0.2, -0.15, rip) + 0.45 * tuck;
+  p[P.hdX] = lerp(-0.1, 0.35, tuck) - 0.2 * open;
+  // the sword hand sweeps the ripped blade to his right side, point down along the body: an axle
+  // the flip turns round (it never swings through the legs)
+  v3(p, P.rH, lerp(0.12, -0.16, rip), lerp(-0.2, -0.36, rip), lerp(0.34, 0.06, rip));
+  v3(p, P.rP, -0.9, -0.1, -0.4);
+  v3(p, P.swD, lerp(0.02, -0.34, rip), -0.82, lerp(0.06, -0.48, rip));
+  v3(p, P.swF, 1, 0, 0);
+  p[P.twoHand] = 1 - rip;
+  v3(p, P.lH, lerp(0.05, 0.3, open), lerp(-0.25, -0.12, open), lerp(0.3, 0.12, open));
+  v3(p, P.lP, 0.8, -0.3, -0.4);
+  // the push off the head, the tuck (knees to the chest), then the legs reach for the ground
+  v3(p, P.rF, -0.14, ANK + 0.25 * (1 - rip), -0.15);
+  v3(p, P.lF, 0.14, ANK + 0.25 * (1 - rip), 0.12);
+  bodyPointTo(p, P.rF, -0.12, -0.3, 0.28, tuck);
+  bodyPointTo(p, P.lF, 0.12, -0.26, 0.3, tuck);
+  to3(p, P.rK, -0.2, 0.6, 1, tuck);
+  to3(p, P.lK, 0.2, 0.6, 1, tuck);
+  to3(p, P.rF, -0.2, ANK + 0.12, -0.12, open);
+  to3(p, P.lF, 0.18, ANK + 0.12, 0.22, open);
+  p[P.footFlat] = lerp(0.6, 0.2, tuck);
+}
+
+function plLand(p, A, u) {
+  stance(p, A, 0);
+  const k = 1 - smoothstep(0.3, 1, u); // the crouch rises into the stance
+  const hit = 1 - smoothstep(0, 0.08, u); // the touchdown's compression
+  p[P.bodyY] = lerp(p[P.bodyY], -0.5 - 0.06 * hit, k);
+  p[P.bodyZ] = 0.05 * k;
+  p[P.spX] = lerp(p[P.spX], 0.55, k);
+  p[P.spY] = lerp(p[P.spY], -0.12, k);
+  p[P.hdX] = lerp(p[P.hdX], -0.35, k); // head up: eyes on the wyrm
+  // free hand down on the grass ahead-left, the blade trailing low behind on his right
+  to3(p, P.lH, 0.12, -0.55, 0.36, k);
+  to3(p, P.lP, 0.7, -0.2, -0.6, k);
+  to3(p, P.rH, -0.36, -0.28, -0.12, k);
+  dirTo(p, P.swD, -0.55, -0.42, -0.72, k);
+  to3(p, P.swF, 0, 1, 0, k);
+  to3(p, P.rF, -0.26, ANK, -0.34, k);
+  to3(p, P.lF, 0.22, ANK, 0.36, k);
+  to3(p, P.rK, -0.6, 0, 1, k);
+  to3(p, P.lK, 0.4, 0.1, 1, k);
+}
+
+function plungePose(p, A) {
+  const S = A.player?.plungeAnim;
+  const ph = S ? S.phase : PLN.LAND, u = S ? clamp(fin(S.u), 0, 1) : 1;
+  if (ph <= PLN.HANG) plHang(p, A, ph === PLN.HANG ? u : 0);
+  else if (ph === PLN.DIVE) plDive(p, A, u);
+  else if (ph === PLN.RIDE) plRide(p, A, u, fin(S?.h));
+  else if (ph === PLN.FLIP) plFlip(p, A, u);
+  else plLand(p, A, u);
+}
+
+/** Deflect: from the guard the blade snaps out into the blow (alternate sides through a chain:
+ *  player.deflect.side), the chest rocks back with the pushback, and the guard is back by ~0.17 s
+ *  so the next blow of the string can be met at once. Later deflects of a chain snap harder. */
+function deflectPose(p, A) {
+  blockPose(p, A);
+  const t = A.t, D = A.player?.deflect;
+  const n = fin(D?.n, 1), side = D?.side < 0 ? -1 : 1;
+  const f = t < 0.045 ? easeOutCubic(t / 0.045) : 1 - smoothstep(0.06, 0.17, t);
+  const s = clamp(0.85 + 0.06 * (n - 1), 0.85, 1.15);
+  if (side > 0) {
+    // the blow from the front-right: the edge flicks out to the right and up (the classic parry)
+    dirTo(p, P.swD, -0.55, 0.8, 0.5, f);
+    to3(p, P.rH, -0.05, -0.08, 0.4, f);
+    p[P.spY] -= 0.4 * f * s;
+    p[P.pelvY] -= 0.15 * f * s;
+    p[P.hdY] += 0.3 * f;
+  } else {
+    // the next one from the front-left: the blade swings up across to the left, the wrist rolled
+    dirTo(p, P.swD, 0.62, 0.72, 0.36, f);
+    to3(p, P.rH, 0.24, -0.04, 0.42, f);
+    p[P.spY] += 0.3 * f * s;
+    p[P.pelvY] += 0.1 * f * s;
+    p[P.hdY] -= 0.2 * f;
+  }
+  to3(p, P.swF, 0, 0.3, 1, f);
+  to3(p, P.lH, side > 0 ? 0.22 : 0.3, -0.32, side > 0 ? 0.02 : -0.05, f);
+  p[P.spX] -= 0.05 * f;
+  // the rock back: the chest gives with the blow, the weight onto the back foot
+  const push = t < 0.03 ? t / 0.03 : 1 - smoothstep(0.03, 0.22, t);
+  p[P.spX] -= 0.12 * push * s;
+  p[P.bodyZ] -= 0.05 * push;
+  p[P.hdX] -= 0.08 * push;
+}
+
+/** Walking clips after a parry in rhythm: the upper body holds the block's guard (guardHold
+ *  0..1, eased off ~0.6 s after the last parry) while the legs walk, so the blade stays up
+ *  between taps instead of dropping to the low ready guard and back for every blow. */
+function locoGuard(p, A) {
+  loco(p, A);
+  const g = clamp(fin(A.player?.guardHold), 0, 1);
+  if (g < 0.001) return;
+  blockPose(SCR_GUARD, A);
+  const ax = p[P.swD], ay = p[P.swD + 1], az = p[P.swD + 2];
+  for (const i of GUARD_CH) p[i] += (SCR_GUARD[i] - p[i]) * g;
+  dirLerp(p, P.swD, ax, ay, az, SCR_GUARD[P.swD], SCR_GUARD[P.swD + 1], SCR_GUARD[P.swD + 2], g);
+}
+// ============================================================ end PLUNGE + DEFLECT (plunge agent)
+
 const POSES = {
-  loco,
+  loco: locoGuard,
   attack: attackPose,
   charge: chargePose,
   block: blockPose,
-  parry: parryPose,
+  parry: deflectPose,
   ghostep: ghostepPose,
+  plunge: plungePose,
   guardBreak: guardBreakPose,
   roll: rollPose,
   backstep: backstepPose,
@@ -1426,9 +1648,9 @@ const _G = new THREE.Vector3(), _TL = new THREE.Vector3(), _qId = new THREE.Quat
 const _qInv2 = new THREE.Quaternion(), _qB = new THREE.Quaternion();
 
 const TIP_FLOOR = 0.012; // the steel point rests ON the ground (its outer corners included), never in it
-// blade vs the legs (outside attacks): thigh / shin clearance radii (limb + knee guard + margin) and
-// how far from the grip the steel starts to count
-const BLADE_CLEAR = [0.1, 0.085, 0.15];
+// blade vs the legs (outside attacks): thigh / shin clearance radii (limb + knee guard + margin,
+// model.js BODY: they grew with the round-3 legs) and how far from the grip the steel starts to count
+const BLADE_CLEAR = [BODY.thigh[0] + 0.025, BODY.shin[0] + 0.028, 0.15];
 const _mB = new THREE.Matrix4();
 const LEG_PTS = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()); // R hip, knee, ankle; L hip, knee, ankle
 const _cD = new THREE.Vector3();
@@ -1446,7 +1668,37 @@ const COAT_FLOOR = 0.04; // panel ends stay this far above the ground
 const COAT_JUMP = 0.2; // rad per frame: the most a lying-down floor fix may swing a panel at once
 const COAT_A = [[-1.5, 0.3], [-1.0, 0.6]]; // outward (−) / inward (+) swing limits per segment
 const COAT_B = [0.7, 0.55]; // sideways swing limit per segment
-const LEG_R = 0.08; // thigh / knee radius used to push the panels out
+const LEG_R = BODY.thigh[0] + 0.004; // thigh / knee radius used to push the panels out
+// the blade vs the coat (round 3): the cloth never passes through the steel (it used to come out
+// through the tails behind a run). Every frame the grip and points along the drawn blade (BLADE_PTS,
+// pelvis space) are tested against each panel segment's sheet: with the sword hand outside the cloth
+// the panel hangs INSIDE the hand and the blade (they cap how far it flares; the legs still win), with
+// the hand under the cloth (or the steel running in under it, inside the panel's pivot) it drapes OVER
+// the blade (they push it out). The side is latched while any steel is over the panel; lying down or
+// tumbling, the floor contact rules instead. COAT_BLADE_R / COAT_HAND_R = the blade's half-width /
+// the gauntlet, + the cloth's margin.
+const COAT_BLADE_R = 0.07, COAT_HAND_R = 0.06;
+const COAT_STEEL_JUMP = 0.12; // rad per 60 fps frame: the most the steel moves a coat segment at once
+const BLADE_PTS = Array.from({ length: 13 }, () => new THREE.Vector3()); // [0] = the grip
+const _mC = new THREE.Matrix4();
+// the steel in a panel's anchor frame (QA) and in its lower segment's parent frame (QB): x along the
+// hips, y up, z out, from the segment's pivot; SEG = segLocal's output
+const QA = new Float32Array(39), QB = new Float32Array(39), SEG = new Float32Array(3);
+/** Point k of Q (a coat segment's parent frame, its pivot at the origin) in the frame of that
+ *  segment swung (a, b) (rotation order YXZ: Rx(a)·Rz(b)): SEG = [x along it, y down it (≤ 0),
+ *  height above the sheet's curve round the hips (radius R)]. Returns whether the point lies over
+ *  the sheet (its length L, half-width hw0 → hw1 down it; + 3 cm). */
+function segLocal(Q, k, a, b, L, hw0, hw1, R) {
+  const qx = Q[k * 3], qy = Q[k * 3 + 1], qz = Q[k * 3 + 2];
+  const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+  const y1 = qy * ca + qz * sa, z1 = -qy * sa + qz * ca;
+  const x2 = qx * cb + y1 * sb, y2 = -qx * sb + y1 * cb;
+  const t = -y2 / L, Rt = R + 0.25 * clamp(t, 0, 1) * L;
+  SEG[0] = x2;
+  SEG[1] = y2;
+  SEG[2] = z1 + Rt - Math.sqrt(Math.max(0, Rt * Rt - x2 * x2));
+  return t > 0.03 / L && t <= 1 && Math.abs(x2) <= lerp(hw0, hw1, clamp(t, 0, 1)) + 0.03;
+}
 // torn strips (one spring each, so every tip sways on its own and lags its panel ~0.1 s)
 const STRIP_K = 75, STRIP_C = 7.5, STRIP_LAG = 0.08, STRIP_FLARE = 0.42;
 const STRIP_A = [-1.5, 0.8], STRIP_B = 0.8, STRIP_FLOOR = 0.03;
@@ -1541,6 +1793,7 @@ export class HeroAnimator {
     this.leanSV = 0;
     this.stepCool = 0;
     this.coatState = rig.coat.map(() => [{ x: 0, vx: 0, z: 0, vz: 0 }, { x: 0, vx: 0, z: 0, vz: 0 }]);
+    this.coatSide = new Uint8Array(rig.coat.length).fill(1); // per panel: the steel 1 outside it, 2 under it
     this.stripState = rig.coat.map((C) => C.strips.map(() => ({ x: 0, vx: 0, z: 0, vz: 0 })));
     this.streamState = (rig.streamers ?? []).map(() => ({
       segs: [{ x: 0, vx: 0, z: 0, vz: 0 }, { x: 0, vx: 0, z: 0, vz: 0 }], prev: new THREE.Vector3(), vel: new THREE.Vector3(),
@@ -1554,12 +1807,13 @@ export class HeroAnimator {
     }));
     this.hairInit = false;
     this.legPts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-    // sphere proxies (joint-local centre + radius) kept above the ground by apply()
+    // sphere proxies (joint-local centre + radius) kept above the ground by apply(); the torso ones
+    // follow the round-3 chest / hip depth (model.js BODY: +0.02 over round 2)
     this.proxies = [
       { joint: rig.head, x: 0, y: 0.13, z: 0, r: 0.14 },
-      { joint: rig.chest, x: 0, y: 0.09, z: 0, r: 0.15 },
-      { joint: rig.spine, x: 0, y: 0.06, z: 0, r: 0.12 },
-      { joint: rig.pelvis, x: 0, y: -0.02, z: 0, r: 0.14 },
+      { joint: rig.chest, x: 0, y: 0.09, z: 0, r: 0.17 },
+      { joint: rig.spine, x: 0, y: 0.06, z: 0, r: 0.135 },
+      { joint: rig.pelvis, x: 0, y: -0.02, z: 0, r: 0.16 },
     ];
     this.reset();
   }
@@ -1640,6 +1894,7 @@ export class HeroAnimator {
     for (const st of this.coatState) {
       for (const c of st) c.x = c.vx = c.z = c.vz = 0;
     }
+    this.coatSide.fill(1);
     for (const st of this.stripState) {
       for (const c of st) c.x = c.vx = c.z = c.vz = 0;
     }
@@ -2156,9 +2411,11 @@ export class HeroAnimator {
     if (l > 1e-4) _bz.copy(_cP).multiplyScalar(1 / l);
   }
 
-  /** Hand target in chest space (into _T): the pose's shoulder offset (body axes). */
+  /** Hand target in chest space (into _T): the pose's shoulder offset (body axes). The sword hand's
+   *  offsets start from `arm.anchor` (model.js DIM.gripShoulder: the round-2 shoulder), so the
+   *  broader round-3 shoulders leave every grip the arm reaches, and the blade's hit segment, as it was. */
   _handTarget(arm, p, hi) {
-    _T.set(p[hi], p[hi + 1], p[hi + 2]).applyQuaternion(_qBC).add(arm.upper.position);
+    _T.set(p[hi], p[hi + 1], p[hi + 2]).applyQuaternion(_qBC).add(arm.anchor ?? arm.upper.position);
     return _T;
   }
 
@@ -2211,10 +2468,37 @@ export class HeroAnimator {
     return Math.min(_e0.y, _e1.y);
   }
 
+  /** QB = the steel (QA, a panel's anchor frame) in its lower segment's parent frame: the upper
+   *  segment swung (a0, b0), the pivot at its end (0, −len0, 0). */
+  _lowerFrame(nb, a0, b0, len0) {
+    const ca = Math.cos(a0), sa = Math.sin(a0), cb = Math.cos(b0), sb = Math.sin(b0);
+    for (let k = 0; k < nb; k++) {
+      const qx = QA[k * 3], qy = QA[k * 3 + 1], qz = QA[k * 3 + 2];
+      const y1 = qy * ca + qz * sa;
+      QB[k * 3] = qx * cb + y1 * sb;
+      QB[k * 3 + 1] = -qx * sb + y1 * cb + len0;
+      QB[k * 3 + 2] = -qy * sa + qz * ca;
+    }
+  }
+
+  /** The grip and the drawn blade (DIM.forte → DIM.drawnTip) as BLADE_PTS in pelvis space (this
+   *  frame's pose; [0] = the grip); returns how many (0 on a bad frame). */
+  _bladePts() {
+    const r = this.rig;
+    r.sword.updateWorldMatrix(true, false);
+    _mC.copy(r.pelvis.matrixWorld).invert().multiply(r.sword.matrixWorld);
+    const n = BLADE_PTS.length, z0 = DIM.forte, z1 = DIM.drawnTip ?? DIM.steelTip;
+    BLADE_PTS[0].set(0, 0, 0).applyMatrix4(_mC);
+    for (let k = 1; k < n; k++) BLADE_PTS[k].set(0, 0, z0 + ((z1 - z0) * (k - 1)) / (n - 2)).applyMatrix4(_mC);
+    const e = BLADE_PTS[n - 1];
+    return Number.isFinite(e.x + e.y + e.z + BLADE_PTS[0].x) ? n : 0;
+  }
+
   /** Coat skirt: each panel segment springs toward gravity-hang + hip flare − its anchor's
-   *  velocity (so it lags turns, runs and rolls). The knees and thighs push the panels out, and
-   *  the hem never sinks into the ground. Angles: x = swing (− outward), z = sideways. Then the
-   *  torn strips of each panel follow on their own springs (_strips). */
+   *  velocity (so it lags turns, runs and rolls). The knees and thighs push the panels out, the
+   *  blade caps how far they flare (they hang inside it), and the hem never sinks into the
+   *  ground. Angles: x = swing (− outward), z = sideways. Then the torn strips of each panel follow
+   *  on their own springs (_strips). */
   _coat(dt) {
     const r = this.rig;
     const steps = dt > 0 ? Math.min(8, Math.ceil(dt / (1 / 120))) : 0;
@@ -2233,6 +2517,8 @@ export class HeroAnimator {
       r.pelvis.worldToLocal(lp[li * 2 + 1].copy(_T));
     }
     const still = 1 - clamp(this.speed / 2.5, 0, 1); // the idle breeze fades out once moving
+    // (not while he lies down or tumbles: there the hem's floor contact rules the cloth)
+    const nb = Math.abs(wrapAngle(this.cur[P.pitch])) < 1.0 ? this._bladePts() : 0;
 
     for (let i = 0; i < r.coat.length; i++) {
       const C = r.coat[i], D = C.def, st = this.coatState[i], LEN = C.len;
@@ -2250,6 +2536,39 @@ export class HeroAnimator {
       const flut = Math.min(1, Math.hypot(_v.x, _v.z) / 5);
       const breeze = (BREEZE[i] ?? 0.03) + 0.1 * Math.sin(this.time * 2.618 + i * 1.3) * (0.5 + 0.5 * Math.sin(this.time * 0.9 + i));
       const ap = C.anchor.position;
+      // the steel in this panel's anchor frame, and which side of the panel it is on (latched while
+      // any of it is over the panel, so the cloth never jumps through it): the sword hand under the
+      // cloth (inside a segment's current sheet) → the panel drapes OVER the blade (it swings out
+      // clear of it); otherwise it hangs INSIDE the hand and the blade (they cap its flare)
+      const steel = nb > 0 && !D.flap && C.r0 > 0;
+      const L1 = D.len[1] + 0.08, R1 = C.r0 + 0.25 * D.len[0]; // the lower segment (+ the strip roots)
+      if (steel) {
+        for (let k = 0; k < nb; k++) {
+          const B = BLADE_PTS[k], dx = B.x - ap.x, dz = B.z - ap.z;
+          QA[k * 3] = dx * tx + dz * tz;
+          QA[k * 3 + 1] = B.y - ap.y;
+          QA[k * 3 + 2] = dx * nx + dz * nz;
+        }
+        // gh = the grip's height over the sheet; near = any steel over it; dive = steel under the
+        // sheet that the cloth cannot hang inside of (it runs in under the cloth, inside the pivot)
+        let gh = Infinity, near = false, dive = false;
+        this._lowerFrame(nb, st[0].x, st[0].z, D.len[0]);
+        for (let s = 0; s < 2; s++) {
+          const Q = s ? QB : QA, L = s ? L1 : D.len[0], R = s ? R1 : C.r0;
+          for (let k = 0; k < nb; k++) {
+            if (!segLocal(Q, k, st[s].x, st[s].z, L, D.w[s] / 2, D.w[s + 1] / 2, R)) continue;
+            near = true;
+            if (k === 0) {
+              if (SEG[2] < gh) gh = SEG[2];
+            } else if (SEG[2] < -0.02 && Q[k * 3 + 2] - COAT_BLADE_R <= 0.005) dive = true;
+          }
+        }
+        const side = this.coatSide;
+        if (gh < -0.01 || dive) side[i] = 2;
+        else if (gh > 0.05 || !near) side[i] = 1;
+      }
+      const over = steel && this.coatSide[i] === 2;
+      const J = COAT_STEEL_JUMP * dtk; // the most the steel moves a segment in one frame
       let parentA = 0, parentB = 0;
       for (let s = 0; s < 2; s++) {
         const c = st[s];
@@ -2277,6 +2596,35 @@ export class HeroAnimator {
           }
           absA = Math.min(absA, lim);
         }
+        // the steel, from this segment's parent frame (the anchor's, or the swung upper segment's for
+        // the lower one): inside it, the grip and every blade point over the sheet cap the swing out
+        // (bl, the legs win a conflict); over it, they push it out (bo). The swing that puts a point
+        // at height h over the sheet: a = asin(h / ρ) − φ (ρ, φ = the point's distance and angle
+        // out from straight down); absolute = + parentA
+        let bl = -Infinity, bo = Infinity;
+        if (steel) {
+          if (s === 1) this._lowerFrame(nb, st[0].x, st[0].z, D.len[0]);
+          const Q = s ? QB : QA, L = s ? L1 : D.len[0], R = s ? R1 : C.r0;
+          for (let k = 0; k < nb; k++) {
+            if (!segLocal(Q, k, c.x, c.z, L, D.w[s] / 2, D.w[s + 1] / 2, R)) continue;
+            const d = -Q[k * 3 + 1], qz = Q[k * 3 + 2];
+            if (d < 0.03) continue;
+            const rho = Math.hypot(d, qz), phi = Math.atan2(qz, d);
+            const curv = SEG[2] - (d * Math.sin(c.x) + qz * Math.cos(c.x)); // the sheet's curve here
+            const m = k ? COAT_BLADE_R : COAT_HAND_R;
+            if (over) {
+              const need = Math.asin(clamp((-m - curv) / rho, -1, 1)) - phi + parentA;
+              if (need < bo) bo = need;
+            } else if (qz - m > 0.005) {
+              // (steel inside the pivot's line: no clear way round it)
+              const need = Math.asin(clamp((m - curv) / rho, -1, 1)) - phi + parentA;
+              if (need > bl) bl = need;
+            }
+          }
+          if (bo < absA) absA = bo;
+          if (s === 0 && bl > lim) bl = lim; // the legs win
+          if (bl > absA) absA = bl;
+        }
         const [aMin, aMax] = COAT_A[s];
         const tA = clamp(absA - parentA, aMin, aMax);
         const tB = clamp(absB - parentB, -COAT_B[s], COAT_B[s]);
@@ -2296,6 +2644,15 @@ export class HeroAnimator {
         if (s === 0 && c.x > lim) {
           c.x = Math.max(aMin, lim);
           if (c.vx > 0) c.vx = 0;
+        }
+        // the steel is rigid: a segment the spring would carry through it is held at it, eased in
+        // at J per frame (a blade sweeping into the cloth pushes it aside over 2-3 frames, no pop)
+        if (bo < Infinity && c.x > bo - parentA) {
+          c.x = Math.max(aMin, c.x - Math.min(J, c.x - (bo - parentA)));
+          if (c.vx > 0) c.vx = 0;
+        } else if (bl > -Infinity && c.x < bl - parentA) {
+          c.x = Math.min(aMax, c.x + Math.min(J, bl - parentA - c.x));
+          if (c.vx < 0) c.vx = 0;
         }
         parentA += c.x;
         parentB += c.z;

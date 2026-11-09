@@ -139,6 +139,12 @@ export class Hud {
     this.bossName = el('span', 'ab-boss-name', '', head);
     this.bossDmg = el('span', 'ab-boss-dmg', '', head);
     this.bossBar = new DelayedBar(this.bossEl, 'boss', { hold: 0.6, drain: 1.8, rise: 2.2 });
+    // the phase gates (dragon.phaseAt, e.g. 66 % / 33 %): thin ticks where the next phase starts
+    const marks = this.game?.dragon?.phaseAt;
+    for (const f of Array.isArray(marks) ? marks.slice(1) : []) {
+      if (!(f > 0 && f < 1)) continue;
+      el('div', 'tick', null, this.bossBar.root).style.left = `${(f * 100).toFixed(1)}%`;
+    }
     const post = el('div', 'ab-boss-post', null, this.bossEl);
     this.postBar = new PostureBar(post);
     this.brokenEl = el('span', 'ab-broken', 'BROKEN', post);
@@ -176,8 +182,10 @@ export class Hud {
     this.dmgAcc = 0;
     this.dmgT = 0;
     this._setDmgShown(false);
-    this._p2 = d?.phase === 2;
+    this._p2 = d?.phase >= 2;
+    this._p3 = d?.phase >= 3;
     this.bossEl.classList.toggle('p2', this._p2);
+    this.bossEl.classList.toggle('p3', this._p3);
     this.bossOn = true;
     this.bossEl.classList.add('on');
   }
@@ -332,10 +340,14 @@ export class Hud {
       // posture is polled too (authoritative); 'dragon:posture' only makes rises instant
       const pmax = num(d.maxPosture, 0);
       if (pmax > 0 && Number.isFinite(d.posture)) this.postBar.set(d.posture / pmax);
-      const p2 = d.phase === 2;
+      const p2 = d.phase >= 2, p3 = d.phase >= 3;
       if (p2 !== this._p2) {
         this._p2 = p2;
         this.bossEl.classList.toggle('p2', p2);
+      }
+      if (p3 !== this._p3) {
+        this._p3 = p3;
+        this.bossEl.classList.toggle('p3', p3);
       }
     }
     if (this.dmgT > 0) {

@@ -5,6 +5,133 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-09 — Session 6: the epic wyrm fight (combos, the plunge, flights and fire, three phases)
+**Owner:** the hero is "too lanky / skinny", and his sword always shows and clips through him, even
+through his back from behind. The dragon needs far more attacks, epic fire spells, flying attacks and
+fire from the air. A perfect dodge should put the hero on top of the dragon for a flying stab into
+its head (the teleport behind it confused players). Enemy combos should be parried hit after hit,
+like Sekiro / Phantom Blade Zero. The fight should be longer and harder.
+**Owner's answers:** the head-stab is automatic on every perfect dodge in range; the fight lasts
+3–5 min, is hard and has three phases; flying means short flying attacks; all four spells (meteor
+rain, eruptions, flame walls / rings, an inferno nova).
+
+**How:** a shared spec with four contracts (1 strings and the deflect chain, 2 the plunge, 3 hazards
+and fire attacks, 4 three phases) and four worktree agents in parallel, each owning its files:
+hero-look (`c3/hero-look`), plunge (`c3/plunge`), dragon-melee (`c3/dragon-melee`) and dragon-fire
+(`c3/dragon-fire`). Base: `main` @ `8ce6aef` (PR #4, the reference match, merged). The lead merged
+them into `combat/epic-wyrm` (`cbc3056`, `b528723`, `4020ad6`, `c6f4411`; the dragon-side plunge
+scenario renamed `plungeReact`) and tuned the result (`64543ac`, `b3a69b3`, `1fe7f42`, `9fbf9fd`).
+
+**Done — the hero:**
+- **Broad build (ADR-031):** a `BODY` girth table on the same bones: chest 0.40 × 0.21 → 0.50 ×
+  0.27 m, waist 0.27 → 0.31, hips 0.30 → 0.34, thick arms and legs, bigger boots, shoulders ±0.21.
+  The sword hand aims from the old shoulder spot, so the grips are unchanged.
+- **The blade is depth-tested again:** the depth pull (ADR-022) is gone, so the sword no longer shows
+  through his back or legs. The coat yields to the steel (hangs inside the sword hand or drapes over
+  it, latched per panel): blade-through-coat frames 156 → 25 over 23 clips.
+- **The plunge (ADR-027):** a perfect dodge of the wyrm within 30 m of its head: vanish, hang 5 m
+  above the head, dive, a reverse-grip stab (90 final damage, 40 posture), ride the head down,
+  backflip to a visible landing in front of it toward where he came from, then the crit window.
+  Out of range or against a fire hazard: slow-mo + crits in place. On a posture break, attack near
+  the head for the **execution** (260). Plunge poses (hang, dive, ride, flip, three-point landing),
+  cold FX, a dive whoosh and a skull-crunch impact.
+- **Deflect chain feel:** parries in rhythm snap the blade to alternating sides, push him back a
+  little, grow the clash and raise the clang a step each; the guard lingers between taps; "DEFLECT
+  ×N" and "EXECUTION" call-outs.
+- **Camera keep-in-view:** `cameraRig.keep` pans (and pulls back a little) so the hero and the head
+  stay on screen through the plunge; the flow uses it to frame a flying wyrm.
+
+**Done — the wyrm:**
+- **Strings (ADR-026):** a data-driven string framework with ten hit kinds and seven strings: claw
+  combo, rending flurry, hesitant maw (a held bite that baits an early parry), wing buffet, tail
+  lash, pounce, frenzy (6–7 hits). A parried non-final hit is deflected (posture + a 0.14 s
+  knock-back), the string goes on; the last hit's parry recoils it.
+- **Plunge reaction:** `plungePoint` / `onPlunge`, the `plunged` reaction (the head slammed down, a
+  thrash, the rise; in the air a fall and a crash landing first; an execution heavier, spending the
+  break).
+- **Three phases (ADR-028):** gates at 66 % and 33 %, transition roars that clear the hazards, a
+  white-hot phase 3 that opens with the nova, per-phase tuning arrays, a generic weight-based AI
+  selection, the Lab's Phase 3 button, boss-bar phase ticks, the phase-3 banner and music.
+- **Short flights (ADR-030):** the burning pass, the sky dive, the hover barrage, with hover, glide
+  and dive poses and the GLIDE / DIVE wing keys.
+- **Fire spells and hazards (ADR-029):** meteor rain, fire eruptions (a phase-3 chase), flame ring,
+  flame wall, inferno nova; a pooled hazard system with red ground warnings; 12 procedural fire
+  sounds; all FX from world-atlas glyphs.
+
+**Lead, after the merge:**
+- A successful deflect re-arms the parry at once (ADR-032): a player holding the guard a moment
+  between blows could not re-arm in time for the next blow of a string.
+- Fire hazards no longer flash the red screen edge (a meteor rain pulsed the whole HUD).
+- AI weights retuned: up close the stomp and the bite were ~2/3 of the picks. The dive and the hover
+  barrage have no minimum distance, the strafe's is 7 m, the eruptions' 6 m, the breath works from
+  4.5 × S. Close-range pick shares now: P1 strings ~60 %, bite / stomp ~40 %; P2 strings ~39 %, fire
+  and flights ~35 %, singles ~25 %; P3 strings ~42 %, fire ~41 %.
+- A new phase's abilities unlock one by one (`unlockStagger` [2, 2.5, 2] s); the nova opener is not
+  delayed.
+- HP 4200 → 4500; the plunge's hurt flash is capped at 0.45 (the hitstop froze its decay and washed
+  the wyrm white).
+- The airborne plunge in play: fire the wyrm breathes or spits from the air (the burning pass's
+  strip front, the hover barrage's shells) spawns its hazard with `plunge: true`, so perfect-dodging
+  it sends the hero onto the flying wyrm's head and it crashes (before, every blow dealt in flight
+  was a no-plunge hazard and the crash was only reachable from the Lab). Spells from the sky or the
+  ground (meteors, pillars, rings, walls) still never plunge. A deflect's instant re-arm is cleared
+  on respawn.
+- Tests: the opt-in `probe` scenario (ADR-033), the plunge's head damage exact, the eruption chase
+  judged against each pillar's live window, the deflect re-arm assert, a perfect dodge of the burning
+  pass plunging onto the flying wyrm (it crashes and fights on); the win scenario's pre-merge plunge
+  emulation is gone.
+
+**Decisions:** ADR-026 … ADR-033.
+
+**Verification:**
+- Per-agent headless GPU captures (deterministic boot, the game camera plus side / back / close
+  views): `scratchpad/combat3/<agent>/` (hero-look `sheet_*`, plunge `plunge_*` and
+  `deflect_chain_*`, dragon-melee `sheet_<string>_side/game`, dragon-fire
+  `sheet_game_<ability>`).
+- Merged captures at the game camera (`scratchpad/combat3/final/`): a live fight with the AI on, the
+  plunge from in front, the sky dive with the flying framing, the dive and the barrage from the air,
+  the phase-3 roar and the nova opener, and the hero's back / reference / side views.
+- `npm test`: ALL PASSED on the tuned merge (0 console errors; 54 catalogued events, payloads match;
+  glyph check 218 literals, bad = 0). New scenarios: `plunge`, `deflect`, `strings`, `plungeReact`,
+  `timing`, `fire`, `herolook`; `win` now runs three phases. Highlights: every string contact
+  within ±85 ms of its flash + lead (worst 67 ms, 661 placements); every fire blow within 17 ms; the
+  plunge deals exactly 90, lands in front of the head and keeps both on screen (also onto a flying
+  wyrm and through the leap); the blade never sinks > 2 cm into the body (831 frames).
+- `npm run build`: OK (1402 KB).
+- Difficulty (integration bots; the probe ran at 4200 HP, 4500 adds ~7 %): a 95 % probe bot wins in
+  145–150 s, 85 % wins 1 of 3 (129 s) and dies 2 of 3, 70 % always dies; the god-mode `win` bot at
+  4500 HP wins in 157.5 s (P2 at 51 s, P3 at 91 s; 44 of 46 parries, 26 deflect chains, 24 plunges,
+  posture breaks at 25 s and 87 s).
+
+**Open issues / next:**
+- **Playtest:** a human playtest is needed. The bots heal poorly, so the probe's death rates are
+  pessimistic; the 3–5 min target is inferred from the bots.
+- **Hero:**
+  - his mass reads only modestly at the game camera (the wide skirt dominates the outline)
+  - from behind, the low idle guard now shows only the point
+  - 25 coat-crossing frames remain (near the hilt; the torn strips and sleeve streamers ignore the
+    blade), the coat swings more in runs, the block's free hand doesn't brace the flat
+  - over the wyrm at the game camera the plunging hero reads mainly through his cold tint and the
+    cyan blade
+- **Wyrm:**
+  - the tail "jab" is a lash, not a thrust (needs a tail-raise control in the rig)
+  - the wing buffet's range band is narrow (6.8–8.3 model units)
+  - later string hits can whiff a hero who doesn't move (the frenzy's 4th–6th hits land on 13–17 of
+    33 placements)
+  - the overhead claw is hard to read at the game camera; the deflect knock-back is a small 0.14 s
+    offset
+  - the meteor cast has no red windup glow of its own; the dive hovers at 13 m and the barrage at
+    9 m (spec 14 / 8)
+  - the phase-3 eruption chase is verified in the sim only
+- **FX:** the clash bloom is large in synthetic captures (the wyrm's parry spark can land on the
+  hero's chest; in real fights it is at the claw).
+- **Carried over from session 5:** the capture determinism leak, the stray `"` glyph particles, the
+  hero's coat drape and face, the boss camera in melee, the wyrm's letter boil.
+- **Next:** open the PR from `combat/epic-wyrm`; the owner plays its preview and approves; tune from
+  the playtest; then cut the release (the reference match is merged but not released yet).
+
+---
+
 ## 2026-11-08 — Session 5: the reference match (wyrm and hero look and motion)
 **Owner:** "i want you to focus on making the dragon and character look as identical and good as
 the attached reference images and make sure the animations and movement look great." Attached: a

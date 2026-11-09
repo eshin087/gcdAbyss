@@ -6,9 +6,10 @@ import { TELL, TELL_STYLE, RESULT, POSTURE, tellDefaults } from '../../combat/ru
 import { TUNING, SCALE } from './tuning.js';
 import { buildDrake } from './model.js';
 import { Rig, createPose, resetPose } from './rig/anim.js';
-import { Brain, SEQ } from './ai.js';
-import { ATTACKS, MELEE } from './attacks.js';
+import { Brain, SEQ, NO_PLUNGE } from './ai.js';
+import { ATTACKS, MELEE, perPhase } from './attacks.js';
 import { DragonFx } from './fx.js';
+import { Hazards } from './hazards.js';
 
 // VAELGRIM, THE CINDER WYRM — the boss. Public contract: see docs/ARCHITECTURE.md (Dragon).
 // Wiring: Brain (ai.js) writes pose targets + root motion and runs the attack tell beats, Rig
@@ -98,10 +99,15 @@ export class Dragon {
     this.warn = 0; // current red tell glow strength (uWarn.a)
     this._warnAt = -1; // this.time of the last red timing flash (-1 = no spike)
     this._warnAction = null; // the action that flashed it (a replaced action drops the spike)
+    // a deflected string hit's knock-back (visual only): t = seconds since the parry (-1 = none)
+    this.knock = { t: -1, part: '', wi: 0, x: 0, z: 0 };
+    this._lastPlunge = -1;
+    this.crashing = false; // a plunge is cancelling a flight: its end() must not land it elsewhere
 
     this.pose = createPose();
     this.rig = new Rig(this.model, this);
     this.fx = new DragonFx(this);
+    this.hazards = new Hazards(this); // fire hazards (hazards.js): cleared by fx.reset(), death, phase changes
     this.brain = new Brain(this);
     this.debug = createDebug(this);
 
@@ -112,16 +118,26 @@ export class Dragon {
 
   // ---------------------------------------------------------------- public API
   get turnRate() {
-    return TUNING.turnSpeed[this.phase === 2 ? 1 : 0];
+    return perPhase(TUNING.turnSpeed, this.phase);
   }
   /** Radius (m, around the arena centre) the root stays inside: see TUNING.bound. */
   get bound() {
     const B = Number(this.game.CONFIG?.world?.dragonBound ?? CONFIG.world.dragonBound);
     return Math.min(Number.isFinite(B) ? B : 26, TUNING.bound ?? Infinity);
   }
-  /** Phase-2 speed-up of windups + recoveries (TUNING.phase2TimeScale). */
+  /** Later phases' speed-up of windups + recoveries (TUNING.phaseTimeScale). */
   get tScale() {
-    return this.phase === 2 ? TUNING.phase2TimeScale : 1;
+    const k = perPhase(TUNING.phaseTimeScale, this.phase);
+    return Number.isFinite(k) && k > 0 ? k : 1;
+  }
+  /** HP fractions where each phase starts ([1, 0.66, 0.33]; the HUD draws ticks at the gates). */
+  get phaseAt() {
+    return TUNING.phaseAt;
+  }
+  /** HP where the next phase starts (its gate), 0 in the last phase. */
+  get nextPhaseHp() {
+    const f = TUNING.phaseAt?.[this.phase];
+    return this.phase < 3 && Number.isFinite(f) ? this.maxHp * f : 0;
   }
 
   isTargetable() {
@@ -140,6 +156,10 @@ export class Dragon {
     this.brain.startAction(SEQ.intro);
   }
 
+  /**
+   * A hit from the player. Internal extras (the plunge, onPlunge): `exact` = `damage` is final (no part
+   * / broken multipliers), `posture` = add exactly this much posture instead of the weapon gain.
+   */
   takeHit(o = {}) {
     if (this.state === 'dying' || this.state === 'dead') return 0;
     o = o || {};
@@ -148,14 +168,14 @@ export class Dragon {
     const part = PARTS[o.part] !== undefined ? o.part : 'body';
     const broken = this.broken;
     // the player already multiplied a Ghostep crit; a broken posture opens every hit to crits
-    const dmg = Math.max(1, Math.round(raw * PARTS[part] * (broken ? POSTURE.breakCritMult : 1)));
+    const dmg = o.exact ? Math.max(1, Math.round(raw)) : Math.max(1, Math.round(raw * PARTS[part] * (broken ? POSTURE.breakCritMult : 1)));
     const crit = !!o.crit || broken;
-    // phase 2 always plays: in a running fight, phase-1 damage stops at the threshold until the
-    // transition starts (crits on a broken wyrm could otherwise skip the whole second phase, or kill
-    // it during the transition windup). The Lab's AI-off mode keeps plain damage (debug.phase2 / kill exist).
+    // every phase plays: in a running fight, damage stops at the next phase's threshold until its
+    // transition starts (crits on a broken wyrm could otherwise skip a whole phase, or kill it during
+    // the transition windup). The Lab's AI-off mode keeps plain damage (debug.phase2 / phase3 / kill).
     let hp = this.hp - dmg;
-    const gate = this.maxHp * TUNING.phase2At;
-    if (this.phase === 1 && this.brain.aiEnabled && this.hp >= gate) hp = Math.max(gate, hp);
+    const gate = this.nextPhaseHp;
+    if (gate > 0 && this.brain.aiEnabled && this.hp >= gate) hp = Math.max(gate, hp);
     this.hp = Math.max(0, hp);
     this.flash = Math.max(this.flash, o.heavy || crit ? 1 : 0.8);
 
@@ -186,32 +206,153 @@ export class Dragon {
     }
     // posture: light / heavy weapon hits (the old `poise` value scales it around its v0.1 norm)
     if (!broken && POSTURE_STATES.has(this.state)) {
-      const heavy = !!o.heavy;
-      let gain = heavy ? POSTURE.hit.heavy : POSTURE.hit.light;
-      const poise = Number(o.poise);
-      if (Number.isFinite(poise) && poise > 0) gain *= clamp(poise / (heavy ? 40 : 12), 0.6, 1.5);
-      if (part === 'head') gain *= TUNING.posture.headMult;
-      this.addPosture(gain);
+      if (o.posture !== undefined) this.addPosture(Number(o.posture));
+      else {
+        const heavy = !!o.heavy;
+        let gain = heavy ? POSTURE.hit.heavy : POSTURE.hit.light;
+        const poise = Number(o.poise);
+        if (Number.isFinite(poise) && poise > 0) gain *= clamp(poise / (heavy ? 40 : 12), 0.6, 1.5);
+        if (part === 'head') gain *= TUNING.posture.headMult;
+        this.addPosture(gain);
+      }
     }
-    if (this.phase === 1 && this.hp <= this.maxHp * TUNING.phase2At) this.brain.pendingPhase2 = true;
+    if (gate > 0 && this.hp <= gate) this.brain.pendingPhase = Math.max(this.brain.pendingPhase, this.phase + 1);
     return dmg;
   }
 
-  /** Called after player.takeHit returned 'parried' (by hitPlayer; a second call the same instant is ignored). */
+  /**
+   * Called after player.takeHit returned 'parried' (by hitPlayer; a second call the same instant is
+   * ignored). The DEFLECT CHAIN (contract 1): a parried string hit that is not its last one does not
+   * cancel the string: the posture damage applies and the struck part is knocked back (visual, no
+   * timing change). Parrying the last hit (or a single melee attack) recoils the wyrm. Emits
+   * 'dragon:parried' {attack, tell, hit, last} and, from the 2nd parry in a row within one string,
+   * 'combat:deflectChain' {count}.
+   */
   onParried(info = {}) {
     if (this.state === 'dying' || this.state === 'dead' || this.state === 'sleeping') return;
     if (this.time - this._lastParry < 0.1) return;
     this._lastParry = this.time;
-    const attack = info?.attack ?? this.brain.action?.cur?.attack ?? this.brain.action?.name ?? null;
+    const a = this.brain.action;
+    const attack = info?.attack ?? a?.cur?.attack ?? a?.name ?? null;
     const tell = info?.tell === TELL.BLUE ? TELL.BLUE : TELL.NORMAL;
-    this.emit('dragon:parried', { attack, tell });
+    const mine = !!a && (attack == null || attack === a.name); // the running action's own hit (not a stray shell)
+    const b = mine ? a.cur : null;
+    const hit = Number.isFinite(b?.hit) ? b.hit : 0;
+    const string = mine && !!a.def?.string;
+    const last = !string || hit >= (a.beats?.length ?? 1) - 1;
+    this.emit('dragon:parried', { attack, tell, hit, last });
+    if (string) {
+      a.chain = (a.chain ?? 0) + 1;
+      if (a.chain >= 2) this.emit('combat:deflectChain', { count: a.chain });
+    }
     const h = this._hitPt;
     this.fx.parrySpark(h.x, h.y, h.z, tell);
     this.flash = Math.max(this.flash, 0.6);
-    // a parried melee swing is cancelled: head snaps back (projectiles just fizzle)
-    const a = this.brain.action;
-    if (a && MELEE.has(a.name) && (attack == null || attack === a.name) && this.state === 'combat') this.brain.recoil();
+    // a parried melee swing is cancelled: head snaps back (projectiles just fizzle); a string's
+    // earlier hits are only deflected
+    if (mine && (MELEE.has(a.name) || a.def?.melee) && this.state === 'combat') {
+      if (last) this.brain.recoil();
+      else this._startKnock(b, h);
+    }
     this.addPosture(POSTURE.parry[tell] ?? POSTURE.parry.normal);
+  }
+
+  /** The hero's plunge rides this point: the top of the head (+0.6 x SCALE up), valid in flight. */
+  plungePoint(out) {
+    const h = this.rig.pt.head;
+    if (Number.isFinite(h.x + h.y + h.z) && (h.x || h.y || h.z)) return out.set(h.x, h.y + 0.6 * S, h.z);
+    return out.set(this.position.x, 4 * S, this.position.z);
+  }
+
+  /**
+   * The hero's plunge (contract 2) lands on the head: `damage` (final, to part head, phase gate
+   * respected) and `posture`; the running action is cancelled (not the intro, a transition or death)
+   * and the plunged reaction plays: the head slammed to the ground, a thrash, the rise; airborne it
+   * crashes first. An execution on a broken wyrm is heavier and longer and consumes the break.
+   * Emits 'dragon:plunged' {execution}. Returns the damage dealt.
+   */
+  onPlunge(o = {}) {
+    o = o || {};
+    if (!TARGETABLE.has(this.state)) return 0;
+    if (this.time - this._lastPlunge < 0.25) return 0; // one plunge, one reaction
+    this._lastPlunge = this.time;
+    const execution = !!o.execution;
+    const wasBroken = this.broken;
+    const heavy = execution && wasBroken;
+    const pt = o.point && Number.isFinite(o.point.x + o.point.y + o.point.z) ? o.point : this.rig.pt.head;
+    const posture = Math.max(0, Number(o.posture) || 0);
+    const dmg = this.takeHit({ damage: Number(o.damage) || 0, part: 'head', point: pt, heavy: true, crit: true, exact: true, posture: 0 });
+    if (this.state === 'dying' || this.state === 'dead') {
+      this.emit('dragon:plunged', { execution });
+      return dmg;
+    }
+    const a = this.brain.action;
+    if (!a || !NO_PLUNGE.has(a.name)) {
+      const air = this.state === 'airborne' || this.rig.s.alt > 1.0;
+      this._clearWarn(); // a cancelled red windup drops its glow at once
+      this.brain.plunged({ air, alt: Math.max(this.rig.s.alt, 0), heavy });
+    }
+    // a soft hurt flash only: the impact's hitstop freezes the flash's decay, and a full one washed the
+    // whole wyrm white for that moment (the hero's impact burst is the accent)
+    this.flash = Math.min(this.flash, TUNING.plunged?.flash ?? 0.45);
+    // the execution spends the break (the meter starts over); a plain plunge adds its posture (a full
+    // meter breaks once the reaction is over)
+    if (!heavy && posture > 0 && !this.broken) this.addPosture(posture);
+    this.emit('dragon:plunged', { execution });
+    return dmg;
+  }
+
+  /** Start a deflected hit's knock-back: the struck part (paw / head / body) is thrown back <= 0.15 s. */
+  _startKnock(b, at) {
+    const K = this.knock, p = this.game.player?.position;
+    K.t = 0;
+    K.part = b?.part ?? '';
+    K.wi = b?.wi ?? 0;
+    // away from the hero
+    let dx = p ? at.x - p.x : -this.fwd.x, dz = p ? at.z - p.z : -this.fwd.z;
+    const l = Math.hypot(dx, dz);
+    if (!(l > 1e-4)) {
+      dx = -this.fwd.x;
+      dz = -this.fwd.z;
+    } else {
+      dx /= l;
+      dz /= l;
+    }
+    K.x = dx;
+    K.z = dz;
+  }
+
+  /** Brain.update, after the action wrote the pose: add the deflect knock-back (visual only). */
+  applyDeflectKnock(dt) {
+    const K = this.knock;
+    if (K.t < 0) return;
+    const D = TUNING.deflectKnock;
+    K.t += dt;
+    if (K.t >= D.time || this.state === 'dying' || this.state === 'dead') {
+      K.t = -1;
+      return;
+    }
+    const f = Math.sin((Math.PI * K.t) / D.time); // out and back
+    const pose = this.pose;
+    const paw = (i) => {
+      const ov = pose.pawOv[i];
+      if (!(ov.w > 0)) return false;
+      ov.pos.x += K.x * D.paw * S * f;
+      ov.pos.z += K.z * D.paw * S * f;
+      ov.pos.y += D.up * S * f;
+      return true;
+    };
+    let done = false;
+    if (K.part === 'claw') done = paw(K.wi);
+    else if (K.part === 'forefeet' || K.part === 'wrists') done = paw(0) | paw(1);
+    if (!done) {
+      // the head (bites) or the whole front (wings, tail): thrown back along the blow
+      pose.headOffset.x += K.x * D.head * S * f;
+      pose.headOffset.z += K.z * D.head * S * f;
+      pose.headOffset.y += D.up * S * f;
+      pose.pitch -= 0.05 * f;
+    }
+    pose.jaw = Math.max(pose.jaw, 0.5 * f);
   }
 
   reset() {
@@ -231,6 +372,9 @@ export class Dragon {
     this.broken = false;
     this.postureTimer = 0;
     this._lastParry = -1;
+    this._lastPlunge = -1;
+    this.knock.t = -1;
+    this.crashing = false;
     this._atkN = 0;
     this.flash = 0;
     this.glow = 0;
@@ -286,15 +430,43 @@ export class Dragon {
     }
   }
 
-  /** Phase 2 begins (the transition roar's start): bigger posture meter, emptied (incl. a waiting break). */
-  enterPhase2() {
-    this.phase = 2;
-    this.brain.pendingPhase2 = false;
+  /**
+   * Phase `n` begins (its transition roar's start): that phase's posture meter, emptied (incl. a
+   * waiting break). Damage that already went past the next gate (Lab, AI off) queues the next one.
+   */
+  enterPhase(n) {
+    n = clamp(Math.round(Number(n) || 2), 1, 3);
+    this.phase = n;
+    this.brain.pendingPhase = 0;
     this.brain.pendingBreak = false;
-    this.maxPosture = TUNING.posture.max[1];
+    this.maxPosture = perPhase(TUNING.posture.max, n);
     this.posture = 0;
     this.postureTimer = 0;
     this.emitPosture(true);
+    // the abilities this phase unlocks come in one by one, not all at once after the roar: each gets a
+    // staggered opening cooldown (TUNING.unlockStagger [first, step, jitter] s) in a random order. The
+    // phase-3 opener (the nova) is queued by the roar itself and is not delayed.
+    const U = TUNING.unlockStagger;
+    if (U && n > 1 && this.brain?.cooldowns) {
+      const fresh = Object.keys(TUNING.attacks).filter((k) => TUNING.attacks[k]?.phase === n && k !== 'nova' && k !== 'roar');
+      for (let i = fresh.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = fresh[i];
+        fresh[i] = fresh[j];
+        fresh[j] = t;
+      }
+      fresh.forEach((k, i) => {
+        const cd = U[0] + U[1] * i + Math.random() * U[2];
+        this.brain.cooldowns[k] = Math.max(this.brain.cooldowns[k] ?? 0, cd);
+      });
+    }
+    const gate = this.nextPhaseHp;
+    if (gate > 0 && this.hp <= gate) this.brain.pendingPhase = n + 1;
+  }
+
+  /** v0.4 name of enterPhase(2). */
+  enterPhase2() {
+    this.enterPhase(2);
   }
 
   // ---------------------------------------------------------------- helpers for brain/attacks
@@ -386,6 +558,7 @@ export class Dragon {
         blockable,
         attack,
         attacker: this,
+        plunge: o.plunge ?? cur?.plunge, // false: a perfect dodge never plunges (fire hazards)
       });
     } catch (err) {
       console.error('[dragon] player.takeHit failed', err);
@@ -395,11 +568,15 @@ export class Dragon {
     return r ?? RESULT.IGNORED;
   }
 
-  /** One result per hit: any answer (hit, block, parry, dodge, Ghostep) consumes the activation. */
+  /**
+   * One result per hit: any answer (hit, block, parry, dodge, Ghostep) consumes the activation. A hit
+   * that lands or is blocked breaks a string's deflect chain (dodges keep it).
+   */
   strike(a, o) {
     if (a.hitDone) return RESULT.IGNORED;
     const r = this.hitPlayer(o, a);
     if (r && r !== RESULT.IGNORED) a.hitDone = true;
+    if (r === RESULT.HIT || r === RESULT.BLOCKED) a.chain = 0;
     return r;
   }
 
@@ -418,6 +595,8 @@ export class Dragon {
       case 'forefeet':
       case 'wrists': // v0.3 name (the wyvern's wing wrists): the front paws now
         return out.lerpVectors(pt.arms[0].toe, pt.arms[1].toe, 0.5);
+      case 'wing': // a wing's mid knuckle (b.wi: 0 = left, 1 = right): the buffet
+        return out.copy(pt.wings[b?.wi ?? 0]?.knuckles[1] ?? pt.chest);
       case 'tailTip': {
         const t = this.rig.tail;
         return out.copy(t.p[t.n]);
@@ -590,9 +769,12 @@ export class Dragon {
     this._refreshHurt();
     this._refreshPushers();
     this.fx.update(dt);
+    this.hazards.update(dt); // (guarded inside: never throws)
     if (this.state !== 'dying') {
       this.fx.eyeGlints(dt, this.rig.pt.eyes, this.rig.s.eyes);
-      if (this.phase === 2) this.fx.bodyEmbers(dt, this.hurtSpheres, 22, false);
+      // phase 2 smoulders, phase 3 burns (TUNING.phaseEmbers)
+      const embers = perPhase(TUNING.phaseEmbers, this.phase);
+      if (embers > 0) this.fx.bodyEmbers(dt, this.hurtSpheres, embers, this.phase >= 3);
     }
     this._applyMaterials(dt);
   }
@@ -772,8 +954,8 @@ function createDebug(d) {
     abilities() {
       const out = [];
       for (const name in ATTACKS) {
-        const t = TUNING.attacks[name] ?? {};
-        out.push({ name, label: t.label ?? name, tell: t.tell ?? TELL.NORMAL, phase: t.phase ?? 1 });
+        const t = TUNING.attacks[name] ?? {}, def = ATTACKS[name];
+        out.push({ name, label: t.label ?? def.label ?? name, tell: t.tell ?? def.tell ?? TELL.NORMAL, phase: def.phase ?? t.phase ?? 1 });
       }
       return out;
     },
@@ -793,6 +975,10 @@ function createDebug(d) {
     },
     get aiEnabled() {
       return d.brain.aiEnabled;
+    },
+    /** Lab readout: the running action (name · phase t/dur). */
+    currentAction() {
+      return d.brain.action;
     },
     wake() {
       if (d.state !== 'sleeping') return false;
@@ -819,6 +1005,15 @@ function createDebug(d) {
       if (d.state === 'airborne') return false;
       d.brain.queued = null;
       d.brain.startAction(SEQ.phase2);
+      return true;
+    },
+    /** Straight into the phase-3 transition (from phase 1 or 2): the roar, the hotter wyrm. */
+    phase3() {
+      if (!alive()) return false;
+      if (d.state === 'sleeping' || d.state === 'waking') dbg.startFight();
+      if (d.state === 'airborne') return false;
+      d.brain.queued = null;
+      d.brain.startAction(SEQ.phase3);
       return true;
     },
     stagger() {
@@ -853,7 +1048,8 @@ function createDebug(d) {
       d.hp = Math.round(d.maxHp * f);
       if (d.hp <= 0) return dbg.kill();
       // (asleep: the roar plays once the fight runs — brain.update only starts it in combat)
-      if (d.phase === 1 && d.hp <= d.maxHp * TUNING.phase2At) d.brain.pendingPhase2 = true;
+      const gate = d.nextPhaseHp;
+      if (gate > 0 && d.hp <= gate) d.brain.pendingPhase = d.phase + 1;
       return true;
     },
     /** Hurt spheres + attack spheres tested this frame. Reuses its objects: copy if you keep them. */

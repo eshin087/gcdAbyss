@@ -33,9 +33,13 @@ const LOGGED = {
   'player:ghostep': 'P ghostep',
   'player:died': 'P died',
   'dragon:parried': 'D parried',
+  'combat:deflectChain': 'D deflect chain',
   'dragon:postureBreak': 'D postureBreak',
   'dragon:stagger': 'D stagger',
   'dragon:phase2': 'D phase2',
+  'dragon:phase3': 'D phase3',
+  'dragon:phase': 'D phase',
+  'dragon:plunged': 'D plunged',
   'dragon:death': 'D death',
 };
 
@@ -300,6 +304,12 @@ export class TimingTrainer {
         return attack;
       case 'player:ghostep':
         return `${finite(d?.x).toFixed(1)}, ${finite(d?.z).toFixed(1)}`;
+      case 'combat:deflectChain':
+        return `x${Math.round(finite(d?.count))}`;
+      case 'dragon:phase':
+        return `phase ${Math.round(finite(d?.n))}`;
+      case 'dragon:plunged':
+        return d?.execution ? 'execution' : '';
       default:
         return '';
     }

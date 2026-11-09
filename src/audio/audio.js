@@ -6,6 +6,7 @@ import { SFX } from './sfx.js';
 import { ForestAmbience, BreathLoop } from './ambience.js';
 import { ChargeHum } from './charge.js';
 import { createMusic } from './music.js';
+import { FIRE_SFX, subscribeFire } from './fire.js';
 
 // Procedural WebAudio engine: every sound is synthesised at runtime (no sample files).
 // The AudioContext is created lazily by unlock() (flow calls it on title dismiss; the engine
@@ -22,8 +23,9 @@ import { createMusic } from './music.js';
 // full level within 8 m, ≈ −12 dB at 35 m), opts.gain, opts.pan, opts.delay (s):
 //   player   swing{heavy,combo,thrust} slam hit{heavy,crit,part} hurt{damage,kind} sizzle roll
 //            footstep{sprint} heal noFlask lockOn{on} dodge gong
-//   combat   tellBlue tellRed tellTick flash{tell} parry{tell} block{tell} guardBreak
+//   combat   tellBlue tellRed tellTick flash{tell} parry{tell,chain} block{tell} guardBreak
 //            ghostep{slow}   (+ the sustained charge hum: player:charge → release/interrupt)
+//            plungeDive{exec} plungeHit{exec}
 //   dragon   roar{strength,pitch} wake dragonStep{heavy} wingFlap{strength} takeoff land bite
 //            windup{name} dragonSwipe dragonPain dragonRecoil{tell} postureBreak{roar}
 //            fireball explosion{radius} stagger phase2{roar} dragonDeath emberHiss
@@ -53,7 +55,7 @@ const VICTORY_SETTLE = 10; // s of victory pad before settling to ambient
 const GRUNT_GAP = 0.5; // s: rapid fire-contact ticks only grunt this often (sizzle in between)
 const DUCK_HZ = 650;
 const EMPTY = Object.freeze({});
-const RX_OWN_SOUND = /breath|fire|flame|ball|bite|roar|inferno|blaze|meteor/i;
+const RX_OWN_SOUND = /breath|fire|flame|ball|bite|roar|inferno|blaze|meteor|strafe|dive|barrage|erupt|nova/i;
 
 const ALIASES = {
   ui: ['blip', { kind: 'select' }],
@@ -179,7 +181,7 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx || ctx.state === 'closed' || typeof name !== 'string') return false;
     let o = opts && typeof opts === 'object' ? opts : EMPTY;
-    let def = SFX[name];
+    let def = SFX[name] ?? FIRE_SFX[name];
     if (!def && ALIASES[name]) {
       const [n, extra] = ALIASES[name];
       name = n;
@@ -571,7 +573,7 @@ export class AudioEngine {
     let want = null;
     if (to === 'title' || to === 'explore') want = 'ambient';
     else if (to === 'bossIntro') want = 'none';
-    else if (to === 'boss') want = this.game.dragon?.phase === 2 ? 'boss2' : 'boss';
+    else if (to === 'boss') want = this.game.dragon?.phase >= 2 ? 'boss2' : 'boss';
     else if (to === 'dead') want = 'death';
     else if (to === 'victory') want = 'victory';
     if (want) this._autoMusic(want);
@@ -601,9 +603,13 @@ export class AudioEngine {
     });
     on('player:slam', (d) => this.play('slam', { x: d.x, z: d.z }));
     on('player:charge', (d) => this.charge?.start(d));
-    on('player:hitDragon', (d) =>
-      this.play('hit', { heavy: d.heavy, crit: d.crit, part: d.part, damage: d.damage, x: d.point?.x, z: d.point?.z }),
-    );
+    on('player:hitDragon', (d) => {
+      if (d.kind === 'plunge') return; // the plunge's own impact plays on player:plungeHit
+      this.play('hit', { heavy: d.heavy, crit: d.crit, part: d.part, damage: d.damage, x: d.point?.x, z: d.point?.z });
+    });
+    // the plunge: the dive's rush, then the blade into the skull
+    on('player:plunge', (d) => this.play('plungeDive', { exec: !!d.execution }));
+    on('player:plungeHit', (d) => this.play('plungeHit', { exec: !!d.execution }));
     on('player:hurt', (d) => {
       // (a hit that interrupts a charge is caught by the charge hum's player-state poll)
       // burn DoT ticks (every 0.5 s) and the breath's contact ticks (every 0.15 s) would grunt
@@ -642,7 +648,8 @@ export class AudioEngine {
     });
     on('player:parry', (d) => {
       this.charge?.stop(0.05);
-      this.play('parry', { tell: d.tell });
+      // a deflect chain (parries in rhythm) rings higher with every blow met
+      this.play('parry', { tell: d.tell, chain: d.chain });
     });
     on('player:guardBreak', () => {
       this.charge?.stop(0.05);
@@ -654,7 +661,8 @@ export class AudioEngine {
     // attack tells (any attacker): the player's reaction cues
     on('combat:tell', (d) => {
       const o = this._atEvent(d);
-      if (d.tell === 'blue') this.play('tellBlue', o);
+      if (d.hazard) this.play('hazardTell', o); // a fire hazard's own tell (meteors, pillars): no brass sting
+      else if (d.tell === 'blue') this.play('tellBlue', o);
       else if (d.tell === 'red') {
         this.play('tellRed', o);
         this._dipMusic();
@@ -733,6 +741,21 @@ export class AudioEngine {
       this._last.set('roar', now);
       if (this.musicMode === 'boss' || this.game.state === 'boss') this._autoMusic('boss2');
     });
+    on('dragon:phase3', () => {
+      // the white-hot phase: the enraged sting again (it claims the roar slot like phase 2), and the
+      // phase-2 music if the Lab jumped straight here
+      const now = this.ctx.currentTime;
+      const last = this._last.get('roar');
+      const roared = last !== undefined && now >= last && now - last < 0.3;
+      this.play('phase2', this._atDragon({ roar: !roared }));
+      this._last.set('roar', now);
+      if (this.musicMode === 'boss' || this.musicMode === 'boss2' || this.game.state === 'boss') this._autoMusic('boss2');
+    });
+    on('dragon:plunged', (d) => {
+      // the blade in its skull: the body-slam thump and a pained roar (an execution: the break's)
+      this._painPending = false;
+      this.play(d.execution ? 'postureBreak' : 'dragonPain', this._atDragon({ roar: true }));
+    });
     on('dragon:death', () => {
       this._painPending = false;
       this.breath?.stop(0.3);
@@ -740,6 +763,7 @@ export class AudioEngine {
       this._autoMusic('none');
     });
     on('dragon:dead', () => this.play('emberHiss', this._atDragon()));
+    subscribeFire(on, this); // dragon:spell / dragon:hazard (fire spells, flights, hazards: audio/fire.js)
 
     // flow
     on('bonfire:rest', () => {
