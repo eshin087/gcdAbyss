@@ -110,6 +110,11 @@ why the build checklist (§5) weights horizontal silhouette features for the top
 The painting and the owner's own ASCII panel disagree here. The panel draws the glowing blade
 much longer than the painted steel. Shorter steel with a longer glow satisfies both.
 
+*Superseded 2026-11-08 (reference match, ADR-022):* the drawn steel is **1.64 m** (pommel tip
+−0.19 → `DIM.drawnTip` 1.45), so gem to point is ≈ 70 % of his height on screen, like the owner's
+portrait. The animator still poses with `DIM.steelTip` 1.17 and the hit segment is unchanged; the
+drawn point stays inside it.
+
 ### 1.5 Delta from the current model (what is wrong today)
 Taken from `model.js` and the look-dev screenshots (`scratchpad/shots/m_views.png`,
 `final_showroom_hero*.png`):
@@ -265,6 +270,11 @@ splits the back from 0.95 m down.
   horizontal (60–75° from vertical). Dodge: the tails are flung up over the back. Slam and wide
   stances: the hem pools wide (30°). The ragged tips lag the panel by 0.1 s, so each **strip** should
   sway, not only each panel.
+- *Built 2026-11-08:* hems at the tear line 0.30 m (front), 0.60 m (sides), 0.55 m (back); a resting
+  `flare` per panel (front 0.22, sides 0.5, back 0.3; `COAT_FLARE` 0.3 ≈ 16°) plus an asymmetric
+  idle flare while standing (`IDLE_FLARE`: front 0.02 / 0.06, sides 0.3 / 0.62, back 0.22 / 0.45);
+  soft vertical folds deepening toward the hem; the lower 55 % of each lower segment is the lavender
+  torn zone (`hem`). Burn holes and blotches are still not modelled (§7.2).
 
 ### 2.5 Shirt
 - Black fitted shirt: `#20232b` → linear `[0.014,0.017,0.024]`, slightly bluer than the coat.
@@ -355,6 +365,9 @@ height, up to 0.6 m behind), and whip up in the dodge.
   - Side wings wrap 0.03 m round the knee, with a ridge down the middle and silver bevels.
   - 2 straps (§2.6) hold it on.
   - From the back the wing edges show as small points at the back of the knee.
+- *Built 2026-11-08:* a **kite greave** down each shin (a faceted diamond plate with a raised ridge
+  and bevels, cuff lames under the knee and at the ankle) replaces the 3 stacked ring lames, which
+  read as a barrel.
 
 ### 2.11 Sword
 Sword space follows `model.js`: the origin is the **grip centre**, the blade runs along **+Z**, the
@@ -466,6 +479,11 @@ miss.
   - The far end tapers into a thin line of `+`.
 
 ### 3.2 Translation to `createSurfaceGlyphMaterial`
+*Superseded for what the player sees:* since v0.4 the hero is ASCII art of a shaded source, and
+since 2026-11-08 he is **ink-line art** (§7.2, ADR-019 / ADR-020): a flat fill per part
+(`HERO_INK`) printed as dim letters inside bright ink lines the art pass traces per pixel. The
+surface-glyph table below only shapes the `U.uArtSolid` = 0 look-dev render.
+
 The game cannot use 0.06 m cells: they would be 2–3 px at the default camera, the v0.1 "too solid"
 failure. Keep **glyph shape over glyph count**. Cells of 0.11–0.13 m wide and 0.17–0.20 m tall on
 vertical surfaces come out about 5–6 px square on screen, because vertical extents shrink by 0.53.
@@ -565,6 +583,14 @@ The frames differ by ≤ 3° of sword angle and by coat flutter only, so treat t
 plus breeze, with no weight change and no steps. **Coat:** rest flare plus breeze, back-left tails
 most blown out.
 
+*Superseded 2026-11-08:* the idle follows the owner's portrait, a wide contrapposto (anim.js
+`guard`, §7.2): the straight right leg planted forward and out (−0.30, +0.20), the left foot out and
+back (+0.27, −0.12) with its knee bent, the hips over the right leg, the torso leaning back toward
+his left, the head turned left and tipped down, the free arm hanging straight. The sword is 1H, low
+at the right hip, along (+0.76, −0.645, +0.17) (`IDLE_SW`, ~39° below level), its drawn point
+resting 0–5 cm above the grass. (Round 1 had (+0.675, −0.737, +0.035), feet (−0.27, +0.20) /
+(+0.12, −0.06).) A slow weight sway joins the breathing.
+
 ### 4.3 Walk: 0.9 s loop, side view (one frame per 0.15 s)
 Held through the cycle:
 - Lean +6°, head level (pitch −5°).
@@ -627,6 +653,12 @@ gameplay-tuning decision (`COMBAT.md`), so match the poses first.
 `(−0.75, −0.2, −0.62)`. The sheet brings it in **along the body** for the tuck and roll, then
 forward-down for the kneel.
 
+*Built 2026-11-08:* frame 05 is a **sliding kneel**, not a still one: the gameplay root still moves
+4–6 m/s there, so the right shin lies flat on the grass and slides, the left foot is planted with
+the free hand braced on its knee, the torso is upright and the blade trails back-down with its point
+dragging (dust, torn grass and sparks; `ROLL_SLIDE`). Frame 06 rises into the low guard with the
+blade still behind, as the sheet shows. The sheet's forward-down kneel blade was dropped.
+
 ### 4.6 Light attack: 0.45 s, right→left sweep with a rising finish
 Timing: `combat.js` light 1 has windup 0.14 + active 0.11 + recovery 0.22 = 0.47 s. In the sheet
 the hero faces image-right and shows his right side.
@@ -643,6 +675,13 @@ the hero faces image-right and shows his right side.
 **Delta:** the current light 1 ends flat (`a2` 1.9, `elev` −0.04). The sheet finishes **rising**:
 elevation +0.7 rad at the end of follow-through. The backhand (light 2) is not on the sheet, so
 mirror this one.
+
+*Built 2026-11-08:* from the low portrait guard the windup (02) cocks the blade **up over the right
+shoulder** along one path paced by the steel point's travel (a vertical loop in 6 even frames, peak
+78 m/s, under the strike's 98), instead of a 216° flick round the front at knee height. In the coil
+the free hand reaches toward the target, then swings back hard against the sweep and stays out for
+balance; the rear heel peels. Both sweeps snap into the rising finish and hold it ~4 frames before
+going home. The active frames (03–04) are unchanged (ADR-024).
 
 ### 4.7 Charge attack: hold + release (thrust)
 Current data: thrust windup 0.07, active 0.20, recovery 0.45. The hold length is driven by input.
@@ -663,6 +702,12 @@ Current data: thrust windup 0.07, active 0.20, recovery 0.45. The hold length is
 - The current `thrustPose` is one-handed with the free arm swung back. The sheet thrusts
   **two-handed, both arms extended**.
 
+*Built 2026-11-08:* the hold winds tighter as the charge builds, and an updraft lifts the coat
+panels, strips and hair (frame 02). The release dashes in **two bounding steps**: the rear foot
+swings through and lands mid-dash, the front foot lifts for a 3-frame flight and lands into the
+lunge; both are world-planted from touchdown (a dust puff each) and the stretched rear leg drags its
+toe. The front foot no longer skids (1.02 → 0.08 m at full charge).
+
 ### 4.8 Heavy attack: 1.0 s overhead slam (combo finisher)
 Timing from `combat.js`: windup 0.40, active 0.12, recovery 0.48.
 
@@ -680,6 +725,12 @@ Timing from `combat.js`: windup 0.40, active 0.12, recovery 0.48.
 coil comes from the wrists and arms rather than from more hand travel. The rest matches
 `slamPose`.
 
+*Built 2026-11-08:* the windup (02) first **gathers** (a dip, a coil to the right, both hands
+drawing the blade down and back past the right hip), then **raises** it up the right side past the
+head and over the top into the unchanged apex, so it stays visible from behind (a straight raise up
+the middle hid it behind the head for ~0.2 s). On impact the body sinks 5 cm, the head bows and the
+blast throws the coat tails out.
+
 ### 4.9 FX per frame (cyan language)
 Colours are the current `fx.js` `COL` values unless noted. Every glyph is in the atlas.
 
@@ -694,6 +745,12 @@ Colours are the current `fx.js` `COL` values unless noted. Every glyph is in the
 | **Gem glint** | windup start of each attack; idle every 1.8 s | A 4-point star with a white core | `+` rotated 45°, `°` | `gemCore` → `gem` | 0.18–0.28 s |
 | **Dodge dust** | dodge 01, 05 | a small ground puff | `. , :` | dust | 0.45–0.85 s |
 | **Blade halo** | always (dimmer at idle) | `·` dot lattice ±0.12 m around the edges plus 0.2–0.3 m past the tip (§3.2) | `·` | `[0.10,0.35,0.60]` | 0.4 s |
+
+*Built 2026-11-08:* the sweep arc sub-steps by the outer point's travel and curves round the hilt,
+so at the game camera it is one continuous crescent (it was scattered dashes); the halo and the tip
+streak sit on the drawn point; new **roll skid** (dust and torn-grass bits `. , : / \ '` off the
+sliding shin and foot, `COL.grassBit`) and **point scrape** (cold `' |` sparks); the thrust dash's
+footfalls kick dust.
 
 ---
 
@@ -806,12 +863,15 @@ wings.
 wide with a 14 % tip taper. Upswept quillons (span ≈0.25) with inner hooks, cage rails with 3 barbs a
 side, a silver diamond frame around a 0.07 m violet gem proud of both flats, a kite pommel with a
 collar, and ferrules. The hit segment is unchanged (`bladeBase` 0.16 → `bladeTip` 1.5, plus
-`REACH.tipExt` 0.4); the tip's ground clamp uses the steel length. The blade material uses `levels`
+`REACH.tipExt` 0.4); the tip's ground clamp uses the steel length. (*2026-11-08:* drawn to 1.64 m,
+`DIM.drawnTip` 1.45, with 6 teeth a side growing toward the point and a ridge line; the forte is
+0.25, so the cyan starts under the gem; §7.2.) The blade material uses `levels`
 chevrons (2 columns, +y toward the tip) and `seamAxis: 'y'`, so only the edges and the ridge carry
 the cyan seam lines (no ladder). player.js keeps the flats dark at idle (uInkGlow 0.5) and flares
 them through strikes.
 
-**Materials (§3.2 as built).** Every large surface uses `levels` (whole glyphs, picked per cell from
+**Materials (§3.2 as built).** (*Since 2026-11-08 these only shape the `uArtSolid` = 0 render; in
+game the hero is ink-line art, §7.2.*) Every large surface uses `levels` (whole glyphs, picked per cell from
 the cell-centre light) with the caret family at every level, dense `8` only on the lit levels (about
 1 in 7), no bar glyphs and no lone dots (polka dots). Departures from the §3.2 table, all found in
 the browser:
@@ -827,7 +887,8 @@ the browser:
 - Skin is `levels` of `' . : o` at 0.04 m, dim and warm, so the face is a sliver of light, not a pair
   of eyes.
 
-**Poses (§4).** `guard` (idle: right foot ahead, weight left, head turned and tipped down, the sword
+**Poses (§4).** (*The idle, the light windup, the slam windup, the thrust dash and the roll's kneel
+are superseded by §7.2.*) `guard` (idle: right foot ahead, weight left, head turned and tipped down, the sword
 1H at the thigh with the point on the grass ahead of the left boot); `loco` (run: blade back-down
 38°; sprint: lean ≈28°, blade level behind, fist pumping); `slashH` (the coil at the right hip, twist
 −35° → +55°, a rising finish through `elev2` in the attack data); `slamPose` (the windup goes ready →
@@ -858,7 +919,10 @@ breathing beyond the sway. (The glyph-scale gap of the first build is closed by 
 
 ### 7.1 Fix round 1 (art-director review: hero 4/10 → this round)
 
-Each P0 / P1 gap of the review, and what was built for it.
+Each P0 / P1 gap of the review, and what was built for it. (*Since 2026-11-08 the glyph cells, inks
+and glyph zooms below only show in the `uArtSolid` = 0 render. The geometry still stands except
+where §7.2 changes it, and the blade's distance self-lighting (`bladeFar`) still feeds the ink-line
+fill.*)
 
 - **Glyph scale (P0).** `setHeroGlyphScale(mats, dist)` (model.js) runs every frame from
   `Player._updateMaterials` with the camera → hero distance: k = clamp(dist / 12, 0.15, 1), so the
@@ -948,3 +1012,117 @@ the grass). The game-camera glyph zoom is now `GLYPH_SCALE.farZoom` 0.45 (model.
 fills its ~5 px cell, so the hero reads as the panel's light-grey caret field (mean 63, p75 105).
 Ink colours and the bloom threshold are unchanged (more lit pixels, not brighter ones); close-ups
 keep `zoomNear` (a 4 m Lab close-up moves 0.92 → 0.88).
+
+### 7.2 Reference match (2026-11-08): ink-line art and motion
+
+The owner attached the "Shadow Swordsman" ASCII line-art image (anime line art turned into ASCII:
+a dim, dense letter fill inside bright ink strokes) and asked for the hero to look "as identical and
+good as" it, with great animation and movement. Two rounds of a look agent and a motion agent:
+round 1 each had an independent reviewer / polish pass; in round 2 both hero builds finished and
+reported with tests passing, but their review passes were stopped mid-way and the unfinished edits
+were discarded (kept outside the repo as `scratchpad/look/hero-look-polish-unfinished.patch`).
+Supersedes the notes above where they disagree. Decisions: ADR-019 … ADR-024. Contracts:
+ARCHITECTURE.md "Creature ASCII art" and "Player".
+
+**Rendering.**
+- **Ink-line art** (round 1): every material writes a part id (`HERO_INK` → `heroArt`); the pass
+  draws bright lines on the silhouette, on the nearer side of depth steps and on part edges (the
+  higher part draws), over dim fill letters. Part ids (layered parts get higher ids): skin 1, eye 2,
+  shirt 3, lining / collar inside 4, pants 5, coat / collar 6, lapel facing 7, hem (torn zone,
+  strips, streamers) 8, piping 9, leather 10, hair 11, armour 12, spikes 13, bevels 14, welt 15,
+  trim 16, blade 17, gem 18, flask 19. Sub-ids (`aPart`) alternate on neighbouring coat panels, hair
+  locks and the blade's two halves, so they are outlined up close.
+- **Lines traced per pixel** (round 2, ADR-020): one font pixel wide plus a dimmer second pixel up
+  close, a gap at each letter spacing (a chain of stroke glyphs); dotted on the tails and hair,
+  unbroken on the blade and gem. Fill cells that an edge crosses print a dim letter up close (the
+  dark channel); the face is `open`.
+- **Source light** (round 2): `U.uArtHeroLight` (0.2, 0.95, 0.2, 1.4) = less flat light, more key
+  light from the camera's upper left, stronger glints on curved metal; `U.uArtHeroRim` (0.14, 0.19,
+  0.72) on the screen's left; `uArtBlack.x` 0.06, `uHeroFill` (0.03, 0.6, 0.27, 1); the coat's fill
+  carries fold streaks up close (`folds` [34, 0.85, 1.1]).
+- **Game camera** (round 1 LOD, round 2 dark figure, ADR-021): one-letter outline at every distance;
+  between 6 and 20 m view depth piece edges drop out (dithered), cloth inner lines become dark
+  seams (`farLine` 0), armour keeps bright edges (`farLine` 0.55–0.7), the fill takes `farFill`
+  (cloth 0.35, hem 0.4, hair 0.5, armour 1.05–1.2, blade 2) × `uHeroLod.z` 1.3, the silhouette is a
+  dim cool rim (`uHeroLod.w` 0.25), the letters come from a dense far ramp, and the blade and gem
+  glow is capped (HDR 1.8). A dark halo darkens the world grid round him from 8 m, fully at 20 m.
+- **Blade** (round 2, ADR-022): drawn to `DIM.drawnTip` 1.45 (1.64 m of steel); at the game camera
+  the blade, point and gem are drawn up to 0.65 m nearer the camera (`BLADE_PULL`), so the low guard
+  reads as a full cyan line across his back from behind.
+
+**Model** (`model.js`).
+- Round 1: a wide coat flare through the per-panel `flare` with longer, wider strips (still 22); a
+  bigger layered pauldron with 6 claw blades; a fuller hair mop (polish: near-neutral dark fill with
+  violet tips, no bars over the face); saw teeth along the blade and claws on the guard; the left
+  eye a larger dark almond with a violet lid line, its two fringe locks shorter.
+- Round 2: the blade as above, built as two halves (a centre ridge line), the forte 0.35 → 0.25 (the
+  cyan starts under the gem), 6 teeth a side growing toward the point, shorter cage rails. Coat
+  panels wider (hems 0.3 front, 0.6 sides, 0.55 back) with soft folds deepening toward the hem, the
+  front panels hanging nearly straight (`flare` 0.22, the open coat edges), and the lavender torn
+  zone over the lower 55 % of every lower segment (6 more meshes). Kite greaves on the shins
+  (§2.10). A bigger scalp cap with longer locks lying over it, crown wisps curling back, lower side
+  flicks and a shorter fringe so the face shows. Thicker sleeves (0.064 / 0.056 m). Brighter armour
+  fill and more glints. 127 meshes, ~20.1k triangles (round 1: 121 / 17.7k).
+
+**Poses and motion** (`anim.js`, `player.js`, `fx.js`; every attack's active frames bit-identical,
+ADR-024):
+- Idle (round 2): the portrait's wide contrapposto with the blade's long low diagonal (§4.2 note);
+  the coat flares asymmetrically while he stands (`IDLE_FLARE`). It is the base pose the other clips
+  blend from, so windup and recovery frames changed by up to 45 cm while active frames did not.
+- Gait and feet (round 1, ADR-023): stride and cycle length follow the speed (walk with double
+  support, run with a flight phase, the swing leaves and lands at ground speed, heel peel, a body bob
+  on contact, lean from a smoothed speed plus an acceleration spring, banking into curves, hips and
+  shoulders counter-rotating); a world-space foot planner holds planted feet through starts, stops,
+  curves and turns; the drawn heading trails a fast turn on a spring (`TURN_K` 650 since round 2,
+  was 420: peak hip lag in a standing 180° turn 76 → 64°). Sprint hair blows back 13–21° per lock
+  (`HAIR_DRAG` 0.06; the sheet's 20°).
+- Blade paths (round 1): azimuth / elevation blending round the outside, fades that keep their way
+  round (no 350° spin between light 1 and light 2), the blade pushed out of the leg capsules, a
+  forward guard when backpedalling, attack entries easing in from rest, recoveries kept out of the
+  body.
+- Light attacks (round 2): light 1's over-the-shoulder windup loop and aiming free hand (§4.6 note);
+  both sweeps hold their rising finish ~4 frames (`FINISH`) and flare the coat as they snap.
+- Slam (round 2): gather, raise up the right side, apex (§4.8 note); an impact settle.
+- Charge and thrust (round 2): the coiling hold with the updraft and the two-step dash (§4.7 note).
+- Roll (round 1 + 2): the blade held in body axes at his right side, a push-off from planted feet,
+  then the intended sliding kneel with skid dust and point sparks (§4.5 note). The backstep is a
+  real hop.
+- Smaller (round 2): repeated RMB taps no longer shuffle the feet (3 lifts → 0); the stagger jolts
+  the blade relative to the guard (swing 136 → 54°); the flask swig lifts the elbow out and tips the
+  head back (readable from behind) while the guard holds; coat floor contact is exact and
+  rate-limited and strips stay above the grass (round 1).
+
+**Measured.**
+- Reference view (round 2): figure mean luma 98.9 → 106.2 (reference 108.4), share above 120
+  29.2 → 37.1 % (37.9 %), below 50 30.8 → 27.6 % (28.8 %).
+- Game camera, hero alone on black (round 2): facing the camera mean / p50 / above-120 104 / 99 /
+  42.7 % → 97 / 79 / 33.4 %; facing away 113 / 121 / 50.7 % → 80 / 65 / 24.3 %. The reference scaled
+  to that size: 56 / 46 / 6 %.
+- Feet (round 1, mean planted-foot slide): run 0.80 / 0.63 → 0.03 / 0.00 m/s, walk 0.80 / 0.58 →
+  0.06 / 0.03, strafe 1.15 / 1.10 → 0.06 / 0.05, combo 2.31 / 2.06 → 0.14 / 0.21; blade inside the
+  body: 0 frames in every clip (was 1–29). Round 2: thrust front foot 0.60 → 0.01 m/s.
+- Gameplay: round 2's blade compare covered 192 hit-tested frames of light 1, light 2, the slam and
+  the thrust from several entries: 0 differ. The REACH table and the `hero` scenario are unchanged.
+- Cost: within run-to-run noise (game camera 1.38–1.43 ms render on an RTX 4090; animator
+  0.31–0.37 ms; peak live FX particles in attack loops 352 → 501 from the denser trail).
+
+**Still open.**
+- The coat still reads as separate flat panels and fins with outlines; the reference's is one wide
+  ragged drape with holes and blotches (a one-piece skirt or edge-sharing panels, plus burn holes).
+- Proportions (shoulders, waist, legs, skull) are round 1's; only the sleeves and hair grew.
+- At the game camera he is still brighter than the reference (mean 80–97 vs 56): the blade glow, the
+  rim and the armour column (pauldron over vambrace, a bright white stack from the front); the
+  capital fill letters (`A B H G`) can read as text at 4x6.
+- Hair: a rounder mop of straight clumps; the reference's curved violet-white strand lines and
+  floating wisps are missing. Face: a pale patch with one eye; no nose, mouth or eye shadow.
+- The halo does not darken the wyrm's letters, so over the dragon he has no cut-out.
+- At the reference angle (yaw 20) the idle is still close to frontal; a bigger chest turn would turn
+  his gameplay idle away from the target.
+- Strike key poses are limited by the bit-identical rule; light 1's loop is fast (~5.9 m of point
+  travel in 0.1 s; a longer windup would be a tuning decision); light 2 has no free-arm
+  choreography; from behind at 36 m the thrust's legs are mostly hidden by the coat; the knockdown's
+  blade still swings ~150° out to his right; Ghostep's reappear and the backstep were not reworked
+  in round 2.
+- The roll's planted-foot slide metric rose by design (the shin slides with the gameplay root);
+  shorten the kneel window, not the pose, if it should drop.
+- hero-motion's foot-slide metrics were not re-run on the merged wide idle.

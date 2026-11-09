@@ -59,26 +59,124 @@ Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `
 `tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code.
 
 Render helpers for creature modules:
-- **v0.4 creature ASCII art:**
-  - `FLAG.ART_HERO` (0.48) selects the hero's pass settings. The pass uniforms are vec2:
-    x = hero, y = wyrm (`uArtLum`, `uArtBlack` (source luma treated as black), `uArtMin`,
-    `uArtDither`, and `uArtEdge`, the relative depth jump that blacks out part boundaries).
-    `uArtMax` is shared (0.8, so white letters don't bloom).
-  - The hero has his own, finer grid: `createPixelArtAtlas(s)` in `glyphs.js` draws `ART_CHARS`
-    from a 3x5 pixel font into (4s x 6s) cells (`pixelArtCell`; s = 2 from 2160 px tall). The pass
-    tests the hero grid first (`tHeroArt`, `uHeroCell`), then the wyrm's grid for the other
-    `FLAG.ART` pixels.
-  - Shared, hero source only: `U.uArtHeroKey` (a fixed key light from the camera's upper left, so
-    he shades the same in moonlight and firelight) and `U.uArtHeroEdge` (darkening toward his
-    silhouette instead of the moonlit outline).
-  - `createSurfaceGlyphMaterial` now defaults `flag` to `FLAG.ART` (0.5). With the shared
-    `U.uArtSolid` = 1, the material writes a smooth shaded source (ink × `artGain`, no glyph gaps).
-  - The ASCII pass (`pipeline.js`) converts every `FLAG.ART` pixel to a fine screen grid of
-    `ART_CHARS` letters (`createArtAtlas` in `glyphs.js`; cell ≈ H/135 px), coloured by the
-    source hue.
-  - Set `U.uArtSolid` = 0 to feed the patterned surface render instead (look-dev A/B).
-  - Options: `artGain` (source brightness, default 1). Pass uniforms: `uArtLum`, `uArtMin`,
-    `uArtMax`, `uArtDither`.
+- **Creature ASCII art** (v0.4, reworked by the reference match of 2026-11-08: ADR-018 … ADR-022).
+  Creature materials render a SOURCE image into the scene target and the ASCII pass
+  (`pipeline.js`) turns it into letters. `createSurfaceGlyphMaterial` defaults `flag` to `FLAG.ART`
+  (0.5); with the shared `U.uArtSolid` = 1 the material writes its art source (0 = the patterned
+  surface render, a look-dev A/B). `artGain` (default 1) scales the generic smooth source. The pass
+  tests the hero's grid first, then the wyrm's, then the world grid. Two creature paths, told
+  apart by the **alpha contract** (no other material may write alpha in 0.46–0.55):
+
+  | alpha written | by | meaning |
+  |---|---|---|
+  | `0.5 + 0.01 × code` (0.50 … 0.54) | the wyrm (materials with `wyrm`) | `FLAG.ART` plus a **stroke code** from `wyrmMain`: 0 none, 1 `-`, 2 `/`, 3 `\|`, 4 `\` (the screen direction of a thin part's outline or a scale rim at that pixel). The pass decodes `floor((a − 0.5) × 100 + 0.5)` |
+  | `HERO_ART.a0 + (part × 2 + aPart) × HERO_ART.step` (0.4632 … 0.4866) | the hero (materials with `heroArt`) | a **part id** inside the hero window (0.46, 0.49) that `isHero` tests (`FLAG.ART_HERO` 0.48 marks the window): `part` 0..19 from the material, `aPart` 0 / 1 the geometry's sub-id |
+
+  `HERO_ART = { a0: 0.4632, step: 0.0006, parts: 20 }` is exported from `materials.js` (`HERO_PARTS`
+  20 from `shaderLib.js`). The step is ≥ 2 half-float ulps there, so part ids need the half-float
+  scene target; on the 8-bit fallback they collapse to ~7 levels (silhouette and depth lines still
+  draw, part tints and fill gains come out wrong). Every hero material must pass `heroArt`
+  (`createHeroMaterials` throws without a `HERO_INK` entry).
+- **The wyrm's source** (`wyrm: {...}` option; dragon materials only, one `WYRM_ART` entry per
+  material in `dragon/model.js`). Compiles `SG_WYRM` (plus `SG_WYRM_MEMBRANE` when `membrane` is
+  given); without the option the shader is unchanged. In art mode `wyrmMain` replaces the smooth lit
+  ink and writes the stroke code above. All fields optional (defaults in `wyrmFeatures`; arrays of
+  the wrong size fall back to them):
+  - shape: `scale [w, h]` (shingle scales in aGUV units; omit for spikes, bones, membranes),
+    `scaleDir 'along' | 'down'` (roof tiles round a barrel), `strokes 'rim' | 'axis' | 'none'`
+    (default `'rim'` with `scale`; `'axis'` = along a thin part's length where the fresnel term
+    reaches `strokeEdge`), `tip [y0, y1, root, glow]` (horns, spikes, claws)
+  - tone and light: `tone [gap, body, rim, rimWidth]`, `gap [rows, px]`, `vary` (per-scale
+    brightness spread, default 0.8), `ink`, `rimInk`, `light [gain, key, fresnel, floor]`,
+    `key [right, up, toward]` (a key light fixed in camera space), `envSat` (moon / ambient
+    saturation; fire light keeps its colour), `under [r, g, b, k]` (lava light from below)
+  - molten: `emit`, `glow [gaps, all]`, `vein [strength, share, width, plate]` (a broken voronoi
+    net), `crack [strength, share, lo, hi]` (cracks along the scale gaps, faded in on down-facing
+    surfaces by `smoothstep(lo, hi, −n.y)`); all × the material's `uGlow` (`model.glow`)
+  - membranes: `membrane [mottle, specks, tears, edgeTears]`, `boneGlow [width, base, hot]` (the
+    orange streak along the finger bones, default [0.3, 0.05, 0.9])
+
+  Uniforms `uWScale, uWShape, uWTip, uWTone, uWGap, uWInk, uWRimInk, uWLight, uWKey, uWEnvSat,
+  uWVein, uWCrack, uWVary, uWEmit, uWGlow, uWUnder` (+ `uWMem, uWMemBone`), plus the shared
+  `U.uCamRight` / `U.uCamUp` (added only to `wyrm` materials). Today the hide materials (`scales`,
+  `limbs`, `neck`, `head`, `belly`, `throat`, `lava`) use `strokes: 'none'` (scale outlines by letter
+  brightness only); `wingBone`, `spine`, `bone`, `claw` and `teeth` use `'axis'`.
+  `SG_WYRM_MEMBRANE` reads two static vertex attributes of `WingMembrane` (`membrane.js`, laid out
+  once on `WING_KEYS.HALF`): `aEdge` (0 inside → 1 on the free trailing edge: holes and the ragged
+  edge) and `aBone` (model units to the panel's nearer bone: `boneGlow`).
+- **The wyrm's letters** (pass; `wyrmGlyphs.js`, tested by the wyrm branch for `FLAG.ART` pixels):
+  - `createWyrmArtAtlas(s, small)` → `{ texture, sets: [mid start, bright start, stroke start],
+    total }`: one row, column 0 blank, then `WYRM_SETS.dim / mid / bright`, then `WYRM_STROKES`
+    (`- / | \`). Thin one-pixel 4x6 letters with a 0.24 soft halo in 5s x 8s cells
+    (`wyrmArtCell(s, small)`); `small` = 3x5 letters in 4x6 cells. `wyrmArtScale(H)` → `{ s, small }`:
+    small under 900 px tall, else s = round(H / 1080). `setSize` rebuilds it (`tArt`, `uArtCell`,
+    `uWyrmAtlas`).
+  - Per cell (4 samples; 2 must hit, 1 if the cell draws a stroke): the cell value picks a letter
+    SET, the cell's hash the letter inside it, so letters only change when a cell changes tier;
+    ≥ `uWyrmGlyph.w` stroke-code votes print that stroke glyph in the brightest coded sample's
+    colour; silhouette cells (1–3 hits) print a marching-squares edge stroke (`uWyrmOutline`; a
+    horizontal edge keeps its letter); each stroke pixel takes brightness and hue from its own source
+    pixel (`uWyrmTone.w`).
+  - Uniforms: `uWyrmTone` (x brightest letter 0.95, y gamma 1.3, z value below which a cell prints
+    nothing 0.022, w own-pixel share 0.85), `uWyrmGlyph` (x / y set steps dim → mid → bright 0.12 /
+    0.42, z per-cell dither 0.08, w stroke votes 1), `uWyrmAtlas` (vec4: the atlas `sets` and
+    `total`), `uWyrmOutline` (1). The pass's `.y` uniforms are the wyrm's: `uArtLum.y` 2.2,
+    `uArtBlack.y` 0.004, `uArtMin.y` 0.012, `uArtEdge.y` 0 (the depth-gap blackout is off). `uArtMax`
+    (0.8) is shared.
+- **The hero's source** (`heroArt: {...}` option, built from `HERO_INK` by `createHeroMaterials`):
+  `part` (0..19, required; throws outside), `fill [r, g, b]`, `spec`, `specPow`, `rim`, `glow` (share
+  of the animated `uInkGlow`: blade, gem, flask), `pull` (bool), `folds [freq, depth, wander]` (throws
+  if not finite). Defines `SG_HERO_ART` (with `HERO_A0`, `HERO_AS`), `SG_HERO_PULL`,
+  `SG_HERO_FOLDS`; uniforms `uArtFill`, `uArtSpec`, `uArtRim`, `uArtGlowK`, `uArtPart` (= part × 2),
+  `uArtPull` (m, set per frame), `uArtFold`; shared `U.uCamRight`, `U.uCamUp`, `U.uArtHeroLight`
+  (vec4: flat fill, camera key light from the upper left, scene-light share, glint gain; (0.2, 0.95,
+  0.2, 1.4)) and `U.uArtHeroRim` (the cool screen-left rim colour). The fill is flat per part (no
+  glyph gaps); glints only where the surface curves.
+  - `aPart` (float vertex attribute, 0 / 1): `sub(geometry, k)` in `player/model.js`, carried through
+    the static merge; a geometry without it reads 0 (`defaultAttributeValues`). It splits one part
+    into pieces the pass outlines up close (coat panels, hair locks, the blade's two halves).
+  - `pull`: each vertex moves `uArtPull` m toward the camera along its own view ray (at most half the
+    distance): the same pixels on screen, a nearer depth. Visual only (ADR-022).
+  - `folds`: dark fold bands in the fill up close (gone between 8 and 16 m).
+- **Per-part pass data** (`U.uHeroPartInk[20]`, `U.uHeroPartFill[20]`, vec4, shared; filled once by
+  `createHeroMaterials` from `HERO_INK`): ink = line tint rgb × gain (`line`; > 1 blooms: the cyan
+  blade edges, the violet gem); fill = x `fillGain`, y line style (0 one stroke per letter cell,
+  1 dotted (`dotted`), 2 unbroken (`solid`), + 4 when `open`: no dark channel or depth-step gap, the
+  face), z `farLine` (share of inner-line light kept at the game camera: 0 a dark seam (cloth) … 1
+  bright (armour, blade)), w `farFill` (fill gain there). Materials that share a `part` must share
+  these fields.
+- **The hero's letters and lines** (pass, hero branch):
+  - Grid: `createPixelArtAtlas(hs)` (`glyphs.js`; hs = max(1, floor(H / 1080))) → `{ texture, count,
+    lines, cols }`: row 1 = `ART_CHARS` in a 3x5 pixel font, sorted sparse → dense (`uHeroCount`,
+    `uHeroCols`); row 2 = `PIXEL_LINES` (`| - / \` and a dot), no longer sampled. Cells `uHeroCell`
+    = `pixelArtCell(hs)` (4hs x 6hs).
+  - Fill: a cell whose centre is on him (or ≥ 2 of its 4 samples) prints one letter. Its part's
+    light (`uArtLum.x` 3, `uArtBlack.x` 0.06) picks it along the ramp `uHeroFill.zw` (near) /
+    `uHeroFar.xy` (far), jittered by `uArtDither.x` 2.6 / `uHeroFar.z`; brightness `uHeroFill.xy` ×
+    `fillGain`. Cell-level edge classes (`heroEdge`, threshold `uArtEdge.x` 0.004 × depth, creases by
+    `uHeroCrease`) only darken the cell: an edge cell prints a dim letter up close (`uHeroPx.z`, the
+    dark channel), the far side of a depth step a gap (`uHeroInk.w`). `uArtMin.x` is unused.
+  - Ink lines, per PIXEL (`heroPxEdge` against the neighbours `uHeroPx.x` = hs px away): 1
+    silhouette, 0.8 depth step (drawn by the nearer side; a slope predictor skips curved and grazing
+    surfaces; threshold `uHeroPx.y` 0.0015 × depth), 0.6 part edge (drawn by the higher part id), 0.4
+    piece edge (sub-id; up close only). One font pixel wide, plus a dimmer second pixel up close
+    (`uHeroPx.w` 0.45). Line light `uHeroInk.xy` (dark / lit source), `.z` hue share, × `uHeroLine`
+    (depth step / part edge / piece), × the part's ink; the stroke style (part fill .y) gaps it per
+    letter cell.
+  - Distance LOD by view depth: `uHeroLod` (x / y far look starts / complete 6 / 20 m, z far fill
+    gain 1.3, w the silhouette's light floor 0.25) and `uHeroFar` (x / y far letter ramp 0.45 / 0.85,
+    z far jitter 1, w HDR cap 1.8 for the blade and gem). Far away piece edges drop out (dithered per
+    cell), inner lines keep `farLine`, the fill takes `farFill`.
+  - `uHeroDebug` (look-dev): 1 the raw source, 2 lines only, 3 lines coloured by class.
+  - Halo: `uHeroHalo` (xy his screen uv, z radius px, w strength), set per frame in
+    `_updateAsciiCamera` from `U.uPlayerScreen` (radius `HERO_HALO_R` 2.1 m; strength fades in from
+    0.4 × to 1 × `uHeroHaloShape.w` = 20 m view depth, so none in close-ups), and `uHeroHaloShape`
+    (x / y tap radii 2 / 4 px × hs, z darkening 0.72). Two rings of 8 taps darken **world-grid**
+    pixels round him (grass, stones, trees, bonfire); the wyrm's letters are not darkened.
+- **Leftovers** (declared, no longer effective): `U.uArtHeroKey` / `U.uArtHeroEdge` are still in
+  `SURFACE_SHARED` and computed by the generic source, but the `SG_HERO_ART` fill replaces that
+  colour on every hero material. `createArtAtlas` (`glyphs.js`) is no longer imported; the generic
+  `artCell()` pass function and its `uArtCount` uniform were removed.
 - `createSurfaceGlyphMaterial(U, opts)` (`render/materials.js`). **v0.3: crisp surface glyphs.** One
   glyph per aGUV cell is printed on the body (aGUV +y = "glyph up"), picked by local light, over
   near-black gaps (`base`). Pass `ascii: <set>` to pick the default ramp + cell (`SURFACE_SETS`):
@@ -185,15 +283,26 @@ RMB cancels a charge (the LMB press is consumed); an RMB press during one's own 
 raises the guard when recovery starts. Streams (breath) only Ghostep when the roll starts into them.
 
 Model (`player/model.js`, built to `docs/art/hero.md`, the Shadow Swordsman): private to the player
-module (nothing outside reads the rig). `DIM.bladeBase → DIM.bladeTip` (0.16 → 1.5 m along the
-sword, + `REACH.tipExt`) is the **hit segment**; the visible steel ends at `DIM.steelTip` (1.17 m:
-1.36 m of steel with the pommel) and the cyan dot halo past the point (`PlayerFx.bladeHalo`) carries
-the rest of the reach. The animator (`player/anim.js`) drives: `coat` = 7 skirt panels
-(`COAT_PANELS`: six + the front flap), each two spring segments plus `strips` (22 torn strips, one
-spring each, kept above the grass); `streamers` (two two-segment sleeve strips on the arms); `hair`
-= 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root mesh
-(`hair`) and a sheened-tip mesh (`hairTip`). Static meshes that share a joint and a material are
-merged at build time (fewer draw calls); only the flask stays separate.
+module (nothing outside reads the rig). It is drawn as ink-line ASCII art (ADR-019): every material
+carries a `HERO_INK` entry (the `heroArt` source and its per-part pass data, see Render helpers).
+Three sword lengths (sword space, m from the grip centre):
+- `DIM.bladeBase → DIM.bladeTip` (0.16 → 1.5, + `REACH.tipExt`): the **hit segment** (gameplay).
+- `DIM.steelTip` 1.17: the point the **animator** poses with. `anim.js` keeps it on the grass and out
+  of the legs, and the `hero` integration scenario checks it. Unchanged, so every attack's hit
+  segment is unchanged.
+- `DIM.drawnTip` 1.45: the **drawn** point (1.64 m of drawn steel with the pommel; visual only, still
+  inside the hit segment). FX that sit on the point use `DIM.drawnTip ?? DIM.steelTip`
+  (`PlayerFx.bladeHalo`'s dots and tip streak); the cyan dot halo past the point carries the rest of
+  the reach.
+
+The animator (`player/anim.js`) drives: `coat` = 7 skirt panels (`COAT_PANELS`: six + the front
+flap, each with a resting `flare` and optional `folds`), each two spring segments (the lower one is
+two meshes: `coat` above, the lavender torn zone `hem` over its last 55 %) plus `strips` (22 torn
+strips, one spring each, kept above the grass); `streamers` (two two-segment sleeve strips on the
+arms); `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a
+dark-root mesh (`hair`) and a sheened-tip mesh (`hairTip`). Static meshes that share a joint and a
+material are merged at build time (fewer draw calls; 127 meshes, ~20k triangles); only the flask
+stays separate.
 **Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every
 frame `Player._updateMaterials` measures the camera → hero distance (`player.viewDist`) and rescales
 the hero materials' glyph cells, k = clamp(dist / 12, 0.15, 1): in-game cells at the 36 m camera
@@ -202,14 +311,48 @@ Per material `userData.cell` (in-game cell), `userData.cellMax` (cap for small p
 plates), `userData.lockX` (the blade's two columns), `userData.zoom / zoomNear` (glyph zoom at the
 game camera, default `GLYPH_SCALE.farZoom` 0.45 so the glyphs fill their cells / in close-ups);
 materials without `userData.cell` (gem, eye, skin, flask) keep fixed
-cells. `player.bladeFar` (0 close-up … 1 at ≥ 28 m) makes the blade self-light with distance (dark
-steel with glowing edges up close, a solid cyan line at the game camera). It touches only the
-hero's own materials (no shared uniform, no allocation).
+cells. (The ink-line source is flat per part, so these cells no longer show in game; they still set
+the per-cell dissolve and the `U.uArtSolid` = 0 render.) The same call sets `uArtPull` on the `pull`
+materials (blade, point, gem) from `BLADE_PULL` `{ m: 0.65, near: 10, far: 24 }`: 0 under 10 m of
+view distance, 0.65 m from 24 m (ADR-022). `player.bladeFar` (0 close-up … 1 at ≥ 28 m) makes the
+blade self-light with distance (dark steel with glowing edges up close, a solid cyan line at the
+game camera). It touches only the hero's own materials (no shared uniform, no allocation).
 FX helpers that changed shape: `PlayerFx.gemTick(dt, x, y, z, k, vx, vz, vy)` and
 `gemGlint(x, y, z, s, vx, vz, vy)` take the gem's own velocity (`player.gemVel`, measured from the
 gem joint each frame) so glints ride the hilt; `gemTick` also keeps an always-on 0.22–0.26 m violet
 glow point at the gem; `bladeHalo(dt, k, far)` grows its dots with distance and lays a short bright
-`|` streak 0.06–0.26 m past the point.
+`|` streak 0.06–0.26 m past the drawn point. `trail(pa, pb, a, b, kind, crit)` keeps its signature
+but sub-steps by the outer point's travel (one per 0.24 m, up to 8) and slerps the blade round the
+hilt between frames, so a sweep reads as one curved crescent. New: `skid(dt, slot, x, z, dx, dz, sp,
+k)` (dust and torn grass off a sliding contact; `slot` 0 / 1 keeps a rate accumulator each) and
+`scrape(dt, x, y, z, dx, dz, sp)` (cold sparks off the dragging point). Glyph strokes are laid
+along the rendering camera's axes (`game.camera.matrixWorld`, read in `get add()`; the fixed 58°
+basis is the fallback), so they stay right in Lab views.
+
+Animator ↔ player hooks (`anim.js` is private to the player module):
+- `anim.onFootstep(side, dust?)` → `player._footstep(side, dust = 0)`: emits `player:footstep`;
+  `dust` > 0 kicks up a puff of that size (the thrust dash's two touchdowns).
+- `ROLL_SLIDE` (exported, `[0.42, 0.58]` s of the forward roll's `stateT`): the sliding kneel. In it
+  `_updateFx` calls `fx.skid` for the right shin (slot 0) and the planted left foot (slot 1), and
+  `fx.scrape` while the blade point is below 0.14 m. The root speed is unchanged.
+- `anim.kickCoat(power, rnd = Math.random)` throws the coat panels and strips out. `anim.noise()` is
+  the animator's own LCG (0..1): cosmetic kicks in code the integration sims run pass `anim.noise`,
+  never `Math.random` (the sims seed it and the wyrm's AI rolls on it). The light sweeps kick 0.32 on
+  their first active frame (`player.atk.flared`, a new flag on the attack record), the slam's impact
+  0.6.
+- Internal animator state worth knowing: `pathCh` (channels a windup path drives this frame, copied
+  past the cross-fade), `updraft` 0..1 (the charge lifts the coat and hair), `dashStep` (bits: dash
+  touchdowns taken), `marks` (4 per-clip ground marks), `feet` (the world-space foot planner),
+  `visYaw` (the drawn heading: a critically damped spring, `TURN_K` 650, at most `TURN_LAG_MAX` 1.4 rad
+  behind the gameplay yaw; visual only).
+- **Active frames stay bit-identical** (ADR-024): a pose path that reshapes an attack windup reaches
+  the clip's own pose by windup − 1/30 s and hands its channels back; recovery shaping starts at
+  windup + active + 0.035 s (the frame after the active window is still hit-tested); active-frame
+  shaping only touches non-blade channels (free arm, feet, head, coat). The proof is a per-frame
+  compare of `sword.matrixWorld` and the hit points against the previous build.
+- Blade directions blend by azimuth / elevation round the outside of the body (`dirLerp` /
+  `dirTo`), a cross-fade keeps last frame's way round, and outside attacks the blade is pushed out of
+  the leg capsules before the ground clamp (ADR-023).
 
 ### Dragon — `src/entities/dragon/dragon.js` exports `class Dragon`
 ```
@@ -252,19 +395,30 @@ Body plan (v0.4, "four-legged rebuild", docs/art/dragon.md): a quadruped drake, 
 units (7.5 m), columnar forelegs (elbow back) + digitigrade hind legs, a short thick upright S-neck
 (7 × 0.46 chain), a 16-segment tail lying in a sideways hook, and a separate pair of wings rooted on
 top of the back (humerus → forearm → wrist + thumb hook → 4 two-joint fingers, 4 membrane panels).
-Anatomy numbers live in tuning.js `ANATOMY`.
-Look ("Obsidian Drake", model.js): materials in `model.mats` (scales, limbs, neck, belly, throat,
-lava, membrane, wingBone, spine, bone, claw, teeth, maw, eye; `limbs` = the hide on legs, tail and
-the wing arm, its fissures running along the limb; the hide / membrane / bones use per-cell glyph
-`levels`, the hide's `inkGlow` is its shading floor); crack glow per material from `model.glow`
+Anatomy numbers live in tuning.js `ANATOMY`. Since the reference match the finger bones are
+`[6.2, 6.9, 5.5, 3.9]` with knuckle fractions chosen so the proximal bones (wrist → knuckle, where
+the wing hurt spheres sit) are v0.4's; only the distal bones are ~1.35× longer (visual only).
+Look ("Obsidian Drake", model.js): materials in `model.mats` (scales, limbs, neck, head, belly,
+throat, lava, membrane, wingBone, spine, bone, claw, teeth, maw, eye; `limbs` = the hide on legs,
+tail and the wing arm; `head` = skull, brow and jaw with finer scales). What the player sees is each
+material's `WYRM_ART` source (the `wyrm` option, see Render helpers); the surface-glyph `levels` /
+fissure options only shape the `U.uArtSolid` = 0 render. Crack glow per material from `model.glow`
 (`[phase-1 ember, × glow (phase 2 / death), × throat charge]`, applied in `_applyMaterials`; every
-`model.mats` key needs a `model.glow` row except `eye`, which follows `rig.s.eyes`).
+`model.mats` key needs a `model.glow` row except `eye`, which follows `rig.s.eyes`); the art
+source's veins, cracks and gap glow scale with it.
+Visual-only geometry on gameplay joints: every head mesh hangs on `model.headVis`, scaled
+`HEAD_VIS` (1.3) about the mouth point, while the gameplay joints `head` and `mouth` (the bite /
+charge spheres, the breath / fireball origin) are unscaled; `rig.pt.eyes`, `pt.nostrils` and
+`pt.jawTip` follow the drawn head. The drawn tail radius (`tailRV`) is thicker than
+`model.tailRadii`, which stays the chain's ground clearance (read by the rig and the tail sweep).
 Wing membrane (membrane.js): `new WingMembrane(material, side, restKey)` — 4 Coons panels rebuilt
 from the bones every frame (allocation-free); `aGUV` is laid out once from `restKey`
-(`WING_KEYS.HALF`), so the glyph grid is even in the resting pose; `aEdge` (0 inside → 1 on the free
-trailing edge) is a static per-vertex attribute for a ragged-edge discard (not read by the material
-yet). Resting body language (`TUNING.rest`): wings `spread` 0.5 (HALF) in both phases, ≤ 0.3 while
-walking; jaw 0.4 (phase 1) / 0.65 (phase 2); attacks return to `TUNING.rest.spread`.
+(`WING_KEYS.HALF`, so changing that key re-lays the membrane's texture), so the grid is even in the
+resting pose. Two static per-vertex attributes feed the `wyrm` membrane source: `aEdge` (0 inside →
+1 on the free trailing edge) and `aBone` (model units to the panel's nearer bone). Trailing-edge
+scallops `SAG` [0.3, 0.28, 0.24, 0.16] plus torn `RAG` notches. Resting body language
+(`TUNING.rest`): wings `spread` 0.5 (HALF) in both phases, ≤ 0.3 while walking; jaw 0.65 (phase 1) /
+0.85 (phase 2), the painting's snarl (visual only); attacks return to `TUNING.rest.spread`.
 Rig (rig/anim.js, internal to the dragon module; attacks.js / ai.js are its only writers): each
 frame the brain writes a `pose` (head / look goals, `lookDown` = max nose-down head pitch, jaw 0..1
 → 0.7 rad, pitch / roll / lower / twist, `spread[2]` per wing: 0 FOLD · 0.5 HALF (the painting's
@@ -290,6 +444,68 @@ Striking-part names for tells (`partPos`): 'snout', 'head', 'mouth', 'claw' (a f
 'shell', default chest. The stomp's red ground ring is centred between the two forefeet's landing
 spots (root frame (±1.2, 0, 2.9) model units); the slam presses the paws there (dust + a heavy
 `dragon:step` at each), holds them for 0.3 of the recovery, then plants them and steps home.
+
+Rig additions from the reference match (2026-11-08). New `pose` fields (reset every frame; the
+brain writes them):
+- `idle` 0..1: no attack running (`Brain._combat` sets 1). The rig's idle life plays: breathing
+  sails, weight shifts, gaze drift, a wing rouse every 8–11 s on fixed gaps while standing still
+  (deterministic: it never draws on the AI's random stream), and the stalking stance.
+- `tailLift` 0..1 (default 1): 1 = the arched resting tail (`REST_POSE.tail`), 0 = dragged low (the
+  tail sweep, the stomp's tripod).
+- `tailLegacy` (bool): the tail runs the exact v0.4 chain solve. The tail sweep (and its turn-away
+  prelude) sets it, because its hit spheres and swept arc ride on the chain; otherwise the
+  round-2 limits apply (rest shape at most `TAIL_SINK` 0.55 segments under the ground, segments at
+  most `TAIL_DEV` [0.6 soft, 1.2] rad from their rest direction), easing back in after a sweep.
+- `headExact` (bool): the head aims exactly, with no `HEAD_AIM_RATE` (11 rad/s) turn limit. Set on
+  the frames whose hit spheres ride on the snout / mouth: bite and combo-lunge active, charge
+  active, breath active, fireball.
+- `headLead` (Vector3, world): an offset of the SHOWN head only. `strikeLead` (attacks.js) sets it
+  over the last three windup frames of the bite and the claw combo's lunging bite (12 / 30 / 55 % of
+  the strike's first step), so the head accelerates into the snap. No hit test runs in a windup;
+  active frames are untouched (ADR-025).
+- `drape[2]` 0..1 per wing: the wing collapses onto the ground beside the body, in world space
+  (dying; the chest frame rolls with the body).
+
+Two neck solves (ADR-025): `rig._neckSim` is the measured solve every attack's head path and hit
+spheres were tuned on; `rig.neck` is the shown chain (applied to the joints, read by the neck hurt
+spheres), blended toward the resting S by `s.rest`. While an attack drives the head (`s.rest` <
+0.03) the shown chain swings toward the measured head (the head's step spread down its length,
+`NECK_FOLLOW` 0.45 toward the measured shape) and the head joint is pinned to the measured solve
+(`Chain.endQuat`), so the snout / head / mouth points are the measured ones (≤ 9 mm, float noise).
+The pin is released only while `headLead` is non-zero.
+
+`REST_POSE` (exported from rig/anim.js, tunable live from the console): `neck` (the resting S:
+head low and forward), `lookDown` 0.45 / `headDip` 0.22, `stance` (`frontOut`, `frontFwd`,
+`hindOut`, `hindBack`, `stalk { frontL, frontR, hindL, hindR }`, `crouch` 0.12), `sweep` (the
+resting wings turn with the head toward a foe aside: `bias`, `look` 0.7, `max` 0.85, `maxBack` 0.35,
+`arm` 0.4), `tail` (`pitch0`, `pitchStep`, `pitchCurve` + the dip `dipAmp`, `dipAt`, `dipWidth`).
+`WING_KEYS.HALF` is a re-fitted cambered sail (wrist (±2.1, 7.5, −0.78) root frame, the leading
+finger held ≥ 14° below the wrist) that keeps ≥ 0.42 of each wing's area visible from every 58°
+game-camera yaw and the reference / front views. Death (`SEQ.death` → `deathPose` in ai.js) is a
+timed collapse (`DEATH`: a throe, the legs give way from 0.3 s, the chest hits the ground at 1.1 s,
+the head at 1.22 s, a last heave); every foot is locked while dying. The parry recoil throws the
+head on an eased arc and plants any foot caught mid-step (`gait.plantAt`).
+
+Rig helpers (internal to the dragon module):
+- `Gait`: `plantAt(i, pos)` (plant contact `i` now; it steps home later), `settle` 0..1 (set by the
+  rig from the stalk weight: standing still, a foot more than 0.24 × scale from its spot steps back,
+  one 0.42 s step every 0.75 s), `turnRate` / `dYaw` / `pivot` (turning in place trots the feet
+  round; the tail sweep's spin pivots planted feet with the body), per-limb `reach` (a planted foot
+  past 0.92 of its leg's reach wants to step) and `off` / `posRef` (a swinging foot absorbs a jump of
+  its home into `off`, which fades out by the landing; `posRef` is the contact without it, read by
+  the scapula glide so the offset never feeds back into the body). Free contacts ease to their home
+  (`FREE_RATE` 10/s) instead of snapping.
+- `Chain` (rig/chain.js): constructor options `groundGlide` and `stableTwist` (the tail uses both,
+  the neck keeps v0.4's), fields `devSoft` / `devMax` (swing limit from the rest direction;
+  Infinity = off), `buildRest({ ..., dipAmp, dipAt, dipWidth, sinkMax })` (a dip that bends a
+  stretch of segments down, and a cap on how deep the rest shape may dive under the ground),
+  `endQuat(parentQ, out)` (the last joint's world rotation without touching the joints).
+  `aimJointStable` keeps a joint's twist continuous near the −Z singularity (no 180° wing flips).
+- `solveTwoBone(A, T, l1, l2, pole, outMid, outEnd, bend = null, soft = 0)` (rig/ik.js): `bend`
+  (per limb, persistent) keeps last frame's bend direction when the pole runs along the limb; `soft`
+  (the wing arms: 0.05) eases the last stretch toward full extension.
+- Hurt spheres follow the arched resting tail: its first spheres sit ~3–4.5 m up, so a hero behind
+  the wyrm hits hips and legs more and the tail less.
 
 Damages the player only via `game.player.takeHit(...)` with tell data; announces tells with
 `combat:tell` / `combat:flash` and shows them on its own body (no HUD marks):
@@ -453,7 +669,8 @@ Player → hud/audio/fx/flow:
   `player:block {damage, tell}`, `player:parry {tell, attack}`, `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}`,
   `player:ghostep {x, z}`, `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
-  `player:footstep {x, z, sprint}`, `player:lockOn {on}`
+  `player:footstep {x, z, sprint}` (a planted foot's touchdown while moving, and the thrust dash's
+  two bounding steps), `player:lockOn {on}`
 Dragon (any attacker) → hud/audio/flow:
 - `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit; x/z = the
   striking part; impactIn is a first estimate in game seconds),

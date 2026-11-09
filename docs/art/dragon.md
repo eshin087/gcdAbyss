@@ -345,6 +345,10 @@ near wing and the ASCII near wing both show 4 bones fanning from the wrist.
 Build each finger as **2 joints** (proximal + distal) so the kink can animate. Spreading the wing
 straightens the kinks to 30 % of their rest angle.
 
+*Superseded 2026-11-08 (reference match):* finger lengths are [6.2, 6.9, 5.5, 3.9]. The proximal
+bones (wrist → knuckle) keep the lengths above, because the wing hurt spheres sit on the knuckles;
+only the distal bones are ~1.35× longer (the painting's huge bat wings).
+
 **Membrane.** Use **4 panels**:
 
 | Panel | Edges | Scallop depth (SAG) |
@@ -359,6 +363,9 @@ straightens the kinks to 30 % of their rest angle.
   0–0.26, plus 1–2 small holes per wing (an optional shader mask, §3.3).
 - The ASCII panel's trailing edges also **drip**: some glyph columns hang a cell or two lower
   than their neighbours.
+- *Built (2026-11-08):* `SAG` [0.30, 0.28, 0.24, 0.16] (fuller sails; fix round 1 had 0.42 / 0.40 /
+  0.34 / 0.22), `RAG` rips up to 0.29, and the art source tears holes and a ragged trailing edge from
+  `aEdge`.
 
 **Resting pose (the painting).** The wings are half-raised, or mantled.
 - The arm rises nearly vertically from the root, tilted 8° forward and 15° outward. The wrist
@@ -376,6 +383,10 @@ straightens the kinks to 30 % of their rest angle.
   the flank above the foreleg.
 - The far wing in the painting is the same pose, opened ~25° more to the side.
 - Folded and fully spread poses are in §4.
+- *Superseded 2026-11-08:* the resting HALF key is a cambered sail fitted to stay broad from every
+  game-camera yaw (wrist (±2.1, 7.5, −0.78), the leading finger falling away from the wrist peak),
+  and the wings turn with the head toward a foe off to one side, so the far wing reaches past the
+  head. See "Implementation notes (reference match)".
 
 ### 2.7 Tail
 
@@ -390,6 +401,12 @@ tip with one 0.6 blade plus two 0.2 side blades.
 the whole way. The painting curls it toward the viewer, which is model-right. Implement this with
 a quadratic yaw term in `Chain.buildRest`: add `yawCurve`, so `yaw_i += yawCurve·i²`, around
 0.012. A constant `yawStep` makes a circle, not a hook.
+
+*Superseded 2026-11-08:* at rest the tail is carried about level off the rump for a third of its
+length, then arches down to land almost flat on the ground around segment 11, the end hooking
+(`REST_POSE.tail`, blended by `pose.tailLift`). The tail sweep and the stomp's tripod lay it low.
+The drawn tail is thicker at the root, `r(t) = 0.06 + 0.7·(1 − t)^1.4`, over the unchanged chain
+clearance above.
 
 **Spikes.**
 - A dorsal row of **broad flat blades** like saw teeth: 0.55 at the root down to 0.12 at the tip,
@@ -476,6 +493,11 @@ multiplies it by light × `gain`.
 | Maw ink | [1.0, 0.55, 0.15], `inkGlow` 1.8 | Painting mouth peak [0.98, 0.64, 0.38] |
 
 ## 3. The ASCII GAMEPLAY panel, translated into rendering rules
+
+*Since v0.4 the player sees the wyrm as ASCII art of a shaded source, and since 2026-11-08 that
+source is `WYRM_ART` (the `wyrm` material option), printed in the wyrm's own pixel font. The
+surface-glyph tables in §3.2 and the `GLOW` table below them only shape the `U.uArtSolid` = 0
+look-dev render now; the current material rules are in "Implementation notes (reference match)".*
 
 ### 3.1 What the panel shows
 
@@ -618,6 +640,11 @@ Blend piecewise between the keys.
 | **Sleeping curled** | On the belly: keel on the ground, hips 0.9 lower than standing. Breath period 4.6 s, ember glow pulsing 0.05–0.15 | Forelegs folded under the chest (sphinx); hind legs folded with knees out, feet under the haunches | Neck curled back along the **right** flank, head resting on the ground beside the right hind foot. Eyes closed (glow 0), jaw closed | FOLD, flattened onto the back (`FOLD_LYING`) | Curled around the left side; the tip ends at the snout, closing the ring |
 | **Stagger / posture break** | Front collapses: chest drops onto the forelegs (`lower` 1.0 at the front), hips stay up | Forelegs buckle (elbows out), hind legs brace | Neck limp and low, head on or near the ground | Droop half-open to the ground (spread 0.35, arm lowered, tips touching the ground) | Limp |
 | **Death** | Rolls onto the right side (roll 1.2) | Legs stiffen out | Neck sprawled | One wing splays up and over, the other is pinned under | Limp, straight |
+
+*Superseded 2026-11-08:* the combat idle is the painting's display (HALF sails, the head low and
+forward on a strong S, jaw 0.65 open, a stalking stance, the arched tail), and death is a timed
+collapse in which every foot stays planted and both wings crumple onto the ground. See
+"Implementation notes (reference match)".
 
 ## 5. Moveset mapping
 
@@ -930,12 +957,13 @@ dist 38, painting angle yaw 300 pitch 8, panel angles yaw 315–330 pitch 30, cl
 
 **Wings (P0 + P1).**
 - Resting spread is HALF (0.5) in both phases (`TUNING.rest`: spread 0.5, ≤ 0.3 while walking,
-  jaw 0.4 / 0.65); every attack returns to it. At 0.3 the sails were edge-on from the game camera.
+  jaw 0.4 / 0.65, *0.65 / 0.85 since 2026-11-08*); every attack returns to it. At 0.3 the sails were
+  edge-on from the game camera.
 - `ANATOMY.wingForearm` 2.05 → 2.6 (arm 4.1 ≈ 1.0 H). HALF wrist (±1.9, 7.5, 1.15) (elbow ~135°),
   fingers f0 (0.62, −0.12, −0.68), f1 (0.58, −0.5, −0.62), f2 (0.46, −0.78, −0.42),
   f3 (0.3, −0.95, −0.07): ~20–25° apart, opened toward the front so the 58° camera sees each sail's
   face (wider than the critic's numbers on f1/f2: with the sheet's back-sweep the right sail stayed
-  a sliver from the front).
+  a sliver from the front). *Superseded 2026-11-08 by the fitted HALF key (reference-match notes).*
 - SPREAD (roar / leap) wrist (±2.9, 7.4, 2.1), f0 (0.82, 0.4, −0.3): the leading finger rises ~23°
   above the wrist (a dihedral), the others fan out and down with little back-sweep. MANTLE (breath)
   wrist (±2.3, 7.9, 2.0) is held in the HIPS frame (`hipsWrist`, blended by the mantle weight in
@@ -956,7 +984,8 @@ dist 38, painting angle yaw 300 pitch 8, panel angles yaw 315–330 pitch 30, cl
   1–2 irregular rips (0.12–0.18) per panel (the regular sawtooth read as feathers). `aGUV` is laid
   out once from the HALF key in 3D (`new WingMembrane(mat, side, WING_KEYS.HALF)`), so the resting
   grid is square and even; `aEdge` (0 → 1 on the free trailing edge) is computed for the shader's
-  future ragged-edge discard. Material: `glyphZoom` 0.8, L0 glyph-filled (`'.:co'`), `inkGlow` 0.32
+  future ragged-edge discard. *2026-11-08: `SAG` [0.30, 0.28, 0.24, 0.16], deeper `RAG` rips, and the
+  `wyrm` source reads `aEdge` (holes, torn edge) and a new `aBone` (orange bone streaks).* Material: `glyphZoom` 0.8, L0 glyph-filled (`'.:co'`), `inkGlow` 0.32
   (the backlit sail reads red, as a translucent bat wing does), seam ember 0.04.
 
 **Hide (P1).** Five `levels` (`'vco:ce.o'` → `'8B0A69&Y'`, the darkest prints small letters),
@@ -997,3 +1026,124 @@ are aimed with `aimJointUp` (no roll: the hind foot was rolled ~20°). Claw inkG
    `hash(cell) < smoothstep(0.75, 1.0, aEdge) × 0.6`.
 4. A true shading floor (`levelFloor`: clamp the level input ≥ 0.3, L0 only where n·up < −0.3)
    instead of the `inkGlow` approximation, which brightens the lit glyphs a little too.
+
+*Status 2026-11-08:* all four are closed or moot for what the player sees. The art pass prints
+upright letters on a screen grid (1); the `wyrm` source draws a broken vein net and cracks only in
+the scale gaps of down-facing surfaces (2), tears the membrane from `aEdge` (3) and has its own
+light floor (`light.w`) (4).
+
+## Implementation notes (reference match, 2026-11-08: the ASCII-art wyrm)
+
+The owner attached his red-black ASCII dragon reference (thin digits on black whose brightness
+draws charcoal scales, orange cracks and crimson torn sails) and asked for the dragon to look "as
+identical and good as" it, with great animation. Two rounds of a look agent and a motion agent:
+round 1 each had an independent reviewer / polish pass; round 2's two dragon branches were stopped
+near the end and merged without their final self-report or any review (their commit messages are
+the record). Supersedes the notes above where they disagree. Decisions: ADR-018, ADR-024, ADR-025.
+
+**What the player sees.** Each material's `WYRM_ART` source (`model.js`, the `wyrm` option of
+`createSurfaceGlyphMaterial`), printed in the wyrm's pixel font (`wyrmGlyphs.js`; rules in STYLE.md
+"Creature ASCII art"). The surface-glyph `levels`, voronoi fissures and inks above only feed the
+`uArtSolid` = 0 render.
+
+**Art source per material** (`WYRM_ART`; all share a key light from the viewer's upper left fixed to
+the camera, `key` [−0.5, 0.9, 1], greyed moonlight `envSat` 0.3, thin scale gaps `gap` [0.12, 3.5 px]
+and orange under-light):
+- Hide: `scales` (the barrel: roof tiles hanging from the dorsal line, `scaleDir: 'down'`, scales
+  [0.48, 0.34]), `limbs` [0.3, 0.23], `neck` [0.4, 0.3] and the new `head` material (skull, brow,
+  jaw, fine [0.2, 0.15] scales). Charcoal ink [0.34, 0.31, 0.29], dark scale bodies with thin bright
+  free edges (tone [0, 0.11, 2.0, 0.16]), an even charcoal (`vary` 0.35), outlines by letter
+  brightness only (`strokes: 'none'`), molten cracks in the scale gaps on down-facing surfaces
+  (`crack` [22, 0.1, −0.4, 0.6]; `limbs` 14, `head` 12: the tail's underside read orange at 22).
+- Molten undersides (`belly`, `throat`, `lava`): grey-orange scales with gold / amber rims
+  (`rimInk`), lit from below, glowing gaps and cracks; the sternum is the brightest scale area, the
+  throat S stays under the bloom threshold at rest and flares with the breath charge.
+- Membrane: crimson [0.5, 0.045, 0.03], mottled, with holes and a torn trailing edge (`membrane`
+  [0.8, 0.085, 2.0, 0.62]), orange bone streaks (`boneGlow` [0.65, 0.1, 1.05]) and round ember specks.
+- Thin parts, outlined with stroke glyphs (`strokes: 'axis'`): `wingBone` (charcoal with pale edges),
+  `spine` (dorsal and tail blades: grey-white, red only at the root), `bone` (horns and spikes,
+  stroked only at the very edge, bright tips), `claw` (dark roots, ivory tips), `teeth`.
+- `GLOW` phase-1 baselines (supersede §3.2's table): scales 0.35, limbs 0.32, neck 0.32, head 0.3,
+  belly 0.5, throat [0.5, 0.9, 2.4], lava 0.5, membrane 0.35, wingBone 0.15, spine 0.3, bone 0.08,
+  maw 0.55. Phase 2 wakes the hide cracks ×0.5 (more bloomed the lower body into a halo).
+
+**Shape.**
+- Head: 1.3× bigger (`HEAD_VIS`; every head mesh hangs on `headVis`, scaled about the mouth), so
+  the skull, horns and mane grow back over the neck while the gameplay joints `head` / `mouth` (bite
+  and charge spheres, the fire's origin) stay put. Nape frill, brow, cheek and jaw frills, 12 dorsal
+  blades, a neck crest. The eye glint is a small hot-orange point (0.2 S; it was a 0.64 m
+  yellow-white ball).
+- Feet: eagle feet, a pad and thick knuckled toes each ending in a hooked talon bent along an arc
+  (`hookGeometry`), instead of a pad with long cones that read as a rake.
+- Legs ~15 % thicker (visual radii; bones and IK unchanged). The tail is drawn thicker at the root
+  and tapers faster over the unchanged chain clearance; bigger saw blades, side and ventral blades,
+  a barbed tip.
+- Wings: distal finger bones ~1.35× longer (proximal bones and knuckles unchanged); fuller sails
+  (`SAG` above), deeper rips.
+
+**Poses and motion** (rig/anim.js, gait.js, chain.js, ik.js, attacks.js, ai.js):
+- Round 1 rig fixes: twist-stable joint aiming (`aimJointStable`: no 179° / 163° / 141° per-frame
+  wing flips), IK bend memory (no elbow / knee side flips), feet that step at their reach limit,
+  in-place turns stepping diagonal pairs, the tail sweep's spin pivoting the planted feet, the walk
+  stride centred under the shoulder, toes kept above the ground when lying, the stomp's paws landing
+  on the impact frame (they hit ~5 frames early) with a coil before and a squash after. Worst-foot
+  before → after: turning in place slide 1.41 → 0.01 m and float 1.61 → 0.03 m; walk float 0.56 →
+  0.03 m; tail sweep toe-to-contact error 4.8 → 0.44 m; roar / phase 2 / intro slides 0.7–2.6 →
+  0–0.33 m; the claw combo's rake paw drag 1.38 → 0.30 m.
+- Resting display (`REST_POSE`): the neck's S carries the head ~0.45 lower and further forward
+  (occiput ~(0, 4.25, 3.45)), glaring down (`lookDown` 0.45, `headDip` 0.22), jaw 0.65 open (phase 2
+  0.85). Standing still it stalks (left forefoot +0.4 forward, right hind −0.3 back, the body sunk
+  0.12) and `Gait.settle` steps stray feet home one at a time. Idle life (`pose.idle`): breathing
+  sails, weight shifts, gaze drift, a wing rouse every ~8–11 s while it stands still.
+- HALF wings (round 2 fit): wrist (±2.1, 7.5, −0.78) root frame; fingers f0 (0.629, −0.249,
+  −0.736), f1 (0.953, −0.259, 0.158), f2 (0.694, −0.374, 0.615), f3 (0.173, −0.98, 0.098) (left wing,
+  chest frame). Fitted by coordinate descent on the projected membrane area of both wings over the
+  58° camera's whole ring of yaws plus the reference and front views: every wing keeps ≥ 0.42 of
+  its area from each of them (before: down to 0.12–0.2), with the leading finger ≥ 14° below the
+  wrist peak (the painting's bat M; a rising one drew a flat bar across the reference view). The
+  resting sweep (`REST_POSE.sweep`) turns the wings with the head toward a foe off to one side: the
+  far wing swings forward up to 0.85 rad, past the head, the near one back up to 0.35.
+- Tail (`REST_POSE.tail`): level for a third of its length, then arching down (steepest ~60° near
+  segment 7) to land almost tangent around segment 11 and hook. Round 2 limits stop it folding into
+  a U on the ground (`TAIL_SINK`, `TAIL_DEV`); the tail sweep keeps the exact v0.4 solve
+  (`pose.tailLegacy`). Worst tail joint (deg/frame): turn 24 → 9, roar 24 → 7, charge 63 → 32,
+  stomp 79 → 60, posture break 43 → 15, death 49 → 17.
+- Strikes (round 2, ADR-025): the shown neck spreads a strike down its length with the head pinned
+  to the measured solve; the bite and the combo's lunging bite lead the shown head over their last
+  three windup frames (`headLead`); the head's aim turns at most 11 rad/s except on `headExact`
+  frames. Worst neck joint (deg/frame): bite 75 → 37, claw combo 40 → 31, leap 28 → 22. Swinging
+  feet absorb a jump of their home (charge start / stop, a lunge: 50–65° thigh / shin pops gone),
+  free feet ease home, the wing arms use soft IK.
+- Parry recoil: the head is thrown up and back on an eased arc with a short dazed shake; a foot
+  caught mid-step plants. Neck tip 137 → 46°, head 44 → 13°, humerus 86 → 19° per frame.
+- Death (`deathPose`, ai.js): a throe (reared, head flung up, jaw wide, wings flared), the front
+  buckles, the body falls accelerating onto its right side, the chest thuds at 1.1 s and rebounds,
+  the head slaps down last (1.22 s, dust), one last heave. Every foot stays planted (the old stiff-leg
+  overrides are gone), the wings crumple onto the ground beside the body (`pose.drape`, world space)
+  and the dead tail lies in a loose curve. Foot slide 4.5 → 0.6 m.
+
+**Gameplay checks.** Round 1: attack spheres within a few cm of v0.4 on their active frames;
+first contact identical for bite (16 / 16 probes), claw combo (12 / 12) and charge (12 / 12);
+swipe 13 / 16 (the three probes that missed in v0.4 now land, +33 ms); the tail sweep's median
+contact −50 ms (v0.4 −58.5) and it no longer lands before its red flash (0 of 24 probes; v0.4: 5).
+Round 2: every attack sphere on every active frame within 1–4 mm of round 1, except the rake paw
+(up to 2.3 cm, same hit frames). The resting head's hurt sphere stays above the sword band (bottom
+~5.9 m vs ~4 m); the arched tail lifts its first hurt spheres to ~3–4.5 m.
+
+**Measured.** Reference view, round 1: body mean / ink / bright 30.0 / 22.9 / 10.9 (reference 29.0 /
+21.6 / 9.0), chest 71.3 / 52.1 / 29.6 (63.9 / 45.8 / 23.8). Round 2: lit-ink colour mix white 43 /
+orange 23 / red 35 % (painting 41 / 22 / 37; round 1 39 / 32 / 30); front view, orange share of the
+membrane pixels 36 → 45 %. Cost (round 1): about +0.3 ms per frame on an RTX 4090 at 1080p, dragon
+meshes 194 → 183.
+
+**Still open.**
+- At the reference angle the sails sit lower than the painting's, and with the hero straight ahead
+  the far wing is a thin shape behind the neck: one symmetric pose cannot show both of the
+  painting's wings broad from one 3/4 view (a design decision).
+- In melee at 16:9 the head, neck and wings are mostly above the top of the screen (the boss camera's
+  5 m zoom cap, ADR-013): the player mostly sees legs, chest and wing edges.
+- Some intended fast motions still jump far per frame (charge thigh ~60°, bite neck 37°); the bite
+  and leap spheres ride on them, so smoothing needs re-measuring.
+- Close-ups show large, flat scale plates (no LOD toward finer scales); letters still change on
+  ~39 % of the lit cells per frame at idle.
+- Round 2's dragon work had no independent review.

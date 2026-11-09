@@ -161,6 +161,22 @@ function biteAim(d, a, reach) {
   a.goal.y = Math.max(0.75 * S, a.goal.y);
 }
 
+const _lead = { target: V(), goal: V() };
+/**
+ * The last frames of a bite's windup lead the SHOWN head into the strike (pose.headLead: no hit test
+ * runs in a windup, the measured head waits for the active phase): 12 / 30 / 55 % of the strike's
+ * first step, so the head accelerates into the snap instead of jumping its whole first step (~1.8 m)
+ * in one frame. The active frames, and every sphere on them, are untouched.
+ */
+function strikeLead(d, a, dt, reach) {
+  const left = (a.dur - a.t) / Math.max(1e-4, dt); // frames until the strike
+  const f = left < 1.5 ? 0.55 : left < 2.5 ? 0.3 : left < 3.5 ? 0.12 : 0;
+  if (f <= 0) return;
+  biteAim(d, _lead, reach); // the goal the active phase is about to lock
+  const k = 1 - Math.exp(-18 * Math.max(dt, 1e-4)); // the strike's first step (biteActive's head rate)
+  d.pose.headLead.subVectors(_lead.goal, d.rig.headPos).multiplyScalar(k * f);
+}
+
 /**
  * Bite windup (four-legged, docs/art/dragon.md §5): the forelegs plant a little wider, the shoulders
  * sink, the neck coils back into a tight S (head cocked up and back over the neck base), the throat
@@ -179,11 +195,13 @@ function biteWindup(d, a, dt) {
   pose.spread[0] = pose.spread[1] = k < 0.75 ? 0.6 : REST_SPREAD;
   pose.spreadRate = 6;
   d.throat = 0.3 * k;
+  strikeLead(d, a, dt, T.bite.reach);
 }
 
 /** The neck uncoils and the shoulders drive forward off the planted hind feet; the jaw snaps at k 0.62. */
 function biteActive(d, a, dt, speed) {
   const pose = d.pose;
+  pose.headExact = true; // the snout / head spheres ride on the head's aim
   pose.head = pose.headTarget.copy(a.goal);
   pose.look.copy(a.target);
   pose.lookDown = 1.2; // the snout aims down at the hero
@@ -456,6 +474,7 @@ const clawCombo = {
         pose.spread[0] = pose.spread[1] = REST_SPREAD + 0.12 * Math.sin(Math.PI * a.k);
         pose.spreadRate = 8;
         d.throat = 0.25 * a.k;
+        strikeLead(d, a, dt, CC.hits[2].reach);
         break;
       }
       case 'active3':
@@ -504,9 +523,13 @@ const tail = {
   },
   update(d, a, dt) {
     const pose = d.pose;
+    // the sweep's tail is the measured v0.4 chain solve (its hit spheres and swept arc ride on it)
+    pose.tailLegacy = true;
     // wings folded tight through the whole sweep so the membranes stay clear of the tail
     pose.spread[0] = pose.spread[1] = a.phase === 'recovery' && a.k > 0.4 ? REST_SPREAD : 0;
     pose.spreadRate = 5;
+    // the arched resting tail drops low for the sweep (the measured v0.4 tail) and lifts back after
+    pose.tailLift = a.phase === 'recovery' && a.k > 0.3 ? 1 : 0;
     if (a.phase === 'windup') {
       // looks over its shoulder at the player (pose.look = the player's chest), crouches, the hind
       // feet brace wide, the tail coils to the opposite side (away from the player, with the body's
@@ -576,6 +599,7 @@ const tail = {
 // ahead of the front-paw homes): the ring is centred on their midpoint, the flash / dust sit on them.
 const STOMP_Z = 2.9;
 const STOMP_X = 1.2;
+const _slam = V();
 const stomp = {
   name: 'stomp',
   cooldown: T.stomp.cooldown,
@@ -593,6 +617,15 @@ const stomp = {
     return r <= T.stomp.radius - 0.3 ? T.stomp.weight * (r <= 3 * S ? 1.5 : 1) : 0;
   },
   enter(d, a, phase) {
+    if (phase === 'active') {
+      // the slam starts from wherever the rear-up holds the paws and body (see update)
+      const A2 = d.rig.pt.arms;
+      a.paw0 = [V().copy(A2[0].toe), V().copy(A2[1].toe)];
+      a.pitch0 = d.rig.s.pitch;
+      a.rear0 = d.rig.s.rear;
+      a.lower0 = d.rig.s.lower;
+      return;
+    }
     if (phase !== 'recovery') return;
     const c = d.rootPt(_a, 0, 0, STOMP_Z);
     const g = d.game;
@@ -618,36 +651,48 @@ const stomp = {
       // chest height, claws spread; the tail presses flat (the third leg of the tripod), head high,
       // wings flare; the hind feet brace wider
       d.turnToward(s.yawTo, d.turnRate * 0.6, dt);
-      pose.pitch = -0.62;
+      // the last third coils higher (anticipation): chest and paws lift a little more, the head
+      // draws back, the wings flare up for the downstroke
+      const coil = smoothstep(0.62, 1, a.k);
+      pose.pitch = -0.62 - 0.08 * coil;
       pose.rear = 1;
-      pose.bodyRate = 3.5;
-      pose.lower = -0.2;
-      pose.spread[0] = pose.spread[1] = 0.6;
+      pose.bodyRate = 3.5 + 2.5 * coil;
+      pose.lower = -0.2 - 0.08 * coil;
+      pose.spread[0] = pose.spread[1] = 0.6 + 0.22 * coil;
       pose.spreadRate = 5;
-      pose.head = d.rootPt(pose.headTarget, 0, 6.0, 3.5);
+      pose.head = d.rootPt(pose.headTarget, 0, 6.0 + 0.3 * coil, 3.5 - 0.35 * coil);
       pose.headRate = 4;
-      pose.jaw = 0.45;
+      pose.jaw = 0.45 + 0.2 * coil;
       pose.stanceH = 0.25;
       pose.restep = 1;
       pose.swell = a.k;
       pose.tailWave = 0;
+      pose.tailLift = 0; // pressed flat behind: the tripod's third leg
     } else if (a.phase === 'active') {
-      // both forefeet slam down together on their landing spots; the body pitches forward; the
-      // wings snap down (a gust)
-      pose.pitch = 0.16;
-      pose.bodyRate = 22; // also snaps `rear` back to 0
-      pose.lower = 0.15;
+      // both forefeet slam down together on their landing spots, accelerating all the way so they
+      // strike exactly on the impact (the end of the active, when the ring and the dust go off: they
+      // used to land ~5 frames early and wait); the body pitches forward with them, the wings beat
+      // down through the slam (a gust)
+      const e = a.k * a.k;
+      pose.pitch = lerp(a.pitch0 ?? -0.62, 0.16, e);
+      pose.rear = (a.rear0 ?? 1) * (1 - e);
+      pose.lower = lerp(a.lower0 ?? -0.2, 0.15, e);
+      pose.bodyRate = 60;
       for (let k = 0; k < 2; k++) {
         const ov = pose.pawOv[k];
         ov.w = 1;
-        d.rootPt(ov.pos, (k === 0 ? 1 : -1) * STOMP_X, 0, STOMP_Z);
+        const spot = d.rootPt(_slam, (k === 0 ? 1 : -1) * STOMP_X, 0, STOMP_Z);
+        if (a.paw0) ov.pos.lerpVectors(a.paw0[k], spot, e);
+        else ov.pos.copy(spot);
       }
-      pose.pawOvRate = 40;
+      pose.pawOvRate = 90;
       pose.stanceH = 0.25;
-      pose.spread[0] = pose.spread[1] = REST_SPREAD;
-      pose.spreadRate = 18;
+      pose.spread[0] = pose.spread[1] = lerp(0.82, REST_SPREAD - 0.18, e);
+      pose.spreadRate = 22;
       pose.headRate = 10;
       pose.jaw = 0.8;
+      pose.tailWave = 0;
+      pose.tailLift = 0;
     } else {
       // settle: the forefeet stay pressed into the slam spots for a beat (held by the override, so
       // the gait can't lift them), then plant there as contacts and step back home
@@ -662,11 +707,24 @@ const stomp = {
         pose.pawOvRate = 40;
         if (!hold) a.planted = true;
       }
-      pose.pitch = 0.08 * (1 - a.k);
-      pose.bodyRate = 3;
-      pose.lower = 0.15 * (1 - a.k);
+      // the impact travels through the body: the chest keeps sinking into the braced forelegs for
+      // ~0.1 s (squash), the head and the wings follow through downward, the tail slaps, then all of
+      // it settles back to the stance
+      const sq = a.k < 0.1 ? a.k / 0.1 : Math.max(0, 1 - (a.k - 0.1) / 0.32);
+      const ease = sq * sq * (3 - 2 * sq);
+      pose.pitch = 0.08 * (1 - a.k) + 0.06 * ease;
+      pose.bodyRate = a.k < 0.45 ? 9 : 3;
+      pose.lower = 0.15 * (1 - a.k) + 0.2 * ease;
+      pose.headOffset.y -= 0.7 * S * ease;
+      pose.headRate = a.k < 0.45 ? 8 : 4;
+      pose.spread[0] = pose.spread[1] = REST_SPREAD - 0.18 * ease;
+      pose.spreadRate = a.k < 0.3 ? 10 : 3;
+      pose.tailWave = 0.07 + 0.08 * ease;
+      // the tail stays down through the slam's squash and lifts back to its arch once the body settles
+      // (lifting while the slam whipped the chain into the ground folded it)
+      pose.tailLift = a.k < 0.5 ? 0 : 1;
       pose.restep = hold ? 0 : 1;
-      pose.jaw = 0.1;
+      pose.jaw = 0.1 + 0.25 * ease;
     }
   },
 };
@@ -726,6 +784,7 @@ const breath = {
       d.throat = a.k;
       d.fx.mouthEmbers(dt, pt.mouth, 30, pt.headFwd);
     } else if (a.phase === 'active') {
+      pose.headExact = true; // the stream leaves the mouth
       if (d.phase === 2) a.aim = a.aim0 + a.side * T.breath.sweepP2 * a.k;
       else a.aim = turnToward(a.aim, s.yawTo, 32 * DEG * dt);
       d.turnToward(a.aim, 1.2, dt);
@@ -823,6 +882,7 @@ const fireball = {
   update(d, a, dt) {
     const pose = d.pose, s = d.sense, pt = d.rig.pt;
     a.recoil = Math.max(0, a.recoil - dt * 4);
+    pose.headExact = true; // each shell leaves the mouth (launched from last frame's)
     pose.stanceF = 0.15; // forefeet planted a little wider: they absorb each spit
     pose.restep = 1;
     if (a.phase === 'windup') {
@@ -985,6 +1045,7 @@ const charge = {
       }
     } else if (a.phase === 'active') {
       const k = a.k;
+      pose.headExact = true; // the snout sphere rides on the head's aim
       a.v = chargeSpeed(k);
       if (k < 0.4) d.turnToward(s.yawTo, 0.6, dt);
       const want = a.v * dt;

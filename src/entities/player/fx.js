@@ -18,6 +18,7 @@ const COL = {
   crit: [2.2, 2.8, 4.2], critEnd: [0.3, 0.55, 1.4],
   flash: [4.2, 3.6, 2.6],
   dust: [0.2, 0.18, 0.14], dustEnd: [0.09, 0.08, 0.065],
+  grassBit: [0.16, 0.26, 0.12], grassBitEnd: [0.05, 0.09, 0.04], // torn grass kicked up by a slide
   heal: [1.3, 1.9, 0.55], healEnd: [0.25, 0.6, 0.12],
   flame: [3.0, 1.35, 0.32], flameEnd: [0.9, 0.12, 0.02],
   ash: [0.34, 0.035, 0.028], ashEnd: [0.1, 0.012, 0.01],
@@ -35,15 +36,59 @@ const COL = {
 };
 
 // points along the hit segment (0 = hilt … 1 = the edge-wave tip past the steel) that leave a trail
-const TRAIL_ALONG = [0.66, 0.84, 1.0];
-const TRAIL_ALONG_HEAVY = [0.5, 0.68, 0.84, 1.0];
+const TRAIL_ALONG = [0.62, 0.76, 0.89, 1.0];
+const TRAIL_ALONG_HEAVY = [0.5, 0.64, 0.77, 0.89, 1.0];
+const TRAIL_SUB_LEN = 0.24; // m of outer-point travel per trail sub-step …
+const TRAIL_SUB_MAX = 8; // … up to this many sub-steps a frame
+// the swept blade between two frames: hilt lerped, direction slerped round it, length lerped
+const ARC = { ax: 0, ay: 0, az: 0, dx: 0, dy: 0, dz: 0, n0: [0, 0, 1], n1: [0, 0, 1], l0: 1, l1: 1, th: 0, s: 1 };
+const ARC_P = [0, 0, 0], ARC_Q = [0, 0, 0];
+function arcSetup(pa, pb, a, b) {
+  ARC.ax = pa.x; ARC.ay = pa.y; ARC.az = pa.z;
+  ARC.dx = a.x - pa.x; ARC.dy = a.y - pa.y; ARC.dz = a.z - pa.z;
+  const ux = pb.x - pa.x, uy = pb.y - pa.y, uz = pb.z - pa.z, vx = b.x - a.x, vy = b.y - a.y, vz = b.z - a.z;
+  ARC.l0 = Math.hypot(ux, uy, uz) || 1e-6;
+  ARC.l1 = Math.hypot(vx, vy, vz) || 1e-6;
+  const n0 = ARC.n0, n1 = ARC.n1;
+  n0[0] = ux / ARC.l0; n0[1] = uy / ARC.l0; n0[2] = uz / ARC.l0;
+  n1[0] = vx / ARC.l1; n1[1] = vy / ARC.l1; n1[2] = vz / ARC.l1;
+  const c = Math.max(-1, Math.min(1, n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2]));
+  ARC.th = Math.acos(c);
+  ARC.s = Math.sin(ARC.th);
+}
+/** Point f (0 hilt … 1 tip) of the swept blade at sub-step t (0 last frame … 1 now) → o. */
+function arcPoint(t, f, o) {
+  let w0 = 1 - t, w1 = t;
+  if (ARC.th > 0.02 && ARC.th < 2.8) {
+    w0 = Math.sin((1 - t) * ARC.th) / ARC.s;
+    w1 = Math.sin(t * ARC.th) / ARC.s;
+  }
+  const n0 = ARC.n0, n1 = ARC.n1;
+  let x = n0[0] * w0 + n1[0] * w1, y = n0[1] * w0 + n1[1] * w1, z = n0[2] * w0 + n1[2] * w1;
+  const l = Math.hypot(x, y, z) || 1;
+  const len = (ARC.l0 + (ARC.l1 - ARC.l0) * t) * f / l;
+  o[0] = ARC.ax + ARC.dx * t + x * len;
+  o[1] = ARC.ay + ARC.dy * t + y * len;
+  o[2] = ARC.az + ARC.dz * t + z * len;
+}
 const TRAIL_NONE = [];
 // the halftone dot fields sit on a world lattice so their dots line up like the panel's grid
 const LATTICE = 0.12;
 // screen axes of the fixed camera (pitch 58°): right = +X, up ≈ (0, cos 58°, −sin 58°)
 const UP_Y = 0.53, UP_Z = -0.85;
+// the rendering camera's matrixWorld elements (columns: right, up): glyph particles are screen
+// billboards, so a stroke laid along a world direction needs the real camera's axes. The game
+// camera is the fixed 58° one, but the Lab's model views look from any angle (there the fixed
+// basis turned the tip streak and the sweep strokes into stray bars across the blade).
+let CAM = null;
 /** Screen-space rotation that lays a '|' glyph along world direction (dx, dy, dz). */
-const alongRot = (dx, dy, dz) => Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
+const alongRot = (dx, dy, dz) => {
+  if (CAM) {
+    const sx = dx * CAM[0] + dy * CAM[1] + dz * CAM[2], sy = dx * CAM[4] + dy * CAM[5] + dz * CAM[6];
+    if (sx * sx + sy * sy > 1e-12 && Number.isFinite(sx + sy)) return Math.atan2(sy, sx) - Math.PI / 2;
+  }
+  return Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
+};
 
 export class PlayerFx {
   constructor(game, rig) {
@@ -58,9 +103,12 @@ export class PlayerFx {
     this.haloAcc = 0;
     this.gemGlowAcc = 0;
     this.tipAcc = 0;
+    this.skidAcc = [0, 0]; // per sliding contact (skid)
+    this.scrapeAcc = 0;
   }
 
   get add() {
+    CAM = this.game.camera?.matrixWorld?.elements ?? null; // every spawner starts here (alongRot)
     return this.game.fx?.add ?? null;
   }
   get alpha() {
@@ -103,29 +151,38 @@ export class PlayerFx {
     const thrust = kind === 'thrust';
     const along = heavy ? TRAIL_ALONG_HEAVY : thrust ? TRAIL_NONE : TRAIL_ALONG;
     const col = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
-    for (let s = 1; s <= 3; s++) {
-      const t = s / 3, t0 = (s - 1) / 3;
+    // sub-steps follow the outer point's travel (a fast frame sweeps 1.5 m): with three fixed
+    // ones the strokes left gaps and the arc read as scattered dashes at the game camera; now
+    // each stroke covers its sub-step, so the band is one continuous crescent at any speed
+    const tipStep = Math.hypot(b.x - pb.x, b.y - pb.y, b.z - pb.z);
+    const nSub = Math.min(TRAIL_SUB_MAX, Math.max(3, Math.ceil(tipStep / TRAIL_SUB_LEN)));
+    arcSetup(pa, pb, a, b);
+    for (let s = 1; s <= nSub; s++) {
+      const t = s / nSub, t0 = (s - 1) / nSub;
       for (let k = 0; k < along.length; k++) {
-        const f = along[k];
-        // this point now, and a sub-step earlier: the stroke lies along its path
-        const ax = pa.x + (a.x - pa.x) * t, ay = pa.y + (a.y - pa.y) * t, az = pa.z + (a.z - pa.z) * t;
-        const bx = pb.x + (b.x - pb.x) * t, by = pb.y + (b.y - pb.y) * t, bz = pb.z + (b.z - pb.z) * t;
-        const x = ax + (bx - ax) * f, y = ay + (by - ay) * f, z = az + (bz - az) * f;
-        const ax0 = pa.x + (a.x - pa.x) * t0, ay0 = pa.y + (a.y - pa.y) * t0, az0 = pa.z + (a.z - pa.z) * t0;
-        const bx0 = pb.x + (b.x - pb.x) * t0, by0 = pb.y + (b.y - pb.y) * t0, bz0 = pb.z + (b.z - pb.z) * t0;
-        const dx = x - (ax0 + (bx0 - ax0) * f), dy = y - (ay0 + (by0 - ay0) * f), dz = z - (az0 + (bz0 - az0) * f);
+        // this point now, and a sub-step earlier: the stroke lies along its path. The blade turns
+        // round the hilt between frames (slerped), so the band is a curved crescent, not a polygon
+        // of straight chords; the inner rows wander a little so the band fills like a smear
+        const f = along[k] < 0.95 ? along[k] + R(-0.04, 0.04) : along[k];
+        arcPoint(t, f, ARC_P);
+        arcPoint(t0, f, ARC_Q);
+        const x = ARC_P[0], y = ARC_P[1], z = ARC_P[2];
+        const dx = x - ARC_Q[0], dy = y - ARC_Q[1], dz = z - ARC_Q[2];
         const step = Math.hypot(dx, dy, dz);
         const moving = step > 0.02;
         const outer = f > 0.95;
         const size = (heavy ? 0.26 : 0.2) * (0.65 + 0.35 * f);
+        // the edge glyph sits on every other sub-step (a bright dotted rim), the body strokes cover
+        // their sub-step end to end
+        if (outer && (s & 1) && nSub > 3) continue;
         fx.spawn({
           x, y, z,
           vx: R(-0.1, 0.1), vy: R(0, 0.15), vz: R(-0.1, 0.1),
-          life: (outer ? R(0.1, 0.14) : R(0.14, 0.22)) * (heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
+          life: (outer ? R(0.1, 0.14) : R(0.12, 0.2)) * (heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
           glyph: outer ? 'A8' : moving ? ')|' : '-~', rot: moving ? alongRot(dx, dy, dz) : R(-0.4, 0.4),
-          stretch: moving && !outer ? Math.min(1.2, (step / size) * 1.1) : 0,
+          stretch: moving && !outer ? Math.min(3, (step / size) * 1.1) : 0,
           color: outer && !crit ? COL.trailCore : col, colorEnd: COL.trailEnd,
-          alpha: outer ? 1 : 0.8, alphaEnd: 0, drag: 2.5,
+          alpha: outer ? 1 : 0.8 + 0.15 * f, alphaEnd: 0, drag: 2.5,
         });
       }
     }
@@ -197,7 +254,7 @@ export class PlayerFx {
           x: x + Math.sin(ph) * 0.15, y: R(0.05, 0.2), z: z + R(-0.15, 0.15),
           vx, vy, vz: R(-0.6, 0.6),
           life: R(0.4, 0.6), size: R(0.14, 0.34), sizeEnd: 0.06, stretch: 0.6,
-          glyph: 'A^V', rot: -Math.atan2(vx, vy * UP_Y), spin: R(-2, 2),
+          glyph: 'A^V', rot: alongRot(vx, vy, 0), spin: R(-2, 2),
           color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -11, drag: 1.2,
         });
       }
@@ -398,7 +455,7 @@ export class PlayerFx {
       const dx = segs[k + 3] - ax, dy = segs[k + 4] - ay, dz = segs[k + 5] - az;
       const len = Math.hypot(dx, dy, dz);
       if (!(len > 1e-3) || !Number.isFinite(len)) continue;
-      const rot = Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
+      const rot = alongRot(dx, dy, dz);
       const n = Math.max(1, Math.round(len / 0.11));
       for (let i = 0; i <= n; i++) {
         const f = i / n;
@@ -415,7 +472,7 @@ export class PlayerFx {
     const sx = nx - ox, sz = nz - oz;
     const dist = Math.hypot(sx, sz);
     if (dist > 0.3 && Number.isFinite(dist)) {
-      const rot = Math.atan2(sz * UP_Z, sx);
+      const rot = alongRot(sx, 0, sz) + Math.PI / 2; // '-' laid along the ground path
       const n = Math.min(60, Math.round(dist / 0.18));
       for (let i = 0; i <= n; i++) {
         const f = i / n;
@@ -511,11 +568,12 @@ export class PlayerFx {
     const sw = this.rig?.sword;
     if (!fx || !sw || !(k > 0)) return;
     const e = sw.matrixWorld.elements;
-    // the edge-wave: a short bright streak laid along the blade 0.06–0.26 m past the steel point
+    const tip = DIM.drawnTip ?? DIM.steelTip; // the drawn point (model.js), not anim's grass-clamp point
+    // the edge-wave: a short bright streak laid along the blade 0.06–0.26 m past the drawn point
     this.tipAcc += dt * 14;
     while (this.tipAcc >= 1) {
       this.tipAcc -= 1;
-      const zz = DIM.steelTip + R(0.06, 0.2);
+      const zz = tip + R(0.06, 0.2);
       const x = e[8] * zz + e[12], y = e[9] * zz + e[13], z = e[10] * zz + e[14];
       const dl = Math.hypot(e[8], e[9], e[10]) || 1;
       if (!Number.isFinite(x + y + z) || y < 0.02) continue;
@@ -531,7 +589,7 @@ export class PlayerFx {
     while (this.haloAcc >= 1) {
       this.haloAcc -= 1;
       const past = Math.random() < 0.3;
-      const zz = past ? DIM.steelTip + R(0.02, 0.3) : R(DIM.forte, DIM.steelTip);
+      const zz = past ? tip + R(0.02, 0.3) : R(DIM.forte, tip);
       const xx = past ? R(-0.02, 0.02) : (Math.random() < 0.5 ? -1 : 1) * R(0.06, 0.12);
       // sword space (xx, 0, zz) → world
       const x = e[0] * xx + e[8] * zz + e[12], y = e[1] * xx + e[9] * zz + e[13], z = e[2] * xx + e[10] * zz + e[14];
@@ -639,6 +697,51 @@ export class PlayerFx {
     }
   }
 
+  /**
+   * A sliding contact (the roll's kneel: the shin, the planted foot): a low spray of dust and torn
+   * grass kicked off the ground spot (x, z), thrown back against the slide (dx, dz unit) and
+   * outward, faster and denser with the slide speed sp (m/s). `slot` keeps one rate accumulator
+   * per contact.
+   */
+  skid(dt, slot, x, z, dx, dz, sp, k = 1) {
+    const fx = this.alpha;
+    if (!fx || !(sp > 0.3)) return;
+    const acc = this.skidAcc;
+    acc[slot] += dt * 40 * k * Math.min(1.5, sp / 4);
+    while (acc[slot] >= 1) {
+      acc[slot] -= 1;
+      const s = sp * R(0.15, 0.45), side = R(-0.9, 0.9);
+      const grass = Math.random() < 0.3;
+      fx.spawn({
+        x: x + R(-0.08, 0.08), y: R(0.03, 0.12), z: z + R(-0.08, 0.08),
+        vx: -dx * s - dz * side, vy: R(0.4, 1.5), vz: -dz * s + dx * side,
+        life: R(0.3, 0.6), size: grass ? R(0.12, 0.17) : R(0.14, 0.22), sizeEnd: grass ? 0.08 : R(0.3, 0.42),
+        glyph: grass ? "/\\'," : '.,:', color: grass ? COL.grassBit : COL.dust, colorEnd: grass ? COL.grassBitEnd : COL.dustEnd,
+        alpha: 0.85, alphaEnd: 0, drag: 2.2, gravity: -2.4, spin: R(-4, 4),
+      });
+    }
+  }
+
+  /** The blade's point dragging in the grass (the roll's slide): cold sparks flicked off it, back
+   *  against the slide (dx, dz unit). */
+  scrape(dt, x, y, z, dx, dz, sp) {
+    const fx = this.add;
+    if (!fx || !(sp > 0.3)) return;
+    this.scrapeAcc += dt * 30 * Math.min(1.5, sp / 4);
+    while (this.scrapeAcc >= 1) {
+      this.scrapeAcc -= 1;
+      const s = sp * R(0.2, 0.6), side = R(-1.2, 1.2);
+      const vx = -dx * s - dz * side, vy = R(0.6, 2.2), vz = -dz * s + dx * side;
+      fx.spawn({
+        x: x + R(-0.04, 0.04), y: y + R(0, 0.05), z: z + R(-0.04, 0.04),
+        vx, vy, vz,
+        life: R(0.12, 0.26), size: R(0.08, 0.14), sizeEnd: 0.03,
+        glyph: "'|", rot: alongRot(vx, vy, vz), stretch: 0.8,
+        color: COL.trailCore, colorEnd: COL.trailEnd, alpha: 1, alphaEnd: 0, drag: 1.5, gravity: -4,
+      });
+    }
+  }
+
   reset() {
     this.flameAcc = 0;
     this.healAcc = 0;
@@ -648,5 +751,7 @@ export class PlayerFx {
     this.haloAcc = 0;
     this.gemGlowAcc = 0;
     this.tipAcc = 0;
+    this.skidAcc[0] = this.skidAcc[1] = 0;
+    this.scrapeAcc = 0;
   }
 }

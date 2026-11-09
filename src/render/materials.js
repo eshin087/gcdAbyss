@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COMMON_GLSL } from './shaderLib.js';
+import { COMMON_GLSL, HERO_PARTS } from './shaderLib.js';
 import { gi } from './glyphs.js';
 
 // Material families (see STYLE.md):
@@ -21,6 +21,14 @@ import { gi } from './glyphs.js';
 //   0.6          LEAF     blobby foliage ramp
 //   1.0          STONE    letter ramp + edge outlines
 export const FLAG = { NONE: 0.0, ART_HERO: 0.48, ART: 0.5, LEAF: 0.6, STONE: 1.0 };
+/**
+ * Hero ink-line art (materials with `heroArt`): instead of FLAG.ART_HERO they write a PART ID into
+ * alpha, a0 + id × step (id = part × 2 + the geometry's aPart sub-id 0/1), still inside the pass's
+ * hero window (0.46, 0.49). The art pass draws a bright ink line wherever two neighbouring cells
+ * show different parts (the higher id draws it) or a depth step (the nearer side draws it). Step 0.0006
+ * is ≥ 2 half-float ulps there; parts 0..19 (each part's line tint: U.uHeroPartInk).
+ */
+export const HERO_ART = { a0: 0.4632, step: 0.0006, parts: HERO_PARTS };
 export const ASCII_SETS = { scales: 0, strands: 1, plates: 2, smooth: 3 };
 /**
  * Surface-glyph defaults per `ascii` set: 4-glyph ramp (dark → bright) and cell size in aGUV
@@ -143,7 +151,110 @@ function surfaceFeatures(o, cell) {
     throw new Error(`surface glyph crack: 'grid' | 'voronoi', got ${JSON.stringify(crack)}`);
   } else if (seamAxis === 'y') defines.SG_SEAM_Y = '';
   else if (seamAxis === 'x') defines.SG_SEAM_X = '';
+  if (o.wyrm != null) wyrmFeatures(o.wyrm, defines, uniforms);
+  // the hero's ink-line art source (see SG_HERO_ART in the fragment shader)
+  if (o.heroArt != null) {
+    const h = o.heroArt;
+    const part = Math.round(h.part ?? 0);
+    if (!(part >= 0 && part < HERO_ART.parts)) throw new Error(`surface glyph heroArt.part: 0..${HERO_ART.parts - 1}, got ${h.part}`);
+    defines.SG_HERO_ART = '';
+    defines.HERO_A0 = HERO_ART.a0.toFixed(4);
+    defines.HERO_AS = HERO_ART.step.toFixed(4);
+    uniforms.uArtFill = { value: new THREE.Color(...(h.fill ?? [0.1, 0.1, 0.11])) };
+    uniforms.uArtSpec = { value: new THREE.Vector2(h.spec ?? 0, h.specPow ?? 20) };
+    uniforms.uArtRim = { value: h.rim ?? 1 };
+    uniforms.uArtGlowK = { value: h.glow ?? 0 };
+    uniforms.uArtPart = { value: part * 2 };
+    // depth pull (the blade): its depth moves `uArtPull` metres toward the camera along each view ray
+    // (the same pixels on screen), so it is drawn over the grass and his own legs it lies just
+    // behind; player/model.js sets it per frame (0 in close-ups)
+    if (h.pull) {
+      defines.SG_HERO_PULL = '';
+      uniforms.uArtPull = { value: 0 };
+    }
+    // cloth folds: [bands per metre across aGUV x (rad), depth 0..1, wander down aGUV y]
+    if (h.folds != null) {
+      const [fq, fd, fw] = h.folds;
+      if (![fq, fd, fw].every(Number.isFinite)) throw new Error(`surface glyph heroArt.folds: [freq, depth, wander], got ${JSON.stringify(h.folds)}`);
+      defines.SG_HERO_FOLDS = '';
+      uniforms.uArtFold = { value: new THREE.Vector3(fq, fd, fw) };
+    }
+  }
   return { defines, uniforms };
+}
+
+/**
+ * Wyrm ASCII-art source (option `wyrm`, the dragon's materials only): in art mode (FLAG.ART with
+ * uArtSolid) the part renders `wyrmMain` instead of the smooth lit ink, the image the art pass
+ * turns into letters (the owner's red-black dragon reference). All fields optional:
+ *   scale: [w, h]        overlapping shingle scales in aGUV units (w across, h per row; tips point
+ *                        toward -aGUV y); omit for smooth parts (spikes, bones, membranes)
+ *   scaleDir: 'along' (default) | 'down' (rows along aGUV y, tips toward larger |aGUV x|: roof-tile
+ *                        scales hanging from the dorsal line, for parts mapped around the body axis)
+ *   strokes: 'rim' (default with scale) | 'axis' | 'none': where the art pass draws stroke glyphs
+ *                        (- / | \) in the edge's screen direction: along the scale rims, or along the
+ *                        part (aGUV y: spikes, claws, bones). Encoded as alpha = flag + 0.01 x code.
+ *   tip: [y0, y1, root, glow]  horns / spikes / claws (aGUV y = distance from the root): value ramps
+ *                        from `root` at y0 to 1 at y1 (bright tips), molten glow x uGlow at the root
+ *   tone: [gap, body, rim, rimWidth]  value over a scale: under the covering scale's edge (the black
+ *                        gap), the scale body, its free-edge rim; rimWidth in rows
+ *   gap: [rows, px]      width of that black gap: at least `rows` of a scale row and `px` screen pixels
+ *   ink: [r,g,b]         albedo of the source (charcoal hide, molten plates, crimson membrane)
+ *   rimInk: [r,g,b]      albedo of the scale rims (default: ink), e.g. gold rims on molten plates
+ *   light: [gain, key, fresnel, floor]  moon + fire lights x gain, a key light fixed to the camera
+ *                        (`key` direction: the reference's light, the same from every view), a moonlit
+ *                        edge rim, a flat light floor
+ *   key: [right, up, toward]  the key light's direction in camera space (screen right, screen up,
+ *                        toward the viewer): [-0.6, 0.9, 1] lights the upper-left faces of every form
+ *   envSat: 0..1         saturation of the moonlight and ambient on the part (default 1; 0 = neutral
+ *                        grey); fire light keeps its colour
+ *   vein: [strength, share, width, plate]  molten fissures x uGlow: voronoi plates of `plate` aGUV
+ *                        units, only `share` of the fissures glow (a broken, branching net), `width`
+ *   crack: [strength, share, lo, hi]  molten cracks x uGlow IN THE SCALE GAPS (needs `scale`): jagged
+ *                        lines that follow the scale outlines, wandering across the hide in a few long
+ *                        runs plus `share` of single scales, only on surfaces facing down (world normal:
+ *                        smoothstep(lo, hi, -n.y), e.g. [-0.4, 0.6]: none on the back, some on the
+ *                        flanks, full under the belly / throat / tail)
+ *   vary: 0..1           per-scale brightness variation of the scale bodies (default 0.8; lower = a
+ *                        calmer hide, the reference's even charcoal)
+ *   glow: [gaps, all]    emissive x uGlow in the scale gaps (molten plates) / everywhere (maw, eye)
+ *   under: [r,g,b,k]     warm light from below on down-facing surfaces (lava light under the jaw)
+ *   membrane: [mottle, specks, tears, edgeTears]  wing membranes only (needs aEdge / aBone): dark
+ *                        mottling, ember specks, holes, a ragged trailing edge
+ *   boneGlow: [width, base, hot]  membranes: the orange streaks along the finger bones, `width` model
+ *                        units out from a bone, emissive `base` + `hot` x uGlow (default [0.3, 0.05, 0.9])
+ */
+function wyrmFeatures(w, defines, uniforms) {
+  const v = (a, n, d) => (Array.isArray(a) && a.length === n && a.every(Number.isFinite) ? a : d);
+  defines.SG_WYRM = '';
+  uniforms.uWScale = { value: new THREE.Vector2(...v(w.scale, 2, [0, 0])) };
+  // x: 1 = 'down' scales (tips toward larger |aGUV x|: barrel parts mapped around the body axis);
+  // y: stroke glyphs for the art pass, 0 none, 1 along the scale rims, 2 along the part (aGUV y)
+  // z: 'axis' strokes only where the fresnel term reaches it (the part's outline; 0 = everywhere)
+  const strokes = { none: 0, rim: 1, axis: 2 }[w.strokes ?? (w.scale ? 'rim' : 'none')] ?? 0;
+  uniforms.uWShape = { value: new THREE.Vector4(w.scaleDir === 'down' ? 1 : 0, strokes, w.strokeEdge ?? 0.12, 0) };
+  // [y0, y1, root value, root glow]: value ramps from `root value` at aGUV y0 to 1 at y1 (no ramp:
+  // [-2, -1, 1, 0]); root glow x uGlow below y1 (molten spine roots)
+  uniforms.uWTip = { value: new THREE.Vector4(...v(w.tip, 4, [-2, -1, 1, 0])) };
+  uniforms.uWTone = { value: new THREE.Vector4(...v(w.tone, 4, [0.0, 0.2, 1.0, 0.2])) };
+  uniforms.uWGap = { value: new THREE.Vector2(...v(w.gap, 2, [0.22, 5])) };
+  uniforms.uWInk = { value: new THREE.Color(...v(w.ink, 3, [0.3, 0.29, 0.28])) };
+  uniforms.uWRimInk = { value: new THREE.Color(...v(w.rimInk ?? w.ink, 3, [0.3, 0.29, 0.28])) };
+  uniforms.uWLight = { value: new THREE.Vector4(...v(w.light, 4, [1, 0.5, 0.3, 0.02])) };
+  uniforms.uWKey = { value: new THREE.Vector3(...v(w.key, 3, [0, 0.7, 1])) };
+  uniforms.uWEnvSat = { value: Number.isFinite(w.envSat) ? w.envSat : 1 };
+  uniforms.uWVein = { value: new THREE.Vector4(...v(w.vein, 4, [0, 0.4, 0.06, 1])) };
+  uniforms.uWCrack = { value: new THREE.Vector4(...v(w.crack, 4, [0, 0, -0.4, 0.6])) };
+  uniforms.uWVary = { value: Number.isFinite(w.vary) ? w.vary : 0.8 };
+  // molten colour of veins / gaps / glow: a red-orange (ACES turns a (1, 0.34, 0.05) lava gold)
+  uniforms.uWEmit = { value: new THREE.Color(...v(w.emit, 3, [1.0, 0.17, 0.03])) };
+  uniforms.uWGlow = { value: new THREE.Vector2(...v(w.glow, 2, [0, 0])) };
+  uniforms.uWUnder = { value: new THREE.Vector4(...v(w.under, 4, [1, 0.35, 0.08, 0])) };
+  if (w.membrane != null) {
+    defines.SG_WYRM_MEMBRANE = '';
+    uniforms.uWMem = { value: new THREE.Vector4(...v(w.membrane, 4, [0.5, 0.03, 0.1, 0.4])) };
+    uniforms.uWMemBone = { value: new THREE.Vector3(...v(w.boneGlow, 3, [0.3, 0.05, 0.9])) };
+  }
 }
 
 function pickShared(U, names) {
@@ -158,6 +269,8 @@ const SHARED = [
 ];
 // shared by surface-glyph materials only (declared in their own shader, not COMMON_GLSL)
 const SURFACE_SHARED = ['uArtSolid', 'uArtHeroEdge', 'uArtHeroKey'];
+// ... and by the hero's ink-line art source only (`heroArt`)
+const HERO_ART_SHARED = ['uCamRight', 'uCamUp', 'uArtHeroLight', 'uArtHeroRim'];
 
 /**
  * Geometry attributes required: position, normal, aCol (vec3 albedo, linear), aFlag (float),
@@ -296,6 +409,8 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
     uniforms: {
       ...pickShared(U, SHARED),
       ...pickShared(U, SURFACE_SHARED),
+      ...(o.wyrm != null ? pickShared(U, ['uCamRight', 'uCamUp']) : {}), // the wyrm source's key light
+      ...(o.heroArt != null ? pickShared(U, HERO_ART_SHARED) : {}),
       ...feat.uniforms,
       uAsciiSet: { value: asciiSet },
       uBase: { value: new THREE.Color(...(o.base ?? [0.016, 0.014, 0.016])) },
@@ -330,6 +445,19 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
 #ifdef SG_AXIS
       varying vec3 vNO;
 #endif
+#ifdef SG_WYRM_MEMBRANE
+      attribute float aEdge; // wing membrane: 0 inside -> 1 on the free trailing edge (membrane.js)
+      attribute float aBone; // 0 on a finger / the arm edge -> 1 mid-panel
+      varying float vEdge;
+      varying float vBone;
+#endif
+#ifdef SG_HERO_ART
+      attribute float aPart;
+      varying float vPart;
+#endif
+#ifdef SG_HERO_PULL
+      uniform float uArtPull;
+#endif
       void main() {
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vW = wp.xyz;
@@ -338,7 +466,22 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
 #ifdef SG_AXIS
         vNO = normal; // object space: glowAxis / inkAxis stay glued to the part
 #endif
+#ifdef SG_WYRM_MEMBRANE
+        vEdge = aEdge;
+        vBone = aBone;
+#endif
+#ifdef SG_HERO_ART
+        vPart = aPart;
+#endif
+#ifdef SG_HERO_PULL
+        // scaled along its view ray: the same screen position, a nearer depth
+        vec4 vp = viewMatrix * wp;
+        float dv = length(vp.xyz);
+        vp.xyz *= max(dv - uArtPull, dv * 0.5) / max(dv, 1e-4);
+        gl_Position = projectionMatrix * vp;
+#else
         gl_Position = projectionMatrix * viewMatrix * wp;
+#endif
       }
     `,
     fragmentShader: /* glsl */ `
@@ -391,6 +534,21 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform float uGlowBias;
       uniform vec2 uGlowRange;
 #endif
+#ifdef SG_HERO_ART
+      uniform vec3 uArtFill;
+      uniform vec2 uArtSpec;
+      uniform float uArtRim;
+      uniform float uArtGlowK;
+      uniform float uArtPart;
+      uniform vec3 uCamRight;
+      uniform vec3 uCamUp;
+      uniform vec4 uArtHeroLight;
+      uniform vec3 uArtHeroRim;
+      varying float vPart;
+#endif
+#ifdef SG_HERO_FOLDS
+      uniform vec3 uArtFold;
+#endif
 #ifdef SG_INK_AXIS
       uniform vec3 uInkAxis;
       uniform float uInkAxisChance;
@@ -442,6 +600,199 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         return vec2(sqrt(d2) - sqrt(d1), hash12(id + uSeed * 1.7));
       }
 #endif
+#ifdef SG_WYRM
+      // ---- wyrm ASCII-art source (option wyrm; see wyrmFeatures). The owner's reference dragon:
+      // dark charcoal hide of overlapping shingle scales whose free edges catch the light, molten
+      // fissures and glowing gaps on the chest / throat / undersides, crimson torn membranes.
+      uniform vec2 uWScale;
+      uniform vec4 uWShape;
+      uniform vec4 uWTip;
+      uniform vec4 uWTone;
+      uniform vec2 uWGap;
+      uniform vec3 uWInk;
+      uniform vec3 uWRimInk;
+      uniform vec4 uWLight;
+      uniform vec3 uWKey;
+      uniform float uWEnvSat;
+      uniform vec3 uCamRight;
+      uniform vec3 uCamUp;
+      uniform vec4 uWVein;
+      uniform vec4 uWCrack;
+      uniform float uWVary;
+      uniform vec3 uWEmit;
+      uniform vec2 uWGlow;
+      uniform vec4 uWUnder;
+  #ifdef SG_WYRM_MEMBRANE
+      uniform vec4 uWMem;
+      uniform vec3 uWMemBone;
+      varying float vEdge;
+      varying float vBone;
+  #endif
+      float wNoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        vec2 u = f * f * (3.0 - 2.0 * f);
+        float a = hash12(i), b = hash12(i + vec2(1.0, 0.0));
+        float c = hash12(i + vec2(0.0, 1.0)), d = hash12(i + vec2(1.0, 1.0));
+        return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+      }
+      vec2 wHash22(vec2 p) {
+        vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+        p3 += dot(p3, p3.yzx + 33.33);
+        return fract((p3.xx + p3.yz) * p3.zy);
+      }
+      // Overlapping shingle scales in scale units (p = aGUV / size, tips toward -y), rows offset by
+      // half a scale. Each visible scale is a pointed diamond: its lower V is its own free edge (a
+      // bright rim), its upper half lies under the two scales above, whose edges shade it (the black
+      // gap). Rim and gap stay at least ~one letter cell wide on screen (the art pass averages 4
+      // samples per 5 x 8 px cell), and scales smaller than ~1.5 letters fade to a dim mean (at a
+      // distance they would only alias into noise). Each plate is shaded like a convex scale: dark
+      // under the overlap, lighter toward its free edge. Returns x = value (gap .. rim), y = gap mask;
+      // rimT = the free edge's tangent in p space (xy) and the rim mask (z), for the stroke glyphs.
+      // The free (tip) edge of a scale above its row bottom: a pointed leaf, steeper at the sides.
+      float wEdge(float ax) { return -0.45 + 1.15 * ax + 2.4 * ax * ax * ax; }
+      float wEdgeD(float ax) { return 1.15 + 7.2 * ax * ax; }
+      // Screen direction of the p-space direction t (p = aGUV-derived coords): the stroke glyph code
+      // the art pass draws there: 1 '-', 2 '/', 3 '|', 4 '\\' (screen y up)
+      float wStroke(vec2 t, vec2 jx, vec2 jy) {
+        float det = jx.x * jy.y - jy.x * jx.y;
+        if (abs(det) < 1e-14) return 0.0;
+        vec2 s = vec2(t.x * jy.y - jy.x * t.y, jx.x * t.y - t.x * jx.y) / det;
+        float a = mod(atan(s.y, s.x), 3.14159265);
+        return 1.0 + mod(floor(a / 0.7853982 + 0.5), 4.0);
+      }
+      // sInfo: the scale the point lies on (its grid id xy, its hash z) and the distance to its gap in
+      // gap widths (w): the molten cracks pick scales and glow a few gap widths around the gap
+      vec2 wScales(vec2 p, out vec3 rimT, out vec4 sInfo) {
+        float ppx = max(max(length(dFdx(p)), length(dFdy(p))), 1e-6); // scale units per pixel
+        float rimW = max(uWTone.w, 4.5 * ppx);
+        float gapW = max(uWGap.x, uWGap.y * ppx);
+        float lod = smoothstep(0.11, 0.2, ppx); // fades as a scale shrinks from ~9 to ~5 px across
+        // a slow warp: rows wobble and scales vary a little, hand-drawn rather than a fishnet lattice
+        p += (vec2(wNoise(p * 0.31 + uSeed), wNoise(p.yx * 0.27 + uSeed + 7.7)) - 0.5) * vec2(0.5, 0.36);
+        float row = floor(p.y);
+        float px = p.x + 0.5 * mod(row, 2.0);
+        vec2 f = vec2(fract(px) - 0.5, p.y - row);
+        float ax = abs(f.x);
+        float eC = wEdge(ax), eO = wEdge(0.5 - ax); // this row's / the offset rows' edge here
+        float dOwn = f.y - eC; // > 0: on this row's scale (above its free edge)
+        float dUp = f.y - 1.0 - eO; // > 0: on the upper row's scale (it lies on top)
+        float xo = floor(p.x + 0.5 * mod(row + 1.0, 2.0)); // the offset rows' scale index here
+        float dIn, dCov; // above its own free edge / below the edge of the scale covering it
+        float axl; // |x| from the centre line of the scale the point is on
+        vec2 id, tg;
+        if (dUp > 0.0) { dIn = dUp; dCov = 2.0 + eC - f.y; axl = 0.5 - ax; id = vec2(xo, row + 1.0); tg = vec2(f.x > 0.0 ? -1.0 : 1.0, wEdgeD(0.5 - ax)); }
+        else if (dOwn > 0.0) { dIn = dOwn; dCov = -dUp; axl = ax; id = vec2(floor(px), row); tg = vec2(f.x > 0.0 ? 1.0 : -1.0, wEdgeD(ax)); }
+        else { dIn = f.y + 1.0 - eO; dCov = -dOwn; axl = 0.5 - ax; id = vec2(xo, row - 1.0); tg = vec2(1.0, 0.0); }
+        float hs = hash12(id + uSeed * 0.37);
+        sInfo = vec4(id, hs, mix(dCov / max(gapW, 1e-4), 9.0, lod)); // (no cracks once scales alias)
+        float t = clamp(dCov / max(dCov + dIn, 1e-4), 0.0, 1.0); // 0 under the overlap .. 1 at its edge
+        float body = uWTone.y * (1.0 + uWVary * (hs - 0.5)) * (0.3 + 0.7 * t * t);
+        // the free edge catches the light most at its tip: a bright chevron per scale that fades
+        // toward the shoulders (a continuous rim drew a fishnet lattice over the hide)
+        float rim = (1.0 - smoothstep(0.0, rimW, dIn)) * (1.0 - 0.8 * smoothstep(0.16, 0.46, axl)) * (0.55 + 0.45 * fract(hs * 7.3));
+        float gap = 1.0 - smoothstep(0.0, gapW, dCov);
+        float v = mix(mix(body, uWTone.z * (0.8 + 0.4 * hs), rim), uWTone.x, gap);
+        rimT = vec3(tg, rim * (1.0 - gap) * (1.0 - lod));
+        return mix(vec2(v, gap), vec2(uWTone.y * 0.7 + uWTone.z * 0.05, 0.2), lod);
+      }
+      // molten fissures: a voronoi net (p in plate units) of which only a share of the edges glow,
+      // so the cracks branch and break off instead of closing into cells; w = width in plate units
+      float wVeins(vec2 p, float share, float w) {
+        vec2 i = floor(p), f = fract(p);
+        float d1 = 8.0, d2 = 8.0;
+        vec2 id1 = i, id2 = i;
+        for (int y = -1; y <= 1; y++) {
+          for (int x = -1; x <= 1; x++) {
+            vec2 o = vec2(float(x), float(y));
+            vec2 r = o + 0.15 + 0.7 * wHash22(i + o + uSeed) - f;
+            float d = dot(r, r);
+            if (d < d1) { d2 = d1; id2 = id1; d1 = d; id1 = i + o; }
+            else if (d < d2) { d2 = d; id2 = i + o; }
+          }
+        }
+        float on = step(hash12(id1 + id2 + uSeed * 0.71), share);
+        return on * (1.0 - smoothstep(w * 0.5, w, sqrt(d2) - sqrt(d1)));
+      }
+      void wyrmMain() {
+        vec3 n = normalize(gl_FrontFacing ? vN : -vN);
+        float sh = shadowAt(vW + n * 0.1);
+        vec3 V = normalize(uCamPos - vW);
+        float fres = pow(1.0 - max(dot(n, V), 0.0), 3.0);
+        // key light fixed to the camera (uWKey: screen right, screen up, toward the viewer)
+        vec3 kd = uCamRight * uWKey.x + uCamUp * uWKey.y + V * uWKey.z;
+        float key = max(dot(n, kd * inversesqrt(max(dot(kd, kd), 1e-8))), 0.0);
+        // the lava's light comes from below but wraps up the flanks (the reference's lower scales are
+        // rimmed orange, the upper ones silver)
+        // the blue moon (and ambient) is desaturated toward its own brightness (uWEnvSat 0 = grey):
+        // the reference's hide, horns and bones are neutral to warm greys, never lavender; fire light
+        // keeps its colour
+        float ndl = max((dot(n, uMoonDir) + 0.25) / 1.25, 0.0);
+        vec3 env = ambientAt(n) + uMoonColor * (ndl * sh + fres * uWLight.z);
+        env = mix(vec3(luma(env)), env, uWEnvSat) + pointLights(vW, n, 0.25);
+        vec3 light = env + vec3(1.0, 0.95, 0.9) * key * uWLight.y
+          + uWLight.w + uWUnder.rgb * uWUnder.a * clamp((0.35 - n.y) / 1.35, 0.0, 1.0);
+        // 'down' scales (uWShape.x 1: the barrel) hang from the dorsal line toward the belly like
+        // roof tiles: rows run along the body, tips toward larger |aGUV x| (around the body)
+        vec2 gp = uWShape.x > 0.5 ? vec2(vG.y, -abs(vG.x)) : vG;
+        vec2 gs = gp / max(uWScale, vec2(1e-4));
+        vec2 jx = dFdx(gs), jy = dFdy(gs);
+        vec3 rimT = vec3(0.0);
+        vec4 sInfo = vec4(0.0, 0.0, 0.0, 9.0);
+        vec2 sc = uWScale.x > 0.0 ? wScales(gs, rimT, sInfo) : vec2(1.0, 0.0);
+        // stroke glyph code for the art pass (alpha = flag + 0.01 x code): scale rims draw '\ /'
+        // along their edge (the reference's scale outlines), thin parts (uWShape.y 2: spikes, claws,
+        // bones) draw strokes along their length
+        float stroke = 0.0;
+        float axisS = wStroke(vec2(0.0, 1.0), dFdx(vG), dFdy(vG));
+        // thin parts: strokes along their silhouette (outlined horns and claws with letters inside;
+        // a wide horn filled with strokes read as a hatched plank); uWShape.z = fresnel threshold
+        if (uWShape.y > 1.5 && fres >= uWShape.z) stroke = axisS;
+        else if (uWShape.y > 0.5 && uWShape.y < 1.5 && rimT.z > 0.5) stroke = wStroke(rimT.xy, jx, jy);
+        float hot = uGlow * uGlowMask;
+        // horns, spikes, claws (aGUV y = distance from the root): dark roots, bright tips, molten
+        // roots on the glowing spines (uWTip: tip ramp from .x to .y, value at the root .z, root glow .w)
+        float tipT = smoothstep(uWTip.x, uWTip.y, vG.y);
+        sc.x *= mix(uWTip.z, 1.0, tipT);
+        vec3 col = mix(uWInk, uWRimInk, clamp(rimT.z, 0.0, 1.0)) * uTint * (light * uWLight.x + uInkGlow) * sc.x;
+        col += uWEmit * hot * uWTip.w * (1.0 - tipT);
+  #ifdef SG_WYRM_MEMBRANE
+        // tears glued to the membrane (aGUV): a few holes inside, a ragged trailing edge
+        float tn = wNoise(vG * uWMem.z) * 0.6 + wNoise(vG * uWMem.z * 2.9 + 5.3) * 0.4;
+        if (tn > 0.94 - uWMem.w * smoothstep(0.45, 1.0, vEdge)) discard;
+        // dark mottled patches (the reference's sails are blotched deep red and near black, never a
+        // flat field), darker toward the torn edge, embers along the bones, sparse ember specks
+        float mo = wNoise(vG * 0.75 + 11.3) * 0.65 + wNoise(vG * 2.4 + 3.1) * 0.35;
+        col *= mix(1.0 - uWMem.x, 1.0 + 0.5 * uWMem.x, smoothstep(0.32, 0.68, mo)) * (1.0 - 0.45 * smoothstep(0.5, 1.0, vEdge));
+        float bone = 1.0 - smoothstep(0.0, uWMemBone.x, vBone);
+        vec2 sq = vG / 0.075;
+        float spk = step(1.0 - uWMem.y, hash12(floor(sq) + uSeed)) * step(0.36, mo) * (1.0 - smoothstep(0.22, 0.45, length(fract(sq) - 0.5))); // round embers, not squares
+        col += uWEmit * (spk * (0.3 + 0.9 * hot) + bone * bone * (uWMemBone.y + uWMemBone.z * hot));
+  #endif
+        if (uWVein.x > 0.0 && hot > 0.001) {
+          float vn = wVeins(vG / uWVein.w, uWVein.y, uWVein.z / uWVein.w);
+          col += uWEmit * hot * uWVein.x * vn * (0.75 + 0.25 * sin(uTime * 2.3 + vG.y * 3.1));
+        }
+        // molten cracks in the scale gaps (the reference: jagged orange lines along the scale outlines on
+        // the chest, throat, belly, inner legs and tail underside; none across the back): a smooth noise
+        // over the scale grid picks winding runs of scales (its 0.5 isoline) plus a share of single ones,
+        // and their gap glows, faded in on down-facing surfaces
+        // (the glow spreads ~2.5 gap widths from the gap's middle: a thin hot core and a halo, wide
+        // enough to light the letters across it, where the gap alone only nicked a pixel of them)
+        float cg = 1.0 - smoothstep(0.0, 2.5, sInfo.w);
+        if (uWCrack.x > 0.0 && hot > 0.001 && cg > 0.001) {
+          float uw = smoothstep(uWCrack.z, uWCrack.w, -n.y);
+          float nf = wNoise(sInfo.xy * 0.31 + uSeed * 1.3);
+          float run = 1.0 - smoothstep(0.05, 0.11, abs(nf - 0.5));
+          float one = step(1.0 - uWCrack.y, fract(sInfo.z * 13.17));
+          col += uWEmit * hot * uWCrack.x * (cg * cg + sc.y) * 0.5 * max(run, one) * uw * (0.8 + 0.2 * sin(uTime * 2.3 + sInfo.z * 6.28));
+        }
+        col += uWEmit * hot * (uWGlow.x * sc.y + uWGlow.y);
+        col += vec3(1.0, 0.92, 0.85) * uFlash * (0.15 + 0.6 * sc.x);
+        col += uWarn.rgb * uWarn.a * (0.1 + 0.8 * sc.x + fres * 2.0);
+        col = applyFog(col, vW);
+        gl_FragColor = vec4(col, uFlag + 0.01 * stroke);
+      }
+#endif
 
       // Grid mode: lit colour + (set, screen flow angle) packed into alpha for the ASCII pass.
       void asciiMain() {
@@ -477,6 +828,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vec2 f = fract(g);
         float h = hash12(cell + uSeed);
         if (uDissolve > 0.0 && h < uDissolve) discard;
+#ifdef SG_WYRM
+        if (uArtSolid * step(0.46, uFlag) * step(uFlag, 0.55) > 0.5) { wyrmMain(); return; } // wyrm art source
+#endif
 
         vec3 n = normalize(gl_FrontFacing ? vN : -vN);
         float sh = shadowAt(vW + n * 0.1);
@@ -548,6 +902,34 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float edgeL = pow(1.0 - facing, 6.0);
         col += uMoonColor * edgeL * uOutline * (0.35 + 0.65 * sh) * (1.0 - heroArt);
         col *= 1.0 - heroArt * uArtHeroEdge * (1.0 - facing) * (1.0 - facing);
+#ifdef SG_HERO_ART
+        // The hero's ink-line art source (the owner's reference: anime line art turned into ASCII):
+        // a dim, flat fill per part (a soft key light from the camera's upper left + a share of the
+        // scene light, so fire warms him and the moon cools him), white glints on metal, and a cool
+        // blue-lavender rim on the screen's left. The art pass draws the bright ink lines itself, at
+        // the part edges this material encodes in alpha (see HERO_ART).
+        vec3 kd = normalize(V - uCamRight * 0.55 + uCamUp * 0.8);
+        float kn = max(dot(n, kd), 0.0);
+        vec3 fillC = uArtFill * (uArtHeroLight.x + uArtHeroLight.y * kn + L * uArtHeroLight.z);
+#ifdef SG_HERO_FOLDS
+        // cloth folds (the reference's coat: dark fold streaks running down it between lit ridges):
+        // bands across aGUV x that wander down y. The art pass prints a dark band as sparse letters
+        // and draws a crease line on the lit side of each step. They fade out from 8 to 16 m, where a
+        // band would be narrower than a letter (the game camera is 24–54 m away).
+        float fph = vG.x * uArtFold.x + sin(vG.y * 6.0 + vG.x * 2.3) * uArtFold.z;
+        float fdk = smoothstep(0.45, 0.9, sin(fph) * 0.5 + 0.5) * (1.0 - smoothstep(8.0, 16.0, length(uCamPos - vW)));
+        fillC *= 1.0 - uArtFold.y * fdk;
+#endif
+        // glints from a light well off the view axis (upper left), only where the surface curves
+        // (normal change per metre: domes, rims, cylinders): the reference's streaks of white on
+        // the armour, never a whole flat plate lit up
+        vec3 gd = normalize(V * 0.3 - uCamRight * 0.7 + uCamUp * 0.65);
+        float curv = length(fwidth(vN)) / max(length(fwidth(vW)), 1e-5);
+        fillC += vec3(pow(max(dot(n, normalize(gd + V)), 0.0), uArtSpec.y) * uArtSpec.x * uArtHeroLight.w * smoothstep(2.0, 7.0, curv));
+        fillC += uArtHeroRim * (pow(1.0 - facing, 2.0) * smoothstep(0.05, 0.75, dot(n, -uCamRight)) * uArtRim);
+        fillC = fillC * uTint + inkC * uInkGlow * uArtGlowK;
+        col = mix(col, fillC, heroArt);
+#endif
 
         // molten seams: thin hot cracks between scale rows/columns, the glyphs stay readable
 #ifdef SG_VORONOI
@@ -578,13 +960,19 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         col += vec3(1.0, 0.92, 0.85) * uFlash * (0.25 + 0.75 * m);
         col += uWarn.rgb * uWarn.a * (0.08 + 0.9 * m + rim * 2.5);
         col = applyFog(col, vW);
+#ifdef SG_HERO_ART
+        gl_FragColor = vec4(col, HERO_A0 + (uArtPart + floor(vPart + 0.5)) * HERO_AS);
+#else
         gl_FragColor = vec4(col, uFlag);
+#endif
       }
     `,
     side: o.side ?? THREE.FrontSide,
     blending: THREE.NoBlending,
   });
   if (Object.keys(feat.defines).length) mat.defines = feat.defines;
+  // a hero geometry without the aPart attribute reads sub-id 0
+  if (o.heroArt != null) mat.defaultAttributeValues = { ...mat.defaultAttributeValues, aPart: [0] };
   return mat;
 }
 
