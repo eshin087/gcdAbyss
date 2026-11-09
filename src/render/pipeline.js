@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
-import { FS_VERT } from './shaderLib.js';
+import { FS_VERT, HERO_PARTS } from './shaderLib.js';
 import { createGridAtlas, createArtAtlas, createPixelArtAtlas, pixelArtCell, GRID_COLS, GRID_ROW } from './glyphs.js';
 import { createWyrmArtAtlas, wyrmArtCell } from './wyrmGlyphs.js';
+import { HERO_ART } from './materials.js';
 
 // Frame pipeline:
 //   1. moon shadow map  (casters = objects on LAYER_CASTER)
@@ -107,18 +108,44 @@ export class Pipeline {
         uArtCount: { value: 22 },
         tHeroArt: { value: null },
         uHeroCell: { value: this.heroCell },
-        uHeroCount: { value: 22 },
+        uHeroCount: { value: 22 }, // letters in the hero atlas' top row (sparse → dense)
+        uHeroCols: { value: 22 }, // hero atlas columns (row 2 = the ink-line glyphs, PIXEL_LINES)
+        // The hero as INK-LINE ART (the owner's reference): bright line glyphs on the cells where his
+        // silhouette, a depth step (the nearer side) or a part edge (the higher part, HERO_ART ids)
+        // runs, over a dim, dense letter fill.
+        // ink: x / y = line brightness in dark / lit cells, z = how much of the part's hue a line keeps
+        // (0 = white), w = fill left on the far side of a depth step (the dark gap beside a line)
+        uHeroInk: { value: new THREE.Vector4(0.62, 0.9, 0.62, 0.3) },
+        // fill: x / y = letter brightness at the dark / lit end, z / w = letter-ramp position there
+        uHeroFill: { value: new THREE.Vector4(0.02, 0.36, 0.27, 1.0) },
+        // inner lines are dimmer than the silhouette: brightness × x at a depth step, × y at a part edge,
+        // × z between pieces of one part
+        uHeroLine: { value: new THREE.Vector3(0.9, 0.75, 0.55) },
+        // a crease line where a cell is lit brighter than its neighbour (same part): luma > n × x + y
+        uHeroCrease: { value: new THREE.Vector2(1.7, 0.035) },
+        // distance LOD by view depth (m): x / y = where the far look starts / is complete (the game
+        // camera is 24–54 m, phones 14–34 m; the Lab's close-ups 1.5–5 m), z = fill brightness there,
+        // w = line brightness there (parts whose ink gain is > 1.5 keep theirs: blade, gem, flask).
+        // Far away the creases and piece edges drop out (dithered per cell) and part edges dim.
+        uHeroLod: { value: new THREE.Vector4(6.0, 20.0, 2.9, 0.5) },
+        // look-dev: 1 = show the hero's raw art source (fill) instead of letters, 2 = only the ink
+        // lines, 3 = the ink lines coloured by class (silhouette, depth step, part edge, crease, piece)
+        uHeroDebug: { value: 0 },
+        // each hero part's ink-line tint (rgb) × gain (a), from HERO_INK (player/model.js)
+        uHeroPartInk: U.uHeroPartInk ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },
+        // ... and each part's letter-fill brightness (x) and dotted-edge flag (y)
+        uHeroPartFill: U.uHeroPartFill ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector2(1, 0)) },
         // per creature kind: x = hero (FLAG.ART_HERO), y = wyrm / other (FLAG.ART)
-        // hero: his source (key-lit, U.uArtHeroKey) sits around luma 0.15–0.45 in moonlight and by the
-        // fire alike; black point + gentle curve spread it over the whole ramp, dim to dense
+        // hero: uArtLum.x / uArtBlack.x map his flat art fill (HERO_INK) to the light value v that picks
+        // his fill letters and brightness (uHeroFill); uArtMin.x is unused since the ink-line pass
         uArtLum: { value: new THREE.Vector2(3.0, 4.5) }, // brightness -> ramp position: 1 - exp(-luma * k)
         uArtBlack: { value: new THREE.Vector2(0.04, 0.0) }, // source luma treated as black (contrast)
         uArtMin: { value: new THREE.Vector2(0.14, 0.3) }, // glyph value at the dark end of the ramp
         uArtMax: { value: 0.8 }, // glyph value at the bright end (tone-maps to white without bloom haloes)
-        uArtDither: { value: new THREE.Vector2(1.1, 1.6) }, // per-cell ramp jitter (letters): variety
-        // relative depth jump inside a cell that marks a part boundary (arm over coat, leg over leg):
-        // such cells go black, the reference images' dark gaps between parts (0 = off). The hero's is
-        // low (0.004 = 0.14 m at the 36 m camera, ~1 letter of depth), or no gap ever opens in game.
+        uArtDither: { value: new THREE.Vector2(2.6, 1.6) }, // per-cell ramp jitter (letters): variety
+        // relative depth jump that marks a part boundary (arm over coat, leg over leg). Wyrm (.y): cells
+        // spanning it go black (0 = off). Hero (.x): beyond the slope a neighbour predicts, it draws an
+        // ink line on the nearer side and a dim gap on the far one (0.004 = 0.14 m at the 36 m camera).
         uArtEdge: { value: new THREE.Vector2(0.004, 0.0) },
         // ---- the wyrm's letters (wyrmCell; thin pixel font from wyrmGlyphs.js). Its .y uniforms above
         // map the source: black point, 1 - exp(-luma * k), min brightness, dither, part-gap depth.
@@ -159,6 +186,15 @@ export class Pipeline {
         uniform sampler2D tHeroArt;
         uniform vec2 uHeroCell;
         uniform float uHeroCount;
+        uniform float uHeroCols;
+        uniform vec4 uHeroInk;
+        uniform vec4 uHeroFill;
+        uniform vec3 uHeroLine;
+        uniform vec2 uHeroCrease;
+        uniform vec4 uHeroLod;
+        uniform float uHeroDebug;
+        uniform vec4 uHeroPartInk[${HERO_PARTS}];
+        uniform vec2 uHeroPartFill[${HERO_PARTS}];
         uniform vec2 uArtLum;
         uniform vec2 uArtBlack;
         uniform vec2 uArtMin;
@@ -294,13 +330,59 @@ export class Pipeline {
           return hue * b * mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat)) * m;
         }
 
+        // ---- the hero as ink-line art (the owner's reference: anime line art turned into ASCII).
+        // A cell is one of: an INK LINE (a bright stroke glyph | - / \\ following the edge, in a whitened
+        // tint of the part) where the silhouette, a depth step (its nearer side) or a part edge (the
+        // higher part, HERO_ART ids in alpha) runs; a GAP (the far side of a depth step: a dark fill);
+        // or FILL (dim, dense letters from the density ramp, following the source's light).
+        float heroGlyph(float idx, vec2 local, float lineRow) {
+          vec2 auv = vec2((idx + local.x) / uHeroCols, (1.0 - lineRow) * 0.5 + local.y * 0.5);
+          return texture2D(tHeroArt, auv).a;
+        }
+        // a neighbouring cell centre: x = its alpha (0 = not the hero), y = its view depth, z = its luma
+        vec3 heroAt(vec2 uv) {
+          vec4 s = texture2D(tScene, uv);
+          return isHero(s.a) ? vec3(s.a, linDepth(uv), luma(s.rgb)) : vec3(0.0, -1.0, 0.0);
+        }
+        // ... and when that centre is off the hero, whether the cell still draws the outline itself
+        // (the midpoint of its two samples nearer this cell hits him, so ≥ 2 of its 4 do): x = -1, and
+        // this cell draws none, so the outline stays one letter thick (a double band turned the figure
+        // into a wireframe at the game camera, where he is only ~12 letters wide)
+        vec3 heroNb(vec2 uv, vec2 toC) {
+          vec3 s = heroAt(uv);
+          if (s.x <= 0.0 && isHero(texture2D(tScene, uv + toC * 0.25).a)) s.x = -1.0;
+          return s;
+        }
+        // neighbour n seen from this cell (depth dC, part alpha aC, luma lC); the opposite neighbour's
+        // depth dO predicts a smooth slope, so curved and grazing surfaces draw no line, only real
+        // steps and sharp creases do. x = the ink line this cell draws: 1 silhouette (n is
+        // background; none if n draws it itself, x = -1, see heroNb), 0.8 a depth step (n lies
+        // behind), 0.6 a part edge (n is a lower part at the same depth), 0.5 a crease in the light
+        // (fold, terminator, glint: this cell is the lit side) and 0.4 a piece edge inside one part
+        // (both only where near: up close, see uHeroLod), 0 none; y = 1: n steps in front (this cell
+        // is the far side of a step: a gap)
+        vec2 heroEdge(vec3 n, float dC, float aC, float lC, float dO, float th, bool near) {
+          if (n.x <= 0.0) return vec2(n.x < 0.0 ? 0.0 : 1.0, 0.0);
+          float pred = dO > 0.0 && abs(dC - dO) < th * 4.0 ? 2.0 * dC - dO : dC;
+          float d = n.y - pred;
+          if (d > th) return vec2(0.8, 0.0);
+          if (d < -th) return vec2(0.0, 1.0);
+          if (n.x >= aC - ${(HERO_ART.step * 0.5).toFixed(5)}) {
+            return vec2(near && n.x < aC + ${(HERO_ART.step * 0.5).toFixed(5)} && lC > n.z * uHeroCrease.x + uHeroCrease.y ? 0.5 : 0.0, 0.0);
+          }
+          float pc = floor((aC - ${HERO_ART.a0.toFixed(4)}) / ${(HERO_ART.step * 2).toFixed(4)} + 0.25);
+          float pn = floor((n.x - ${HERO_ART.a0.toFixed(4)}) / ${(HERO_ART.step * 2).toFixed(4)} + 0.25);
+          return vec2(pc != pn ? 0.6 : near ? 0.4 : 0.0, 0.0);
+        }
+
         void main() {
           vec2 px = gl_FragCoord.xy;
-          // the hero first: his own pixel-font grid
+          // the hero first: his own pixel-font grid, drawn as ink-line art
           vec2 hcell = floor(px / uHeroCell);
           vec2 hbase = hcell * uHeroCell;
           vec3 hsum = vec3(0.0);
-          float hhits = 0.0, hmin = 1e9, hmax = 0.0;
+          float hhits = 0.0, dN = 1e9, aN = 0.0;
+          vec4 hin = vec4(0.0); // which of the 4 samples hit the hero (the in-cell silhouette direction)
           for (int i = 0; i < 4; i++) {
             vec2 o = vec2(i == 1 || i == 3 ? 0.75 : 0.25, i >= 2 ? 0.75 : 0.25);
             vec2 suv = (hbase + o * uHeroCell) / uRes;
@@ -308,17 +390,83 @@ export class Pipeline {
             if (isHero(sa.a)) {
               hsum += sa.rgb;
               hhits += 1.0;
+              hin[i] = 1.0;
               float dz = linDepth(suv);
-              hmin = min(hmin, dz);
-              hmax = max(hmax, dz);
+              if (dz < dN) { dN = dz; aN = sa.a; }
             }
           }
-          if (hhits >= 2.0) {
-            if (uArtEdge.x > 0.0 && (hmax - hmin) > uArtEdge.x * hmin) {
-              gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); // part boundary: a dark gap, like the references
-              return;
+          vec2 cuvH = (hbase + 0.5 * uHeroCell) / uRes;
+          vec4 cH = texture2D(tScene, cuvH);
+          bool cHero = isHero(cH.a);
+          if (cHero || hhits >= 2.0) {
+            // the cell's part = its centre (else its nearest hero sample)
+            float dC = cHero ? linDepth(cuvH) : dN;
+            float aC = cHero ? cH.a : aN;
+            vec3 c = (hsum + (cHero ? cH.rgb : vec3(0.0))) / (hhits + (cHero ? 1.0 : 0.0));
+            float th = max(uArtEdge.x, 1e-4) * dC;
+            vec2 dx = vec2(uHeroCell.x, 0.0) / uRes, dy = vec2(0.0, uHeroCell.y) / uRes;
+            vec3 sL = heroNb(cuvH - dx, dx), sR = heroNb(cuvH + dx, -dx), sD = heroNb(cuvH - dy, dy), sU = heroNb(cuvH + dy, -dy);
+            float lC = luma(c);
+            // distance LOD (view depth): 0 up close, 1 at the game camera. Far away nearly every cell
+            // of a 12-letter-wide figure sits on some edge, so the fine inner lines (creases, piece
+            // edges) drop out, dithered per cell so there is no pop, and the fill carries the body.
+            float far = smoothstep(uHeroLod.x, uHeroLod.y, dC);
+            bool fine = hash12(hcell * 0.73 + 5.1) >= smoothstep(0.0, 0.6, far);
+            vec2 eL = heroEdge(sL, dC, aC, lC, sR.y, th, fine), eR = heroEdge(sR, dC, aC, lC, sL.y, th, fine);
+            vec2 eD = heroEdge(sD, dC, aC, lC, sU.y, th, fine), eU = heroEdge(sU, dC, aC, lC, sD.y, th, fine);
+            float sil = hhits < 4.0 ? 1.0 : 0.0; // the silhouette runs through this cell
+            float line = max(sil, max(max(eL.x, eR.x), max(eD.x, eU.x)));
+            // stroke direction: the edge runs across the direction (gx, gy) in which the other side lies
+            vec4 e4 = step(0.1, vec4(eL.x, eR.x, eD.x, eU.x));
+            float gx = (e4.y - e4.x) * 2.0 + (hin.x + hin.z - hin.y - hin.w);
+            float gy = (e4.w - e4.z) * 2.0 + (hin.x + hin.y - hin.z - hin.w);
+            float ax = abs(gx), ay = abs(gy);
+            float hz = e4.x + e4.y, vt = e4.z + e4.w;
+            // an inner cell walled in on 3–4 sides is a speck, not an edge: no stroke (noise)
+            if (sil < 0.5 && line < 0.9 && hz + vt > 2.5) line = 0.0;
+            float gap = max(max(eL.y, eR.y), max(eD.y, eU.y)) * step(line, 0.1);
+            vec2 local = (px - hbase) / uHeroCell;
+            float mx = max(max(c.r, c.g), c.b);
+            vec3 hue = c / max(mx, 1e-4);
+            float sat = (mx - min(min(c.r, c.g), c.b)) / max(mx, 1e-4);
+            float v = 1.0 - exp(-max(luma(c) - uArtBlack.x, 0.0) * uArtLum.x);
+            float hdr = mix(1.0, max(1.0, mx), smoothstep(0.25, 0.6, sat)); // the blade / gem keep their glow
+            int pid = int(clamp(floor((aC - ${HERO_ART.a0.toFixed(4)}) / ${(HERO_ART.step * 2).toFixed(4)} + 0.25), 0.0, ${(HERO_PARTS - 1).toFixed(1)}));
+            vec3 col;
+            if (uHeroDebug > 0.5 && uHeroDebug < 1.5) {
+              col = c; // look-dev: the raw art source
+            } else if (uHeroDebug > 2.5 && line > 0.1) {
+              // look-dev: the line classes (white silhouette, red depth step, green part edge, blue
+              // crease, yellow piece edge)
+              col = 0.5 * (line > 0.9 ? vec3(1.0) : line > 0.7 ? vec3(1.0, 0.08, 0.05) : line > 0.55 ? vec3(0.1, 1.0, 0.15) : line > 0.45 ? vec3(0.15, 0.3, 1.0) : vec3(1.0, 0.85, 0.05));
+            } else if (line > 0.1) {
+              float j;
+              if (ax + ay < 0.5) j = hz > vt + 0.5 ? 0.0 : vt > hz + 0.5 ? 1.0 : 4.0; // a thin part: lines on both sides
+              else if (ax > 2.0 * ay) j = 0.0;
+              else if (ay > 2.0 * ax) j = 1.0;
+              else j = gx * gy > 0.0 ? 3.0 : 2.0;
+              bool outer = line > 0.9;
+              float k = outer ? 1.0 : (line > 0.7 ? uHeroLine.x : line > 0.5 ? uHeroLine.y : uHeroLine.z) * mix(1.0, 0.7, far);
+              vec4 pInk = uHeroPartInk[pid];
+              vec3 ink = mix(vec3(1.0), hue, uHeroInk.z * (0.35 + 0.65 * sat)) * pInk.rgb;
+              // far away the lines step back toward the fill, so the figure reads as a letter mass with
+              // a bright rim rather than a wireframe (the glowing parts, gain > 1.5, keep their ink)
+              float lg = mix(1.0, uHeroLod.w, far * step(pInk.a, 1.5));
+              // torn tails and hair: their outer edges are rows of bright specks (sparse letters), the
+              // reference's dotted rags and wisps, not a drawn stroke. Far away a tail is a strip only a
+              // letter or two wide: denser letters, so it reads as lavender cloth, not scattered dust
+              float g = uHeroPartFill[pid].y > 0.5 && line > 0.7
+                ? heroGlyph(floor(2.0 + 4.0 * far + hash12(hcell + 3.7) * 4.0), local, 0.0)
+                : heroGlyph(j, local, 1.0);
+              col = ink * mix(uHeroInk.x, uHeroInk.y, v) * k * pInk.a * hdr * g * lg;
+            } else if (uHeroDebug > 1.5) {
+              col = vec3(0.0);
+            } else {
+              float jit = (hash12(hcell * 1.37 + 11.0) - 0.5) * uArtDither.x;
+              float idx = clamp(floor(mix(uHeroFill.z, uHeroFill.w, v) * (uHeroCount - 1.0) + 0.5 + jit), 1.0, uHeroCount - 1.0);
+              col = hue * mix(uHeroFill.x, uHeroFill.y, v * v) * uHeroPartFill[pid].x * hdr * mix(1.0, uHeroInk.w, gap) * mix(1.0, uHeroLod.z, far) * heroGlyph(idx, local, 0.0);
             }
-            gl_FragColor = vec4(artCell(hsum / hhits, hcell, (px - hbase) / uHeroCell, 1.0), 1.0);
+            gl_FragColor = vec4(col, 1.0);
             return;
           }
           // the wyrm (other creatures): the art grid
@@ -584,6 +732,7 @@ export class Pipeline {
       this.heroArt = createPixelArtAtlas(hs);
       this.asciiMat.uniforms.tHeroArt.value = this.heroArt.texture;
       this.asciiMat.uniforms.uHeroCount.value = this.heroArt.count;
+      this.asciiMat.uniforms.uHeroCols.value = this.heroArt.cols;
     }
   }
 

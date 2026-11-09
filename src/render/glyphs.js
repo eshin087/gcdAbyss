@@ -203,18 +203,39 @@ const PIXEL_3X5 = {
 export const pixelArtCell = (s) => [4 * s, 6 * s];
 
 /**
+ * The hero's INK-LINE glyphs (the owner's reference is line art turned into ASCII: bright strokes run
+ * along every panel edge and silhouette). Unlike the letters they fill the whole 4x6 cell, rows top →
+ * bottom, 4 bits each (8 = left … 1 = right), so a run of them joins into one continuous stroke:
+ * diagonals step 1 px across per 1.5 px down, the slope of a cell's diagonal. Order is fixed (the art
+ * pass indexes it, the hero branch in pipeline.js): | - / \ (a 1 px core with a dimmer 1 px edge,
+ * the reference's anti-aliased ink), then a dot for a one-cell sliver. Each entry: [core rows,
+ * soft-edge rows]. (No heavier strokes: at the game camera a 2 px outline turned the ~12-letter-wide
+ * figure into a wireframe.)
+ */
+export const PIXEL_LINES = [
+  [[4, 4, 4, 4, 4, 4], [2, 2, 2, 2, 2, 2]], // |
+  [[0, 0, 15, 0, 0, 0], [0, 0, 0, 15, 0, 0]], // -
+  [[1, 2, 2, 4, 4, 8], [0, 1, 4, 2, 8, 4]], // /
+  [[8, 4, 4, 2, 2, 1], [4, 2, 2, 1, 1, 0]], // \
+  [[0, 0, 4, 0, 0, 0], [0, 4, 10, 4, 0, 0]], // dot
+];
+const LINE_SOFT = 0.4; // brightness of a line glyph's soft edge pixels
+
+/**
  * ART_CHARS as a pixel-font atlas (the hero's finer letter grid): each 3x5 glyph scaled by `s`,
  * top-left in its (4s x 6s) cell, so letters keep the reference's one-pixel gaps. Sorted sparse →
- * dense by lit pixels, like createArtAtlas. Returns { texture, count }.
+ * dense by lit pixels, like createArtAtlas. Two rows: the letters on top, PIXEL_LINES below.
+ * Returns { texture, count (letters), lines (line glyphs), cols (atlas columns) }.
  */
 export function createPixelArtAtlas(s = 1) {
   s = Math.max(1, Math.round(s) || 1);
   const [cw, ch] = pixelArtCell(s);
   const lit = (rows) => rows.reduce((n, r) => n + (r & 1) + ((r >> 1) & 1) + ((r >> 2) & 1), 0);
   const sorted = [...ART_CHARS].map((c, i) => ({ rows: PIXEL_3X5[c] ?? PIXEL_3X5[' '], i })).sort((a, b) => lit(a.rows) - lit(b.rows) || a.i - b.i);
+  const cols = Math.max(sorted.length, PIXEL_LINES.length);
   const canvas = document.createElement('canvas');
-  canvas.width = sorted.length * cw;
-  canvas.height = ch;
+  canvas.width = cols * cw;
+  canvas.height = ch * 2;
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#fff';
   sorted.forEach(({ rows }, col) => {
@@ -222,13 +243,22 @@ export function createPixelArtAtlas(s = 1) {
       for (let x = 0; x < 3; x++) if (bits & (4 >> x)) ctx.fillRect(col * cw + x * s, y * s, s, s);
     });
   });
+  PIXEL_LINES.forEach(([core, soft], col) => {
+    for (const [rows, a] of [[soft, LINE_SOFT], [core, 1]]) {
+      ctx.globalAlpha = a;
+      rows.forEach((bits, y) => {
+        for (let x = 0; x < 4; x++) if (bits & (8 >> x)) ctx.fillRect(col * cw + x * s, ch + y * s, s, s);
+      });
+    }
+  });
+  ctx.globalAlpha = 1;
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.NoColorSpace;
   tex.generateMipmaps = false;
   tex.minFilter = THREE.NearestFilter;
   tex.magFilter = THREE.NearestFilter;
   tex.needsUpdate = true;
-  return { texture: tex, count: sorted.length };
+  return { texture: tex, count: sorted.length, lines: PIXEL_LINES.length, cols };
 }
 
 /** Pixel-exact atlas: one row per GRID_ROW entry, each glyph exactly cellW x cellH px. */
