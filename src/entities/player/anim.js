@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp, lerp, smoothstep, damp, easeOutCubic, easeInOutSine, wrapAngle, TAU } from '../../core/math.js';
-import { DIM, BODY, HAIR_CLUSTERS, HERO_SCALE } from './model.js';
+import { DIM, BODY, HAIR_CLUSTERS, HERO_SCALE, sheetOffset } from './model.js';
 
 // Procedural animation for the Wanderer, keyed to the owner's concept sheets ("Movement" / "Combat
 // key poses"). Every frame a target POSE (a flat Float32Array) is built for the current clip as a
@@ -74,6 +74,11 @@ function blend(out, a, b, t, mem = null) {
 const DIR_AVOID = 2.35; // azimuth a blade below shoulder height never sweeps through (back-left)
 const DIR_HIGH = 0.45; // elevation (rad) above which the blade clears the shoulder there
 const DIR_LOCAL = 0.8; // rad of azimuth below which a move is local (never sent the long way round)
+// a move this close to half a turn has no natural way round; below DIR_FLIP_HIGH (rad of elevation,
+// about the head) it goes round the FRONT, never behind the shoulders (ADR-034: the lean idle hangs
+// the blade at his right front, ~180° from the light combo's finish over his left shoulder; the way
+// behind ran the steel through the sword arm's shoulder for a frame)
+const DIR_FLIP = 2.75, DIR_FLIP_HIGH = 0.9;
 const _ae = [0, 0, 0];
 function azEl(x, y, z, o) {
   const h = Math.hypot(x, z);
@@ -113,6 +118,10 @@ function dirLerp(out, i, ax, ay, az, bx, by, bz, t, mem = null) {
     // local: flipping it sent the blade 350° round the body in two frames
     const f = wrapAngle(DIR_AVOID - a0);
     if (((d > 0 && f > 0 && f < d) || (d < 0 && f < 0 && f > d)) && e0 + ((e1 - e0) * f) / d < DIR_HIGH) d -= Math.sign(d) * TAU;
+  }
+  if (Math.abs(d) > DIR_FLIP) {
+    const fb = wrapAngle(Math.PI - a0); // from a0 to straight behind
+    if (((d > 0 && fb > 0 && fb < d) || (d < 0 && fb < 0 && fb > d)) && e0 + ((e1 - e0) * fb) / d < DIR_FLIP_HIGH) d -= Math.sign(d) * TAU;
   }
   if (mem) {
     if (mem.ok) d += TAU * Math.round((mem.d - d) / TAU);
@@ -203,49 +212,47 @@ function kv3(p, i, t, k) {
   v3(p, i, k[e + 1], k[e + 2], k[e + 3]);
 }
 
-/** Idle / ready stance (2.4 s loop), the owner's reference portrait: a wide A stance in
- *  contrapposto — the weight on the straight RIGHT leg, planted forward and out to the side, the hips
- *  shifted over it (its hip riding higher), the LEFT foot set out and back with its knee bent
- *  forward; the torso leans back toward his left over the bent leg, the hips turned a little with
- *  the forward foot. The sword hangs one-handed and LOW in the right hand at the right hip, the long
- *  blade running down-left across his front (down-right on screen, ~39° below level, the portrait's
- *  long diagonal) to the point on the grass well past the left boot; the free arm hangs straight
- *  beside the left hip; the head tips down and turns toward his left, past the blade. Breathing + a
- *  slow weight sway; no steps. */
-// blade direction (body axes): ~39° below level, to his left, a little forward: the drawn point
-// (model.js DIM.drawnTip) rests on the grass through the breathing (measured 0–5 cm above it)
-const IDLE_SW = [0.76, -0.645, 0.17];
+/** Idle / ready stance (2.4 s loop), the owner's six-view reference sheet (ADR-034): an easy stance,
+ *  the feet a little wider than the hips, a slight contrapposto over the right leg. The long sword
+ *  hangs one-handed at his RIGHT side, the hand beside the thigh, the blade angled out to the right
+ *  and forward-down to the point just above the grass, so it reads from the front, both sides and
+ *  the back (round 2's portrait diagonal ran across his front: from behind only its point showed).
+ *  The free arm hangs beside the left hip; the head level, turned a touch toward the blade.
+ *  Breathing + a slow weight sway; no steps. */
+// blade direction (body axes): out to his right, forward and ~37° below level: the drawn point
+// (model.js DIM.drawnTip) rests just above the grass through the breathing
+const IDLE_SW = [-0.52, -0.6, 0.6];
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
-  p[P.bodyX] = -0.045 + 0.01 * sw; // the hips over the straight right (weight) leg
-  p[P.bodyY] = -0.035 + 0.004 * br; // sunk a little into the wide stance
+  p[P.bodyX] = -0.025 + 0.008 * sw; // the hips a little over the right (weight) leg
+  p[P.bodyY] = -0.02 + 0.004 * br;
   p[P.bodyZ] = 0.0;
   p[P.pitch] = 0;
   p[P.yaw] = 0;
   p[P.roll] = 0;
   p[P.pelvX] = 0;
-  p[P.pelvY] = 0.22; // the hips turn a little with the forward right foot
-  p[P.pelvZ] = -0.08 - 0.02 * sw; // the weight leg's (right) hip rides higher
-  p[P.spX] = 0.06 + 0.01 * br;
-  p[P.spY] = -0.02;
-  p[P.spZ] = -0.1 - 0.02 * sw; // the torso leans back toward his left over the bent leg
-  p[P.hdX] = 0.15 - 0.04 * br;
-  p[P.hdY] = 0.36; // head turned toward his left, looking down past the blade
-  p[P.hdZ] = 0.1 + 0.015 * sw;
-  v3(p, P.rH, 0.0, -0.47 + 0.006 * br, 0.19); // grip low at the right hip, in front of the thigh
-  v3(p, P.rP, -0.9, -0.1, -0.45); // the elbow out
-  v3(p, P.lH, 0.02, -0.53, 0.05); // free arm hangs straight beside the left hip
+  p[P.pelvY] = 0.08;
+  p[P.pelvZ] = -0.05 - 0.015 * sw; // the weight leg's (right) hip rides a little higher
+  p[P.spX] = 0.04 + 0.01 * br;
+  p[P.spY] = -0.06;
+  p[P.spZ] = -0.03 - 0.015 * sw;
+  p[P.hdX] = 0.08 - 0.03 * br;
+  p[P.hdY] = -0.12; // a touch toward the blade
+  p[P.hdZ] = 0.03 + 0.01 * sw;
+  v3(p, P.rH, -0.06, -0.52 + 0.006 * br, 0.08); // the sword hand beside the right thigh, the arm near straight
+  v3(p, P.rP, -0.9, -0.1, -0.4); // the elbow out and back
+  v3(p, P.lH, 0.05, -0.52, 0.02); // free arm hangs beside the left hip
   v3(p, P.lP, 0.6, -0.1, -0.8);
-  v3(p, P.swD, IDLE_SW[0] + 0.012 * br, IDLE_SW[1], IDLE_SW[2] + 0.02 * sw);
-  v3(p, P.swF, 0.12, 0.25, 0.96); // the flat faces the viewer (front-left, the portrait's camera)
-  v3(p, P.rF, -0.3, ANK, 0.2); // weight leg: straight, forward and out to the side
-  v3(p, P.lF, 0.27, ANK, -0.12); // free leg: out and back, the knee bent forward
-  v3(p, P.rK, -0.45, 0.1, 1);
-  v3(p, P.lK, 0.35, 0.05, 1);
+  v3(p, P.swD, IDLE_SW[0] + 0.01 * br, IDLE_SW[1], IDLE_SW[2] + 0.015 * sw);
+  v3(p, P.swF, 0.75, 0.0, 0.66); // the flat faces back-left / front-right: broad from behind and his right
+  v3(p, P.rF, -0.2, ANK, 0.06); // weight leg, a little out
+  v3(p, P.lF, 0.18, ANK, -0.06); // free leg, a little back
+  v3(p, P.rK, -0.3, 0.05, 1);
+  v3(p, P.lK, 0.3, 0.05, 1);
   p[P.footFlat] = 0.95;
-  p[P.rFy] = -0.5; // toes turned out
-  p[P.lFy] = 0.35;
+  p[P.rFy] = -0.3; // toes turned out
+  p[P.lFy] = 0.25;
   p[P.rFf] = 1;
   p[P.lFf] = 1;
   p[P.flask] = 0;
@@ -1699,6 +1706,11 @@ function segLocal(Q, k, a, b, L, hw0, hw1, R) {
   SEG[2] = z1 + Rt - Math.sqrt(Math.max(0, Rt * Rt - x2 * x2));
   return t > 0.03 / L && t <= 1 && Math.abs(x2) <= lerp(hw0, hw1, clamp(t, 0, 1)) + 0.03;
 }
+/** Half-width a coat panel's sheet covers at width index i (model.js COAT_PANELS w[i]): a skewed
+ *  panel (its width gained on one side only) counts as covering |x| ≤ w/2 + its offset. */
+function coatHW(D, i) {
+  return D.w[i] / 2 + Math.abs(sheetOffset(D.w[i], D.w[0], D.skew ?? 0));
+}
 // torn strips (one spring each, so every tip sways on its own and lags its panel ~0.1 s)
 const STRIP_K = 75, STRIP_C = 7.5, STRIP_LAG = 0.08, STRIP_FLARE = 0.42;
 const STRIP_A = [-1.5, 0.8], STRIP_B = 0.8, STRIP_FLOOR = 0.03;
@@ -1715,13 +1727,14 @@ const HAIR_DRAG = 0.06;
 
 // hair cluster springs (rotation vector, head space)
 const HAIR_K = 170, HAIR_C = 13, HAIR_MAX = 0.4;
-// idle breeze on the coat: extra outward flare per panel (back-left blows out the most)
-const BREEZE = [0.02, 0.03, 0.05, 0.04, 0.1, 0.05, 0.0];
-// standing still, the skirt FLARES like the reference portrait's (a wide A of torn tails either
-// side of the legs, his right side sweeping out widest; the open front edges hang nearly straight):
-// extra outward swing per panel, faded out by speed
-// (front-left, front-right, left, right, back-left, back-right, flap)
-const IDLE_FLARE = [0.02, 0.06, 0.3, 0.62, 0.22, 0.45, 0];
+// idle breeze on the coat: extra outward flare per panel (model.js COAT_PANELS order: front-left,
+// front-right, left, right, back-left tail, back-right tail; the tails stir the most)
+const BREEZE = [0.02, 0.025, 0.035, 0.035, 0.06, 0.05];
+// standing still, the panels hang with a little extra outward flare at their points (the reference
+// sheet: two tails split by a vent behind, each flaring to its outer point, narrow side panels, the
+// front panels beside the legs; ADR-034 retired round 3's wide skirt): extra outward swing per
+// panel, faded out by speed
+const IDLE_FLARE = [0.01, 0.02, 0.07, 0.1, 0.09, 0.12];
 
 export class HeroAnimator {
   /** player must expose: yaw, state, stateT, animT, atk ({def}), groundVel {x, z}, chargeK,
@@ -1808,12 +1821,12 @@ export class HeroAnimator {
     this.hairInit = false;
     this.legPts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     // sphere proxies (joint-local centre + radius) kept above the ground by apply(); the torso ones
-    // follow the round-3 chest / hip depth (model.js BODY: +0.02 over round 2)
+    // follow the lean chest / hip depth (model.js BODY, ADR-034)
     this.proxies = [
-      { joint: rig.head, x: 0, y: 0.13, z: 0, r: 0.14 },
-      { joint: rig.chest, x: 0, y: 0.09, z: 0, r: 0.17 },
-      { joint: rig.spine, x: 0, y: 0.06, z: 0, r: 0.135 },
-      { joint: rig.pelvis, x: 0, y: -0.02, z: 0, r: 0.16 },
+      { joint: rig.head, x: 0, y: 0.13, z: 0, r: 0.13 },
+      { joint: rig.chest, x: 0, y: 0.09, z: 0, r: 0.13 },
+      { joint: rig.spine, x: 0, y: 0.06, z: 0, r: 0.11 },
+      { joint: rig.pelvis, x: 0, y: -0.02, z: 0, r: 0.13 },
     ];
     this.reset();
   }
@@ -2556,7 +2569,7 @@ export class HeroAnimator {
         for (let s = 0; s < 2; s++) {
           const Q = s ? QB : QA, L = s ? L1 : D.len[0], R = s ? R1 : C.r0;
           for (let k = 0; k < nb; k++) {
-            if (!segLocal(Q, k, st[s].x, st[s].z, L, D.w[s] / 2, D.w[s + 1] / 2, R)) continue;
+            if (!segLocal(Q, k, st[s].x, st[s].z, L, coatHW(D, s), coatHW(D, s + 1), R)) continue;
             near = true;
             if (k === 0) {
               if (SEG[2] < gh) gh = SEG[2];
@@ -2586,7 +2599,7 @@ export class HeroAnimator {
         // the legs push the upper segment out (front panels kick out with the knees)
         let lim = COAT_A[0][1];
         if (s === 0) {
-          const halfW = (D.w[0] + D.w[1]) * 0.25;
+          const halfW = (coatHW(D, 0) + coatHW(D, 1)) * 0.5;
           for (const K of lp) {
             const dx = K.x - ap.x, dy = ap.y - K.y, dz = K.z - ap.z;
             if (dy < 0.05) continue;
@@ -2606,7 +2619,7 @@ export class HeroAnimator {
           if (s === 1) this._lowerFrame(nb, st[0].x, st[0].z, D.len[0]);
           const Q = s ? QB : QA, L = s ? L1 : D.len[0], R = s ? R1 : C.r0;
           for (let k = 0; k < nb; k++) {
-            if (!segLocal(Q, k, c.x, c.z, L, D.w[s] / 2, D.w[s + 1] / 2, R)) continue;
+            if (!segLocal(Q, k, c.x, c.z, L, coatHW(D, s), coatHW(D, s + 1), R)) continue;
             const d = -Q[k * 3 + 1], qz = Q[k * 3 + 2];
             if (d < 0.03) continue;
             const rho = Math.hypot(d, qz), phi = Math.atan2(qz, d);

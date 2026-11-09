@@ -2,16 +2,19 @@ import * as THREE from 'three';
 import { createSurfaceGlyphMaterial, FLAG } from '../../render/materials.js';
 import { limbGeometry, ellipsoidGeometry, hornGeometry, planarGUV } from '../../render/glyphGeometry.js';
 
-// The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md): an
-// athletic, broad-shouldered 1.80 m anime swordsman (BODY, round 3), 7.8 heads tall. A small head
-// under a messy black mop whose heavy fringe
-// falls over the eyes; a tall flared stand collar up to the jaw; a long OPEN black greatcoat over
-// a buttoned black shirt, a belt stack at the natural waist, the skirt flaring into an A-line of
-// 22 claw-like torn strips with grey-lavender edges; a stepped, spiked pauldron on the RIGHT
-// shoulder only; a plate vambrace + gauntlet on the right arm, a leather bracer + fingerless glove
-// on the left; torn sleeve streamers; knee-high armoured boots with kite knee guards; one long
-// sword (1.36 m of steel: faceted dark blade, cyan edges, upswept quillons, a scalloped gem cage,
-// a violet gem, a kite pommel) in the right hand.
+// The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md; the lean
+// reference match of 2026-11-09, ADR-034): a lean 1.80 m anime swordsman, 7.8 heads tall, with a
+// V from the shoulders to a narrow belted waist and long legs. A small head under spiky black hair
+// of distinct pointed locks (crown spikes, layered back locks, nape flicks, a fringe over the
+// eyes); a tall stand collar with a turned-over rim; an OPEN black greatcoat over a buttoned shirt,
+// a shaped upper back (a yoke whose seams dip to a four-point star), a baldric from the right
+// shoulder to the left hip, two belts; below the belts two tapered back tails split by a vent,
+// narrow side panels and two front panels, all ending in ragged grey-lavender points with the legs
+// showing between them; a stack of spiked lames on the RIGHT shoulder only; a plate vambrace +
+// gauntlet on the right arm, a leather bracer + fingerless glove on the left; torn sleeve
+// streamers; knee-high armoured boots with kite knee guards; one long sword (faceted dark steel
+// between cyan edges, barbs at the base, a guard swept up toward the blade round a violet star gem,
+// a kite pommel) in the right hand.
 //
 // A joint hierarchy with surface-glyph meshes hung on it. Faces +Z, Y up, the character's RIGHT
 // is −X. Hands and feet are placed by IK (anim.js); the joints here only define bone lengths and
@@ -36,8 +39,9 @@ export const DIM = {
   hip: [0.1, -0.05, 0], // hip joints ±0.1 (round 3: 0.09; room for the thicker thighs)
   spine: [0, 0.08, 0],
   chest: [0, 0.19, 0],
-  // shoulder joints ±0.21 (round 3: 0.17), deltoid to deltoid ≈ 0.62 m: the broad shoulders
-  shoulder: [0.21, 0.215, 0],
+  // shoulder joints ±0.16 (round 3: 0.21), deltoid to deltoid ≈ 0.46 m: the reference's lean V
+  // (its shoulders are ≈ 0.24 of his height across, the waist ≈ 0.12)
+  shoulder: [0.16, 0.215, 0],
   // the point the SWORD hand's pose targets are offsets from: where the shoulder joint was before
   // round 3 widened it, so every sword-hand target the arm can reach (and with it every attack's
   // hit segment) is unchanged by the broader frame (anim.js _handTarget, rig.arms.R.anchor)
@@ -50,12 +54,12 @@ export const DIM = {
   shin: 0.42,
   ankle: 0.07, // ankle height with the foot flat on the ground
   coatY: 0.18, // coat-skirt anchor above the pelvis joint (1.135 m: tucked under the belt stack)
-  coatR: 0.163, // skirt anchor half-width at the sides (the depth is 0.69 of it: inside the shell)
+  coatR: 0.132, // skirt anchor half-width at the sides (the depth is 0.69 of it: inside the shell)
   // the sword (sword space: origin = grip centre, blade along +Z)
   gripBack: 0.08, // grip runs from −gripBack …
   guard: 0.1, // … to the crossguard
-  gem: 0.17, // the violet gem on the forte, inside its cage
-  forte: 0.25, // end of the dark gunmetal forte under the gem cage (the cyan glyph blade from here on)
+  gem: 0.116, // the violet star gem at the heart of the guard, where the quillons meet
+  forte: 0.2, // end of the dark gunmetal base under the barbs (the cyan glyph blade from here on)
   // the steel length the animator poses with (anim.js keeps this point on the grass and out of the
   // legs; the integration test checks it): unchanged, so every attack's hit segment stays the same
   steelTip: 1.17,
@@ -68,35 +72,37 @@ export const DIM = {
 };
 
 /**
- * Girth (round 3; owner: "the character is too lanky / skinny"): an athletic, broad-shouldered
- * swordsman on the same bones. Bone lengths drive the IK, the foot planner and the blade's hit
- * segment, so the mass comes from mesh radii and widths: a deeper, wider chest and back over a V to a
- * fuller waist, thick upper arms and forearms, heavy thighs and calves in bigger boots. Metres; the
- * meshes below are built from these, anim.js sizes the blade's leg clearance, the coat's leg push and
- * the ground-clamp spheres from them, and the look-dev tools measure blade-in-body against them.
- * Was (round 2): chest 0.40 × 0.21 m, waist 0.27, hips 0.30, upper arm r 0.064, forearm 0.06, thigh
- * 0.076 → 0.056, boot 0.058 → 0.045.
+ * Girth: the lean anime swordsman of the owner's reference sheets (2026-11-09 lean reference match,
+ * ADR-034, superseding round 3's broad build). Measured on the six-view sheet's silhouettes, in
+ * fractions of his height H: shoulders ≈ 0.24 H across, the chest under the arms ≈ 0.18 H, the
+ * belted waist ≈ 0.12 H, thighs ≈ 0.06 H, boots at the calf ≈ 0.05 H, torso depth ≈ 0.12 H. A V from
+ * the shoulders to a narrow waist, slim arms and long legs; the armour, the collar, the coat tails
+ * and the hair carry the outline. Bone lengths drive the IK, the foot planner and the blade's hit
+ * segment, so they stay; only mesh radii and widths changed. Metres; the meshes below are built from
+ * these, anim.js sizes the blade's leg clearance, the coat's leg push and the ground-clamp spheres
+ * from them, and the look-dev tools measure blade-in-body against them. Was (round 3): chest 0.50 ×
+ * 0.27 m, waist 0.31, hips 0.34, upper arm r 0.088, forearm 0.076, thigh 0.098 → 0.07, boot 0.074.
  */
 export const BODY = {
   // torso shell (the coat over the chest): rings at world idle height y, half-width rx, half-depth
   // rz, centre offset cz (the chest pushes forward), the open coat front's half-chord `gap`
   shell: [
-    { y: 1.09, rx: 0.17, rz: 0.12, gap: 0.09 },
-    { y: 1.21, rx: 0.157, rz: 0.113, gap: 0.095 },
-    { y: 1.3, rx: 0.198, rz: 0.128, cz: 0.01, gap: 0.068 },
-    { y: 1.37, rx: 0.232, rz: 0.14, cz: 0.017, gap: 0.048 },
-    { y: 1.43, rx: 0.25, rz: 0.134, cz: 0.012, gap: 0.034 },
-    { y: 1.475, rx: 0.215, rz: 0.114, cz: 0.003, gap: 0.025 },
-    { y: 1.505, rx: 0.115, rz: 0.09, gap: 0.017 },
+    { y: 1.09, rx: 0.136, rz: 0.102, gap: 0.07 },
+    { y: 1.21, rx: 0.116, rz: 0.088, gap: 0.072 },
+    { y: 1.3, rx: 0.138, rz: 0.098, cz: 0.008, gap: 0.056 },
+    { y: 1.37, rx: 0.16, rz: 0.108, cz: 0.014, gap: 0.04 },
+    { y: 1.43, rx: 0.17, rz: 0.104, cz: 0.01, gap: 0.03 },
+    { y: 1.475, rx: 0.146, rz: 0.09, cz: 0.003, gap: 0.022 },
+    { y: 1.505, rx: 0.08, rz: 0.068, gap: 0.015 },
   ],
-  hips: { c: [0, 0, -0.005], r: [0.172, 0.127, 0.125] }, // pelvis ellipsoid (pelvis space, x y z)
-  head: { c: [0, 0.154, -0.007], r: [0.12, 0.132, 0.126] }, // the hair cap round the skull (head space)
-  deltoid: [0.1, 0.088, 0.096], // shoulder cap on each upper arm (x out, y, z)
-  upperArm: [0.088, 0.074], // sleeve radius at the shoulder / the elbow
-  foreArm: [0.076, 0.062], // vambrace / bracer at the elbow / the wrist
-  thigh: [0.098, 0.07, 0.014], // r at the hip, at the knee, mid bulge
-  shin: [0.074, 0.056, 0.01], // the boot: r at the knee, at the ankle, calf bulge
-  foot: { c: [0, -0.02, 0.054], r: [0.062, 0.05, 0.152] }, // boot foot ellipsoid (foot space)
+  hips: { c: [0, 0.012, -0.005], r: [0.128, 0.094, 0.096] }, // pelvis ellipsoid (pelvis space, x y z)
+  head: { c: [0, 0.154, -0.007], r: [0.105, 0.118, 0.112] }, // the hair cap round the skull (head space)
+  deltoid: [0.064, 0.062, 0.068], // shoulder cap on each upper arm (x out, y, z)
+  upperArm: [0.056, 0.048], // sleeve radius at the shoulder / the elbow
+  foreArm: [0.048, 0.041], // vambrace / bracer at the elbow / the wrist
+  thigh: [0.07, 0.05, 0.008], // r at the hip, at the knee, mid bulge
+  shin: [0.053, 0.041, 0.008], // the boot: r at the knee, at the ankle, calf bulge
+  foot: { c: [0, -0.02, 0.05], r: [0.05, 0.046, 0.138] }, // boot foot ellipsoid (foot space)
 };
 
 /** Idle-stance reference heights (m) of the joints the meshes hang on. */
@@ -108,28 +114,27 @@ const REST = (() => {
   return { body, pelvis, spine, chest, head: chest + DIM.neck[1] };
 })();
 
-/** Coat skirt (hero.md §2.4): six panels + a front flap hanging from 1.12 m (az: 0 = front, + =
- *  the hero's left). Each panel = an upper and a lower solid segment (`len`, widths `w` at the top,
- *  the join and the tear line), then torn `strips` (lengths, m; 1 in 4 forks) on their own springs.
- *  The front is open (the legs show), a back vent splits the two back panels. `out` nudges a panel
- *  outward so overlapping neighbours never z-fight. */
-// The owner's reference flares the coat WIDE on both sides into long ragged strips (to mid-calf, the
-// side tails out past the hands): wide hems, long strips, and a per-panel resting `flare` (the
-// animator's outward pull, see COAT_FLARE in anim.js: 0.3 ≈ 17°; 0.62 ≈ 32° on the sides).
-// (round 2: the front panels hang nearly straight, the coat's open front edges; the side and back
-// drapes are wider at the hem with soft folds, so the flare reads as cloth, not planks)
-// (round 3: the anchor ring follows the fuller hips, DIM.coatR 0.139 → 0.163, and the panel tops
-// widen with it (×1.17) so they keep their overlaps; the hems only ×1.07, so the skirt's A-line does
-// not outgrow the broader shoulders)
+/** Coat skirt (hero.md §2.4; the lean reference match, ADR-034): six panels hanging from 1.135 m
+ *  under the belts (az: 0 = front, + = the hero's left). Each panel = an upper and a lower solid
+ *  segment (`len`, widths `w` at the top, the join and the tear line), then torn `strips` (lengths,
+ *  m) on their own springs. `out` nudges a panel outward so overlapping neighbours never z-fight;
+ *  `flare` is its resting outward pull (anim.js COAT_FLARE: 0.1 ≈ 6°); `edge` (±1) runs grey-violet
+ *  piping down its +X / −X edge (the open front edges, the back vent's edges). */
+// The reference sheet's coat is NOT a closed skirt: from behind, two TAILS split by a centre vent
+// from just under the belts, each flaring out (an A-line of its own) to a ragged hem that runs down
+// from the vent to its longest point at the outer edge, at mid-calf; narrow side panels; in front two
+// panels hang beside the legs from the open coat front, flaring the same way. A panel's vent / front
+// edge hangs straight or drifts out (`skew` ≥ 1: the width it gains goes to its outer side), so the
+// legs show in the vent and the open front in every view; the hem slopes down to the outer point
+// (`slant`, m); the lower part lightens into the dusty lavender torn zone and ends in claw points,
+// longest outside.
 export const COAT_PANELS = [
-  { az: 0.75, w: [0.164, 0.25, 0.32], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.22, folds: 1 }, // front-left
-  { az: -0.75, w: [0.164, 0.25, 0.32], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.22, folds: 1 }, // front-right
-  { az: 1.6, w: [0.246, 0.43, 0.64], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.5 }, // left
-  { az: -1.6, w: [0.246, 0.43, 0.64], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.5 }, // right
-  { az: 2.55, w: [0.234, 0.4, 0.59], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
-  { az: -2.55, w: [0.234, 0.4, 0.59], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
-  // the front flap: hangs between the legs from 1.05 m to a point at 0.55 m (seen in wide stances)
-  { az: 0, w: [0.14, 0.14, 0.125], len: [0.28, 0.22], strips: [], fork: [], out: 0, flap: true, y: -0.085, r: 0.131 },
+  { az: 0.86, w: [0.12, 0.17, 0.24], len: [0.27, 0.27], strips: [0.07, 0.15], fork: [0, 0], out: 0.004, flare: 0.12, folds: 1, edge: -1, skew: 1, slant: 0.05 }, // front-left
+  { az: -0.86, w: [0.12, 0.17, 0.24], len: [0.27, 0.27], strips: [0.15, 0.07], fork: [0, 0], out: 0.004, flare: 0.12, folds: 1, edge: 1, skew: -1, slant: 0.05 }, // front-right
+  { az: 1.66, w: [0.12, 0.13, 0.13], len: [0.28, 0.28], strips: [0.13], fork: [0], out: 0, flare: 0.18, folds: 1 }, // left
+  { az: -1.66, w: [0.12, 0.13, 0.13], len: [0.28, 0.28], strips: [0.13], fork: [0], out: 0, flare: 0.18, folds: 1 }, // right
+  { az: 2.5, w: [0.14, 0.21, 0.29], len: [0.3, 0.3], strips: [0.18, 0.12, 0.06], fork: [0, 1, 0], out: 0.008, flare: 0.16, folds: 1, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
+  { az: -2.5, w: [0.14, 0.21, 0.29], len: [0.3, 0.3], strips: [0.06, 0.12, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.16, folds: 1, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
 ];
 
 /** Hair clusters: each is one merged mesh on a spring joint (pivot in head space). `tip` is the
@@ -235,24 +240,36 @@ function shellGeometry(rings, { sub = 2, cols = 24, span = 0 } = {}) {
   });
 }
 
+/** Where a coat sheet of width w is centred (along its tangent) when the width it gains below its
+ *  panel's top width w0 goes to one side only (skew ±1; 0 = symmetric). Exported for the animator
+ *  and the tests through COAT_PANELS' `skew`. */
+export function sheetOffset(w, w0, skew = 0) {
+  return skew ? (skew * (w - w0)) / 2 : 0;
+}
+
 /** A coat-skirt sheet hanging −Y from its joint: width wTop → wBot over `len`, curved around the
  *  hips with a radius that grows down the panel (R0 + flare × depth) so neighbours form a cone.
  *  Local +Z = outward; the front face points out (the lining is the back face). */
-function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, fold = [0, 0, 0], t0 = 0, t1 = 1) {
+function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, fold = [0, 0, 0], t0 = 0, t1 = 1, skew = 0, w0 = wTop, slant = 0) {
   const r = rng(seed);
   const cols = 12, rows = Math.max(2, Math.round(5 * (t1 - t0)));
   const jitter = Array.from({ length: cols + 1 }, () => (r() - 0.5) * jag);
   // `fold` [amplitude at the top, at the bottom (m), waves across, phase]: the reference's coat
   // drapes in soft vertical folds that deepen toward the hem (a flat sheet read as a plank).
   // t0 … t1: build only that stretch of the sheet (the dark coat above, the lavender torn zone below)
+  // skew: the width the sheet gains below its panel's top width w0 goes to its +X (> 0) or −X (< 0)
+  // side, so the other edge hangs straight (|skew| 1: a front panel's opening) or drifts out a little
+  // (|skew| > 1: a tail's vent edge, the vent opens downward) while this one flares out (sheetOffset)
   const ph = fold[3] ?? r() * Math.PI * 2;
   return gridGeometry(cols, rows, (s, tt, o) => {
     const t = lerp(t0, t1, tt);
     const w = lerp(wTop, wBot, t);
-    const u = (s - 0.5) * w;
+    const u = (s - 0.5) * w + sheetOffset(w, w0, skew);
     const R = R0 + flare * t * len;
     const a = u / R;
-    const y = -t * (len + 0.02) + (tt === 1 && t1 === 1 ? jitter[Math.round(s * cols)] : 0);
+    // slant: the sheet runs this much longer at its outer edge (the side its skew flares to), so the
+    // hem slopes down from the vent / front edge to the outer point
+    const y = -t * (len + 0.02 + slant * (skew < 0 ? 1 - s : s)) + (tt === 1 && t1 === 1 ? jitter[Math.round(s * cols)] : 0);
     const f = lerp(fold[0], fold[1], t) * Math.sin(s * Math.PI * 2 * fold[2] + ph) * Math.sin(Math.PI * Math.min(1, s * 6) * 0.5) * Math.sin(Math.PI * Math.min(1, (1 - s) * 6) * 0.5);
     o[0] = Math.sin(a) * (R + f);
     o[1] = y;
@@ -346,6 +363,52 @@ function kiteGeometry(x, y, z, { zNeg = 1, yPos = 1, guv = 'xy' } = {}) {
   return guv === 'xz'
     ? planarGUV(g, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1))
     : planarGUV(g, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
+}
+
+/** Piping down one edge of a skirtSheet (side +1: its +X edge, −1: its −X edge), from its top to t1
+ *  of its length: a 7 mm ribbon 2 mm proud of the sheet, on the sheet's own curve (its folds are 0
+ *  at the edges). The open coat's front edges and the back vent's edges (the reference draws bright
+ *  lines down the inner edges of the tails). */
+function sheetEdge(len, wTop, wBot, R0, side, t1 = 1, flare = 0.25, skew = 0, w0 = wTop) {
+  return gridGeometry(1, Math.max(2, Math.round(6 * t1)), (s, tt, o) => {
+    const t = tt * t1;
+    const w = lerp(wTop, wBot, t);
+    const u = side * (w * 0.5 - 0.0035) + (s - 0.5) * 0.007 + sheetOffset(w, w0, skew);
+    const R = R0 + flare * t * len;
+    const a = u / R;
+    const y = -t * (len + 0.02);
+    o[0] = Math.sin(a) * (R + 0.002);
+    o[1] = y;
+    o[2] = (Math.cos(a) - 1) * R + Math.cos(a) * 0.002;
+    o[3] = u;
+    o[4] = y;
+  }, true);
+}
+
+/** A four-point star in the XZ plane (points at ±rx on X and ±rz on Z, concave waists `waist` from
+ *  the centre between them), `th` thick along Y, its faces rising `peak` to the centre so it catches
+ *  light: the sword's gem and its setting (the blade's flats face ±Y). */
+function starGeometry(rx, rz, waist, th, peak = 0) {
+  const tips = [[rx, 0], [0, rz], [-rx, 0], [0, -rz]];
+  const rim = [];
+  for (let k = 0; k < 4; k++) {
+    const A = tips[k], B = tips[(k + 1) % 4];
+    rim.push(A);
+    const ang = Math.atan2(A[1] + B[1], A[0] + B[0]);
+    rim.push([Math.cos(ang) * waist, Math.sin(ang) * waist]);
+  }
+  const pos = [], n = rim.length, h = th / 2;
+  for (let i = 0; i < n; i++) {
+    const p = rim[i], q = rim[(i + 1) % n];
+    pos.push(0, h + peak, 0, q[0], h, q[1], p[0], h, p[1]); // the +Y face (fan from the raised centre)
+    pos.push(0, -h - peak, 0, p[0], -h, p[1], q[0], -h, q[1]); // the −Y face
+    pos.push(p[0], h, p[1], q[0], h, q[1], q[0], -h, q[1]); // the side wall
+    pos.push(p[0], h, p[1], q[0], -h, q[1], p[0], -h, p[1]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+  g.computeVertexNormals();
+  return planarGUV(g, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1));
 }
 
 /**
@@ -549,9 +612,10 @@ function place(g, x, y, z, rx = 0, ry = 0, rz = 0) {
   return g;
 }
 
-/** Scalp-cap radii (hero.md §2.1, widened for the game read: the head with its hair reads ≈1.25×
- *  the skull), centred 1 cm behind the skull centre. The clumps root on this surface. */
-const CAP = { rx: 0.12, ry: 0.132, rz: 0.126, y: 0.014, z: -0.012 };
+/** Scalp-cap radii, centred 1 cm behind the skull centre: the locks root on this surface. Lean
+ *  reference match: a close cap (round 2's mop was 0.12 × 0.132 × 0.126, a round helmet); the hair's
+ *  volume comes from the pointed locks lifting off it. */
+const CAP = { rx: 0.105, ry: 0.118, rz: 0.112, y: 0.014, z: -0.012 };
 
 /** A point on the scalp cap (head space): azimuth from +Z toward +X (the hero's left), elevation
  *  above the cap's equator, `f` < 1 sinks it under the surface so a clump's root is hidden. */
@@ -564,86 +628,98 @@ function capPoint(az, el, f = 0.9) {
   ];
 }
 
-/** Messy black mop (hero.md §2.1): a scalp cap that leaves the face open, a heavy fringe of 7
- *  tapered clumps falling DOWN over the eyes (one strand across the right eye), a long left lock to
- *  the jaw, short right locks with the ear exposed, a jagged rim of clumps sticking out sideways and
- *  back at temple / crown height, short crown flicks (2–3 near vertical) and nape locks down to the
- *  collar. Each clump is split at 60 % of its length: dark roots (`hair`) and sheened tips
- *  (`hairTip`), so the violet glints sit on the strand ends only. Per-cluster geometries offset to
- *  their pivots: { name: { mass, tip } }. */
+/** Spiky black hair (hero.md §2.1; the lean reference match, ADR-034): distinct, asymmetric, POINTED
+ *  locks in layers, so the outline is a ring of tips from every side, never a round mop (round 2's
+ *  locks lay flat over a big cap and read as a helmet). Each lock is a flat blade tapering to a point
+ *  (clumpGeometry, taper 1), rooted under the scalp cap and lifting off it toward its tip. Layers:
+ *  crown spikes standing up and back; a long upper back layer and a shorter lower one, every other
+ *  lock lifting further, so their tips stick out behind as a jagged ring; nape locks down over the
+ *  collar, the outer ones flicking out sideways; side locks swept back over the ears (a long lock in
+ *  front of his LEFT ear to the jaw; on the right the ear shows); a fringe of uneven points over the
+ *  eyes (longest over his right eye); cowlicks rising over the forehead. Neighbouring locks alternate
+ *  ink-line sub-ids, so the art pass outlines each lock where it overlaps the next (the fringe keeps
+ *  one id: alternating ids there drew parallel bars over the face). Each lock is split at 58 % of its
+ *  length: dark roots (`hair`) and sheened tips (`hairTip`), so the violet glints sit on the points.
+ *  Per-cluster geometries offset to their pivots: { name: { mass, tip } }. */
 function hairGeometries() {
-  const r = rng(77);
+  const r = rng(91);
   const j = (a) => (r() - 0.5) * 2 * a;
   const S = {};
   for (const c of HAIR_CLUSTERS) S[c.name] = { mass: [], tip: [] };
-  // clump: length, half-width, half-thickness, root, direction, curl-toward, curl amount
-  // ink-line sub-ids: the locks of the mop alternate, so the art pass draws a strand line where one
-  // overlaps the next (they radiate from the crown whorl: the reference's strand lines); the fringe
-  // takes one id (alternating fringe ids drew parallel bars over the face)
   let lock = 0;
-  const clump = (name, L, w, th, base, dir, bend, curl = 0.18, taper = 0.85) => {
+  // clump: cluster, length, half-width, half-thickness, root, direction, curl-toward, curl amount
+  const clump = (name, L, w, th, base, dir, bend, curl = 0.18, taper = 1) => {
     const k = name === 'fringe' ? 0 : lock++ % 2;
-    for (const [t0, t1, key] of [[0, 0.6, 'mass'], [0.6, 1, 'tip']]) {
+    for (const [t0, t1, key] of [[0, 0.58, 'mass'], [0.58, 1, 'tip']]) {
       S[name][key].push(sub(orientTo(clumpGeometry(L, w, th, { t0, t1, curl, taper, rows: key === 'mass' ? 3 : 2 }), base, dir, bend), k));
     }
   };
   // scalp directions at (azimuth, elevation): straight out, and down the scalp along the meridian
   const radial = (az, el) => [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
   const merid = (az, el) => [Math.sin(az) * Math.sin(el), -Math.cos(el), Math.cos(az) * Math.sin(el)];
-  const side = (az) => (Math.abs(Math.atan2(Math.sin(az), Math.cos(az))) > 2.5 ? 'crown' : Math.sin(az) > 0 ? 'left' : 'right');
-  // fringe (the reference: thin pointed locks of uneven length hanging over the eyes to the nose,
-  // fanned to either side): 9 locks across the front hairline, tips curling a little off the face,
-  // plus two long strands across the eyes. The two locks over his LEFT eye stop above it, so it
-  // shows between the strands as in the reference (the right eye stays covered)
+  // the back layers' cluster by azimuth: the centre back sways with the crown, the sides with theirs
+  const backOf = (az) => {
+    const a = Math.atan2(Math.sin(az), Math.cos(az));
+    return Math.abs(a) > 2.45 ? 'crown' : a > 0 ? 'left' : 'right';
+  };
+  // crown spikes: a few short ones up and back off the whorl, curling back over at the points (the
+  // reference's bed-head top: points above the head's outline from the front, the back and the sides)
+  for (const [az, el, L, w] of [[2.85, 1.3, 0.085, 0.02], [-2.6, 1.26, 0.08, 0.019], [0.35, 1.36, 0.07, 0.017], [-0.75, 1.3, 0.078, 0.018]]) {
+    const rd = radial(az, el);
+    clump('crown', L + j(0.008), w, 0.008, capPoint(az, el, 0.9), [rd[0] * 0.9, 0.3 + rd[1] * 0.2, rd[2] * 0.9 - 0.55], [rd[0], -0.5, rd[2] - 0.6], 0.3, 1);
+  }
+  // the top: locks fanning down the scalp from the crown in every direction but the face, so the
+  // dome is covered by overlapping points, not a smooth cap
   for (let i = 0; i < 9; i++) {
-    const u = (i / 8) * 2 - 1 + j(0.07);
-    // (round 2: a little shorter, so the pale face shows under the fringe as in the reference)
-    const L = (0.065 + 0.045 * (1 - u * u) + j(0.02)) * (i === 5 || i === 6 ? 0.55 : 1);
-    const base = capPoint(u * 0.72, 0.72 - 0.1 * u * u + j(0.05), 0.99);
-    clump('fringe', L, 0.02 + 0.007 * r() - 0.003 * Math.abs(u), 0.008, base, [u * 0.5 + j(0.25), -0.9, 0.44 - 0.12 * Math.abs(u)], [u * 0.3, 0.25, -1], 0.08 + j(0.05), 0.9);
+    const az = 0.95 + (i / 8) * (Math.PI * 2 - 1.9) + j(0.1);
+    const el = 1.24 + j(0.06);
+    const rd = radial(az, el), m = merid(az, el);
+    clump(backOf(az), 0.12 + j(0.015), 0.03, 0.011, capPoint(az, el, 0.95), [m[0] + rd[0] * 0.06, m[1] + rd[1] * 0.06, m[2] + rd[2] * 0.06], rd, 0.18, 0.95);
   }
-  clump('fringe', 0.12, 0.012, 0.005, capPoint(-0.25, 0.66, 0.99), [-0.2, -0.93, 0.4], [0, 0.2, -1], 0.08, 0.95);
-  // hero's left: the long lock down in front of the ear to the jaw, flicks out and back
-  clump('left', 0.14, 0.017, 0.008, capPoint(1.12, 0.3), [0.25, -1, 0.12], [1, 0, 0.2], 0.22, 0.85);
-  clump('left', 0.11, 0.015, 0.007, capPoint(1.38, 0.42), [0.85, -0.45, -0.3], [0.3, 1, 0], 0.3, 0.8);
-  clump('left', 0.1, 0.015, 0.007, capPoint(1.8, 0.38), [0.75, -0.3, -0.65], [0.2, 1, 0], 0.3, 0.8);
-  // hero's right: locks swept back and out over the ear (the ear shows below)
-  for (let i = 0; i < 4; i++) {
-    clump('right', 0.095 + 0.015 * (i % 2) + j(0.01), 0.015, 0.007, capPoint(-1.2 - i * 0.25, 0.4 + 0.05 * i), [-0.75 + j(0.1), -0.3 + j(0.1), -0.6], [-0.2, 1, 0], 0.3, 0.8);
-  }
-  // the messy mop: thick locks rooted round the crown whorl lie down over the scalp (each one
-  // outlined by the art pass: the reference's strand lines) and lift off it at their pointed ends,
-  // so the dome is hidden and the outline is a jagged ring of tips outside the cap
-  // (round 2: a bigger cap and longer locks that hang down round it, lifting a little at the tips:
-  // the reference's big, round, messy volume instead of a tight cap)
-  // (the locks lie over the bigger cap and lift only a little at their ends: lifting them further
-  // turned the mop into a brim of horizontal spikes)
-  for (const [n, el0, a0, L0, curl, lift] of [[14, 1.12, 0.6, 0.17, 0.14, 0.06], [12, 0.72, 0.85, 0.14, 0.1, 0.0]]) {
+  // the back: an upper and a lower layer round the back half, from ear to ear. Each lock runs down
+  // the scalp (a little into it: it comes out from under the lock above) and its point curls out,
+  // every other one a little further, so the back of the head is a shag of layered points that hang
+  // DOWN toward the nape (round 1 of this pass lifted them straight out: a sea urchin)
+  for (const [n, el0, L0, w, lift0, curl] of [[11, 0.8, 0.15, 0.031, -0.1, 0.24], [10, 0.38, 0.115, 0.027, 0.02, 0.2]]) {
     for (let i = 0; i < n; i++) {
-      const az = a0 + ((i + (el0 < 1 ? 0.5 : 0)) / n) * (Math.PI * 2 - 2 * a0) + j(0.12); // all round but the fringe's front
-      const el = el0 + j(0.1);
-      const rad = radial(az, el), m = merid(az, el);
-      clump(side(az), L0 + j(0.03), 0.028, 0.012, capPoint(az, el, 0.95), [m[0] + rad[0] * lift, m[1] * 1.15 + rad[1] * lift, m[2] + rad[2] * lift], [-rad[0], -rad[1], -rad[2]], curl + j(0.06), 0.6);
+      const u = (i + (el0 < 0.6 ? 0.5 : 0)) / (n - (el0 < 0.6 ? 0 : 1));
+      const az = -1.5 - u * (Math.PI * 2 - 3.0) + j(0.07);
+      const el = el0 + j(0.06);
+      const side = Math.abs(Math.cos(az)) < 0.45; // over the ears: hang down, don't fan out
+      const lift = lift0 + 0.1 * (i % 2) - (side ? 0.12 : 0);
+      const L = (L0 + 0.02 * ((i * 5) % 3) * 0.5 + j(0.01)) * (side ? 0.85 : 1);
+      const rd = radial(az, el), m = merid(az, el);
+      clump(backOf(az), L, w, 0.011, capPoint(az, el, 0.93), [m[0] + rd[0] * lift, m[1] + rd[1] * lift, m[2] + rd[2] * lift], rd, curl, 0.95);
     }
   }
-  // ragged flicks out sideways and back at temple / ear height (the jagged side edges), drooping;
-  // thin, so up close they print as the reference's dotted wisps rather than solid spikes
-  for (const az of [1.45, 1.8, 2.15, 2.5, -1.5, -1.85, -2.2, -2.55, 2.85, -2.9]) {
-    const el = 0.22 + j(0.12);
-    const rad = radial(az, el);
-    clump(side(az), 0.06 + j(0.015), 0.012, 0.008, capPoint(az + j(0.06), el, 0.9), [rad[0] * 0.55, -0.8 + j(0.12), rad[2] * 0.55 - 0.15], [0, 1, 0], 0.3, 0.8);
-  }
-  // crown: thin strands standing up and out at 30–60° and curling back (the reference's wispy,
-  // bed-head top edge, not a crown of broad spikes), longest toward the hero's right
-  for (const [az, el, L] of [[0.45, 1.25, 0.08], [-0.55, 1.2, 0.095], [2.8, 1.3, 0.07], [1.4, 1.1, 0.075], [-1.35, 1.05, 0.09], [-0.1, 1.38, 0.08], [2.1, 1.2, 0.07]]) {
-    const ox = Math.sin(az), oz = Math.cos(az);
-    // wisps out and back, curling over (not straight spikes standing up)
-    clump('crown', L + j(0.012), 0.009, 0.006, capPoint(az, el, 0.88), [ox * 0.9 + j(0.2), 0.45, oz * 0.3 - 0.6], [ox * 0.4, -0.6, -1], 0.75, 0.85);
-  }
-  // nape locks down to the collar top, tips flicking out
+  // nape: down over the collar's rim, the outer ones flicking out to the sides of the neck
   for (let i = 0; i < 7; i++) {
     const u = (i / 6) * 2 - 1;
-    clump('nape', 0.09 + j(0.015), 0.017, 0.007, capPoint(Math.PI + u * 0.8, -0.1 + 0.06 * u * u, 0.92), [u * 0.45, -0.9, -0.38], [u * 0.4, 0.2, -1], 0.28, 0.85);
+    const az = Math.PI + u * 0.92;
+    const sx = Math.sin(az);
+    clump('nape', 0.085 + 0.028 * (1 - Math.abs(u)) + j(0.01), 0.021, 0.008, capPoint(az, 0.04 + 0.1 * u * u + j(0.03), 0.9), [sx * 0.75, -0.85, -0.4], [sx, 0.25, -0.5], 0.3, 1);
+  }
+  // hero's left: the long lock down in front of the ear to the jaw; locks swept back over the ear
+  clump('left', 0.15, 0.019, 0.008, capPoint(1.15, 0.28, 0.93), [0.22, -1, 0.14], [1, 0, 0.3], 0.2, 1);
+  for (const [az, el, L] of [[1.42, 0.44, 0.11], [1.72, 0.36, 0.125], [2.0, 0.5, 0.1]]) {
+    const rd = radial(az, el);
+    clump('left', L + j(0.01), 0.022, 0.009, capPoint(az, el, 0.93), [rd[0] * 0.4, -0.85, rd[2] * 0.4 - 0.3], [rd[0], 0.3, rd[2]], 0.26, 1);
+  }
+  // hero's right: shorter locks swept back and up over the ear (the ear shows below them)
+  for (const [az, el, L] of [[-1.25, 0.52, 0.09], [-1.5, 0.46, 0.105], [-1.78, 0.42, 0.1], [-2.05, 0.48, 0.095]]) {
+    const rd = radial(az, el);
+    clump('right', L + j(0.01), 0.02, 0.008, capPoint(az, el, 0.93), [rd[0] * 0.4, -0.6, rd[2] * 0.4 - 0.6], [rd[0], 0.4, rd[2]], 0.28, 1);
+  }
+  // fringe: separate, uneven points over the eyes (narrow locks, long and short alternating, so its
+  // lower edge is jagged and the face shows between them: one even fringe printed as a dark band, a
+  // blindfold), fanned to either side; longest over his right eye (−X), short over his left so it shows
+  for (const [az, L, w] of [[-0.74, 0.09, 0.017], [-0.52, 0.13, 0.018], [-0.3, 0.098, 0.016], [-0.08, 0.124, 0.017], [0.15, 0.108, 0.016], [0.36, 0.058, 0.015], [0.55, 0.088, 0.016], [0.74, 0.07, 0.016]]) {
+    clump('fringe', L + j(0.006), w, 0.007, capPoint(az, 0.74 - 0.08 * az * az, 0.99), [az * 0.5, -0.9, 0.42], [az * 0.3, 0.25, -1], 0.14, 1);
+  }
+  // cowlicks: rising forward off the top of the forehead, curling down at the points
+  for (const [az, el, L] of [[-0.35, 1.12, 0.1], [0.15, 1.18, 0.09], [0.55, 1.05, 0.085]]) {
+    const rd = radial(az, el);
+    clump('fringe', L, 0.023, 0.009, capPoint(az, el, 0.92), [rd[0] * 0.8, 0.45, rd[2] * 0.8 + 0.5], [0, -1, 0.3], 0.55, 1);
   }
   const out = {};
   for (const c of HAIR_CLUSTERS) {
@@ -665,7 +741,9 @@ function hairCap() {
   const limit = (cx, cz) => {
     const h = Math.max(1e-6, Math.hypot(cx, cz));
     const right = Math.max(0, -cx / h) * Math.max(0, 1 - Math.abs(cz / h) * 1.6);
-    return -0.07 + 0.1 * Math.pow((1 + cz / h) / 2, 1.5) + 0.03 * right;
+    // (the front hairline sits under the fringe's roots, +0.065 m: lower, its straight edge showed
+    // between the pointed locks as a band across the forehead)
+    return -0.07 + 0.135 * Math.pow((1 + cz / h) / 2, 1.5) + 0.03 * right;
   };
   return gridGeometry(22, 10, (s, t, o) => {
     const ph = (s - 0.5) * Math.PI * 2;
@@ -686,28 +764,44 @@ function hairCap() {
   });
 }
 
-/** The tall flared stand collar (hero.md §2.3), chest space: base ring (r 0.078) at 1.505 m
- *  flaring to r 0.12 at 1.61 m behind, the top edge rolled out 0.015 m, the front corners rising to
- *  1.635 m beside the jaw; open in a V at the throat (0.02 m at the base → 0.07 m at the top), so the
- *  chin and jaw show. */
+/** The tall stand collar (hero.md §2.3; the lean reference match), chest space: a band round the neck
+ *  base (1.498 m) that rises and flares out toward its top: 1.594 m behind (a wide, flared band from
+ *  behind, not a tube), the front corners rising to points at 1.636 m beside the jaw, open in a V at the throat (0.018 m at the base →
+ *  0.078 m at the top). It stands off the neck (a dark gap between them from behind), and its inner
+ *  face (collarIn) shows in the V and over the rim. `rim(t)` gives the top edge's radius / height. */
+const COLLAR = { y0: 1.498, yBack: 1.596, yFront: 1.636, r0: [0.084, 0.076], r1: [0.116, 0.098], gap: [0.018, 0.08], z: -0.004 };
+function collarRing(s, t, o) {
+  const C = COLLAR;
+  const gap = lerp(C.gap[0], C.gap[1], Math.pow(t, 1.3));
+  const fl = Math.pow(t, 1.35); // up, flaring out toward the top
+  const rx = lerp(C.r0[0], C.r1[0], fl), rz = lerp(C.r0[1], C.r1[1], fl);
+  const a0 = Math.asin(Math.min(0.95, gap / rx));
+  const a = a0 + s * (Math.PI * 2 - 2 * a0);
+  const front = Math.pow((1 + Math.cos(a)) / 2, 2);
+  const y = lerp(C.y0 + 0.01 * front * (1 - t), lerp(C.yBack, C.yFront, front), t) - REST.chest;
+  o[0] = Math.sin(a) * rx;
+  o[1] = y;
+  o[2] = Math.cos(a) * rz + C.z;
+  o[3] = (a - Math.PI) * 0.1;
+  o[4] = y;
+  return a;
+}
 function collarGeometry() {
-  const y0 = 1.505 - REST.chest, yB = 1.61 - REST.chest, yF = 1.635 - REST.chest;
-  return gridGeometry(24, 5, (s, t, o) => {
-    const gap = lerp(0.015, 0.08, Math.pow(t, 1.4));
-    const fl = Math.pow(t, 0.8);
-    const roll = 0.015 * Math.pow(Math.max(0, (t - 0.65) / 0.35), 2);
-    // (round 3: ~11 % bigger round the thicker neck and the broader shoulders)
-    const rx = lerp(0.088, 0.132, fl) + roll, rz = lerp(0.081, 0.106, fl) + roll * 0.5;
-    const a0 = Math.asin(gap / rx);
-    const a = a0 + s * (Math.PI * 2 - 2 * a0);
-    const front = Math.pow((1 + Math.cos(a)) / 2, 2);
-    const y = lerp(y0 + 0.012 * front * (1 - t), lerp(yB, yF, front), t);
-    o[0] = Math.sin(a) * rx;
-    o[1] = y;
-    o[2] = Math.cos(a) * rz - 0.008;
-    o[3] = (a - Math.PI) * 0.1;
-    o[4] = y;
-  });
+  return gridGeometry(28, 6, (s, t, o) => collarRing(s, t, o));
+}
+/** The collar's turned-over rim: from the top edge outward and down (0.02 m out, 0.017 m down), so
+ *  the collar's top reads as a folded band with its own edge, not the lip of a funnel. */
+function collarRimGeometry() {
+  const o0 = [0, 0, 0, 0, 0];
+  return gridGeometry(28, 2, (s, t, o) => {
+    const a = collarRing(s, 1, o0);
+    const k = Math.sin(t * Math.PI * 0.5);
+    o[0] = o0[0] + Math.sin(a) * 0.016 * k;
+    o[1] = o0[1] + 0.004 * Math.sin(t * Math.PI) - 0.016 * t * t;
+    o[2] = o0[2] + Math.cos(a) * 0.013 * k;
+    o[3] = o0[3];
+    o[4] = o[1];
+  }, true);
 }
 
 // Glyph ramps (hero.md §3): `levels` dark → bright, each a set of per-cell variants; spaces are
@@ -832,6 +926,9 @@ export const ART_GAIN = 1.1;
 // `farFill` = the part's letter-fill gain at the game camera (× the pass's uHeroLod.z): there the
 // reference scaled down is a DARK figure (black coat, dark pants and hair) with bright silver
 // armour, pale lavender tails, a pale face and the cyan blade, so cloth drops and metal rises.
+// (Lean reference match: the armour's far fill / lines came down ~25 % (boots, pauldron and
+// greaves had turned the figure's lower half near-white at the game camera), the lavender torn
+// zone's went up (0.4 → 0.8: the tails read against the black coat), the blade's halo tightened.)
 // `farLine` = how much light its inner lines keep there (0: a dark seam, the cloth; 1: the armour).
 // `solid` = unbroken ink lines (the blade, the gem); `open` = its letters stay lit beside an edge (no
 // dark channel or depth-step gap: the face, a small pale patch walled in by the fringe and the
@@ -844,10 +941,10 @@ export const HERO_INK = {
   lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
   collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
   pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9], farFill: 0.35 },
-  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1], farFill: 0.35 },
-  collar: { part: 6, fill: [0.175, 0.165, 0.155], farFill: 0.35 },
+  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1], farFill: 0.42 },
+  collar: { part: 6, fill: [0.175, 0.165, 0.155], farFill: 0.42 },
   facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1], farFill: 0.5 },
-  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true, farFill: 0.4 },
+  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true, farFill: 0.8 },
   piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1], farFill: 0.6 },
   leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9], farFill: 0.8 },
   // the reference's hair: near-neutral dark letters (lit mean ≈ rgb 103 99 113) with violet-white
@@ -856,15 +953,15 @@ export const HERO_INK = {
   hairTip: { part: 11, fill: [0.2, 0.16, 0.4], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true, farFill: 0.5 },
   // the reference's armour: dark steel plates whose bright white edges and glints make it the
   // brightest thing on him (a light grey fill read as flat paper cut-outs up close)
-  armor: { part: 12, fill: [0.3, 0.3, 0.34], spec: 1.35, specPow: 18, line: [1, 1, 1, 1.3], fillGain: 1.35, farLine: 0.55, farFill: 1.05 },
-  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05, farLine: 0.7, farFill: 1.2 },
-  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6, farLine: 0.6, farFill: 1.1 },
+  armor: { part: 12, fill: [0.3, 0.3, 0.34], spec: 1.35, specPow: 18, line: [1, 1, 1, 1.3], fillGain: 1.35, farLine: 0.45, farFill: 0.78 },
+  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05, farLine: 0.55, farFill: 0.9 },
+  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6, farLine: 0.5, farFill: 0.85 },
   welt: { part: 15, fill: [0.3, 0.31, 0.36] },
-  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.7, farFill: 1.2 },
+  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.55, farFill: 0.95 },
   // the reference's blade: dark steel between two glowing cyan edges and a bright ridge line (the
   // fill letters stay dim up close; far away the whole blade reads as one bright cyan line)
-  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0 },
-  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0 },
+  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.45], fillGain: 0.4, solid: true, farLine: 1, farFill: 1.5 },
+  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.45], fillGain: 0.4, solid: true, farLine: 1, farFill: 1.5 },
   gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1 },
   flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
@@ -1057,22 +1154,22 @@ export function buildHero(U) {
     mesh(pelvis, orient.up(ellipsoidGeometry(hx, hz, hy)), M.pants, ...BODY.hips.c);
   }
   {
-    // H1: diagonal hip strap (0.034 m), left hip (1.13 m) down across the front to the right thigh
-    const h1 = mesh(pelvis, bandGeometry(0.196, 0.148, 0.034, 28), M.leather, 0.012, yPe(1.04), 0.004);
+    // H1: diagonal hip strap (0.03 m), left hip (1.13 m) down across the front to the right thigh
+    const h1 = mesh(pelvis, bandGeometry(BODY.hips.r[0] * 1.14, BODY.hips.r[2] * 1.18, 0.03, 28), M.leather, 0.01, yPe(1.04), 0.004);
     h1.rotation.z = 0.55;
     // D1: centre drop strap from the second belt to 0.93 m, a D-ring and a pointed metal tip
-    mesh(pelvis, strapGeometry([0, yPe(1.13), 0.137], [0, yPe(0.93), 0.129], 0.028, 0.008, [1, 0, 0]), M.leather);
+    mesh(pelvis, strapGeometry([0, yPe(1.13), 0.11], [0, yPe(0.93), 0.104], 0.026, 0.008, [1, 0, 0]), M.leather);
     mesh(pelvis, mergeGeometries([
-      boxGeometry(0.034, 0.026, 0.012, 0, yPe(1.07), 0.144),
-      kiteGeometry(0.016, 0.024, 0.007, { yPos: 0.4 }).translate(0, yPe(0.915), 0.131),
-      boxGeometry(0.05, 0.04, 0.014, -0.11, yPe(1.0), 0.12, 0, -0.5, -0.5), // H1 buckle, right thigh
+      boxGeometry(0.03, 0.024, 0.012, 0, yPe(1.07), 0.117),
+      kiteGeometry(0.015, 0.022, 0.007, { yPos: 0.4 }).translate(0, yPe(0.915), 0.106),
+      boxGeometry(0.044, 0.036, 0.014, -0.086, yPe(1.0), 0.094, 0, -0.5, -0.5), // H1 buckle, right thigh
     ]), M.trim);
   }
 
   // ---------------------------------------------------------------- torso: one V-shell
   const spine = joint(pelvis, ...DIM.spine);
-  // open coat (BODY.shell): hips 0.33 → waist 0.30 (1.21 m) → chest 0.43 → shoulders 0.46, the
-  // front open from the collar (0.03 m) to the belt (0.19 m)
+  // open coat (BODY.shell): hips 0.27 → waist 0.23 (1.21 m) → chest 0.32 → under the arms 0.34, the
+  // front open from the collar (0.03 m) to the belt (0.14 m)
   const SHELL = BODY.shell;
   const shellAt = (h) => {
     let k = 0;
@@ -1094,6 +1191,21 @@ export function buildHero(U) {
   mesh(spine, shellGeometry(SHIRT.map((r) => ({ y: ySp(r.h), rx: r.rx, rz: r.rz, cz: r.cz })), { span: 1.0, cols: 8, sub: 2 }), M.shirt);
   // the main belt W1 (1.21 m) and W2 (1.15 m) radii: 0.012 m off the coat
   const W1 = [shellAt(1.21).rx + 0.012, shellAt(1.21).rz + 0.012], W2 = [shellAt(1.15).rx + 0.016, shellAt(1.15).rz + 0.015];
+  // C1, the baldric: one strap round the torso in a tilted plane, from over the RIGHT shoulder (under
+  // the pauldron) across the chest and across the back down to the LEFT hip (the reference's diagonal
+  // strap from both sides). Height along it h = BALD.h + BALD.slope × x (x = the hero's left); each
+  // point sits BALD.proud off the shell (bisection: the shell's radius changes with the height)
+  const BALD = { h: 1.335, slope: -1.0, w: 0.032, proud: 0.007 };
+  const baldAt = (a) => {
+    const sa = Math.sin(a);
+    let lo = 1.1, hi = 1.505;
+    for (let it = 0; it < 24; it++) {
+      const m = (lo + hi) * 0.5;
+      if (m - (BALD.h + BALD.slope * sa * shellAt(m).rx) > 0) hi = m;
+      else lo = m;
+    }
+    return (lo + hi) * 0.5;
+  };
   {
     const bt = [];
     for (let i = 0; i < 7; i++) {
@@ -1102,34 +1214,43 @@ export function buildHero(U) {
       let k = 0;
       while (k < SHIRT.length - 2 && SHIRT[k + 1].h < h) k++;
       const A = SHIRT[k], B = SHIRT[k + 1], u = Math.min(1, Math.max(0, (h - A.h) / (B.h - A.h)));
-      bt.push(ellipsoidGeometry(0.007, 0.007, 0.004, { widthSegs: 5, heightSegs: 3 }).translate(0, ySp(h), lerp(A.rz + A.cz, B.rz + B.cz, u) + 0.006));
+      bt.push(ellipsoidGeometry(0.006, 0.006, 0.004, { widthSegs: 5, heightSegs: 3 }).translate(0, ySp(h), lerp(A.rz + A.cz, B.rz + B.cz, u) + 0.006));
     }
-    // belt hardware: W1 buckle (3 cm left of centre), W2 buckle (front-right), C1 buckle, rivets
-    bt.push(boxGeometry(0.05, 0.04, 0.014, 0.03, ySp(1.21), W1[1] + 0.004));
-    bt.push(boxGeometry(0.046, 0.036, 0.014, -0.045, ySp(1.152), W2[1] + 0.003, 0, 0, 0.14));
-    bt.push(boxGeometry(0.036, 0.03, 0.012, -0.034, ySp(1.42), shellZ(1.42, -0.034) + 0.016, 0, 0, -0.75));
-    for (const [x, h] of [[0.105, 1.21], [-0.095, 1.21], [0.138, 1.21], [-0.132, 1.21]]) {
-      bt.push(ellipsoidGeometry(0.008, 0.008, 0.006, { widthSegs: 5, heightSegs: 3 }).translate(x, ySp(h), Math.sqrt(Math.max(0, 1 - (x / W1[0]) ** 2)) * W1[1] + 0.003));
+    // belt hardware: W1 buckle (2 cm left of centre), W2 buckle (front-right), rivets; the baldric's
+    // buckle on the chest and its ring between the shoulder blades
+    bt.push(boxGeometry(0.044, 0.036, 0.014, 0.02, ySp(1.21), W1[1] + 0.004));
+    bt.push(boxGeometry(0.04, 0.032, 0.014, -0.036, ySp(1.152), W2[1] + 0.003, 0, 0, 0.14));
+    for (const [x, h] of [[0.075, 1.21], [-0.068, 1.21], [0.1, 1.21], [-0.096, 1.21]]) {
+      bt.push(ellipsoidGeometry(0.007, 0.007, 0.006, { widthSegs: 5, heightSegs: 3 }).translate(x, ySp(h), Math.sqrt(Math.max(0, 1 - (x / W1[0]) ** 2)) * W1[1] + 0.003));
+    }
+    for (const a of [-0.3, Math.PI + 0.42]) {
+      const h = baldAt(a), R = shellAt(h), x = Math.sin(a) * (R.rx + BALD.proud + 0.004), z = Math.cos(a) * (R.rz + BALD.proud + 0.004) + R.cz;
+      bt.push(boxGeometry(0.03, 0.03, 0.01, x, ySp(h), z, 0, a, Math.cos(a) > 0 ? -0.78 : 0.78));
     }
     mesh(spine, mergeGeometries(bt), M.trim);
   }
   // W1 main belt at the natural waist, W2 sloping 1.17 (left) → 1.13 (right): flat leather bands
-  // 0.045 m wide standing 0.012 m off the coat — the bright band between the torso and the skirt
-  mesh(spine, bandGeometry(W1[0], W1[1], 0.048, 32), M.leather, 0, ySp(1.21), 0.0);
-  mesh(spine, bandGeometry(W2[0], W2[1], 0.04, 32), M.leather, 0, ySp(1.15), 0.0).rotation.z = 0.14;
-  // C1: chest harness (0.035 m) from the right collarbone (1.47 m) across the shirt to the left ribs
-  {
-    const c1 = mesh(spine, bandGeometry(0.25, 0.145, 0.035, 32), M.leather, 0.04, ySp(1.375), 0.008);
-    c1.rotation.z = -0.76;
-  }
+  // standing 0.012 m off the coat — the bright bands that cinch the narrow waist
+  mesh(spine, bandGeometry(W1[0], W1[1], 0.044, 32), M.leather, 0, ySp(1.21), 0.0);
+  mesh(spine, bandGeometry(W2[0], W2[1], 0.036, 32), M.leather, 0, ySp(1.15), 0.0).rotation.z = 0.14;
+  mesh(spine, gridGeometry(48, 1, (s, t, o) => {
+    const a = s * Math.PI * 2;
+    const h = baldAt(a) + (t - 0.5) * BALD.w;
+    const R = shellAt(h);
+    o[0] = Math.sin(a) * (R.rx + BALD.proud);
+    o[1] = ySp(h);
+    o[2] = Math.cos(a) * (R.rz + BALD.proud) + R.cz;
+    o[3] = (a - Math.PI) * 0.12;
+    o[4] = o[1];
+  }, true), M.leather);
   // lapels: narrow facings folded out from the collar to ~1.37 m, grey-violet piping along their
   // outer edges and down both front edges of the open coat to the belts
   {
     const lp = [], pp = [];
     const lapel = (s, u, t, o) => {
       const h = lerp(1.485, 1.365, t);
-      const w = lerp(0.034, 0.062, Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.6 + t * 0.4);
-      const xi = s * lerp(0.024, 0.06, t);
+      const w = lerp(0.03, 0.054, Math.sin(Math.PI * Math.min(1, t * 1.15)) * 0.6 + t * 0.4);
+      const xi = s * lerp(0.022, 0.05, t);
       const x = xi + s * u * w;
       const R = shellAt(h);
       const z = Math.sqrt(Math.max(0, 1 - (x / R.rx) ** 2)) * R.rz + R.cz + 0.01 + 0.008 * u;
@@ -1144,7 +1265,7 @@ export function buildHero(U) {
       // piping on the lapel's outer edge
       pp.push(gridGeometry(1, 4, (u, t, o) => {
         lapel(s, 1, t, o);
-        o[0] += s * (u - 0.5) * 0.008;
+        o[0] += s * (u - 0.5) * 0.007;
         o[2] += 0.003;
         o[3] = o[0];
       }, s > 0));
@@ -1152,7 +1273,7 @@ export function buildHero(U) {
       pp.push(gridGeometry(1, 6, (u, t, o) => {
         const h = lerp(1.38, 1.13, t);
         const R = shellAt(h);
-        const x = s * (R.gap + 0.004 + u * 0.008);
+        const x = s * (R.gap + 0.004 + u * 0.007);
         o[0] = x;
         o[1] = ySp(h);
         o[2] = Math.sqrt(Math.max(0, 1 - (x / R.rx) ** 2)) * R.rz + R.cz + 0.004;
@@ -1160,53 +1281,93 @@ export function buildHero(U) {
         o[4] = o[1];
       }, s < 0));
     }
-    // the back emblem: a dark grey-violet spearhead diamond between the shoulder blades
-    lp.push(kiteGeometry(0.034, 0.056, 0.006, { yPos: 1.2 }).translate(0, ySp(1.385), shellZ(1.385, 0, -1) - 0.0065));
+    // the shaped upper back (the reference's back view): a yoke, the coat's back in a second piece
+    // standing 3 mm off it, whose lower edge dips in two arcs from the armpits to a point between the
+    // shoulder blades; piping along those arcs, a centre seam down to the belt, and the emblem, a
+    // four-point star, where the arcs meet. Restrained: a few seams, no stitching noise
+    const YK = { x: 0.15, low: 1.36, high: 1.452, top: 1.474 };
+    const yokeLow = (x) => YK.low + (YK.high - YK.low) * Math.pow(Math.min(1, Math.abs(x) / YK.x), 0.8);
+    const backPt = (x, h, off, o) => {
+      const R = shellAt(h);
+      const xx = Math.max(-R.rx * 0.985, Math.min(R.rx * 0.985, x));
+      o[0] = xx;
+      o[1] = ySp(h);
+      o[2] = -Math.sqrt(Math.max(0, 1 - (xx / R.rx) ** 2)) * R.rz + R.cz - off;
+      o[3] = xx;
+      o[4] = o[1];
+    };
+    const yoke = sub(gridGeometry(16, 3, (s, t, o) => {
+      const x = (s - 0.5) * 2 * YK.x;
+      backPt(x, lerp(yokeLow(x), YK.top, t), 0.003, o);
+    }, true), 1);
+    mesh(spine, yoke, M.coat);
+    // the yoke's two arcs and the centre seam (piping, 6 mm)
+    pp.push(gridGeometry(24, 1, (s, t, o) => {
+      const x = (s - 0.5) * 2 * YK.x;
+      backPt(x, yokeLow(x) + (t - 0.5) * 0.006, 0.0045, o);
+    }, true));
+    pp.push(gridGeometry(1, 4, (s, t, o) => backPt((s - 0.5) * 0.006, lerp(YK.low - 0.03, 1.236, t), 0.004, o), false));
+    // the emblem: a concave four-point star (long points up / down, short ones to the sides)
+    {
+      const hS = YK.low + 0.006, zS = shellZ(hS, 0, -1) - 0.0055;
+      const tips = [[0, 0.046], [0.03, 0], [0, -0.052], [-0.03, 0]];
+      const pos = [];
+      for (let k = 0; k < 4; k++) {
+        const A = tips[k], B = tips[(k + 1) % 4];
+        const mx = (A[0] + B[0]) * 0.17, my = (A[1] + B[1]) * 0.17; // the concave waist between points
+        pos.push(0, 0, 0, mx, my, 0, A[0], A[1], 0);
+        pos.push(0, 0, 0, B[0], B[1], 0, mx, my, 0);
+      }
+      const star = new THREE.BufferGeometry();
+      star.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+      star.rotateY(Math.PI).translate(0, ySp(hS), zS); // faces −Z (his back)
+      star.computeVertexNormals();
+      planarGUV(star, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
+      lp.push(star);
+    }
     mesh(spine, mergeGeometries(lp), M.facing);
     mesh(spine, mergeGeometries(pp), M.piping);
   }
 
   const chest = joint(spine, ...DIM.chest);
-  // tall flared stand collar: black outside, blue-violet inside; the shirt's mandarin collar
+  // tall stand collar: black outside, blue-violet inside, a turned-over rim (its own piece, so it
+  // is outlined); the shirt's mandarin collar
   {
     const cg = collarGeometry();
     mesh(chest, cg, M.collar);
     mesh(chest, cg, M.collarIn);
-    mesh(chest, bandGeometry(0.057, 0.054, 0.032, 16), M.shirt, 0, yCh(1.52), 0.01);
+    mesh(chest, sub(collarRimGeometry(), 1), M.collar);
+    mesh(chest, bandGeometry(0.052, 0.05, 0.03, 16), M.shirt, 0, yCh(1.515), 0.008);
   }
 
   // ---------------------------------------------------------------- pauldron (RIGHT only)
   const pauldron = joint(chest, -DIM.shoulder[0], DIM.shoulder[1], DIM.shoulder[2]);
   {
-    // P1 cap and P2 upper deltoid: thin stepped shells standing off the shoulder (black gaps
-    // between them), each with a silver bevel along its lower rim so every step reads
-    // P1: a shallow cap over the shoulder top; P2: a band wrapping the deltoid from front to back
-    // (a flat stepped lame, not a puffed dome), flaring 0.03–0.045 m off the sleeve
-    // the reference's pauldron is a big layered mass (≈ 0.3 m across, three claw-like blades towering
-    // over the shoulder): P1 a wide shallow cap, P2 a broad band over the deltoid, both standing off
-    // the sleeve so black gaps and ink lines show between the layers
-    // (round 3: ×1.24 round the bigger deltoid, the claws ×1.12 long: it sits on the broad shoulder)
-    const S = 1.24, SL = 1.12;
-    const p1 = { r: [0.105 * S, 0.042 * S, 0.108 * S], el: -0.35, at: [-0.012 * S, 0.064 * S, 0], tilt: 0.34 };
+    // the reference's pauldron: a STACK of curved lames over the right shoulder and down the upper
+    // arm, each standing off the one below with a dark gap and a bright bevel along its lower edge;
+    // the top cap crowned by claw blades sweeping up and back, a lame's back corner drawn out into a
+    // point. Here P1 the cap and P2 a band round the deltoid; P3 / P4 ride on the arm (below). Sized
+    // for the lean shoulder (round 3's was ×1.24, its tallest claw 0.29 m: a crown of spikes)
+    // (×1.3 over the first lean pass: from behind it is one of the figure's three bright features)
+    const S = 1.3;
+    const p1 = { r: [0.082 * S, 0.036 * S, 0.086 * S], el: -0.4, at: [-0.012 * S, 0.052 * S, 0], tilt: 0.36 };
     const pg = [
       place(domeShell(...p1.r, p1.el), ...p1.at, 0, 0, p1.tilt),
-      sub(place(arcPlate(0.04 * S, -0.045 * S, 0.1 * S, 0.122 * S, -Math.PI / 2, 1.6, 12), -0.014 * S, 0, 0.004, 0, 0, 0.14), 1),
+      sub(place(arcPlate(0.03 * S, -0.036 * S, 0.076 * S, 0.09 * S, -Math.PI / 2, 1.55, 12), -0.012 * S, 0, 0.003, 0, 0, 0.16), 1),
     ];
     const tg = [
-      place(domeRim(...p1.r, p1.el, 0.012, 0.004), ...p1.at, 0, 0, p1.tilt),
-      place(arcPlate(-0.031 * S, -0.046 * S, 0.1195 * S, 0.1235 * S, -Math.PI / 2, 1.6, 12), -0.014 * S, 0, 0.004, 0, 0, 0.14),
+      place(domeRim(...p1.r, p1.el, 0.01, 0.004), ...p1.at, 0, 0, p1.tilt),
+      place(arcPlate(-0.025 * S, -0.037 * S, 0.0895 * S, 0.0915 * S, -Math.PI / 2, 1.55, 12), -0.012 * S, 0, 0.003, 0, 0, 0.16),
     ];
-    // broad flattened claw blades (length ≈ 3–4× width, curving back): S1 inner by the collar, S2
-    // the tallest tilted out, S3 and S4 outward-up (they make the top-down star), S5 the fang down
-    // over the chest, S6 a short spur off the band's outer edge
-    const blade = (L, w, base, dir, bend, curl = 0.17) => orientTo(clumpGeometry(L * SL, w * SL, 0.006, { curl, taper: 1, cols: 8, rows: 4 }), base.map((c) => c * S), dir, bend);
+    // flattened claw blades (length ≈ 4× width, curving back): S1 inner by the collar, S2 the
+    // tallest up and back, S3 out and up, S4 P2's back corner drawn out, S5 a fang over the chest
+    const blade = (L, w, base, dir, bend, curl = 0.17) => orientTo(clumpGeometry(L * S, w * S, 0.006, { curl, taper: 1, cols: 8, rows: 4 }), base.map((c) => c * S), dir, bend);
     const sg = [
-      blade(0.11, 0.027, [0.03, 0.096, -0.022], [0.08, 1, -0.32], [0, 0, -1]), // S1 inner
-      sub(blade(0.21, 0.038, [-0.018, 0.104, -0.024], [-0.55, 0.78, -0.3], [0, 0.25, -1], 0.22), 1), // S2 tallest
-      blade(0.16, 0.034, [-0.07, 0.082, -0.014], [-0.85, 0.5, -0.18], [0, 0.45, -1], 0.22), // S3 outer
-      sub(blade(0.12, 0.028, [-0.105, 0.04, 0.0], [-0.95, 0.15, 0.05], [0, 1, 0], 0.25), 1), // S4 out
-      blade(0.12, 0.032, [-0.03, 0.004, 0.1], [0.32, -0.76, 0.5], [0, 0, -1], 0.08), // S5 the fang
-      sub(blade(0.075, 0.02, [-0.12, -0.03, 0.02], [-0.8, -0.55, 0.1], [0, -1, 0], 0.2), 1), // S6 spur
+      blade(0.075, 0.02, [0.014, 0.072, -0.02], [0.05, 1, -0.42], [0, 0, -1], 0.2),
+      sub(blade(0.135, 0.028, [-0.022, 0.08, -0.022], [-0.5, 0.8, -0.38], [0, 0.25, -1], 0.24), 1),
+      blade(0.105, 0.024, [-0.058, 0.062, -0.012], [-0.85, 0.48, -0.26], [0, 0.45, -1], 0.24),
+      sub(blade(0.075, 0.019, [-0.08, -0.02, -0.05], [-0.7, -0.3, -0.65], [0, 1, 0], 0.2), 1),
+      blade(0.07, 0.022, [-0.022, 0.0, 0.082], [0.3, -0.75, 0.55], [0, 0, -1], 0.08),
     ];
     mesh(pauldron, mergeGeometries(pg), M.armor);
     mesh(pauldron, mergeGeometries(tg), M.bevel);
@@ -1255,8 +1416,7 @@ export function buildHero(U) {
     const out = side; // the outer side of this arm is x = side (right arm: −X)
     const upper = joint(chest, side * DIM.shoulder[0], DIM.shoulder[1], DIM.shoulder[2]);
     // sleeves: sub-id 1 against the torso shell's 0, so the arm is outlined where it meets the body
-    // (round 2: fuller coat sleeves, the reference's arms are not thin tubes; round 3: thick upper
-    // arms with a rounded deltoid cap, the broad shoulder line)
+    // (lean reference match: slim coat sleeves with a small rounded deltoid cap)
     mesh(upper, mergeGeometries([
       sub(limb({ length: DIM.upperArm, r0: ua0, r1: ua1, bulge: 0.004 }), 1),
       sub(ellipsoidGeometry(...BODY.deltoid, { widthSegs: 12, heightSegs: 8 }).translate(out * 0.008, -0.02, 0), 1),
@@ -1264,16 +1424,17 @@ export function buildHero(U) {
     const fore = joint(upper, 0, -DIM.upperArm, 0);
     mesh(fore, sub(limb({ length: 0.09, r0: ua1, r1: ua1 - 0.003 }), 1), M.coat);
     if (R) {
-      // P3 / P4: lower pauldron lames riding on the arm itself, standing 0.03 m off the sleeve,
-      // a silver bevel along each lower edge and a small down-back blade each
-      const o = ua0 - 0.064; // round 3: everything on the sleeve stands this much further out
+      // P3 / P4: the pauldron's lower lames riding on the arm itself, stepping in down the arm
+      // (0.03 → 0.018 m off the sleeve), a silver bevel along each lower edge and a down-back point
+      // drawn out of each one's back corner (the reference's stack of blade-edged plates)
+      const o = ua0 - 0.062; // P3 stands ua0 + 0.038 off the arm's axis
       mesh(upper, mergeGeometries([
-        sub(arcPlate(-0.045, -0.125, 0.1 + o, 0.096 + o, -Math.PI / 2, 1.95), 0),
-        sub(arcPlate(-0.11, -0.185, 0.094 + o, 0.088 + o, -Math.PI / 2, 1.85), 1),
+        sub(arcPlate(-0.045, -0.125, 0.1 + o, 0.096 + o, -Math.PI / 2, 2.1), 0),
+        sub(arcPlate(-0.11, -0.185, 0.094 + o, 0.088 + o, -Math.PI / 2, 2.0), 1),
       ]), M.armor);
       mesh(upper, mergeGeometries([
-        arcPlate(-0.113, -0.126, 0.0975 + o, 0.0975 + o, -Math.PI / 2, 1.95),
-        arcPlate(-0.173, -0.186, 0.0895 + o, 0.0895 + o, -Math.PI / 2, 1.85),
+        arcPlate(-0.113, -0.126, 0.0975 + o, 0.0975 + o, -Math.PI / 2, 2.1),
+        arcPlate(-0.173, -0.186, 0.0895 + o, 0.0895 + o, -Math.PI / 2, 2.0),
       ]), M.bevel);
       mesh(upper, mergeGeometries([
         wedge(0.09, 0.022, [-0.095 - o, -0.11, -0.03], [-0.6, -0.6, -0.5], [0, -1, 0], 0.15),
@@ -1282,13 +1443,13 @@ export function buildHero(U) {
       // A1 strap just below the pauldron
       mesh(upper, bandGeometry(ua1 + 0.011, ua1 + 0.011, 0.02, 12), M.leather, 0, -0.19, 0);
       // plate vambrace: 3 overlapping lames with silver bevels, an elbow point and a wrist barb
-      const v = fa0 - 0.06; // round 3: the thicker forearm
+      const v = fa0 - 0.06; // the lames' radii follow the forearm (BODY.foreArm)
       mesh(fore, mergeGeometries([
         limb({ length: 0.085, r0: 0.06 + v, r1: 0.056 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.035, 0),
         sub(limb({ length: 0.08, r0: 0.057 + v, r1: 0.053 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.105, 0), 1),
         limb({ length: 0.075, r0: 0.054 + v, r1: 0.05 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.17, 0),
         // the articulated gauntlet over the grip
-        sub(ellipsoidGeometry(0.05, 0.048, 0.066, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm - 0.008, 0.006), 1),
+        sub(ellipsoidGeometry(0.044, 0.042, 0.058, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm - 0.008, 0.006), 1),
       ]), M.armor);
       mesh(fore, mergeGeometries([
         bandGeometry(0.0605 + v, 0.0605 + v, 0.01, 14).translate(0, -0.113, 0),
@@ -1296,7 +1457,7 @@ export function buildHero(U) {
       ]), M.bevel);
       mesh(fore, mergeGeometries([
         bandGeometry(0.054 + v, 0.054 + v, 0.016, 14).translate(0, -0.247, 0), // the gauntlet cuff ring
-        ellipsoidGeometry(0.035, 0.014, 0.046, { widthSegs: 8, heightSegs: 3 }).translate(0, -DIM.foreArm + 0.02, 0.042),
+        ellipsoidGeometry(0.031, 0.012, 0.04, { widthSegs: 8, heightSegs: 3 }).translate(0, -DIM.foreArm + 0.02, 0.036),
       ]), M.trim);
       mesh(fore, mergeGeometries([
         wedge(0.07, 0.022, [out * (0.045 + v), -0.04, -0.025], [out * 0.35, 1, -0.55], [0, 0, -1], 0.12), // elbow point
@@ -1313,8 +1474,8 @@ export function buildHero(U) {
       ]), M.bevel);
       mesh(fore, bandGeometry(fa1 + 0.002, fa1 + 0.002, 0.025, 14).translate(0, -0.236, 0), M.trim);
       mesh(fore, wedge(0.05, 0.018, [out * (fa0 - 0.015), -0.05, -0.02], [out * 0.3, 1, -0.5], [0, 0, -1], 0.12), M.spike);
-      mesh(fore, ellipsoidGeometry(0.047, 0.045, 0.062, { widthSegs: 10, heightSegs: 6 }), M.pants, 0, -DIM.foreArm - 0.006, 0.004);
-      mesh(fore, ellipsoidGeometry(0.035, 0.016, 0.023, { widthSegs: 8, heightSegs: 4 }), M.skin, 0, -DIM.foreArm - 0.05, 0.026);
+      mesh(fore, ellipsoidGeometry(0.042, 0.04, 0.055, { widthSegs: 10, heightSegs: 6 }), M.pants, 0, -DIM.foreArm - 0.006, 0.004);
+      mesh(fore, ellipsoidGeometry(0.031, 0.014, 0.021, { widthSegs: 8, heightSegs: 4 }), M.skin, 0, -DIM.foreArm - 0.046, 0.023);
     }
     arms[R ? 'R' : 'L'] = { upper, fore };
   }
@@ -1329,8 +1490,8 @@ export function buildHero(U) {
   const streamers = [];
   {
     const defs = [
-      { arm: arms.R.upper, at: [-0.014, -0.12, -(ua0 - 0.004)], w: 0.08, len: [0.26, 0.28], seed: 501 },
-      { arm: arms.L.fore, at: [0.004, -0.012, -(ua1 - 0.002)], w: 0.072, len: [0.17, 0.18], seed: 507 },
+      { arm: arms.R.upper, at: [-0.014, -0.12, -(ua0 - 0.004)], w: 0.066, len: [0.24, 0.26], seed: 501 },
+      { arm: arms.L.fore, at: [0.004, -0.012, -(ua1 - 0.002)], w: 0.06, len: [0.16, 0.17], seed: 507 },
     ];
     for (const d of defs) {
       const s0 = joint(d.arm, ...d.at);
@@ -1364,13 +1525,20 @@ export function buildHero(U) {
     // knee-high armoured boot: the shell, a cuff lame under the knee and one at the ankle, and the
     // reference's KITE GREAVE down the shin: a faceted diamond plate pointed at the knee and the
     // ankle with a raised centre ridge, silver bevels on its edges and the ridge (stacked ring lames
-    // read as a stack of tyres). Round 3: a heavier boot round a real calf (BODY.shin)
+    // read as a stack of tyres); from behind, two lames step down the calf (the reference's back view
+    // shows banded calves). The boot follows the lean leg (BODY.shin)
     mesh(shin, limb({ length: DIM.shin - 0.02, r0: sh0, r1: sh1, bulge: shB }), M.armor, 0, -0.02, 0);
-    const b = sh0 - 0.058; // how much further out the boot's plates stand (round 3)
+    const b = sh0 - 0.058; // how far the boot's plates stand in / out with the shin's radius
     mesh(shin, mergeGeometries([
       sub(arcPlate(-0.045, -0.09, 0.067 + b, 0.065 + b, 0, 1.4, 6), 1),
       sub(arcPlate(-0.33, -0.375, 0.054 + b * 0.9, 0.052 + b * 0.9, 0, 1.5, 6), 1),
+      sub(arcPlate(-0.13, -0.19, sh0 + 0.016, sh0 + 0.012, Math.PI, 1.35, 8), 1),
+      arcPlate(-0.2, -0.26, sh0 + 0.011, sh1 + 0.012, Math.PI, 1.3, 8),
     ]), M.armor);
+    mesh(shin, mergeGeometries([
+      arcPlate(-0.183, -0.192, sh0 + 0.0165, sh0 + 0.0165, Math.PI, 1.35, 8),
+      arcPlate(-0.252, -0.261, sh1 + 0.0125, sh1 + 0.0125, Math.PI, 1.3, 8),
+    ]), M.bevel);
     {
       const T = [0, -0.06, 0.069 + b], Rt = [0.058 + b, -0.16, 0.058 + b], B = [0, -0.355, 0.051 + b * 0.9], Lf = [-0.058 - b, -0.16, 0.058 + b], C = [0, -0.16, 0.08 + b * 1.3];
       const kg = new THREE.BufferGeometry();
@@ -1385,152 +1553,157 @@ export function buildHero(U) {
         arcPlate(-0.366, -0.375, 0.0535 + b * 0.9, 0.0535 + b * 0.9, 0, 1.5, 6),
       ]), M.bevel);
     }
-    // kite knee guard (poleyn): 0.12 W × 0.14 H standing 0.02 m off the knee, a ridge down the
+    // kite knee guard (poleyn): 0.1 W × 0.14 H standing 0.02 m off the knee, a ridge down the
     // middle, silver bevels on all four edges, wings wrapping the sides; its point leans 15° out
     // and a short spike carries it to 0.60 m
     {
       const lean = -side * 0.26;
-      const T = [0, 0.085, 0.082 + b], Rt = [0.06, 0.004, 0.072 + b], B = [0, -0.05, 0.08 + b], Lf = [-0.06, 0.004, 0.072 + b], C = [0, 0.012, 0.094 + b];
+      const T = [0, 0.085, 0.082 + b], Rt = [0.05, 0.004, 0.072 + b], B = [0, -0.05, 0.08 + b], Lf = [-0.05, 0.004, 0.072 + b], C = [0, 0.012, 0.094 + b];
       const kp = new THREE.BufferGeometry();
       kp.setAttribute('position', new THREE.BufferAttribute(new Float32Array([...T, ...C, ...Rt, ...T, ...Lf, ...C, ...C, ...Lf, ...B, ...C, ...B, ...Rt]), 3));
       kp.computeVertexNormals();
       planarGUV(kp, new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0));
       const wings = [];
-      for (const s of [-1, 1]) wings.push(place(kiteGeometry(0.014, 0.034, 0.034), s * (0.06 + b), -0.006, 0.03 + b * 0.5, 0, s * 0.6, 0));
+      for (const s of [-1, 1]) wings.push(place(kiteGeometry(0.012, 0.03, 0.03), s * (0.05 + b), -0.006, 0.03 + b * 0.5, 0, s * 0.6, 0));
       mesh(shin, mergeGeometries([kp, ...wings]).rotateZ(lean), M.armor);
       const edge = (a, c) => strapGeometry([a[0], a[1], a[2] + 0.003], [c[0], c[1], c[2] + 0.003], 0.01, 0.004, [-(c[1] - a[1]), c[0] - a[0], 0]);
       mesh(shin, mergeGeometries([edge(T, Rt), edge(Rt, B), edge(B, Lf), edge(Lf, T), edge(T, C), edge(C, B)]).rotateZ(lean), M.bevel);
       mesh(shin, wedge(0.038, 0.013, [0, 0.075, 0.083 + b], [0, 1, 0.12], [0, 0, 1], 0.05).rotateZ(lean), M.spike);
     }
     const foot = joint(shin, 0, -DIM.shin, 0);
-    // boot foot, 2 instep lames, a rounded slightly pointed toe, heel, the silver sole welt (round
-    // 3: a bigger boot under the heavier leg; the sole still rests on the ground at −0.07)
+    // boot foot, 2 instep lames, a rounded slightly pointed toe, heel, the silver sole welt (the sole
+    // rests on the ground at −0.07)
     const F = BODY.foot;
     mesh(foot, mergeGeometries([
       ellipsoidGeometry(...F.r, { widthSegs: 10, heightSegs: 6 }).translate(...F.c),
-      sub(place(ellipsoidGeometry(0.053, 0.026, 0.045, { widthSegs: 8, heightSegs: 4 }), 0, F.c[1] + F.r[1] - 0.016, 0.068, -0.35), 1),
-      place(ellipsoidGeometry(0.048, 0.023, 0.04, { widthSegs: 8, heightSegs: 4 }), 0, F.c[1] + F.r[1] - 0.032, 0.118, -0.25),
-      sub(boxGeometry(0.07, 0.034, 0.056, 0, -0.053, -0.066), 1),
+      sub(place(ellipsoidGeometry(0.046, 0.024, 0.041, { widthSegs: 8, heightSegs: 4 }), 0, F.c[1] + F.r[1] - 0.015, 0.064, -0.35), 1),
+      place(ellipsoidGeometry(0.042, 0.021, 0.037, { widthSegs: 8, heightSegs: 4 }), 0, F.c[1] + F.r[1] - 0.03, 0.11, -0.25),
+      sub(boxGeometry(0.062, 0.032, 0.052, 0, -0.053, -0.062), 1),
     ]), M.armor);
     mesh(foot, ellipsoidGeometry(F.r[0] + 0.006, 0.007, F.r[2] + 0.007, { widthSegs: 14, heightSegs: 3 }), M.welt, 0, -0.062, F.c[2]);
     legs[side < 0 ? 'R' : 'L'] = { thigh, shin, foot };
   }
 
   // ---------------------------------------------------------------- coat skirt
-  // 6 panels (+ the front flap) × (upper + lower solid segment, each a lagging spring) → torn
-  // strips, each on its own spring (anim.js); indigo lining on the inside of the flare. The panel
-  // tops tuck under the belt stack, just inside the coat shell (no hard rim at the waist).
+  // 6 tapering panels × (upper + lower solid segment, each a lagging spring) → torn strips, each on
+  // its own spring (anim.js); indigo lining on the inside; grey-violet piping down the open front
+  // edges and the back vent's edges (COAT_PANELS `edge`). The panel tops tuck under the belt stack,
+  // just inside the coat shell (no hard rim at the waist).
   const coat = [];
   COAT_PANELS.forEach((P, i) => {
     const sa = Math.sin(P.az), ca = Math.cos(P.az);
-    const R0 = P.r ?? 1 / Math.hypot(sa / DIM.coatR, ca / (DIM.coatR * 0.69)) + P.out * 0.5;
-    const ay = P.flap ? DIM.coatY + P.y : DIM.coatY;
-    const anchor = joint(pelvis, sa * R0, ay, ca * R0);
+    const R0 = 1 / Math.hypot(sa / DIM.coatR, ca / (DIM.coatR * 0.69)) + P.out * 0.5;
+    const anchor = joint(pelvis, sa * R0, DIM.coatY, ca * R0);
     anchor.rotation.y = P.az; // local +Z = outward, +X = tangent
     const s0 = joint(anchor);
     // neighbouring panels alternate ink-line sub-ids: their overlapping edges are outlined. Soft
     // folds deepen down each panel (the same phase across the join, so the two segments meet)
-    const fph = i * 2.1 + 0.7, fw = P.flap ? 0 : P.folds ?? 1.5;
-    const g0 = sub(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i, [0, 0.014, fw, fph]), i % 2);
+    const fph = i * 2.1 + 0.7, fw = P.folds ?? 1;
+    const sk = P.skew ?? 0, w0 = P.w[0];
+    const g0 = sub(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i, [0, 0.008, fw, fph], 0, 1, sk, w0), i % 2);
     mesh(s0, g0, M.coat);
     mesh(s0, g0, M.lining);
     const s1 = joint(s0, 0, -P.len[0], 0);
     const R1 = R0 + 0.25 * P.len[0];
-    let g1;
-    if (P.flap) {
-      // pointed tip, violet lower part (hem ink)
-      g1 = tatterStrip(P.len[1], P.w[1], { curl: 0.05, seed: 900 });
-      mesh(s1, g1, M.hem);
-    } else {
-      // the lower segment lightens into the dusty lavender torn zone over its last 55 % (the
-      // reference's tails: black at the hips, grey-lavender toward the ragged hem)
-      const fold = [0.014, 0.034, fw, fph];
-      g1 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i, fold, 0, 0.45), i % 2);
-      mesh(s1, g1, M.coat);
-      mesh(s1, g1, M.lining);
-      const g2 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.03, 31 + i, fold, 0.45, 1), i % 2);
-      mesh(s1, g2, M.hem);
-      mesh(s1, g2, M.lining);
+    // the lower segment lightens into the dusty lavender torn zone over its last 60 % (the
+    // reference's tails: black at the hips, grey-lavender toward the ragged points)
+    const fold = [0.008, 0.016, fw, fph];
+    const sl = P.slant ?? 0;
+    const g1 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.022, 31 + i, fold, 0, 0.4, sk, w0, sl), i % 2);
+    mesh(s1, g1, M.coat);
+    mesh(s1, g1, M.lining);
+    const g2 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.022, 31 + i, fold, 0.4, 1, sk, w0, sl), i % 2);
+    mesh(s1, g2, M.hem);
+    mesh(s1, g2, M.lining);
+    if (P.edge) {
+      mesh(s0, sheetEdge(P.len[0], P.w[0], P.w[1], R0, P.edge, 1, 0.25, sk, w0), M.piping);
+      mesh(s1, sheetEdge(P.len[1], P.w[1], P.w[2], R1, P.edge, 0.5, 0.25, sk, w0), M.piping);
     }
-    // torn strips along the tear line (0.06–0.12 m wide at the root, overlapping a little)
+    // torn strips along the tear line: the claw points the panel ends in, overlapping a little
     const strips = [];
     const n = P.strips.length;
     const R2 = R1 + 0.25 * P.len[1];
     const wr = P.w[2] / Math.max(1, n);
     for (let k = 0; k < n; k++) {
-      const u = ((k + 0.5) / n - 0.5) * P.w[2];
+      const sk01 = (k + 0.5) / n;
+      const u = (sk01 - 0.5) * P.w[2] + sheetOffset(P.w[2], w0, sk);
       const a = u / R2;
-      const sj = joint(s1, Math.sin(a) * R2, -P.len[1], (Math.cos(a) - 1) * R2);
+      const sj = joint(s1, Math.sin(a) * R2, -P.len[1] - sl * (sk < 0 ? 1 - sk01 : sk01), (Math.cos(a) - 1) * R2);
       sj.rotation.y = a;
-      mesh(sj, sub(tatterStrip(P.strips[k], Math.max(0.065, wr * 1.3), { fork: !!P.fork[k], curl: 0.4, seed: 1000 + i * 31 + k * 7 }), (i + k) % 2), M.hem);
+      mesh(sj, sub(tatterStrip(P.strips[k], Math.max(0.05, wr * 1.25), { fork: !!P.fork[k], curl: 0.25, seed: 1000 + i * 31 + k * 7 }), (i + k) % 2), M.hem);
       strips.push({ joint: sj, len: P.strips[k], rest: a, phase: (i * 1.7 + k * 2.3) % (Math.PI * 2) });
     }
     // r0 = the sheet's radius round the hips at the anchor (the lower segment's is r0 + 0.25 × len[0])
-    coat.push({ anchor, segs: [s0, s1], def: P, strips, len: [P.len[0], P.len[1] + (n ? Math.max(...P.strips) * 0.8 : 0)], r0: R0 });
+    coat.push({ anchor, segs: [s0, s1], def: P, strips, len: [P.len[0], P.len[1] + sl + (n ? Math.max(...P.strips) * 0.8 : 0)], r0: R0 });
   });
 
   // ---------------------------------------------------------------- the longsword
-  // origin at the grip centre, blade along +Z (width on X, flat faces ±Y). The forte under the gem
-  // cage (to DIM.forte) is dark gunmetal, so the violet gem sits on dark metal between silver
-  // rails; the glyph blade starts above it, and its last 0.15 m (the point) is the brightest steel.
+  // origin at the grip centre, blade along +Z (width on X, flat faces ±Y). The reference's sword
+  // (the owner's single-figure image): a broad blade at the guard tapering in one long straight line
+  // to a sharp point; dark faceted steel between cyan edges with a bright centre ridge; a dark
+  // gunmetal base with a hooked barb on each edge; a few lightning notches up the lower half; a guard
+  // whose quillons sweep UP toward the blade into hooked points round a violet four-point star gem.
   const sword = joint(body);
   {
     const tipZ = DIM.drawnTip;
-    const z0 = 0.125, L = tipZ - z0, hw0 = 0.0475, hw1 = 0.04, tipF = 0.14;
-    const hwAt = (z) => hw0 + (hw1 - hw0) * Math.min(1, (z - z0) / (L * (1 - tipF)));
+    const z0 = 0.11, L = tipZ - z0, hw0 = 0.05, hw1 = 0.031, tipF = 0.17;
+    const hwAt = (z) => hw0 + (hw1 - hw0) * Math.min(1, Math.max(0, (z - z0) / (L * (1 - tipF))));
     const zT = tipZ - L * tipF; // where the point's taper starts
     for (const h of [-1, 1]) {
+      // the two halves either side of the ridge are separate pieces (ink-line sub-ids 0 / 1)
       const k = h > 0 ? 1 : 0;
       mesh(sword, sub(bladeGeometry(DIM.forte - z0 + 0.004, hw0, hwAt(DIM.forte), 0, 0.012, 0.045, h), k), M.armor, 0, 0, z0);
-      mesh(sword, sub(bladeGeometry(zT - DIM.forte + 0.002, hwAt(DIM.forte), hw1, 0, 0.012, 0.045, h), k), M.blade, 0, 0, DIM.forte);
-      mesh(sword, sub(bladeGeometry(tipZ - zT, hw1, hw1, 0.999, 0.012, 0.045, h), k), M.bladeTip, 0, 0, zT);
+      mesh(sword, sub(bladeGeometry(zT - DIM.forte + 0.002, hwAt(DIM.forte), hw1, 0, 0.011, 0.045, h), k), M.blade, 0, 0, DIM.forte);
+      mesh(sword, sub(bladeGeometry(tipZ - zT, hw1, hw1, 0.999, 0.011, 0.045, h), k), M.bladeTip, 0, 0, zT);
     }
-    // the reference's jagged edge: flat saw teeth along both edges, raking toward the point and
-    // growing toward it, the biggest (lightning-like notches) on the last third (the art pass
-    // outlines them in the blade's cyan)
+    // the base's barbs: a broad hook flaring off each edge just above the guard, raking to the point,
+    // and a smaller one where the cyan edge begins
+    const barbs = [];
+    for (const s of [-1, 1]) {
+      barbs.push(spike(0.06, 0.02, [s * (hw0 - 0.008), 0, z0 + 0.035], [s * 0.85, 0, 0.55], [0, 0, 1], 0.45, 4, 0.3));
+      barbs.push(spike(0.036, 0.012, [s * (hwAt(DIM.forte) - 0.006), 0, DIM.forte - 0.012], [s * 0.7, 0, 0.72], [0, 0, 1], 0.3, 4, 0.3));
+    }
+    mesh(sword, mergeGeometries(barbs), M.armor);
+    // the jagged edge: lightning notches up the lower half of both edges, shrinking toward the point
+    // (the art pass outlines them in the blade's cyan)
     const teeth = [];
     for (const s of [-1, 1]) {
-      for (let t = 0; t < 6; t++) {
-        const z = 0.52 + t * 0.15 + (s > 0 ? 0.075 : 0);
-        if (z > zT - 0.02) continue;
-        const k = t / 5;
-        teeth.push(spike(0.026 + 0.03 * k * k, 0.013 + 0.004 * k, [s * (hwAt(z) - 0.006), 0, z], [s * 0.74, 0, 0.67], [0, 0, 1], 0.25, 4, 0.3));
+      for (let t = 0; t < 4; t++) {
+        const z = 0.33 + t * 0.14 + (s > 0 ? 0.07 : 0);
+        const k = 1 - t / 4;
+        teeth.push(spike(0.022 + 0.02 * k, 0.012, [s * (hwAt(z) - 0.005), 0, z], [s * 0.72, 0, 0.7], [0, 0, 1], 0.25, 4, 0.3));
       }
     }
     mesh(sword, mergeGeometries(teeth), M.blade);
   }
   mesh(sword, limbGeometry({ length: 0.16, r0: 0.016, r1: 0.017, radial: 6, rings: 3 }), M.leather, 0, 0, -DIM.gripBack); // grip
   {
-    // gunmetal: guard block, upswept quillons (tips hooked back toward the pommel), the gem cage
-    // rails with outward barbs (a scalloped outline), the kite pommel
+    // gunmetal: the guard block, its quillons swept up toward the blade into hooked points (a
+    // crescent round the gem), a claw back toward the grip off each quillon root, a spur toward the
+    // pommel, the kite pommel
     const gg = [
-      ellipsoidGeometry(0.04, 0.022, 0.024, { widthSegs: 10, heightSegs: 6 }).translate(0, 0, DIM.guard + 0.005),
+      ellipsoidGeometry(0.034, 0.02, 0.022, { widthSegs: 10, heightSegs: 6 }).translate(0, 0, DIM.guard + 0.004),
       kiteGeometry(0.022, 0.014, 0.05, { zNeg: 1.5 }).translate(0, 0, -0.135),
+      spike(0.04, 0.012, [0, 0, DIM.guard - 0.008], [0, 0, -1], [1, 0, 0], 0, 4, 0.6),
     ];
     for (const s of [-1, 1]) {
-      gg.push(spike(0.115, 0.017, [s * 0.03, 0, DIM.guard + 0.006], [s, 0, -0.18], [0, 0, -1], 0.4, 5, 0.6));
-      gg.push(spike(0.03, 0.007, [s * 0.128, 0, DIM.guard - 0.03], [-s * 0.6, 0, 0.8], [0, 0, 1], 0, 4)); // inner hook
-      for (let b = 0; b < 3; b++) gg.push(spike(0.022 - b * 0.003, 0.006, [s * (0.056 - b * 0.004), 0, 0.16 + b * 0.065], [s, 0, 0.55], [0, 0, 1], 0.2, 4));
-      // the reference's spiky guard: a claw on each side sweeping out toward the blade
-      gg.push(spike(0.085, 0.012, [s * 0.045, 0, DIM.guard + 0.03], [s * 0.6, 0, 0.8], [s, 0, 0], 0.35, 5, 0.55));
+      gg.push(spike(0.12, 0.018, [s * 0.026, 0, DIM.guard], [s, 0, 0.32], [0, 0, 1], 0.55, 5, 0.6));
+      gg.push(spike(0.032, 0.007, [s * 0.11, 0, DIM.guard + 0.048], [-s * 0.4, 0, 0.9], [0, 0, 1], 0.1, 4));
+      gg.push(spike(0.04, 0.01, [s * 0.04, 0, DIM.guard - 0.006], [s * 0.7, 0, -0.7], [0, 0, -1], 0.2, 4, 0.6));
     }
     mesh(sword, mergeGeometries(gg), M.armor);
-    // silver: ferrules, the pommel collar, the cage rails, the diamond frame holding the gem
+    // silver: ferrules, the pommel collar, the four-point star setting behind the gem
     const sv = [
-      ring(0.02, 0.02, 0.008, 8).rotateX(Math.PI / 2).translate(0, 0, DIM.guard - 0.012),
+      ring(0.02, 0.02, 0.008, 8).rotateX(Math.PI / 2).translate(0, 0, DIM.guard - 0.014),
       ring(0.02, 0.02, 0.008, 8).rotateX(Math.PI / 2).translate(0, 0, -DIM.gripBack),
       ring(0.019, 0.019, 0.007, 8).rotateX(Math.PI / 2).translate(0, 0, -0.095),
-      kiteGeometry(0.038, 0.016, 0.062, { guv: 'xz' }).translate(0, 0, DIM.gem),
+      starGeometry(0.038, 0.054, 0.013, 0.027).translate(0, 0, DIM.gem),
     ];
-    for (const s of [-1, 1]) sv.push(place(limbGeometry({ length: 0.2, r0: 0.008, r1: 0.005, radial: 5, rings: 2, capSegs: 1 }), s * 0.054, 0, DIM.guard + 0.01, 0, s * -0.045, 0));
     mesh(sword, mergeGeometries(sv), M.trim);
   }
-  // the gem: two half-gems proud of both flats by 0.018 m (0.07 m long so it stays a cell) on the
-  // dark forte; a marker joint for its glow sprite and glints
-  mesh(sword, mergeGeometries([
-    kiteGeometry(0.024, 0.014, 0.038, { guv: 'xz' }).translate(0, 0.016, 0),
-    kiteGeometry(0.024, 0.014, 0.038, { guv: 'xz' }).translate(0, -0.016, 0),
-  ]), M.gem, 0, 0, DIM.gem);
+  // the gem: a violet four-point star proud of both flats (its points along the blade and across
+  // the quillons), on its silver setting; a marker joint for its glow sprite and glints
+  mesh(sword, starGeometry(0.023, 0.033, 0.008, 0.031, 0.005), M.gem, 0, 0, DIM.gem);
   const gem = joint(sword, 0, 0, DIM.gem);
   // fewer draw calls: static meshes sharing a joint and a material become one mesh
   mergeStatic(root, new Set([flask]));
