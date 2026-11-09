@@ -101,8 +101,8 @@ const LAVA = {
  * shows the molten fissures from the start (chest, throat, undersides strongest, sparse on the back).
  */
 export const GLOW = {
-  scales: [0.35, 0.7, 0], // sparse embers in the hide's fissures; phase 2: the cracks wake up
-  limbs: [0.32, 0.7, 0], // legs, tail, wing arm: as scales (fissures run along the limb)
+  scales: [0.35, 0.5, 0], // the cracks in the scale gaps (undersides); phase 2: they wake up
+  limbs: [0.32, 0.5, 0], // legs, tail, wing arm: as scales
   neck: [0.32, 0.7, 0.3], // the throat strip carries the molten S and its charge
   head: [0.3, 0.7, 0.2], // skull, brow and jaw: as the neck, a little heat while the breath charges
   belly: [0.5, 1.0, 0.3],
@@ -146,7 +146,7 @@ const HIDE_ART = {
   light: [1.0, 0.55, 0.25, 0.03],
   // molten cracks in the scale gaps, only where the hide faces down (the reference's cracks on the
   // lower flanks, legs and tail underside; a voronoi net over the whole back read as red worms)
-  crack: [5.0, 0.08, -0.45, 0.6],
+  crack: [22, 0.1, -0.4, 0.6],
   under: UNDER,
 };
 // molten undersides: the reference's chest is grey scales lit orange from below with gold rims and
@@ -160,7 +160,7 @@ const LAVA_ART = {
   ink: [0.45, 0.3, 0.22],
   rimInk: [0.85, 0.5, 0.25],
   light: [1.0, 0.55, 0.25, 0.04],
-  crack: [5.0, 0.3, -0.9, 0.15],
+  crack: [14, 0.3, -0.9, 0.15],
   glow: [1.4, 0.02],
   under: [1.0, 0.3, 0.06, 1.2],
 };
@@ -173,7 +173,7 @@ export const WYRM_ART = {
   limbs: { ...HIDE_ART, scale: [0.3, 0.23] },
   neck: { ...HIDE_ART, scale: [0.4, 0.3] },
   // the head keeps fine scales (the neck's big plates turned the skull into a few flat tiles)
-  head: { ...HIDE_ART, scale: [0.2, 0.15], crack: [2.4, 0.04, -0.3, 0.7] },
+  head: { ...HIDE_ART, scale: [0.2, 0.15], crack: [12, 0.06, -0.3, 0.7] },
   // the sternum: the brightest scales on the body, lit gold from below (the reference's focal chest)
   belly: { ...LAVA_ART, scale: [0.56, 0.4], tone: [0.0, 0.24, 2.0, 0.22], ink: [0.42, 0.34, 0.29], rimInk: [0.85, 0.55, 0.3], glow: [1.2, 0], under: [1.0, 0.32, 0.07, 1.5] },
   // the throat: orange-lit scales with amber rims, kept under the bloom threshold at rest (a gold

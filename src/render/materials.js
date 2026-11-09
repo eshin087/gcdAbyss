@@ -642,8 +642,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float a = mod(atan(s.y, s.x), 3.14159265);
         return 1.0 + mod(floor(a / 0.7853982 + 0.5), 4.0);
       }
-      // sInfo: the scale the point lies on (its grid id xy, its hash z): the molten cracks pick scales
-      vec2 wScales(vec2 p, out vec3 rimT, out vec3 sInfo) {
+      // sInfo: the scale the point lies on (its grid id xy, its hash z) and the distance to its gap in
+      // gap widths (w): the molten cracks pick scales and glow a few gap widths around the gap
+      vec2 wScales(vec2 p, out vec3 rimT, out vec4 sInfo) {
         float ppx = max(max(length(dFdx(p)), length(dFdy(p))), 1e-6); // scale units per pixel
         float rimW = max(uWTone.w, 4.5 * ppx);
         float gapW = max(uWGap.x, uWGap.y * ppx);
@@ -665,7 +666,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         else if (dOwn > 0.0) { dIn = dOwn; dCov = -dUp; axl = ax; id = vec2(floor(px), row); tg = vec2(f.x > 0.0 ? 1.0 : -1.0, wEdgeD(ax)); }
         else { dIn = f.y + 1.0 - eO; dCov = -dOwn; axl = 0.5 - ax; id = vec2(xo, row - 1.0); tg = vec2(1.0, 0.0); }
         float hs = hash12(id + uSeed * 0.37);
-        sInfo = vec3(id, hs);
+        sInfo = vec4(id, hs, mix(dCov / max(gapW, 1e-4), 9.0, lod)); // (no cracks once scales alias)
         float t = clamp(dCov / max(dCov + dIn, 1e-4), 0.0, 1.0); // 0 under the overlap .. 1 at its edge
         float body = uWTone.y * (1.0 + uWVary * (hs - 0.5)) * (0.3 + 0.7 * t * t);
         // the free edge catches the light most at its tip: a bright chevron per scale that fades
@@ -718,7 +719,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vec2 gs = gp / max(uWScale, vec2(1e-4));
         vec2 jx = dFdx(gs), jy = dFdy(gs);
         vec3 rimT = vec3(0.0);
-        vec3 sInfo = vec3(0.0);
+        vec4 sInfo = vec4(0.0, 0.0, 0.0, 9.0);
         vec2 sc = uWScale.x > 0.0 ? wScales(gs, rimT, sInfo) : vec2(1.0, 0.0);
         // stroke glyph code for the art pass (alpha = flag + 0.01 x code): scale rims draw '\ /'
         // along their edge (the reference's scale outlines), thin parts (uWShape.y 2: spikes, claws,
@@ -757,12 +758,15 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         // the chest, throat, belly, inner legs and tail underside; none across the back): a smooth noise
         // over the scale grid picks winding runs of scales (its 0.5 isoline) plus a share of single ones,
         // and their gap glows, faded in on down-facing surfaces
-        if (uWCrack.x > 0.0 && hot > 0.001 && sc.y > 0.001) {
+        // (the glow spreads ~2.5 gap widths from the gap's middle: a thin hot core and a halo, wide
+        // enough to light the letters across it, where the gap alone only nicked a pixel of them)
+        float cg = 1.0 - smoothstep(0.0, 2.5, sInfo.w);
+        if (uWCrack.x > 0.0 && hot > 0.001 && cg > 0.001) {
           float uw = smoothstep(uWCrack.z, uWCrack.w, -n.y);
           float nf = wNoise(sInfo.xy * 0.31 + uSeed * 1.3);
           float run = 1.0 - smoothstep(0.05, 0.11, abs(nf - 0.5));
           float one = step(1.0 - uWCrack.y, fract(sInfo.z * 13.17));
-          col += uWEmit * hot * uWCrack.x * sc.y * max(run, one) * uw * (0.8 + 0.2 * sin(uTime * 2.3 + sInfo.z * 6.28));
+          col += uWEmit * hot * uWCrack.x * (cg * cg + sc.y) * 0.5 * max(run, one) * uw * (0.8 + 0.2 * sin(uTime * 2.3 + sInfo.z * 6.28));
         }
         col += uWEmit * hot * (uWGlow.x * sc.y + uWGlow.y);
         col += vec3(1.0, 0.92, 0.85) * uFlash * (0.15 + 0.6 * sc.x);
