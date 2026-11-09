@@ -66,21 +66,22 @@ export const WING_KEYS = {
   },
   // the combat stance (the owner's reference painting): both wings raised high and spread wide, the arm
   // rising out and up to a wrist ~1.85 H up and 2.1 out: the peak of the wing. From there the sail is
-  // CAMBERED: the leading finger runs out, back and a little up, the next two fan out and forward-down
-  // so the outer sail faces UP and forward, and the inner finger hangs down so the inner sail (down to
-  // the hip) faces out like a cape. Fitted (coordinate descent, round 2) to the projected membrane
-  // area over the 58° game camera's whole ring of yaws plus the reference and front views, both wings:
-  // any flat sail is edge-on from somewhere on that ring (v0.4's back-swept one from the front three-
-  // quarters; round 1's out-forward one at ±45° and from behind, and its far wing at the reference
-  // view: ~0.12-0.2 of the wing's area). This one keeps every wing at >= 0.44 of its area from every
-  // one of those views. The painting's far wing reaching past the head is still the look sweep
-  // (REST_POSE.sweep: the foe off to one side).
+  // CAMBERED: the leading finger falls away back and down from the peak (the painting's bat 'M'), the
+  // next two fan straight out and forward-down so the outer sail faces UP and forward, and the inner
+  // finger hangs down so the inner sail (down to the hip) faces out like a cape. Fitted (coordinate
+  // descent, round 2) to the projected membrane area over the 58° game camera's whole ring of yaws
+  // plus the reference and front views, both wings: any flat sail is edge-on from somewhere on that
+  // ring (v0.4's back-swept one from the front three-quarters; round 1's out-forward one at ±45° and
+  // from behind, and its far wing at the reference view: ~0.12-0.2 of the wing's area). This one keeps
+  // every wing at >= 0.42 of its area from every one of those views (a rising leading edge scored
+  // 0.44 but drew a flat bar across the top of the reference view). The painting's far wing reaching
+  // past the head is still the look sweep (REST_POSE.sweep: the foe off to one side).
   // Thumb: up and forward, its tip hooking down in front (the top-most accent).
   // The membrane's glyph grid is laid out on this key (membrane.js), so it is square at rest.
   HALF: {
-    wrist: ck(2.1, 7.5, -0.42),
+    wrist: ck(2.1, 7.5, -0.78),
     pole: [0.35, -0.05, -1],
-    fingers: [[0.797, 0.203, -0.569], [0.905, -0.105, 0.411], [0.708, -0.325, 0.627], [0.431, -0.895, 0.112]].map(nrm),
+    fingers: [[0.629, -0.249, -0.736], [0.953, -0.259, 0.158], [0.694, -0.374, 0.615], [0.173, -0.98, 0.098]].map(nrm),
     kink: [-8 * DEG, -22 * DEG, -8 * DEG, 0],
     thumb: nrm([0.1, 0.8, 0.6]),
   },
