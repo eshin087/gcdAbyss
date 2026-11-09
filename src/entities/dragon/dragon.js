@@ -291,8 +291,10 @@ export class Dragon {
       const air = this.state === 'airborne' || this.rig.s.alt > 1.0;
       this._clearWarn(); // a cancelled red windup drops its glow at once
       this.brain.plunged({ air, alt: Math.max(this.rig.s.alt, 0), heavy });
-      this.flash = Math.max(this.flash, 1);
     }
+    // a soft hurt flash only: the impact's hitstop freezes the flash's decay, and a full one washed the
+    // whole wyrm white for that moment (the hero's impact burst is the accent)
+    this.flash = Math.min(this.flash, TUNING.plunged?.flash ?? 0.45);
     // the execution spends the break (the meter starts over); a plain plunge adds its posture (a full
     // meter breaks once the reaction is over)
     if (!heavy && posture > 0 && !this.broken) this.addPosture(posture);
@@ -441,6 +443,23 @@ export class Dragon {
     this.posture = 0;
     this.postureTimer = 0;
     this.emitPosture(true);
+    // the abilities this phase unlocks come in one by one, not all at once after the roar: each gets a
+    // staggered opening cooldown (TUNING.unlockStagger [first, step, jitter] s) in a random order. The
+    // phase-3 opener (the nova) is queued by the roar itself and is not delayed.
+    const U = TUNING.unlockStagger;
+    if (U && n > 1 && this.brain?.cooldowns) {
+      const fresh = Object.keys(TUNING.attacks).filter((k) => TUNING.attacks[k]?.phase === n && k !== 'nova' && k !== 'roar');
+      for (let i = fresh.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = fresh[i];
+        fresh[i] = fresh[j];
+        fresh[j] = t;
+      }
+      fresh.forEach((k, i) => {
+        const cd = U[0] + U[1] * i + Math.random() * U[2];
+        this.brain.cooldowns[k] = Math.max(this.brain.cooldowns[k] ?? 0, cd);
+      });
+    }
     const gate = this.nextPhaseHp;
     if (gate > 0 && this.hp <= gate) this.brain.pendingPhase = n + 1;
   }

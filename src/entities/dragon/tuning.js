@@ -19,7 +19,7 @@ const S = SCALE;
 export const TUNING = {
   // v0.5 "epic wyrm fight" starting difficulty (the lead tunes after the merge): a 3-5 min fight for
   // a player who knows the moves (docs/COMBAT.md "Difficulty")
-  maxHp: 4200,
+  maxHp: 4500,
   // three phases (contract 4): phase n starts at phaseAt[n - 1] of max HP (P1 100 %, P2 66 %, P3 33 %).
   // Each threshold is a gate: with the AI on, damage stops there until the transition roar starts.
   phaseAt: [1, 0.66, 0.33],
@@ -63,7 +63,11 @@ export const TUNING = {
     fall: 0.6, slam: 0.3, thrash: 0.6, rise: 0.45,
     exec: { slam: 0.35, thrash: 1.15, rise: 0.5 },
     crashShake: 0.6,
+    flash: 0.45, // cap on the hurt flash at the impact (the hitstop freezes its decay)
   },
+  // a new phase's abilities unlock one by one: opening cooldown = first + step x i + jitter (s), in a
+  // random order (Dragon.enterPhase). The phase-3 opener (nova) is queued by the roar and not delayed.
+  unlockStagger: [2, 2.5, 2],
   // the tell's timing cue: combat:flash + in-world flash this many seconds before impact (COMBAT.md)
   flashLead: 0.35,
   // strings (contract 1): a follow-up hit lands at least this long after the previous one (the
@@ -106,7 +110,7 @@ export const TUNING = {
     bite: {
       label: 'Bite', tell: TELL.BLUE,
       windup: 0.75, active: 0.2, impact: 0.06, recovery: 0.8,
-      damage: 24, knockback: 2, reach: 5.4 * S, cooldown: 1.2, weight: 3,
+      damage: 24, knockback: 2, reach: 5.4 * S, cooldown: 1.2, weight: 1.5,
     },
     swipe: {
       label: 'Claw swipe (foreleg rake)', tell: TELL.NORMAL,
@@ -122,7 +126,7 @@ export const TUNING = {
         // reach: max head reach from the neck base; lunge: max root travel during the bite (m)
         { kind: 'lungeBite', tell: TELL.BLUE, windup: 0.6, active: 0.24, impact: 0.05, damage: 22, knockback: 3, reach: 6.0 * S, lunge: 2.5 * S },
       ],
-      recovery: 1.0, cooldown: 5, weight: [2.2, 2.64, 2.4], range: [2.4, 5.4], maxAng: 0.9,
+      recovery: 1.0, cooldown: 5, weight: [2.4, 2.4, 2.0], range: [2.4, 5.4], maxAng: 0.9,
     },
     // claw, claw, an overhead smash and a lunging bite: parry, parry, PARRY, PARRY
     rendingFlurry: {
@@ -134,7 +138,7 @@ export const TUNING = {
         { kind: 'overhead', side: 1, tell: TELL.BLUE, windup: 0.62, active: 0.24, impact: 0.22, damage: 22, knockback: 3, lunge: 1.2 },
         { kind: 'lungeBite', tell: TELL.BLUE, windup: 0.55, active: 0.24, impact: 0.05, damage: 24, knockback: 3.5, reach: 6.0 * S, lunge: 2.5 * S },
       ],
-      recovery: 1.1, cooldown: 7, weight: [2.0, 2.4, 2.2], range: [2.4, 5.4], maxAng: 0.9,
+      recovery: 1.1, cooldown: 7, weight: [3.0, 2.8, 2.4], range: [2.4, 5.4], maxAng: 0.9,
     },
     // the head rears back and HOLDS (a random delay), then snaps; half the time a quick second snap
     hesitantMaw: {
@@ -144,7 +148,7 @@ export const TUNING = {
         { kind: 'bite', chance: 0.5, tell: TELL.BLUE, windup: 0.5, active: 0.2, impact: 0.06, damage: 20, knockback: 2.5, reach: 5.4 * S },
       ],
       // (the reared head can't reach down under the snout: from 3.5 out)
-      recovery: 0.9, cooldown: 6, weight: [1.8, 2.0, 2.0], range: [3.5, 6.5], maxAng: 0.65,
+      recovery: 0.9, cooldown: 6, weight: [2.4, 2.2, 2.0], range: [3.5, 6.5], maxAng: 0.65,
     },
     // a wing smashes down beside the body, it pivots, the other wing smashes down (a gust shoves)
     wingBuffet: {
@@ -170,7 +174,7 @@ export const TUNING = {
         { kind: 'tailJab', tell: TELL.RED, windup: 1.0, active: 0.36, impact: 0.245, damage: 26, knockback: 4, offset: 0.95, past: 0.8, lunge: 0.8, minReach: 2.0 * S, reach: 9.5 * S },
         { kind: 'tailSweep', tell: TELL.RED, windup: 0.9, active: 0.45, impact: 0.2, impactFlank: 0.1, damage: 30, knockback: 3, spin: 200 * DEG, minReach: 2.0 * S, reach: 9.5 * S },
       ],
-      recovery: 1.0, cooldown: 8, weight: [0, 2.0, 2.2], range: [2.4, 5.4], maxAng: 0.9,
+      recovery: 1.0, cooldown: 8, weight: [0, 2.6, 2.4], range: [2.4, 5.4], maxAng: 0.9,
     },
     // a short hop onto the hero (red ring), then a bite
     pounce: {
@@ -196,7 +200,7 @@ export const TUNING = {
         { kind: 'bite', tell: TELL.BLUE, windup: 0.55, active: 0.2, impact: 0.12, damage: 24, knockback: 3, reach: 5.4 * S },
         { kind: 'stomp', tell: TELL.RED, windup: 0.85, active: 0.15, impact: 0.15, damage: 36, knockback: 4, radius: 4.5 * S },
       ],
-      recovery: 1.2, cooldown: 12, weight: [0, 0, 2.6], range: [2.4, 5.4], maxAng: 0.9,
+      recovery: 1.2, cooldown: 12, weight: [0, 0, 3.4], range: [2.4, 5.4], maxAng: 0.9,
     },
     tail: {
       label: 'Tail sweep', tell: TELL.RED,
@@ -204,7 +208,7 @@ export const TUNING = {
       // minWindup: the backswing's floor (phase 3's x0.78 left the tail on a hero straight behind: it
       // landed on the first active frame, 0.2 s before its flash + lead)
       windup: 0.9, minWindup: 0.76, active: 0.45, impact: 0.2, impactFlank: 0.1, recovery: 0.9,
-      damage: 32, knockback: 3, cooldown: 2.5, weight: 3, spin: 200 * DEG,
+      damage: 32, knockback: 3, cooldown: 2.5, weight: 2.4, spin: 200 * DEG,
       // swept-arc band around the root: the 16-segment tail's tip reaches 8.9 model units out in the
       // spin (measured v0.4) + its 0.45 hit sphere + the hero's radius
       minReach: 2.0 * S, reach: 9.5 * S,
@@ -212,7 +216,7 @@ export const TUNING = {
     stomp: {
       label: 'Stomp', tell: TELL.RED,
       windup: 1.0, active: 0.15, recovery: 1.0, // impact = end of active
-      damage: 34, radius: 4.5 * S, knockback: 3, cooldown: 3, weight: 3,
+      damage: 34, radius: 4.5 * S, knockback: 3, cooldown: 3, weight: 1.4,
     },
     // a stream: blockable (chip), not parryable; dodge through it or step out of the cone
     breath: {

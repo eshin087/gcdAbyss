@@ -699,7 +699,7 @@ const breath = {
     ['recovery', wind(d, T.breath.recovery)],
   ],
   beats: (d, a) => [beat('breath', 0, a.list[0][1], T.breath, 'mouth')],
-  weight: (d, s) => (s.dist >= 6 * S && s.dist <= 16 * S && s.absAng <= 1.0 ? perPhase(T.breath.weight, d.phase) : 0),
+  weight: (d, s) => (s.dist >= 4.5 * S && s.dist <= 16 * S && s.absAng <= 1.0 ? perPhase(T.breath.weight, d.phase) : 0),
   start(d, a) {
     a.side = Math.random() < 0.5 ? -1 : 1;
     a.aim = d.sense.yawTo;
