@@ -6,6 +6,7 @@ import { SFX } from './sfx.js';
 import { ForestAmbience, BreathLoop } from './ambience.js';
 import { ChargeHum } from './charge.js';
 import { createMusic } from './music.js';
+import { FIRE_SFX, subscribeFire } from './fire.js';
 
 // Procedural WebAudio engine: every sound is synthesised at runtime (no sample files).
 // The AudioContext is created lazily by unlock() (flow calls it on title dismiss; the engine
@@ -53,7 +54,7 @@ const VICTORY_SETTLE = 10; // s of victory pad before settling to ambient
 const GRUNT_GAP = 0.5; // s: rapid fire-contact ticks only grunt this often (sizzle in between)
 const DUCK_HZ = 650;
 const EMPTY = Object.freeze({});
-const RX_OWN_SOUND = /breath|fire|flame|ball|bite|roar|inferno|blaze|meteor/i;
+const RX_OWN_SOUND = /breath|fire|flame|ball|bite|roar|inferno|blaze|meteor|strafe|dive|barrage|erupt|nova/i;
 
 const ALIASES = {
   ui: ['blip', { kind: 'select' }],
@@ -179,7 +180,7 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx || ctx.state === 'closed' || typeof name !== 'string') return false;
     let o = opts && typeof opts === 'object' ? opts : EMPTY;
-    let def = SFX[name];
+    let def = SFX[name] ?? FIRE_SFX[name];
     if (!def && ALIASES[name]) {
       const [n, extra] = ALIASES[name];
       name = n;
@@ -654,7 +655,8 @@ export class AudioEngine {
     // attack tells (any attacker): the player's reaction cues
     on('combat:tell', (d) => {
       const o = this._atEvent(d);
-      if (d.tell === 'blue') this.play('tellBlue', o);
+      if (d.hazard) this.play('hazardTell', o); // a fire hazard's own tell (meteors, pillars): no brass sting
+      else if (d.tell === 'blue') this.play('tellBlue', o);
       else if (d.tell === 'red') {
         this.play('tellRed', o);
         this._dipMusic();
@@ -755,6 +757,7 @@ export class AudioEngine {
       this._autoMusic('none');
     });
     on('dragon:dead', () => this.play('emberHiss', this._atDragon()));
+    subscribeFire(on, this); // dragon:spell / dragon:hazard (fire spells, flights, hazards: audio/fire.js)
 
     // flow
     on('bonfire:rest', () => {

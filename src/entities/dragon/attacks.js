@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TUNING, SCALE } from './tuning.js';
 import { TELL } from '../../combat/rules.js';
 import { clamp, lerp, smoothstep, easeInOutSine, easeOutCubic, easeInCubic, turnToward, angleDiff } from '../../core/math.js';
+import { FIRE } from './fireAttacks.js';
 
 /** Wing spread the actions return to (the mantled HALF sails, TUNING.rest). */
 const REST_SPREAD = TUNING.rest.spread;
@@ -2022,6 +2023,7 @@ const frenzy = makeString('frenzy');
 export const ATTACKS = {
   bite, swipe, clawCombo, rendingFlurry, hesitantMaw, wingBuffet, tailLash, pounce, frenzy,
   tail, stomp, breath, fireball, charge, leap, roar,
+  ...FIRE, // fireAttacks.js: the short flights and the fire spells (contract 3)
 };
 
 /** Parryable close-range swings (+ every string, `def.melee`): a parry on the last hit recoils. */

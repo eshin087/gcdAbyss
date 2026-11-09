@@ -1186,6 +1186,255 @@ async function scenarioLab() {
   return G;
 }
 
+// ================================================================== scenario: fire / flight attacks + hazards (dragon-fire)
+async function scenarioFire() {
+  out('\n== scenario FIRE (flight attacks, spells, hazards: completion, flight bounds, flash timing, dodges, clear) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const d = game.dragon, p = game.player, H = d.hazards, lead = TUNING.flashLead;
+  const ER_MAX_CHASE_HITS = TUNING.attacks.eruptions.chase.maxHits;
+  const FIRE_NAMES = ['skyStrafe', 'diveBomb', 'hoverBarrage', 'meteorRain', 'eruptions', 'flameRing', 'flameWall', 'nova'];
+  const AIR = new Set(['skyStrafe', 'diveBomb', 'hoverBarrage']);
+  const HIGH = { skyStrafe: ['pass'], diveBomb: ['hover'], hoverBarrage: ['barrage'] };
+  const listed = new Set(d.debug.abilities().map((a) => a.name));
+  assert(FIRE_NAMES.every((n) => listed.has(n) && TUNING.attacks[n]?.tell === TELL.RED), 'every fire attack is a red Lab ability with tuning data');
+  assert(H && typeof H.clear === 'function' && H.alive === 0, 'dragon.hazards exists, empty at the start');
+  // payloads of the fire events (not in the shared PAYLOAD table: checked here)
+  const badPay = [];
+  const okPay = (n, dd) => {
+    if (n === 'dragon:spell' && !(typeof dd?.name === 'string' && Number.isFinite(dd.x) && Number.isFinite(dd.z))) badPay.push(n);
+    if (n === 'dragon:hazard' && !(typeof dd?.kind === 'string' && typeof dd?.stage === 'string' && [dd.x, dd.z, dd.radius].every(Number.isFinite))) badPay.push(n);
+  };
+  /** Put the hero `dist` m straight ahead of the wyrm (world metres), facing it, full HP. */
+  const front = (dist) => {
+    const a = d.yaw;
+    p.debug.teleport(d.position.x + Math.sin(a) * dist, d.position.z + Math.cos(a) * dist);
+    p.yaw = Math.atan2(d.position.x - p.position.x, d.position.z - p.position.z);
+    p.debug.heal();
+    aimAt(G);
+  };
+  const PLACE = { skyStrafe: 18, diveBomb: 14, hoverBarrage: 14, meteorRain: 12, eruptions: 14, flameRing: 9, flameWall: 14, nova: 12 };
+  const timing = [];
+  for (const name of FIRE_NAMES) {
+    settle(G);
+    H.clear();
+    d.position.set(0, 0, -8);
+    d.yaw = 0;
+    d.rig.snap();
+    run(G, 0.3, { passive: true });
+    front(PLACE[name]);
+    p.debug.god = true;
+    const flashes = [], tells = [];
+    const h0 = G.hits.length;
+    let finite = true, maxAlt = 0, outOfBound = 0, circlesInAir = 0, lowSphere = Infinity, lowWhy = '', sawAir = false, spells = 0;
+    G.watch = (n, dd) => {
+      okPay(n, dd);
+      if (n === 'dragon:spell' && dd?.name === name) spells++;
+      if (dd?.attack !== name) return;
+      if (n === 'combat:tell') tells.push(game.time);
+      if (n === 'combat:flash') flashes.push(game.time);
+    };
+    const trig = game.lab.trigger(name);
+    let done = false;
+    for (let i = 0; i < Math.round(14 / DT) && !done; i++) {
+      input.axis = { x: 0, y: 0 };
+      G.tick(DT);
+      const pt = d.rig.pt, s = d.rig.s;
+      if (![pt.head.x, pt.head.y, pt.head.z, pt.chest.y, pt.hips.y, pt.mouth.y, s.alt, s.pitch, d.yaw].every(Number.isFinite)) finite = false;
+      maxAlt = Math.max(maxAlt, s.alt);
+      if (Math.hypot(d.position.x, d.position.z) > d.bound + 0.01) outOfBound++;
+      if (d.state === 'airborne') {
+        sawAir = true;
+        if (d.bodyCircles.length) circlesInAir++;
+      }
+      // up in its main flight phase (the pass, the hover, the barrage) nothing is in sword reach
+      if (HIGH[name]?.includes(d.brain.action?.phase)) for (const h of d.hurtSpheres) { if (h.y - h.r < lowSphere) { lowSphere = h.y - h.r; lowWhy = `${h.part} at ${d.brain.action?.phase} alt ${s.alt.toFixed(1)}`; } }
+      done = !d.brain.action && d.state === 'combat' && !H.count(null);
+    }
+    G.watch = null;
+    const hits = G.hits.slice(h0).filter((h) => h.attack === name && h.tell === TELL.RED);
+    // each red blow lands flashLead after its timing flash (within ~2 frames)
+    let worst = 0;
+    for (const h of hits) {
+      const f = flashes.filter((t) => t <= h.t + 1e-6).pop();
+      const err = f === undefined ? Infinity : h.t - (f + lead);
+      if (Math.abs(err) > Math.abs(worst)) worst = err;
+    }
+    timing.push(`${name} ${(worst * 1000).toFixed(0)}ms/${hits.length}`);
+    out(`   ${name.padEnd(12)} trigger ${trig} done ${done} tells ${tells.length} flashes ${flashes.length} red hits ${hits.length} worst hit-(flash+lead) ${(worst * 1000).toFixed(0)} ms · max alt ${maxAlt.toFixed(1)} m${Number.isFinite(lowSphere) ? ` · lowest hurt sphere in flight ${lowSphere.toFixed(1)} m (${lowWhy})` : ''}`);
+    assert(trig === true && done, `${name}: forced through the Lab, completes, back to combat with its hazards gone (${d.state})`);
+    assert(finite, `${name}: positions and pose stay finite`);
+    assert(tells.length >= 1 && tells.length === flashes.length, `${name}: one timing flash per tell (${tells.length} / ${flashes.length})`);
+    assert(hits.length >= 1, `${name}: the standing hero is hit (${hits.length} red blows)`);
+    assert(Math.abs(worst) <= 2.5 * DT, `${name}: every blow lands ~flashLead after its flash (worst ${(worst * 1000).toFixed(0)} ms)`);
+    assert(maxAlt <= 16 && !outOfBound, `${name}: stays <= 16 m up and inside the bound (alt ${maxAlt.toFixed(1)}, out ${outOfBound})`);
+    if (AIR.has(name)) {
+      assert(sawAir && !circlesInAir, `${name}: flies (state airborne) with no body circles (${circlesInAir} frames with circles)`);
+      assert(Number.isFinite(lowSphere) && lowSphere > 4.5, `${name}: flying, every hurt sphere is out of sword reach (lowest ${lowSphere.toFixed(1)} m, ${lowWhy})`);
+    }
+    assert(spells >= 1, `${name}: dragon:spell announces it`);
+  }
+  out('   flash timing: ' + timing.join(' · '));
+  assert(!badPay.length, `dragon:spell / dragon:hazard payloads ${JSON.stringify(badPay.slice(0, 4))}`);
+
+  // ---- a hazard against the hero: standing → hit, rolling (i-frames) → dodged, rolling out of its ring → untouched
+  const meteorAt = (delay) => H.circle({ kind: 'meteor', attack: 'meteorRain', x: p.position.x, z: p.position.z, r: 3.4, delay, damage: 18, burn: 0, knockback: 3, fall: 0.6, from: { x: p.position.x + 5, y: 30, z: p.position.z - 11 } });
+  const hazardTrial = (rollAt, axis) => {
+    settle(G);
+    H.clear();
+    p.debug.god = false;
+    p.debug.heal();
+    p.burnT = 0;
+    const hp0 = p.hp, h0 = G.hits.length;
+    const delay = 1.2;
+    meteorAt(delay);
+    let told = 0, flashT = -1, rolled = false;
+    const t0 = game.time;
+    G.watch = (n, dd) => {
+      if (dd?.attack !== 'meteorRain') return;
+      if (n === 'combat:tell') told++;
+      if (n === 'combat:flash') flashT = game.time;
+    };
+    for (let i = 0; i < Math.round(2.2 / DT); i++) {
+      input.axis = { x: 0, y: 0 };
+      if (rollAt !== null && !rolled && game.time - t0 >= delay - rollAt - 1e-6) {
+        rolled = true;
+        input.axis = axis;
+        input.tap('Space');
+      }
+      G.tick(DT);
+    }
+    G.watch = null;
+    const h = G.hits.slice(h0).find((x) => x.attack === 'meteorRain');
+    return { res: h?.r ?? null, hp: hp0 - p.hp, told, flash: flashT >= 0 ? flashT - t0 : null };
+  };
+  const st = hazardTrial(null);
+  out(`   meteor on a standing hero: ${st.res}, -${st.hp} HP, tells ${st.told}, flash at ${st.flash?.toFixed(3)} s (impact 1.2)`);
+  assert(st.res === RESULT.HIT && st.hp === 18 && st.told === 1 && near(st.flash, 1.2 - lead, 1.5 * DT), 'a meteor hits a standing hero (announced, flashed flashLead before impact)');
+  const rl = hazardTrial(0.25, { x: 0, y: 1 });
+  out(`   meteor vs a roll 0.25 s before impact: ${rl.res}, -${rl.hp} HP`);
+  assert(rl.res === RESULT.DODGED && rl.hp === 0, 'a rolling hero with i-frames is not hit (dodged)');
+  const out1 = hazardTrial(0.8, { x: 1, y: 0 });
+  out(`   meteor vs a roll out of the ring 0.8 s before impact: ${out1.res}, -${out1.hp} HP`);
+  assert(out1.res === null && out1.hp === 0, 'a plain dodge out of the ring avoids it (no blow reaches the hero)');
+
+  // ---- the strafe's burning strip: contact ticks while standing in it, none while rolling through it
+  settle(G);
+  H.clear();
+  p.debug.god = false;
+  p.debug.heal();
+  const sx = p.position.x, sz = p.position.z;
+  const strip = H.strip({ kind: 'strip', attack: 'skyStrafe', announce: false, ax: sx, az: sz - 6, bx: sx, bz: sz + 6, w: 4.6, delay: 0.05, speed: 40, linger: 2.5, tick: 0.25, tickDamage: 4, tickBurn: 0, damage: 26, burn: 0, knockback: 0 });
+  const hs0 = G.hits.length;
+  run(G, 1.2, { passive: true });
+  const standTicks = G.hits.slice(hs0).filter((h) => h.attack === 'skyStrafe' && h.kind === 'fire').length;
+  const front1 = G.hits.slice(hs0).filter((h) => h.attack === 'skyStrafe' && h.tell === TELL.RED).length;
+  let rollTicks = 0, rollFrames = 0;
+  for (let k = 0; k < 2; k++) {
+    input.axis = { x: 0, y: k ? -1 : 1 };
+    input.tap('Space');
+    for (let i = 0; i < Math.round(0.6 / DT); i++) {
+      const n0 = G.hits.length;
+      G.tick(DT);
+      if (p.state !== 'roll') continue;
+      rollFrames++;
+      rollTicks += G.hits.slice(n0).filter((h) => h.kind === 'fire').length;
+    }
+  }
+  assert(rollFrames > 40, `the hero rolled through the burning strip (${rollFrames} rolling frames)`);
+  out(`   strip: front blow ${front1}, ticks standing 1.2 s ${standTicks}, ticks landed during rolls ${rollTicks}`);
+  assert(front1 === 1 && standTicks >= 3, 'the strip front hits once, then its fire ticks a hero standing in it');
+  assert(rollTicks === 0, 'its fire never ticks a rolling hero');
+  assert(H.get(strip) !== null, 'the strip still burns (lingers)');
+
+  // ---- phase 3's eruptions variant: pillars chase the hero for ~3 s (each one rings, tells, flashes)
+  settle(G);
+  H.clear();
+  d.phase = 3;
+  G.tick(DT);
+  front(14);
+  p.debug.god = true;
+  const ct = [], cf = [], ch0 = G.hits.length;
+  let maxPillars = 0;
+  G.watch = (n, dd) => {
+    if (dd?.attack !== 'eruptions') return;
+    if (n === 'combat:tell') ct.push(game.time);
+    if (n === 'combat:flash') cf.push(game.time);
+  };
+  const rnd = Math.random;
+  Math.random = () => 0.1; // (picks the chase: ER.chase.chance)
+  game.lab.trigger('eruptions');
+  Math.random = rnd;
+  const isChase = d.brain.action?.chase === true;
+  for (let i = 0; i < Math.round(6 / DT); i++) {
+    input.axis = { x: i % 120 < 60 ? 1 : -1, y: 0 }; // the hero keeps moving (side to side)
+    G.tick(DT);
+    maxPillars = Math.max(maxPillars, H.count('pillar'));
+  }
+  G.watch = null;
+  input.axis = { x: 0, y: 0 };
+  const chits = G.hits.slice(ch0).filter((h) => h.attack === 'eruptions');
+  let cworst = 0;
+  for (const h of chits) {
+    const f = cf.filter((t) => t <= h.t + 1e-6).pop();
+    const err = f === undefined ? Infinity : h.t - (f + lead);
+    if (Math.abs(err) > Math.abs(cworst)) cworst = err;
+  }
+  out(`   P3 eruption chase: ${isChase}, pillars alive at once ${maxPillars}, tells ${ct.length} flashes ${cf.length}, blows ${chits.length} (worst ${(cworst * 1000).toFixed(0)} ms after flash+lead)`);
+  assert(isChase && maxPillars >= 2 && ct.length >= 6 && ct.length === cf.length, 'phase 3: the eruptions chase the hero with announced pillars (one flash per tell)');
+  assert(chits.length <= ER_MAX_CHASE_HITS && Math.abs(cworst) <= 2.5 * DT, 'the chase deals at most its hit cap, each blow on its flash');
+  d.phase = 1;
+  run(G, 1, { passive: true });
+
+  // ---- clear(): by hand, on a phase change, on death, on reset
+  settle(G);
+  H.clear();
+  meteorAt(3);
+  H.ring({ kind: 'ring', attack: 'flameRing', x: d.position.x, z: d.position.z, r0: 3, r1: 20, speed: 10, w: 2.2, delay: 2, damage: 1, announce: false });
+  H.rain({ attack: 'meteorRain', count: 10, first: 1.3, span: 5, r: 3.4, damage: 1, group: H.group(3) });
+  run(G, 0.2, { passive: true });
+  const n0 = H.alive;
+  H.clear();
+  assert(n0 >= 3 && H.alive === 0 && H.count() === 0, `clear() empties the hazards (${n0} → ${H.alive})`);
+  H.rain({ attack: 'meteorRain', count: 10, first: 0.5, span: 5, r: 3.4, damage: 1, group: H.group(3) });
+  run(G, 1.0, { passive: true });
+  const nr = H.alive;
+  assert(d.debug.phase2() === true, 'phase 2 forced with hazards on the field');
+  G.tick(DT);
+  G.tick(DT);
+  assert(nr >= 2 && H.alive === 0, `a phase change clears them (${nr} → ${H.alive})`);
+  run(G, 6, { passive: true }, () => !d.brain.action && d.state === 'combat');
+  H.rain({ attack: 'meteorRain', count: 10, first: 0.5, span: 5, r: 3.4, damage: 1, group: H.group(3) });
+  run(G, 1.0, { passive: true });
+  const nd = H.alive;
+  assert(d.debug.kill() === true, 'kill with hazards on the field');
+  G.tick(DT);
+  G.tick(DT);
+  assert(nd >= 2 && H.alive === 0, `death clears them (${nd} → ${H.alive})`);
+  d.debug.reset();
+  meteorAt(5);
+  d.debug.reset();
+  assert(H.alive === 0, 'reset clears them');
+
+  // ---- killed in mid-air (hovering before the dive): it drops and dies cleanly, nothing left flying
+  fightSetup(G);
+  settle(G);
+  front(14);
+  game.lab.trigger('diveBomb');
+  run(G, 4, { passive: true }, () => d.brain.action?.phase === 'hover');
+  const alt0 = d.rig.s.alt, st0 = d.state;
+  assert(d.debug.kill() === true, `killed while hovering (${st0}, alt ${alt0.toFixed(1)})`);
+  let okFall = true;
+  run(G, 2, { passive: true }, () => {
+    if (![d.position.x, d.position.z, d.rig.s.alt, d.rig.pt.chest.y].every(Number.isFinite)) okFall = false;
+    return false;
+  });
+  out(`   killed at alt ${alt0.toFixed(1)} (${st0}) → ${d.state}, alt ${d.rig.s.alt.toFixed(2)}`);
+  assert(st0 === 'airborne' && alt0 > 10 && okFall && d.state === 'dying' && d.rig.s.alt < 0.2, 'a mid-air death drops the wyrm to the ground and plays the death');
+  return G;
+}
+
 // ================================================================== scenario: the hero's rig
 async function scenarioHero() {
   out('\n== scenario HERO (Shadow Swordsman rig: coat strips, streamers, hair stay finite and above the grass) ==');
@@ -1649,7 +1898,7 @@ async function scenarioStrings() {
 // onPlunge called directly (the player side is the plunge agent's): grounded mid-windup, airborne
 // during the leap (it crashes and lands, finite), an execution on a broken wyrm, the phase gate, a
 // phase transition (not cancelled), and the head point the hero rides.
-async function scenarioPlunge() {
+async function scenarioPlungeReact() {
   out('\n== scenario PLUNGE (dragon side: onPlunge grounded / during the leap / execution / phase gate) ==');
   const G = build();
   const { game } = G;
@@ -1758,7 +2007,7 @@ async function scenarioPlunge() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, strings: scenarioStrings, plunge: scenarioPlunge, timing: scenarioTiming, win: scenarioWin, die: scenarioDie, touch: scenarioTouch };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, lab: scenarioLab, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, fire: scenarioFire };
 const runs = [];
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || SCEN === 'all') runs.push(await fn());
 if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
