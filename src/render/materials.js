@@ -164,6 +164,13 @@ function surfaceFeatures(o, cell) {
     uniforms.uArtRim = { value: h.rim ?? 1 };
     uniforms.uArtGlowK = { value: h.glow ?? 0 };
     uniforms.uArtPart = { value: part * 2 };
+    // cloth folds: [bands per metre across aGUV x (rad), depth 0..1, wander down aGUV y]
+    if (h.folds != null) {
+      const [fq, fd, fw] = h.folds;
+      if (![fq, fd, fw].every(Number.isFinite)) throw new Error(`surface glyph heroArt.folds: [freq, depth, wander], got ${JSON.stringify(h.folds)}`);
+      defines.SG_HERO_FOLDS = '';
+      uniforms.uArtFold = { value: new THREE.Vector3(fq, fd, fw) };
+    }
   }
   return { defines, uniforms };
 }
@@ -435,6 +442,9 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform vec3 uArtHeroRim;
       varying float vPart;
 #endif
+#ifdef SG_HERO_FOLDS
+      uniform vec3 uArtFold;
+#endif
 #ifdef SG_INK_AXIS
       uniform vec3 uInkAxis;
       uniform float uInkAxisChance;
@@ -601,6 +611,15 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         vec3 kd = normalize(V - uCamRight * 0.55 + uCamUp * 0.8);
         float kn = max(dot(n, kd), 0.0);
         vec3 fillC = uArtFill * (uArtHeroLight.x + uArtHeroLight.y * kn + L * uArtHeroLight.z);
+#ifdef SG_HERO_FOLDS
+        // cloth folds (the reference's coat: dark fold streaks running down it between lit ridges):
+        // bands across aGUV x that wander down y. The art pass prints a dark band as sparse letters
+        // and draws a crease line on the lit side of each step. They fade out from 8 to 16 m, where a
+        // band would be narrower than a letter (the game camera is 24–54 m away).
+        float fph = vG.x * uArtFold.x + sin(vG.y * 6.0 + vG.x * 2.3) * uArtFold.z;
+        float fdk = smoothstep(0.45, 0.9, sin(fph) * 0.5 + 0.5) * (1.0 - smoothstep(8.0, 16.0, length(uCamPos - vW)));
+        fillC *= 1.0 - uArtFold.y * fdk;
+#endif
         // glints from a light well off the view axis (upper left), only where the surface curves
         // (normal change per metre: domes, rims, cylinders): the reference's streaks of white on
         // the armour, never a whole flat plate lit up

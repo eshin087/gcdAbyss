@@ -760,7 +760,9 @@ export const ART_GAIN = 1.1;
  * and gain (> 1 glows under bloom: the cyan blade edges, the violet gem); default white × 1.
  * `fillGain` scales the brightness of its letter fill (default 1); `dotted` prints its outer edges
  * as bright specks instead of strokes (the reference's dotted rags and hair wisps). Materials
- * sharing a part must share these. See HERO_ART in render/materials.js.
+ * sharing a part must share these. `folds` [bands per metre across aGUV x (rad), depth, wander]
+ * darkens fold streaks into the fill up close (the coat), per material. See HERO_ART in
+ * render/materials.js.
  */
 export const HERO_INK = {
   skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8 },
@@ -769,7 +771,7 @@ export const HERO_INK = {
   lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85] },
   collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85] },
   pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9] },
-  coat: { part: 6, fill: [0.175, 0.165, 0.155] },
+  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1] },
   collar: { part: 6, fill: [0.175, 0.165, 0.155] },
   facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1] },
   hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true },
