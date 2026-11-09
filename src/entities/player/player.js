@@ -990,7 +990,7 @@ export class Player {
     if (!def) return false;
     const light = def.kind === 'light';
     this.atk = {
-      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, lunge: null, travel: 0,
+      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, lunge: null, travel: 0,
       pending: light && this.lmb.held, // still held: may become a charge (the swing waits at the coil)
       damage: fin(def.damage, 30), poise: fin(def.poise, 12), charge: 0,
     };
@@ -1055,7 +1055,7 @@ export class Player {
   _releaseThrust(holdT) {
     const st = thrustStats(holdT);
     this.atk = {
-      def: THRUST, t: 0, hit: false, prevT: 0, gust: false, impact: false, pending: false,
+      def: THRUST, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, pending: false,
       lunge: 0, travel: st.travel, damage: st.damage, poise: st.poise, charge: st.k,
     };
     this.releaseK = st.k;
@@ -1407,6 +1407,11 @@ export class Player {
       if (t >= W && prevT <= end + 0.04) {
         this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, d.kind, crit);
         if (!a.hit && prevT <= end) this._tryHit(a);
+        // the sweep's snap flares the coat tails (cosmetic: the animator's own noise, not the RNG)
+        if (d.kind === 'light' && !a.flared) {
+          a.flared = true;
+          this.anim.kickCoat(0.32, this.anim.noise);
+        }
       }
       if (d.kind === 'thrust') {
         if (!a.gust && t >= W) {
