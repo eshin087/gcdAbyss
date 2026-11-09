@@ -173,7 +173,9 @@ export const WYRM_ART = {
   throat: { ...LAVA_ART, scale: [0.4, 0.3], tone: [0.0, 0.28, 1.5, 0.24], ink: [0.55, 0.3, 0.16], rimInk: [0.9, 0.5, 0.2], glow: [1.2, 0.04], under: [1.0, 0.3, 0.06, 1.0] },
   lava: LAVA_ART,
   // deep crimson, blotched, torn: [mottle, ember specks, tear noise frequency, trailing-edge tears]
-  membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], under: UNDER },
+  // (its embers and bone streaks glow orange, not the hide's red-orange: the reference's sails carry
+  // orange-yellow sparks)
+  membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], emit: [1.0, 0.45, 0.1], under: UNDER },
   // finger bones: charcoal lines with pale outlines, a little ember along them
   wingBone: { ...LIT, ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
   // dorsal / tail blades: charcoal with pale tips, molten at the root (the reference's orange-lit
