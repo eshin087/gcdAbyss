@@ -675,12 +675,15 @@ Dragon (any attacker) → hud/audio/flow:
 - `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit; x/z = the
   striking part; impactIn is a first estimate in game seconds),
   `combat:flash {source:'dragon', attack, tell, x, y, z}` (~0.35 s before impact — the **authoritative**
-  timing cue: moving targets (charge, fireball) re-time it after the tell)
+  timing cue: moving targets (charge, fireball) re-time it after the tell),
+  `combat:deflectChain {count}` (the 2nd, 3rd ... parry in a row within one string; contract 1)
 - `dragon:wake`, `dragon:roar {strength}`, `dragon:introDone`, `dragon:windup {name}`, `dragon:attack {name}`,
   `dragon:step {x, z, heavy}`, `dragon:wingFlap {strength}`, `dragon:takeoff`, `dragon:land {x, z}`,
   `dragon:breathStart`, `dragon:breathEnd`, `dragon:fireball {x, y, z}`, `dragon:explosion {x, z, radius}`,
-  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell}`,
+  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last}` (hit = 0-based
+  index in its string, last = the string's last hit or a single attack: only then a recoil),
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
+  `dragon:phase3`, `dragon:phase {n}` (with each of the two above), `dragon:plunged {execution}` (contract 2),
   `dragon:death`, `dragon:dead`
 Flow → hud/audio:
 - `state {from, to}`, `bonfire:rest`, `game:retry`, `game:victory`, `area {name}`
