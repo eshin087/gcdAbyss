@@ -106,7 +106,7 @@ export class Player {
     this.intent = { x: 0, z: 0, len: 0, sprint: false };
     this.buf = { action: null, t: 0 };
     this.lmb = { held: false, t: 0 }; // hold time of the current LMB press (game time)
-    this.rmb = { held: false, upT: -Infinity, parryT: -Infinity, edge: false };
+    this.rmb = { held: false, upT: -Infinity, parryT: -Infinity, edge: false, chain: false };
     this.vel = { x: 0, z: 0 }; // own movement
     this.want = { x: 0, z: 0 }; // desired movement this frame
     this.kb = { x: 0, z: 0 }; // knockback slide
@@ -547,9 +547,13 @@ export class Player {
     }
     if (L.held && (!inp.mouseDown(0) || L.t >= CHARGE.maxHold)) L.held = false; // released (or auto-release)
 
-    // RMB: hold = block; a press counts as a parry attempt only after a full re-arm (anti-mash)
+    // RMB: hold = block; a press counts as a parry attempt only after a full re-arm (anti-mash). A
+    // successful deflect re-arms at once (Rb.chain): the next press counts as soon as RMB was released,
+    // so a string can be deflected hit after hit even with the guard held between blows; whiffed
+    // presses keep the re-arm, so mashing still fails.
     if (inp.mousePressed(2)) {
-      if (this.time - Rb.upT >= DEFENSE.parryRearm) Rb.parryT = this.time;
+      if (Rb.chain || this.time - Rb.upT >= DEFENSE.parryRearm) Rb.parryT = this.time;
+      Rb.chain = false;
       Rb.held = true;
       Rb.edge = true;
     }
@@ -847,6 +851,7 @@ export class Player {
       }
     }
     const D = this.deflect;
+    this.rmb.chain = true; // the next RMB press may parry again without the anti-mash re-arm
     D.n = this.time - D.t <= TUNE.deflectChainGap ? Math.min(99, D.n + 1) : 1;
     D.t = this.time;
     D.side = D.n & 1 ? 1 : -1;
