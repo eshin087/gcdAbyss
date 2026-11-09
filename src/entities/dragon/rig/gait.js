@@ -33,6 +33,8 @@ const MIN_DUR = 0.13; // fastest step (s): the spin's scramble
 const SETTLE_DIST = 0.24;
 const SETTLE_DUR = 0.42;
 const SETTLE_GAP = 0.75;
+// a contact that leaves the ground eases to its home at this rate (1/s) instead of snapping there
+const FREE_RATE = 10;
 
 function makeLimb(name, side, hind) {
   return {
@@ -57,6 +59,14 @@ function makeLimb(name, side, hind) {
     homeSpeed: 0, // m/s, smoothed
     _prevHome: new THREE.Vector3(),
     _hasPrev: false,
+    // swinging foot: world offset (x / z) that absorbs a jump of its home mid-swing and fades out by
+    // the landing (see update), and last frame's swing progress
+    off: new THREE.Vector3(),
+    _tPrev: 0,
+    // the contact without that offset (what pos was before it existed): the shoulders' scapula glide
+    // follows this one, so the offset can't feed back into the reach and the step decisions
+    posRef: new THREE.Vector3(),
+    wasFree: false,
   };
 }
 
@@ -92,6 +102,8 @@ export class Gait {
     if (!l || !Number.isFinite(pos.x + pos.z)) return;
     l.plant.set(pos.x, 0, pos.z);
     l.pos.copy(l.plant);
+    l.posRef.copy(l.plant);
+    l.off.set(0, 0, 0);
     l.stepping = false;
     l.t = 0;
     l.lift = 0;
@@ -102,6 +114,8 @@ export class Gait {
     for (const l of this.limbs) {
       l.plant.copy(l.home);
       l.pos.copy(l.home);
+      l.posRef.copy(l.home);
+      l.off.set(0, 0, 0);
       l.stepping = false;
       l.t = 0;
       l.lift = 0;
@@ -135,6 +149,9 @@ export class Gait {
     const quick = l.dur < 0.22 && adapt;
     l.height = (l.hind ? 0.3 : 0.35) * Math.min(1.4, 0.8 + speed * 0.05) * sc * (quick ? 0.7 : 1);
     l.from.copy(l.plant);
+    l.to.copy(l.home);
+    l.off.set(0, 0, 0);
+    l._tPrev = 0;
   }
 
   _inAir(l, until) {
@@ -179,14 +196,21 @@ export class Gait {
       }
     }
 
-    // free contacts follow their home (re-plant there when they come back down)
+    // free contacts follow their home (re-plant there when they come back down). They ease there
+    // (FREE_RATE) instead of snapping: a paw lifted off a plant far from its home (a forefoot left
+    // behind by a lunge, then hopped off the ground by a parry recoil) jumped 1 m in one frame
+    const fk = 1 - Math.exp(-FREE_RATE * dt);
     for (const l of limbs) {
       if (l.free) {
-        l.plant.copy(l.home);
-        l.pos.copy(l.home);
+        if (l.wasFree) l.pos.lerp(l.home, fk);
+        else l.pos.y = 0;
+        l.plant.set(l.pos.x, 0, l.pos.z);
+        l.posRef.copy(l.pos);
+        l.off.set(0, 0, 0);
         l.stepping = false;
         l.lift = 0;
       }
+      l.wasFree = l.free;
     }
 
     const restance = this.stepScale < 0.8;
@@ -299,20 +323,45 @@ export class Gait {
       if (l.free) continue;
       if (!l.stepping) {
         l.pos.copy(l.plant);
+        l.posRef.copy(l.plant);
         l.lift = 0;
         continue;
       }
       l.t += dt / Math.max(0.05, l.dur);
-      l.to.copy(l.home); // track the moving home so fast gaits don't lag behind
       const t = Math.min(1, l.t);
       const e = t * t * (3 - 2 * t);
-      l.pos.lerpVectors(l.from, l.to, e);
+      // track the moving home so fast gaits don't lag behind. A home can also JUMP (the root's velocity
+      // lead changes in one frame when a run starts or stops dead: the charge's first frame and its
+      // skid / bonk, a lunge): the swinging foot jumped with it, 1.5-2.5 m in a frame (thigh / shin
+      // pops of 55-65°). The part of the home's move beyond what the root's travel and turn explain is
+      // taken into `off`, which fades out by the landing: the foot sweeps over smoothly and still lands
+      // exactly on the home (step decisions, lift timing and landing spots are unchanged)
+      {
+        const dx = l.home.x - l.to.x, dz = l.home.z - l.to.z, dl = Math.hypot(dx, dz);
+        const r = Math.hypot(l.home.x - this.pivot.x, l.home.z - this.pivot.z);
+        const expect = (Math.abs(speed) * 1.25 + this.turnRate * r * 1.25 + 1.5 * sc) * dt;
+        const fade = l._tPrev < 1 ? Math.max(0, Math.min(1, (1 - t) / Math.max(1e-4, 1 - l._tPrev))) : 0;
+        l.off.multiplyScalar(fade);
+        if (dl > expect && Number.isFinite(dl)) {
+          const k = ((dl - expect) / dl) * e;
+          l.off.x -= dx * k;
+          l.off.z -= dz * k;
+        }
+        l.off.y = 0;
+        if (!Number.isFinite(l.off.x + l.off.z)) l.off.set(0, 0, 0);
+        l._tPrev = t;
+      }
+      l.to.copy(l.home);
+      l.posRef.lerpVectors(l.from, l.to, e);
       l.lift = Math.sin(Math.PI * t);
-      l.pos.y = l.to.y + l.lift * l.height;
+      l.posRef.y = l.to.y + l.lift * l.height;
+      l.pos.copy(l.posRef).add(l.off);
       if (l.t >= 1) {
         l.stepping = false;
         l.plant.copy(l.to);
         l.pos.copy(l.plant);
+        l.posRef.copy(l.plant);
+        l.off.set(0, 0, 0);
         l.lift = 0;
         this.onStep?.(l);
       }

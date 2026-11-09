@@ -11,7 +11,7 @@ const _u = new THREE.Vector3();
 const _w = new THREE.Vector3();
 const _p = new THREE.Vector3();
 
-export function solveTwoBone(A, T, l1, l2, pole, outMid, outEnd, bend = null) {
+export function solveTwoBone(A, T, l1, l2, pole, outMid, outEnd, bend = null, soft = 0) {
   _u.subVectors(T, A);
   let d = _u.length();
   if (d < 1e-5 || !Number.isFinite(d)) {
@@ -22,6 +22,14 @@ export function solveTwoBone(A, T, l1, l2, pole, outMid, outEnd, bend = null) {
   }
   const minD = Math.abs(l1 - l2) + 0.02;
   const maxD = l1 + l2 - 0.002;
+  // soft IK (`soft` = fraction of the reach): over the last stretch the reached distance eases toward
+  // full extension instead of hitting it, so a limb pulled out of a nearly straight pose bends
+  // smoothly (near full extension a small change in distance swings the middle joint far: a wing
+  // lowered from a high spread popped its elbow 1.3 m in one frame). The end then falls a little short
+  if (soft > 0 && d > maxD * (1 - soft)) {
+    const ds = maxD * (1 - soft), span = maxD - ds;
+    d = ds + span * (1 - Math.exp(-(d - ds) / span));
+  }
   d = Math.min(maxD, Math.max(minD, d));
   let cosA = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d);
   cosA = Math.min(1, Math.max(-1, cosA));

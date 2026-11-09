@@ -6,8 +6,10 @@ import * as THREE from 'three';
 const Z = new THREE.Vector3(0, 0, 1);
 const _v = new THREE.Vector3();
 const _qi = new THREE.Quaternion();
+const _qe = new THREE.Quaternion();
 const _perp = new THREE.Vector3();
 const _d = new THREE.Vector3();
+const _rd = new THREE.Vector3();
 
 /**
  * Rotate `joint` so its +Z follows world direction `dir`, given the parent's world quaternion.
@@ -104,6 +106,10 @@ export class Chain {
     // v0.4 lift-and-restretch the neck's lying / stunned poses were tuned with
     this.groundGlide = groundGlide;
     this.stableTwist = stableTwist;
+    // soft limit on how far each segment may swing away from its REST direction (radians; see
+    // enforce): `devSoft` starts compressing the swing, `devMax` caps it. Infinity = off (v0.4)
+    this.devSoft = Infinity;
+    this.devMax = Infinity;
     this.baseAxis = new THREE.Vector3(0, 0, 1);
     this._q = new THREE.Quaternion();
     this._q2 = new THREE.Quaternion();
@@ -118,10 +124,11 @@ export class Chain {
    * yawCurve > 0 makes a lateral HOOK (straight at the base, curling ever tighter toward the tip);
    * a constant yawStep makes a circle.
    */
-  buildRest(origin, frameQ, { pitch0 = 0, pitchStep = 0, pitchCurve = 0, yaw0 = 0, yawStep = 0, yawCurve = 0, waveAmp = 0, wavePhase = 0, dipAmp = 0, dipAt = 0, dipWidth = 1 }) {
+  buildRest(origin, frameQ, { pitch0 = 0, pitchStep = 0, pitchCurve = 0, yaw0 = 0, yawStep = 0, yawCurve = 0, waveAmp = 0, wavePhase = 0, dipAmp = 0, dipAt = 0, dipWidth = 1, sinkMax = Infinity }) {
     const r = this.rest;
     r[0].copy(origin);
     const dip = dipAmp !== 0 && dipWidth > 1e-3;
+    const sink = Number.isFinite(sinkMax) ? sinkMax * this.len : Infinity;
     for (let i = 0; i < this.n; i++) {
       const yaw = yaw0 + yawStep * i + yawCurve * i * i + waveAmp * Math.sin(wavePhase - i * 0.5) * (i / this.n);
       let pitch = pitch0 + pitchStep * i + pitchCurve * i * i;
@@ -132,6 +139,20 @@ export class Chain {
       frameDir(_d, yaw, pitch, frameQ);
       if (i === 0) this.baseAxis.copy(_d);
       r[i + 1].copy(r[i]).addScaledVector(_d, this.len);
+      // sinkMax (segments): a rest shape that dives deep under the ground clearance (a tail slapped
+      // flat, the stunned / dead tail) is laid along the ground instead, at most sinkMax segments under
+      // it, keeping the segment's length and heading. The springs used to pull those points metres
+      // into the ground against the clamp in enforce(): the lying segments fought it and flickered
+      // 30-65° a frame. A rest shape that stays within sinkMax (the arched resting tail) is untouched
+      const floor = this.minY[i + 1] - sink;
+      if (r[i + 1].y < floor) {
+        const dy = floor - r[i].y;
+        const hx = _d.x, hz = _d.z, hl = Math.hypot(hx, hz);
+        if (Math.abs(dy) < this.len && hl > 1e-4) {
+          const h = Math.sqrt(this.len * this.len - dy * dy) / hl;
+          r[i + 1].set(r[i].x + hx * h, floor, r[i].z + hz * h);
+        } else r[i + 1].y = floor;
+      }
     }
   }
 
@@ -196,11 +217,24 @@ export class Chain {
     const n = this.n, p = this.p, len = this.len;
     p[0].copy(this.rest[0]);
     let ref = this.baseAxis;
+    const dev = this.devSoft < this.devMax || Number.isFinite(this.devMax);
     for (let i = 0; i < n; i++) {
       _d.subVectors(p[i + 1], p[i]);
       const l = _d.length();
       if (l < 1e-6 || !Number.isFinite(l)) _d.copy(ref);
       else _d.multiplyScalar(1 / l);
+      if (dev) {
+        // never further than devMax from the rest direction (softly beyond devSoft): a tail whipped by
+        // a fast body (the stomp's slam, a rake) used to fold back on itself into a U lying on the
+        // ground, and the fold rolled down the chain, every joint it passed spinning 20-40° a frame
+        _rd.subVectors(this.rest[i + 1], this.rest[i]);
+        const rl = _rd.length();
+        if (rl > 1e-6) {
+          _rd.multiplyScalar(1 / rl);
+          const a = Math.acos(Math.min(1, Math.max(-1, _d.dot(_rd))));
+          if (a > this.devSoft) constrainDir(_d, _rd, Math.min(this.devMax, this.devSoft + (a - this.devSoft) * 0.4));
+        }
+      }
       constrainDir(_d, ref, i === 0 ? this.baseBend : this.maxBend);
       p[i + 1].copy(p[i]).addScaledVector(_d, len);
       const minY = this.minY[i + 1];
@@ -251,5 +285,21 @@ export class Chain {
       this._q.copy(this._q2);
     }
     return out.copy(this._q);
+  }
+
+  /**
+   * World rotation the LAST joint would get from apply() (aimJoint, no stable twist), without touching
+   * the joints: lets another chain be shown while a child is placed as if this one were.
+   */
+  endQuat(parentQ, out) {
+    out.copy(parentQ);
+    for (let i = 0; i < this.n; i++) {
+      _qi.copy(out).invert();
+      _v.copy(this.dirs[i]).applyQuaternion(_qi);
+      const l = _v.length();
+      if (l > 1e-6 && Number.isFinite(l)) out.multiply(_qe.setFromUnitVectors(Z, _v.multiplyScalar(1 / l)));
+      else out.multiply(this.joints[i].quaternion);
+    }
+    return out;
   }
 }
