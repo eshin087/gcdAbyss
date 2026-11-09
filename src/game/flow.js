@@ -39,7 +39,9 @@ const TUNE = {
   // focus is clamped so the hero stays `margin` m inside the view and the far end of the wyrm crops.
   // Fades back to the plain hero camera when the hero is farther than `far` m from the body.
   // maxZoom stays small on purpose: the hero must stay readable (owner feedback), the wyrm may crop
-  bossCam: { weight: 1, lean: 0.6, margin: 3, north: 0.39, south: 0.22, side: 0.44, maxZoom: 5, near: 16, far: 36 },
+  // highY (m): a head / body hurt sphere above it (or the wyrm airborne) also asks the camera rig to
+  // keep the head and body on screen (cameraRig.keep; the leap and flight attacks fly 10-20 m up)
+  bossCam: { weight: 1, lean: 0.6, margin: 3, north: 0.39, south: 0.22, side: 0.44, maxZoom: 5, near: 16, far: 36, highY: 13 },
   // phones (cameraRig.mobile): the close camera stays close (the rig also caps extra zoom); the wider
   // landscape screen shows more to the sides; the hero may sit lower (marginSouth: the bottom
   // centre is free, the thumbs cover the corners) so more of the wyrm shows above it
@@ -569,6 +571,17 @@ export class GameFlow {
     f.x += (tx - f.x) * k;
     f.z += (tz - f.z) * k;
     f.y = 0;
+    // a wyrm in the air (or rearing far above the box's lean): the box above can't see 10–20 m up,
+    // so ask the rig to keep its head and body on screen too (core/cameraRig.js keep: it pans with
+    // the real projection, and the hero, a must, is never cropped for them)
+    if (this._ovW > 0.05 && typeof rig?.keep === 'function') {
+      let high = g.dragon?.state === 'airborne';
+      for (let i = 0; i < H.length && !high; i++) high = !!H[i] && (H[i].part === 'head' || H[i].part === 'body') && H[i].y > T.highY;
+      if (high) {
+        rig.keep(p.x, finite(p.y) + 1.1, p.z, 1.6, true);
+        for (const h of H) if (h && (h.part === 'head' || h.part === 'body')) rig.keep(h.x, h.y, h.z, h.r, false);
+      }
+    }
   }
 
   _enterDead() {
