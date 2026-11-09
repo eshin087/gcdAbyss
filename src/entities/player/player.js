@@ -405,6 +405,7 @@ export class Player {
     this.rmb.edge = false;
     this.rmb.upT = -Infinity;
     this.rmb.parryT = -Infinity;
+    this.rmb.chain = false; // a deflect's instant re-arm doesn't survive a respawn / reset
     this.chargeK = 0;
     this.chargeFull = false;
     this.releaseK = 0;

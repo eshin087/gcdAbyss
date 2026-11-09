@@ -13,7 +13,8 @@ import { clamp } from '../../core/math.js';
 // circles over time: rain (meteors round the player) and chase (pillars under the player).
 //
 // Every hazard draws a red glyph ground warning from spawn until it goes off, then hits through
-// dragon.hitPlayer({ ..., tell: TELL.RED, plunge: false }): i-frames dodge it, block / parry fail.
+// dragon.hitPlayer({ ..., tell: TELL.RED, plunge: false }): i-frames dodge it, block / parry fail
+// (a hazard spawned with plunge: true, fire breathed or spat from the air, lets a perfect dodge plunge).
 // The main hit lands at most once per hazard (a strip's lingering fire ticks: blockable contact
 // damage, skipped while the hero rolls). A hazard either announces itself (`announce`, circles:
 // 'combat:tell' once the hero is near its ring, 'combat:flash' flashLead s before impact) or is
@@ -44,7 +45,7 @@ function blank(i) {
     r0: 0, r1: 0, speed: 0, dist: 0, n: 0, step: 0, delay: 0, active: 0,
     f: 0, // last front / radius / sweep position (swept hit tests)
     // blow
-    damage: 0, burn: 0, knockback: 0, knockdown: false,
+    damage: 0, burn: 0, knockback: 0, knockdown: false, plunge: false,
     // strip contact fire
     linger: 0, tick: 0, tickT: 0, tickDamage: 0, tickBurn: 0,
     // tells
@@ -133,6 +134,10 @@ export class Hazards {
     h.burn = num(o.burn, 0);
     h.knockback = num(o.knockback, 0);
     h.knockdown = !!o.knockdown;
+    // plunge: true = a perfect dodge of this hazard's blow may send the hero onto the wyrm's head (fire
+    // the wyrm breathes or spits from the air: the strafe's front, the hover barrage's shells). Spells
+    // that fall from the sky or burst from the ground (meteors, pillars, rings, walls) never do.
+    h.plunge = o.plunge === true;
     h.announce = o.announce !== false;
     h.group = Number.isInteger(o.group) ? o.group : -1;
     h.impact = Math.max(0.05, num(o.delay, 1));
@@ -427,6 +432,7 @@ export class Hazards {
     o.parryable = false;
     o.blockable = false;
     o.attack = h.attack;
+    o.plunge = h.plunge === true;
     this._from.x = fx;
     this._from.z = fz;
     const p = this.player.position;
@@ -452,6 +458,7 @@ export class Hazards {
     o.parryable = false;
     o.blockable = true;
     o.attack = h.attack;
+    o.plunge = false;
     this._from.x = fx;
     this._from.z = fz;
     this._pt.x = p.position.x;

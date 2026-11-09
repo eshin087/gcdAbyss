@@ -163,6 +163,7 @@ const skyStrafe = {
       w: SK.strip.width, delay: a.list[0][1] + SK.takeoff, speed: a.vf, linger: SK.strip.linger,
       tick: SK.strip.tick, tickDamage: SK.strip.tickDamage, tickBurn: SK.strip.tickBurn,
       damage: SK.damage, burn: SK.burn, knockback: SK.knockback,
+      plunge: true, // perfect-dodge the stream from the flying wyrm: the hero lands on its head, it crashes
     });
     a.flapCos = 1;
     a.breathing = false;
@@ -540,6 +541,7 @@ const hoverBarrage = {
     const ref = d.hazards.circle({
       kind: 'shell', attack: 'hoverBarrage', announce: false, x: _a.x, z: _a.z, r: HB.radius, delay: HB.aim + 0.75,
       damage: HB.damage, burn: HB.burn, knockback: HB.knockback, group: a.group, active: 0.1,
+      plunge: true, // a perfectly dodged shell: the hero plunges onto the hovering wyrm (it crashes)
     });
     a.rings[i] = ref;
     if (b && !b.flashed) b.impactIn = Math.max(0.05, a.T - b.at + HB.aim + 0.75);
