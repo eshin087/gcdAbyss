@@ -106,7 +106,7 @@ export const GLOW = {
   neck: [0.32, 0.7, 0.3], // the throat strip carries the molten S and its charge
   head: [0.3, 0.7, 0.2], // skull, brow and jaw: as the neck, a little heat while the breath charges
   belly: [0.5, 1.0, 0.3],
-  throat: [0.65, 0.9, 1.2],
+  throat: [0.5, 0.9, 2.4], // calm at rest, a strong flare while the breath / roar charges (the tell)
   lava: [0.5, 1.0, 0],
   membrane: [0.35, 0.8, 0.3], // embers along the bones and in specks
   wingBone: [0.15, 0.35, 0],
@@ -167,8 +167,9 @@ export const WYRM_ART = {
   // the head keeps fine scales (the neck's big plates turned the skull into a few flat tiles)
   head: { ...HIDE_ART, scale: [0.2, 0.15], vein: [3.0, 0.3, 0.08, 0.45] },
   belly: { ...LAVA_ART, scale: [0.56, 0.4], ink: [0.42, 0.34, 0.29], rimInk: [0.7, 0.48, 0.3], glow: [1.2, 0] },
-  // the throat: orange-lit scales with gold rims (it still flares for the breath / roar charge)
-  throat: { ...LAVA_ART, scale: [0.4, 0.3], tone: [0.0, 0.3, 1.8, 0.24], ink: [0.55, 0.3, 0.16], rimInk: [1.0, 0.62, 0.25], glow: [1.6, 0.05] },
+  // the throat: orange-lit scales with amber rims, kept under the bloom threshold at rest (a gold
+  // hot spot glowed like a lamp under the jaw); it still flares for the breath / roar charge
+  throat: { ...LAVA_ART, scale: [0.4, 0.3], tone: [0.0, 0.26, 1.3, 0.24], ink: [0.55, 0.3, 0.16], rimInk: [0.9, 0.5, 0.2], glow: [1.2, 0.04], under: [1.0, 0.3, 0.06, 1.0] },
   lava: LAVA_ART,
   // deep crimson, blotched, torn: [mottle, ember specks, tear noise frequency, trailing-edge tears]
   membrane: { ...LIT, ink: [0.5, 0.045, 0.03], light: [1.0, 0.3, 0.15, 0.02], membrane: [0.8, 0.06, 2.0, 0.62], under: UNDER },
