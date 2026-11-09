@@ -1001,21 +1001,7 @@ function blockPose(p, A) {
   walkLegs(p, A);
 }
 
-/** Parry: from the guard, a sharp outward flick of the blade (to the right and up), the body
- *  turning with it, then settling back. */
-function parryPose(p, A) {
-  blockPose(p, A);
-  const t = A.t;
-  const f = t < 0.06 ? easeOutCubic(t / 0.06) : 1 - smoothstep(0.06, 0.3, t);
-  dirTo(p, P.swD, -0.55, 0.8, 0.5, f);
-  to3(p, P.swF, 0, 0.3, 1, f);
-  to3(p, P.rH, -0.05, -0.08, 0.4, f);
-  to3(p, P.lH, 0.22, -0.32, 0.02, f);
-  p[P.spY] -= 0.4 * f;
-  p[P.pelvY] -= 0.15 * f;
-  p[P.spX] -= 0.05 * f;
-  p[P.hdY] += 0.3 * f;
-}
+// (the parry clip: deflectPose in the PLUNGE + DEFLECT block below)
 
 /** Ghostep: reappear crouched low behind the attacker, off hand braced on the ground, blade swept
  *  back ready for the counter; rise into a forward guard. */
@@ -1348,13 +1334,246 @@ function deathPose(p, A) {
   to3(p, P.lH, 0.32, -0.05, 0.12, limp);
 }
 
+// ================================================================ PLUNGE + DEFLECT (plunge agent)
+// One block for the perfect-dodge plunge (player.js state 'plunge', DEFENSE.plunge) and the
+// deflect chain. The plunge clip follows the player's phase (player.plungeAnim: phase, u = 0..1
+// through it); player._plungePhase re-enters the clip with a short cross-fade at each change, so
+// each phase's pose only has to read well by itself. The root is the hero's ground point carried
+// up into the air (position.y): feet targets stay root-relative, the ground clamps are world-space.
+//   HANG  coiled at the apex above the head: knees tucked, both fists high on the hilt in a reverse
+//         grip, the blade hanging point-down in front of him, winding tighter
+//   DIVE  driving down onto it: the fists punch down to the sternum, the blade straight down
+//         below his tucked feet (the point leads)
+//   RIDE  crouched on the skull, right knee down, both fists on the buried hilt, leaning over it;
+//         a twist of the blade, then he pulls and coils to spring off
+//   FLIP  the blade ripped out, a full backflip (knees to the chest, the blade along his right
+//         side so it turns with him), opening feet-first for the landing
+//   LAND  a deep three-point crouch (free hand on the grass, the blade trailing low on his
+//         right, eyes up on the wyrm), rising into the fighting stance
+// The deflect (parry clip) snaps the blade into the blow on alternating sides (player.deflect.side)
+// with a small rock back and is back in the guard by ~0.17 s; between parries in rhythm the
+// walking clips keep the guard up (player.guardHold).
+const PLN = { VANISH: 0, HANG: 1, DIVE: 2, RIDE: 3, FLIP: 4, LAND: 5 }; // = player.js PL
+const PL_FLIP_PITCH = [0, 0, 0.1, 0.22, 0.2, -0.35, 0.52, -3.2, 0.8, -5.75, 0.94, -6.283185307179586, 1, -6.283185307179586];
+const SCR_GUARD = new Float32Array(N);
+const GUARD_CH = [P.rH, P.rH + 1, P.rH + 2, P.rP, P.rP + 1, P.rP + 2, P.lH, P.lH + 1, P.lH + 2, P.lP, P.lP + 1, P.lP + 2, P.swF, P.swF + 1, P.swF + 2, P.spX, P.spY, P.spZ, P.hdX, P.hdY, P.pelvY];
+
+/** The shared airborne base: every channel the plunge poses read, upright, arms down. */
+function plBase(p, A) {
+  guard(p, A);
+  p[P.bodyX] = 0;
+  p[P.bodyZ] = 0;
+  p[P.yaw] = 0;
+  p[P.roll] = 0;
+  p[P.pelvX] = 0;
+  p[P.pelvY] = 0;
+  p[P.pelvZ] = 0;
+  p[P.spY] = 0;
+  p[P.spZ] = 0;
+  p[P.hdY] = 0;
+  p[P.hdZ] = 0;
+  p[P.rFy] = p[P.lFy] = 0;
+  p[P.rFf] = p[P.lFf] = 1;
+  p[P.flask] = 0;
+}
+
+/** Knees tucked up under him (k 0..1), feet root-relative. */
+function plTuck(p, k) {
+  to3(p, P.rF, -0.13, 0.46, 0.06, k);
+  to3(p, P.lF, 0.14, 0.56, 0.2, k);
+  to3(p, P.rK, -0.25, 0.35, 1, k);
+  to3(p, P.lK, 0.25, 0.4, 1, k);
+  p[P.footFlat] = lerp(p[P.footFlat], 0.15, k);
+}
+
+function plHang(p, A, u) {
+  plBase(p, A);
+  const w = smoothstep(0, 1, u), br = Math.sin(A.time * 9) * 0.01;
+  p[P.bodyY] = -0.1 - 0.06 * w;
+  p[P.pitch] = 0.16 + 0.12 * w; // leaning out over the head below
+  p[P.spX] = -0.12 - 0.08 * w + br; // the chest opens under the raised fists
+  p[P.hdX] = 0.5; // eyes down on the head
+  // both fists high over his head on the hilt (reverse grip): the blade hangs point-down in
+  // front of him, clear of the face; they lift a little higher as the coil tightens
+  v3(p, P.rH, 0.13, 0.4 + 0.07 * w, 0.24);
+  v3(p, P.rP, -0.9, 0.25, -0.3);
+  v3(p, P.lP, 0.9, 0.25, -0.3);
+  v3(p, P.swD, 0.02, -1, 0.22 - 0.06 * w);
+  v3(p, P.swF, 1, 0, 0);
+  p[P.twoHand] = 1;
+  v3(p, P.rF, -0.12, ANK, 0.05);
+  v3(p, P.lF, 0.12, ANK, 0.05);
+  plTuck(p, 0.75 + 0.25 * w);
+}
+
+function plDive(p, A, u) {
+  plBase(p, A);
+  const e = easeOutCubic(clamp(u * 2.2, 0, 1)); // the fists drive down in the first half
+  p[P.bodyY] = -0.12;
+  p[P.pitch] = 0.28 - 0.12 * e; // upright as he drops onto it
+  p[P.spX] = lerp(-0.2, 0.22, e);
+  p[P.hdX] = 0.55;
+  v3(p, P.rH, 0.12, lerp(0.47, -0.16, e), lerp(0.24, 0.34, e));
+  v3(p, P.rP, -0.85, -0.2, -0.45);
+  v3(p, P.lP, 0.85, -0.2, -0.45);
+  v3(p, P.swD, 0.02, -1, lerp(0.16, 0.04, e));
+  v3(p, P.swF, 1, 0, 0);
+  p[P.twoHand] = 1;
+  v3(p, P.rF, -0.12, ANK, 0.05);
+  v3(p, P.lF, 0.12, ANK, 0.05);
+  plTuck(p, 1);
+  // the legs open a touch for the landing at the end
+  to3(p, P.rF, -0.16, 0.3, -0.2, smoothstep(0.6, 1, u));
+}
+
+function plRide(p, A, u, h) {
+  plBase(p, A);
+  // the head's thrash shakes him (cosmetic, his own clock); a twist of the buried blade mid-ride
+  const sh = Math.sin(A.time * 31) * 0.02 + Math.sin(A.time * 17.3) * 0.015;
+  const land = 1 - smoothstep(0, 0.12, u); // the impact's compression
+  const coil = smoothstep(0.66, 1, u); // pulling the blade, coiling to spring
+  const twist = Math.sin(Math.PI * smoothstep(0.25, 0.6, u));
+  p[P.bodyY] = -0.5 - 0.06 * land + 0.1 * coil + sh;
+  p[P.bodyZ] = 0.04;
+  p[P.pitch] = 0.26 + 0.08 * land - 0.1 * coil;
+  p[P.spX] = 0.4 + 0.12 * land - 0.2 * coil;
+  p[P.spY] = 0.18 * twist;
+  p[P.pelvY] = -0.1 * twist;
+  p[P.hdX] = 0.3 - 0.45 * coil; // eyes on the blade, then up at the landing ahead of his back
+  p[P.hdY] = -0.15 * twist;
+  // both fists on the buried hilt, the blade straight down into the skull
+  v3(p, P.rH, 0.12, -0.36 + 0.16 * coil, 0.36);
+  v3(p, P.rP, -0.85, -0.2, -0.45);
+  v3(p, P.lP, 0.85, -0.2, -0.45);
+  v3(p, P.swD, 0.02 + 0.08 * twist, -1, 0.06);
+  v3(p, P.swF, 1, 0, 0.3 * twist);
+  p[P.twoHand] = 1;
+  // right knee down on the skull, the left foot planted forward
+  v3(p, P.rF, -0.14, ANK + 0.02, -0.4);
+  v3(p, P.lF, 0.17, ANK, 0.26);
+  v3(p, P.rK, -0.15, -0.35, 1);
+  v3(p, P.lK, 0.25, 0.15, 1);
+  p[P.footFlat] = 0.7;
+  p[P.rFf] = 0.4;
+}
+
+function plFlip(p, A, u) {
+  plBase(p, A);
+  p[P.pitch] = lin(u, PL_FLIP_PITCH); // a full turn backward (wraps to upright for the landing)
+  const rip = smoothstep(0, 0.14, u); // the blade comes out of the head
+  const tuck = smoothstep(0.12, 0.3, u) * (1 - smoothstep(0.72, 0.9, u));
+  const open = smoothstep(0.78, 1, u); // feet-first for the landing
+  p[P.bodyY] = -0.2 + 0.1 * rip - 0.12 * tuck;
+  p[P.spX] = lerp(0.2, -0.15, rip) + 0.45 * tuck;
+  p[P.hdX] = lerp(-0.1, 0.35, tuck) - 0.2 * open;
+  // the sword hand sweeps the ripped blade to his right side, point down along the body: an axle
+  // the flip turns round (it never swings through the legs)
+  v3(p, P.rH, lerp(0.12, -0.16, rip), lerp(-0.2, -0.36, rip), lerp(0.34, 0.06, rip));
+  v3(p, P.rP, -0.9, -0.1, -0.4);
+  v3(p, P.swD, lerp(0.02, -0.34, rip), -0.82, lerp(0.06, -0.48, rip));
+  v3(p, P.swF, 1, 0, 0);
+  p[P.twoHand] = 1 - rip;
+  v3(p, P.lH, lerp(0.05, 0.3, open), lerp(-0.25, -0.12, open), lerp(0.3, 0.12, open));
+  v3(p, P.lP, 0.8, -0.3, -0.4);
+  // the push off the head, the tuck (knees to the chest), then the legs reach for the ground
+  v3(p, P.rF, -0.14, ANK + 0.25 * (1 - rip), -0.15);
+  v3(p, P.lF, 0.14, ANK + 0.25 * (1 - rip), 0.12);
+  bodyPointTo(p, P.rF, -0.12, -0.3, 0.28, tuck);
+  bodyPointTo(p, P.lF, 0.12, -0.26, 0.3, tuck);
+  to3(p, P.rK, -0.2, 0.6, 1, tuck);
+  to3(p, P.lK, 0.2, 0.6, 1, tuck);
+  to3(p, P.rF, -0.2, ANK + 0.12, -0.12, open);
+  to3(p, P.lF, 0.18, ANK + 0.12, 0.22, open);
+  p[P.footFlat] = lerp(0.6, 0.2, tuck);
+}
+
+function plLand(p, A, u) {
+  stance(p, A, 0);
+  const k = 1 - smoothstep(0.3, 1, u); // the crouch rises into the stance
+  const hit = 1 - smoothstep(0, 0.08, u); // the touchdown's compression
+  p[P.bodyY] = lerp(p[P.bodyY], -0.5 - 0.06 * hit, k);
+  p[P.bodyZ] = 0.05 * k;
+  p[P.spX] = lerp(p[P.spX], 0.55, k);
+  p[P.spY] = lerp(p[P.spY], -0.12, k);
+  p[P.hdX] = lerp(p[P.hdX], -0.35, k); // head up: eyes on the wyrm
+  // free hand down on the grass ahead-left, the blade trailing low behind on his right
+  to3(p, P.lH, 0.12, -0.55, 0.36, k);
+  to3(p, P.lP, 0.7, -0.2, -0.6, k);
+  to3(p, P.rH, -0.36, -0.28, -0.12, k);
+  dirTo(p, P.swD, -0.55, -0.42, -0.72, k);
+  to3(p, P.swF, 0, 1, 0, k);
+  to3(p, P.rF, -0.26, ANK, -0.34, k);
+  to3(p, P.lF, 0.22, ANK, 0.36, k);
+  to3(p, P.rK, -0.6, 0, 1, k);
+  to3(p, P.lK, 0.4, 0.1, 1, k);
+}
+
+function plungePose(p, A) {
+  const S = A.player?.plungeAnim;
+  const ph = S ? S.phase : PLN.LAND, u = S ? clamp(fin(S.u), 0, 1) : 1;
+  if (ph <= PLN.HANG) plHang(p, A, ph === PLN.HANG ? u : 0);
+  else if (ph === PLN.DIVE) plDive(p, A, u);
+  else if (ph === PLN.RIDE) plRide(p, A, u, fin(S?.h));
+  else if (ph === PLN.FLIP) plFlip(p, A, u);
+  else plLand(p, A, u);
+}
+
+/** Deflect: from the guard the blade snaps out into the blow (alternate sides through a chain:
+ *  player.deflect.side), the chest rocks back with the pushback, and the guard is back by ~0.17 s
+ *  so the next blow of the string can be met at once. Later deflects of a chain snap harder. */
+function deflectPose(p, A) {
+  blockPose(p, A);
+  const t = A.t, D = A.player?.deflect;
+  const n = fin(D?.n, 1), side = D?.side < 0 ? -1 : 1;
+  const f = t < 0.045 ? easeOutCubic(t / 0.045) : 1 - smoothstep(0.06, 0.17, t);
+  const s = clamp(0.85 + 0.06 * (n - 1), 0.85, 1.15);
+  if (side > 0) {
+    // the blow from the front-right: the edge flicks out to the right and up (the classic parry)
+    dirTo(p, P.swD, -0.55, 0.8, 0.5, f);
+    to3(p, P.rH, -0.05, -0.08, 0.4, f);
+    p[P.spY] -= 0.4 * f * s;
+    p[P.pelvY] -= 0.15 * f * s;
+    p[P.hdY] += 0.3 * f;
+  } else {
+    // the next one from the front-left: the blade swings up across to the left, the wrist rolled
+    dirTo(p, P.swD, 0.62, 0.72, 0.36, f);
+    to3(p, P.rH, 0.24, -0.04, 0.42, f);
+    p[P.spY] += 0.3 * f * s;
+    p[P.pelvY] += 0.1 * f * s;
+    p[P.hdY] -= 0.2 * f;
+  }
+  to3(p, P.swF, 0, 0.3, 1, f);
+  to3(p, P.lH, side > 0 ? 0.22 : 0.3, -0.32, side > 0 ? 0.02 : -0.05, f);
+  p[P.spX] -= 0.05 * f;
+  // the rock back: the chest gives with the blow, the weight onto the back foot
+  const push = t < 0.03 ? t / 0.03 : 1 - smoothstep(0.03, 0.22, t);
+  p[P.spX] -= 0.12 * push * s;
+  p[P.bodyZ] -= 0.05 * push;
+  p[P.hdX] -= 0.08 * push;
+}
+
+/** Walking clips after a parry in rhythm: the upper body holds the block's guard (guardHold
+ *  0..1, eased off ~0.6 s after the last parry) while the legs walk, so the blade stays up
+ *  between taps instead of dropping to the low ready guard and back for every blow. */
+function locoGuard(p, A) {
+  loco(p, A);
+  const g = clamp(fin(A.player?.guardHold), 0, 1);
+  if (g < 0.001) return;
+  blockPose(SCR_GUARD, A);
+  const ax = p[P.swD], ay = p[P.swD + 1], az = p[P.swD + 2];
+  for (const i of GUARD_CH) p[i] += (SCR_GUARD[i] - p[i]) * g;
+  dirLerp(p, P.swD, ax, ay, az, SCR_GUARD[P.swD], SCR_GUARD[P.swD + 1], SCR_GUARD[P.swD + 2], g);
+}
+// ============================================================ end PLUNGE + DEFLECT (plunge agent)
+
 const POSES = {
-  loco,
+  loco: locoGuard,
   attack: attackPose,
   charge: chargePose,
   block: blockPose,
-  parry: parryPose,
+  parry: deflectPose,
   ghostep: ghostepPose,
+  plunge: plungePose,
   guardBreak: guardBreakPose,
   roll: rollPose,
   backstep: backstepPose,

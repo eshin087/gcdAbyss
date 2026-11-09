@@ -20,7 +20,7 @@ export const RESULT = Object.freeze({
   BLOCKED: 'blocked',
   PARRIED: 'parried',
   DODGED: 'dodged', // i-frames, not perfectly timed
-  PERFECT: 'perfectDodge', // dodge started within the perfect window → Ghostep
+  PERFECT: 'perfectDodge', // dodge started within the perfect window → plunge / Ghostep
   IGNORED: 'ignored',
 });
 
@@ -55,8 +55,26 @@ export const DEFENSE = Object.freeze({
   blockPushback: { normal: 0.6, blue: 1.6 }, // meters slid back on a blocked hit
   // --- dodge: Space
   perfectDodgeWindow: 0.2, // s between the dodge start and the impact for a perfect dodge
-  // --- Ghostep: reward for a perfect dodge (any tell) — teleport behind the attacker
+  // --- Ghostep: reward for a perfect dodge (any tell): slow-mo + the crit window. Against an attacker
+  // that offers a plunge (plungePoint / onPlunge: the wyrm) it becomes the plunge below; against any
+  // other attacker within its range it blinks `distanceBehind` m behind it (the v0.2 Ghostep)
   ghostep: { distanceBehind: 3.2, slowmoScale: 0.3, slowmoTime: 0.6, critWindow: 1.6, critMult: 1.8 },
+  // --- the plunge (contract 2): a perfect dodge of a plungeable attacker within `range` m (the hit
+  // may forbid it: takeHit `plunge: false`) → vanish, reappear `appearUp` m above its head
+  // (`appearBack` m out toward the landing side), hang, dive, a reverse-grip stab into the head
+  // (attacker.onPlunge once: `damage`, `posture`), ride the head down, backflip off to a landing in
+  // front of it, toward where the hero came from; the crit window opens on landing. While the
+  // attacker is posture-broken, attack within `execRange` m of its head starts the same move from
+  // the appear step as an execution (`execDamage`, no slow-mo). Times: game seconds (the vanish +
+  // hang run inside the slow-mo); `flip` = [base, max] (longer from higher up). Lengths: m.
+  plunge: {
+    range: 30, execRange: 9, damage: 90, posture: 40, execDamage: 260,
+    vanish: 0.05, hang: 0.13, dive: 0.14, ride: 0.42, flip: [0.5, 0.85], land: 0.34, landCancel: 0.12,
+    // (the 58° camera sees height at half scale: 5 m up puts him clearly above the head on screen)
+    appearUp: 5, appearBack: 0.3, rideBack: 0.3, flipUp: 1.7,
+    landMin: 4.5, landMax: 12, landClear: 0.8, // landing distance from the head; margin past the body
+    impactStop: 0.13, impactShake: 0.6, execShake: 0.75, landIframes: 0.2,
+  },
 });
 
 /** Attacker posture (enemy "break" meter, shown under the boss HP bar). */
