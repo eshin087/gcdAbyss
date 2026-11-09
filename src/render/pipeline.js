@@ -121,7 +121,7 @@ export class Pipeline {
         // fill: x / y = letter brightness at the dark / lit end, z / w = letter-ramp position there
         // (0.04 / 0.5: the reference's close-up figure statistics, mean luma ≈ 108 / 255 with ~38 %
         // of its pixels above 120: its letter grid is a visible grey texture, not near-black)
-        uHeroFill: { value: new THREE.Vector4(0.04, 0.5, 0.27, 1.0) },
+        uHeroFill: { value: new THREE.Vector4(0.03, 0.6, 0.27, 1.0) },
         // inner lines are dimmer than the silhouette: brightness × x at a depth step, × y at a part edge,
         // × z between pieces of one part
         uHeroLine: { value: new THREE.Vector3(0.9, 0.75, 0.55) },
@@ -165,7 +165,7 @@ export class Pipeline {
         // hero: uArtLum.x / uArtBlack.x map his flat art fill (HERO_INK) to the light value v that picks
         // his fill letters and brightness (uHeroFill); uArtMin.x is unused since the ink-line pass
         uArtLum: { value: new THREE.Vector2(3.0, 4.5) }, // brightness -> ramp position: 1 - exp(-luma * k)
-        uArtBlack: { value: new THREE.Vector2(0.04, 0.0) }, // source luma treated as black (contrast)
+        uArtBlack: { value: new THREE.Vector2(0.06, 0.0) }, // source luma treated as black (contrast)
         uArtMin: { value: new THREE.Vector2(0.14, 0.3) }, // glyph value at the dark end of the ramp
         uArtMax: { value: 0.8 }, // glyph value at the bright end (tone-maps to white without bloom haloes)
         uArtDither: { value: new THREE.Vector2(2.6, 1.6) }, // per-cell ramp jitter (letters): variety

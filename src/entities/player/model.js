@@ -81,12 +81,12 @@ const REST = (() => {
 // (round 2: the front panels hang nearly straight, the coat's open front edges; the side and back
 // drapes are wider at the hem with soft folds, so the flare reads as cloth, not planks)
 export const COAT_PANELS = [
-  { az: 0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.22, folds: 1 }, // front-left
-  { az: -0.75, w: [0.13, 0.19, 0.26], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.22, folds: 1 }, // front-right
-  { az: 1.6, w: [0.19, 0.32, 0.5], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.5 }, // left
-  { az: -1.6, w: [0.19, 0.32, 0.5], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.5 }, // right
-  { az: 2.55, w: [0.18, 0.31, 0.46], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
-  { az: -2.55, w: [0.18, 0.31, 0.46], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
+  { az: 0.75, w: [0.14, 0.22, 0.3], len: [0.26, 0.26], strips: [0.22, 0.27, 0.19], fork: [0, 1, 0], out: 0.006, flare: 0.22, folds: 1 }, // front-left
+  { az: -0.75, w: [0.14, 0.22, 0.3], len: [0.26, 0.26], strips: [0.19, 0.27, 0.22], fork: [0, 0, 1], out: 0.006, flare: 0.22, folds: 1 }, // front-right
+  { az: 1.6, w: [0.21, 0.38, 0.6], len: [0.3, 0.32], strips: [0.4, 0.28, 0.46, 0.33], fork: [0, 1, 0, 0], out: 0, flare: 0.5 }, // left
+  { az: -1.6, w: [0.21, 0.38, 0.6], len: [0.3, 0.32], strips: [0.35, 0.46, 0.27, 0.4], fork: [0, 0, 1, 0], out: 0, flare: 0.5 }, // right
+  { az: 2.55, w: [0.2, 0.36, 0.55], len: [0.34, 0.38], strips: [0.29, 0.36, 0.2, 0.33], fork: [1, 0, 0, 0], out: 0.012, flare: 0.3 }, // back-left
+  { az: -2.55, w: [0.2, 0.36, 0.55], len: [0.34, 0.38], strips: [0.32, 0.19, 0.36, 0.27], fork: [0, 0, 0, 1], out: 0.012, flare: 0.3 }, // back-right
   // the front flap: hangs between the legs from 1.05 m to a point at 0.55 m (seen in wide stances)
   { az: 0, w: [0.12, 0.12, 0.11], len: [0.28, 0.22], strips: [], fork: [], out: 0, flap: true, y: -0.085, r: 0.112 },
 ];
@@ -556,7 +556,8 @@ function hairGeometries() {
   // shows between the strands as in the reference (the right eye stays covered)
   for (let i = 0; i < 9; i++) {
     const u = (i / 8) * 2 - 1 + j(0.07);
-    const L = (0.075 + 0.06 * (1 - u * u) + j(0.025)) * (i === 5 || i === 6 ? 0.55 : 1);
+    // (round 2: a little shorter, so the pale face shows under the fringe as in the reference)
+    const L = (0.065 + 0.045 * (1 - u * u) + j(0.02)) * (i === 5 || i === 6 ? 0.55 : 1);
     const base = capPoint(u * 0.72, 0.72 - 0.1 * u * u + j(0.05), 0.99);
     clump('fringe', L, 0.02 + 0.007 * r() - 0.003 * Math.abs(u), 0.008, base, [u * 0.5 + j(0.25), -0.9, 0.44 - 0.12 * Math.abs(u)], [u * 0.3, 0.25, -1], 0.08 + j(0.05), 0.9);
   }
@@ -574,7 +575,9 @@ function hairGeometries() {
   // so the dome is hidden and the outline is a jagged ring of tips outside the cap
   // (round 2: a bigger cap and longer locks that hang down round it, lifting a little at the tips:
   // the reference's big, round, messy volume instead of a tight cap)
-  for (const [n, el0, a0, L0, curl, lift] of [[14, 1.12, 0.6, 0.18, 0.03, 0.22], [12, 0.72, 0.85, 0.155, 0.02, 0.12]]) {
+  // (the locks lie over the bigger cap and lift only a little at their ends: lifting them further
+  // turned the mop into a brim of horizontal spikes)
+  for (const [n, el0, a0, L0, curl, lift] of [[14, 1.12, 0.6, 0.17, 0.14, 0.06], [12, 0.72, 0.85, 0.14, 0.1, 0.0]]) {
     for (let i = 0; i < n; i++) {
       const az = a0 + ((i + (el0 < 1 ? 0.5 : 0)) / n) * (Math.PI * 2 - 2 * a0) + j(0.12); // all round but the fringe's front
       const el = el0 + j(0.1);
@@ -587,7 +590,7 @@ function hairGeometries() {
   for (const az of [1.45, 1.8, 2.15, 2.5, -1.5, -1.85, -2.2, -2.55, 2.85, -2.9]) {
     const el = 0.22 + j(0.12);
     const rad = radial(az, el);
-    clump(side(az), 0.075 + j(0.015), 0.012, 0.008, capPoint(az + j(0.06), el, 0.9), [rad[0] * 0.75, -0.6 + j(0.12), rad[2] * 0.75 - 0.15], [0, 1, 0], 0.3, 0.8);
+    clump(side(az), 0.06 + j(0.015), 0.012, 0.008, capPoint(az + j(0.06), el, 0.9), [rad[0] * 0.55, -0.8 + j(0.12), rad[2] * 0.55 - 0.15], [0, 1, 0], 0.3, 0.8);
   }
   // crown: thin strands standing up and out at 30–60° and curling back (the reference's wispy,
   // bed-head top edge, not a crown of broad spikes), longest toward the hero's right
@@ -803,7 +806,7 @@ export const ART_GAIN = 1.1;
 // (BLADE_PULL); `open` = its letters stay lit beside an edge (no dark channel or depth-step gap:
 // the face, a small pale patch walled in by the fringe and the collar, would print dim).
 export const HERO_INK = {
-  skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 1.8, farFill: 0.9, open: true },
+  skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 2.2, farFill: 0.8, open: true },
   eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
   shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85], farFill: 0.35 },
   lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
@@ -828,8 +831,8 @@ export const HERO_INK = {
   trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.7, farFill: 1.2 },
   // the reference's blade: dark steel between two glowing cyan edges and a bright ridge line (the
   // fill letters stay dim up close; far away the whole blade reads as one bright cyan line)
-  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 2.2], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
-  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 2.2], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
+  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
+  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.7], fillGain: 0.4, solid: true, farLine: 1, farFill: 2.0, pull: true },
   gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1, pull: true },
   flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
@@ -1213,9 +1216,10 @@ export function buildHero(U) {
     const out = side; // the outer side of this arm is x = side (right arm: −X)
     const upper = joint(chest, side * DIM.shoulder[0], DIM.shoulder[1], DIM.shoulder[2]);
     // sleeves: sub-id 1 against the torso shell's 0, so the arm is outlined where it meets the body
-    mesh(upper, sub(limb({ length: DIM.upperArm, r0: 0.056, r1: 0.049 }), 1), M.coat);
+    // (round 2: fuller coat sleeves, the reference's arms are not thin tubes)
+    mesh(upper, sub(limb({ length: DIM.upperArm, r0: 0.064, r1: 0.056 }), 1), M.coat);
     const fore = joint(upper, 0, -DIM.upperArm, 0);
-    mesh(fore, sub(limb({ length: 0.09, r0: 0.05, r1: 0.048 }), 1), M.coat);
+    mesh(fore, sub(limb({ length: 0.09, r0: 0.056, r1: 0.054 }), 1), M.coat);
     if (R) {
       // P3 / P4: lower pauldron lames riding on the arm itself, standing 0.03 m off the sleeve,
       // a silver bevel along each lower edge and a small down-back blade each
@@ -1232,7 +1236,7 @@ export function buildHero(U) {
         wedge(0.07, 0.017, [-0.088, -0.17, -0.03], [-0.6, -0.65, -0.45], [0, -1, 0], 0.15),
       ]), M.spike);
       // A1 strap just below the pauldron
-      mesh(upper, bandGeometry(0.06, 0.06, 0.02, 12), M.leather, 0, -0.19, 0);
+      mesh(upper, bandGeometry(0.065, 0.065, 0.02, 12), M.leather, 0, -0.19, 0);
       // plate vambrace: 3 overlapping lames with silver bevels, an elbow point and a wrist barb
       mesh(fore, mergeGeometries([
         limb({ length: 0.085, r0: 0.06, r1: 0.056, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.035, 0),
@@ -1256,8 +1260,8 @@ export function buildHero(U) {
     } else {
       // left: plain coat shoulder, A2 strap above the elbow, a leather bracer with two silver
       // bands, a silver cuff ring, a fingerless glove with skin fingertips
-      mesh(upper, bandGeometry(0.055, 0.055, 0.02, 12), M.leather, 0, -0.19, 0);
-      mesh(fore, limb({ length: 0.18, r0: 0.054, r1: 0.047, radial: 10, rings: 3 }), M.leather, 0, -0.05, 0);
+      mesh(upper, bandGeometry(0.065, 0.065, 0.02, 12), M.leather, 0, -0.19, 0);
+      mesh(fore, limb({ length: 0.18, r0: 0.06, r1: 0.049, radial: 10, rings: 3 }), M.leather, 0, -0.05, 0);
       mesh(fore, mergeGeometries([
         bandGeometry(0.0565, 0.0565, 0.012, 14).translate(0, -0.1, 0),
         bandGeometry(0.0525, 0.0525, 0.012, 14).translate(0, -0.17, 0),

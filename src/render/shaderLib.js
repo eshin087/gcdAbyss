@@ -47,8 +47,9 @@ export function createSharedUniforms() {
     // firelight or the Lab (the reference figure is evenly lit)
     uArtHeroKey: { value: 1.15 },
     // the hero's ink-line art source (materials with `heroArt`): fill = part colour × (x flat + y key
-    // light from the camera's upper left + z × the scene light); w scales the metal glints
-    uArtHeroLight: { value: new THREE.Vector4(0.45, 0.55, 0.25, 1.0) },
+    // light from the camera's upper left + z × the scene light); w scales the metal glints. (Round 2:
+    // less flat light, more key: the reference's black cloth with lit folds and bright metal glints)
+    uArtHeroLight: { value: new THREE.Vector4(0.2, 0.95, 0.2, 1.4) },
     // ... and its cool rim from the screen's left (the reference's blue-lavender silhouette side)
     uArtHeroRim: { value: new THREE.Color(0.14, 0.19, 0.72) },
     // the art pass's ink lines per hero part (filled from HERO_INK by player/model.js): rgb tint × a

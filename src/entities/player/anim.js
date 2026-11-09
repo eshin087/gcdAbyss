@@ -228,7 +228,7 @@ function guard(p, A) {
   p[P.spX] = 0.06 + 0.01 * br;
   p[P.spY] = -0.02;
   p[P.spZ] = -0.1 - 0.02 * sw; // the torso leans back toward his left over the bent leg
-  p[P.hdX] = 0.24 - 0.04 * br;
+  p[P.hdX] = 0.15 - 0.04 * br;
   p[P.hdY] = 0.36; // head turned toward his left, looking down past the blade
   p[P.hdZ] = 0.1 + 0.015 * sw;
   v3(p, P.rH, 0.0, -0.47 + 0.006 * br, 0.19); // grip low at the right hip, in front of the thigh
