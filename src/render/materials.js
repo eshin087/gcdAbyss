@@ -673,7 +673,8 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float mo = wNoise(vG * 0.75 + 11.3) * 0.65 + wNoise(vG * 2.4 + 3.1) * 0.35;
         col *= mix(1.0 - uWMem.x, 1.0 + 0.5 * uWMem.x, smoothstep(0.32, 0.68, mo)) * (1.0 - 0.45 * smoothstep(0.5, 1.0, vEdge));
         float bone = 1.0 - smoothstep(0.0, 0.3, vBone);
-        float spk = step(1.0 - uWMem.y, hash12(floor(vG / 0.075) + uSeed)) * step(0.36, mo);
+        vec2 sq = vG / 0.075;
+        float spk = step(1.0 - uWMem.y, hash12(floor(sq) + uSeed)) * step(0.36, mo) * (1.0 - smoothstep(0.22, 0.45, length(fract(sq) - 0.5))); // round embers, not squares
         col += uWEmit * (spk * (0.3 + 0.9 * hot) + bone * bone * (0.05 + 0.9 * hot));
   #endif
         if (uWVein.x > 0.0 && hot > 0.001) {

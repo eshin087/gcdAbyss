@@ -176,7 +176,8 @@ export const WYRM_ART = {
   wingBone: { ...LIT, ink: [0.3, 0.29, 0.28], light: [1.0, 0.45, 0.45, 0.02], vein: [1.2, 0.5, 0.06, 0.6], strokes: 'axis', strokeEdge: 0.2, under: UNDER },
   // dorsal / tail blades: charcoal with pale tips, molten at the root (the reference's orange-lit
   // tail spikes)
-  spine: { ...LIT, ink: [0.34, 0.3, 0.28], light: [1.0, 0.35, 1.5, 0.02], tip: [0.05, 0.6, 0.25, 4.0], strokes: 'axis', under: UNDER },
+  // (little key light: grey ink lit white over the molten root mixed into a salmon pink)
+  spine: { ...LIT, ink: [0.34, 0.3, 0.28], light: [1.0, 0.15, 1.5, 0.02], tip: [0.05, 0.6, 0.25, 4.0], strokes: 'axis', under: UNDER },
   // horns, head / limb spikes: dark obsidian, outlined in strokes (only at the very edge: wider bands
   // hatched every horn into a plank), bright tips
   bone: { ...LIT, ink: [0.4, 0.38, 0.37], light: [1.0, 0.35, 1.6, 0.02], tip: [0.0, 0.5, 0.3, 0], strokes: 'axis', strokeEdge: 0.35, under: UNDER },
@@ -878,12 +879,13 @@ export function buildDrake(U) {
       const kn = A.knuckle[k];
       const l0 = len * kn, l1 = len - l0;
       const f = joint(wrist, 0, 0, 0, `finger${k}`);
-      // slender finger bones (the reference's are thin lines next to the thick wing arm)
-      const rMid = 0.05;
-      batch(f, mats.wingBone, [limbGeometry({ length: l0, r0: 0.075, r1: rMid, radial: 6, rings: 4, capSegs: 2 })]);
+      // finger bones: thinner than the thick wing arm, but 2-3 letters wide at the reference view
+      // like the reference's (at 0.05 they printed as hairlines)
+      const rMid = 0.068;
+      batch(f, mats.wingBone, [limbGeometry({ length: l0, r0: 0.1, r1: rMid, radial: 6, rings: 4, capSegs: 2 })]);
       const fd = joint(f, 0, 0, l0, `finger${k}d`);
       const tip = k === 0 ? horn(0.5, 0.05, 0, 0, l1 - 0.04, 0, 0, 0, 5) : null;
-      batch(fd, mats.wingBone, tip ? [limbGeometry({ length: l1, r0: rMid, r1: 0.03, radial: 6, rings: 4, capSegs: 2 }), tip] : [limbGeometry({ length: l1, r0: rMid, r1: 0.03, radial: 6, rings: 4, capSegs: 2 })]);
+      batch(fd, mats.wingBone, tip ? [limbGeometry({ length: l1, r0: rMid, r1: 0.04, radial: 6, rings: 4, capSegs: 2 }), tip] : [limbGeometry({ length: l1, r0: rMid, r1: 0.04, radial: 6, rings: 4, capSegs: 2 })]);
       // knuckle bump + a back-swept spike
       batch(fd, mats.bone, [place(ellipsoidGeometry(0.08, 0.08, 0.1, { widthSegs: 6, heightSegs: 4 }), 0, 0, 0), horn(0.3, 0.045, 0, 0.06, 0, -1.15, 0, 0.06, 4)]);
       if (k > 0) batch(fd, mats.claw, [horn(k === 3 ? 0.34 : 0.38, 0.05, 0, 0, l1 - 0.03, 0.3, 0, -0.35, 5)]);
