@@ -360,7 +360,9 @@ constructor(game)                      // builds the four-legged drake, sleeping
 object3d, position (Vector3, root on ground), yaw
 bound: number                           // radius around the arena centre the root stays inside:
                                         // min(CONFIG.world.dragonBound, TUNING.bound = 24) (move, charge, leap target)
-name = 'VAELGRIM, THE CINDER WYRM';  hp, maxHp;  phase: 1|2
+name = 'VAELGRIM, THE CINDER WYRM';  hp, maxHp;  phase: 1|2|3
+phaseAt: number[]                       // HP fractions where each phase starts (TUNING.phaseAt [1, 0.66, 0.33])
+nextPhaseHp: number                     // HP of the next phase's gate (0 in phase 3)
 posture, maxPosture: number;  broken: boolean   // posture break = staggered + broken
 state: 'sleeping'|'waking'|'combat'|'staggered'|'airborne'|'dying'|'dead'
 hurtSpheres: Array<{x,y,z,r,part,mult}>  // world space, refreshed every update; part ∈ head|neck|body|tail|wing|leg
@@ -371,9 +373,22 @@ isTargetable(): boolean                 // false while sleeping/dying/dead
 lockPoint(out): Vector3                  // chest/neck base, for lock-on + camera
 startIntro()                            // wake → rise → roar; emits 'dragon:introDone' when the fight starts
 takeHit({ damage, part, point:{x,y,z}, dir:{x,z}, poise, heavy, crit }): number   // returns damage dealt; adds posture
-                                        // phase gate: with the AI on, phase-1 damage stops at the phase-2
-                                        // threshold until the transition starts (no skipping phase 2)
-onParried({ attack, tell }): void       // the dragon calls this itself when player.takeHit returns 'parried'
+                                        // phase gate: with the AI on, damage stops at the next phase's
+                                        // threshold until its transition starts (no skipping a phase)
+onParried({ attack, tell }): void       // the dragon calls this itself when player.takeHit returns 'parried'.
+                                        // Deflect chain (contract 1): a string's non-final hit is only
+                                        // deflected (posture + a 0.14 s visual knock-back, the string goes
+                                        // on); its last hit / a single melee attack recoils. Emits
+                                        // dragon:parried {attack, tell, hit, last} (+ combat:deflectChain)
+plungePoint(out): Vector3               // contract 2: the top of the drawn head (+0.6 x SCALE), valid in flight
+onPlunge({ damage, posture, point, execution }): number   // contract 2: final damage to the head (phase
+                                        // gate kept), posture; cancels the action (not intro / phase2 /
+                                        // phase3 / death) and plays 'plunged' (head slammed down, thrash,
+                                        // rise ~1.35 s; airborne: a fall + crash landing first; an execution
+                                        // on a broken wyrm ~2 s and it consumes the break); emits
+                                        // dragon:plunged {execution}; returns the damage dealt (0 = ignored)
+enterPhase(n)                           // the transition roars call it: phase n's posture meter, emptied
+crashing: boolean                       // true while a plunge cancels a flight: its end() must not land it
 hitstop(sec, scale)                     // game.hitstop that won't crush a running Ghostep slow-mo
 reset()                                 // back to sleeping at the nest, full HP/posture, phase 1, all FX/lights cleared
 update(dt)
@@ -382,11 +397,21 @@ debug: {                                // used by the Lab (generic shape every 
   trigger(name): boolean,               // force an ability now (wakes/starts the fight if needed); false while busy
   setAI(enabled: boolean), aiEnabled: boolean,
   wake(), startFight(),                 // startFight skips the intro straight into combat (no-op if fighting)
-  phase2(), stagger(), postureBreak(), kill(), reset(), setHp(fraction 0..1),
+  phase2(), phase3(), stagger(), postureBreak(), kill(), reset(), setHp(fraction 0..1),
   hitboxes(): Array<{ x, y, z, r, kind: 'hurt'|'attack' }>,  // for the Lab overlay
-  currentAction?(): string|null         // optional, Lab readout
+  currentAction?(): object|string|null  // optional, Lab readout (the running action)
 }
 ```
+Attacks (`attacks.js` `ATTACKS`): the AI picks any entry generically (`ai.js` `attackWeight`) by
+`phase` (first phase, on the def or `TUNING.attacks[name]`), `weight` (a number, `[P1, P2, P3]` or a
+function of `(dragon, sense)` returning either), `cooldown` and `air` (usable while airborne; ground
+attacks never are). **Strings** (contract 1, `makeString(name)`): `TUNING.attacks[name].hits` = N
+hits, each `{ kind, side?, tell, windup, hold?: [min, max], active, impact, damage, knockback,
+chance?, ...kind extras }`, plus the string's `recovery`, `cooldown`, `weight`, `phase`, AI band
+`range` [min, max] (model units x SCALE), `maxAng` / `minAng`. Every hit gets a beat (combat:tell at
+its windup start, combat:flash `flashLead` before its impact); the kinds (`KINDS`: claw, overhead,
+bite, rearBite, lungeBite, wing, tailJab, tailSweep, hop, stomp) perform them through pose fields.
+A string def carries `string: true`, `melee: true` and `noBreak(a)`.
 Size: the model is authored in model units and the root is scaled by `SCALE` (tuning.js, 1.875
 since v0.3); every world-space number (reaches, radii, hurt spheres, body circles, AI ranges, FX,
 pushers, pose targets via `rootPt`) is multiplied by it. The hero does not scale, so 3D hit volumes
