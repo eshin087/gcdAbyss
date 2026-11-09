@@ -64,21 +64,24 @@ export const WING_KEYS = {
     kink: [-6 * DEG, -12 * DEG, -5 * DEG, 0],
     thumb: nrm([0.1, -0.55, 0.85]),
   },
-  // the combat stance (the owner's reference painting): both wings raised high and spread wide to the
-  // sides, the arm rising out and up (elbow ~140°) to a wrist ~1.85 H up and 2.2 out: the peak of
-  // the wing. From there the fingers fan out and down, the leading one drooping a little toward its
-  // tip, so each wing reads as the painting's bat 'M' (the wrist a peak, the outer edge falling away)
-  // and each sail faces forward-out: from the painting's angle the near wing spreads over the upper
-  // left and the far one shows past the head; from the 58° game camera both faces read. (v0.4 held
-  // the sails back along the body: a narrow fin from the front, the far wing hidden from the
-  // three-quarter view.) Thumb: up and forward, its tip hooking down in front (the top-most accent).
+  // the combat stance (the owner's reference painting): both wings raised high, the arm rising out and
+  // up (elbow ~140°) to a wrist ~1.9 H up and 2.1 out: the peak of the wing. From there the fingers
+  // fan out and down, ~30° apart, the leading one drooping a little toward its tip, so each wing
+  // reads as the painting's bat 'M' (the wrist a peak, the outer edge falling away). The leading
+  // edge sweeps back ~30° off the side and the inner fingers come round to point down and a little
+  // forward, so each sail faces out, forward and a little up: a broad face from every side and from
+  // above. Fanned straight out to the side (a sail facing dead ahead: wide from the low front) it was
+  // edge-on from the side, the painting's three-quarter view and the 58° game camera at most yaws (a
+  // thin lance, and a flat airplane 'T' from the front); swept back ~45° (v0.4) it read narrow from
+  // the low front. The painting's far wing reaching past the head is the look sweep (REST_POSE.sweep).
+  // Thumb: up and forward, its tip hooking down in front (the top-most accent).
   // The membrane's glyph grid is laid out on this key (membrane.js), so it is square at rest.
   HALF: {
-    wrist: ck(2.2, 7.45, 1.1),
-    pole: [0.35, -0.1, -1],
-    fingers: [[0.86, -0.14, 0.06], [0.76, -0.56, -0.2], [0.5, -0.83, -0.24], [0.25, -0.96, -0.1]].map(nrm),
-    kink: [-6 * DEG, -18 * DEG, -8 * DEG, 0],
-    thumb: nrm([0.12, 0.8, 0.58]),
+    wrist: ck(2.1, 7.6, 0.95),
+    pole: [0.35, -0.05, -1],
+    fingers: [[0.78, -0.1, -0.45], [0.66, -0.55, -0.4], [0.45, -0.85, -0.15], [0.26, -0.92, 0.18]].map(nrm),
+    kink: [-8 * DEG, -22 * DEG, -8 * DEG, 0],
+    thumb: nrm([0.1, 0.8, 0.6]),
   },
   // roar / leap: the arms out and up, the leading finger rising ~20° above the wrist (a dihedral,
   // not a jet's flat wing). The fingers fan out and down with only a little back-sweep, so the sail
@@ -233,18 +236,20 @@ export function resetPose(p) {
  *   lookDown / headDip: how far the resting head may tip nose-down toward what it watches, and its
  *            resting droop (the old pose held it level: 0.14 / 0.05)
  *   stance : rest feet offsets (front out / forward, hind out / back) on top of ANATOMY's homes
- *   sweep  : the wing fans turn with the head at rest (rad about the vertical at each wrist, + =
- *            forward): watching a foe off to one side, the wing on the far side swings forward past
- *            the head and the near one sweeps back (the painting: head turned toward the viewer, far
- *            wing reaching beyond the head, near wing swept back); `look` = rad per rad of the head's
- *            turn, `bias` = left-forward offset when looking straight ahead, `max` caps it
+ *   sweep  : the wings turn with the head at rest (rad about the vertical, + = forward): watching a
+ *            foe off to one side, the wing on the far side swings forward past the head and the near
+ *            one sweeps back, both sails turning their faces toward it (the painting: head turned
+ *            toward the viewer, far wing reaching beyond the head, near wing swept back). The fan turns
+ *            about the wrist and the arm `arm` x as much about the wing root (the whole wing protracts /
+ *            retracts at the shoulder, so the far wrist itself comes forward); `look` = rad per rad of
+ *            the head's turn, `bias` = left-forward offset when looking straight ahead, `max` caps it
  */
 export const REST_POSE = {
   neck: { pitch0: 2.05, pitchStep: -0.42, pitchCurve: -0.006 },
   lookDown: 0.32,
   headDip: 0.12,
   stance: { frontOut: 0.15, frontFwd: 0.22, hindOut: 0.12, hindBack: -0.15 },
-  sweep: { bias: 0, look: 0.42, max: 0.5 },
+  sweep: { bias: 0, look: 0.5, max: 0.5, arm: 0.4 },
 };
 
 // neck / tail rest-shape presets (angles in the chest / tail-base frame); blended per frame
@@ -295,7 +300,7 @@ export class Rig {
       jaw: 0, spread: [0, 0], pawW: [0, 0], flapAmp: 0, flapPhase: 0, eyes: 0, tailCurl: 0, tailWave: 0.07,
       lookDown: 0.14, gaitRoll: 0, frontDip: 0,
       droop: 0, mantle: 0, stanceF: 0, stanceH: 0, strideF: 0, strideH: 0, restep: 0, elbowsOut: 0, swell: 0, airReach: 0,
-      rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0,
+      rest: 0, sweep: [0, 0], lookYaw: 0, idle: 0, rouse: 0, rouseP: 0, still: 0,
     };
     this.time = 0;
     this.breathPhase = 0;
@@ -506,7 +511,9 @@ export class Rig {
     this._br = br;
     const sway = (Math.sin(t * 0.74) * 0.6 + Math.sin(t * 0.31 + 1.3) * 0.4) * iw;
     const turnSway = Math.sin(t * 0.43 + 0.5) * iw;
-    this._updateRouse(dt, iw * s.rest);
+    // the wings rouse only while it stands and watches (not mid-stride or mid-turn)
+    s.still = sm(s.still, clamp(2 - pose.speed, 0, 1) * (Math.abs(this.yawRate) < 0.4 ? 1 : 0), 3);
+    this._updateRouse(dt, iw * s.rest * s.still);
 
     const bob = -0.07 * hindLift + br * 0.03 - 0.025 * (0.5 + 0.5 * Math.sin(t * 0.53)) * iw;
     m.hips.position.set(0, A.hipY - lower + bob + s.alt / S, A.hipZ);
@@ -624,7 +631,9 @@ export class Rig {
     const under = this._under;
     const lookYawV = s.idle > 1e-3 ? this._lookYaw(lv, awakeW) : lookYaw;
     this._under = under;
-    s.lookYaw = lookYawV;
+    // the wings' resting sweep follows where the foe is, and only a little of the idle gaze drift
+    // (all of it swung the sails ~8° fore and aft while the wyrm just watched)
+    s.lookYaw = lookYaw + 0.3 * (lookYawV - lookYaw);
     const n = neck.n;
     const base = this._nb;
     base.pitch0 = NECK_UP.pitch0;
@@ -1011,10 +1020,12 @@ export class Rig {
         const F = WING_KEYS.FOLD.fingers;
         for (let f = 0; f < 4; f++) for (let i = 0; i < 3; i++) K.fingers[f][i] += (F[f][i] - K.fingers[f][i]) * up;
       }
-      // resting sweep (REST_POSE.sweep): the fan turns about the vertical at the wrist (+ = forward,
-      // the wrist following a little) against the head's turn: watching a foe to its right, the far
-      // (left) wing reaches forward past the head while the near one sweeps back, the painting's
-      // composition. Rest only: any attack, droop, mantle, beat or lying down fades it out
+      // resting sweep (REST_POSE.sweep): the wing turns about the vertical (+ = forward) against the
+      // head's turn: watching a foe to its right, the far (left) wing reaches forward past the head
+      // while the near one sweeps back, both sails facing it, the painting's composition. The fan (and
+      // thumb, elbow pole) turns by the full angle, the wrist about the wing root by `arm` x it (the
+      // shoulder protracts / retracts the whole wing). Rest only: any attack, droop, mantle, beat or
+      // lying down fades it out
       {
         const SW = REST_POSE.sweep;
         const wRest = s.rest * clamp(1 - Math.abs(s.spread[k] - 0.5) * 3, 0, 1) * (1 - s.droop) * (1 - s.mantle) * (1 - lying) * clamp(1 - s.flapAmp * 8, 0, 1);
@@ -1023,15 +1034,19 @@ export class Rig {
         const a = s.sweep[k];
         if (Math.abs(a) > 1e-4) {
           const ca = Math.cos(a), sa = Math.sin(a);
-          for (let f = 0; f < 4; f++) {
-            const d = K.fingers[f], x = d[0], z = d[2];
+          const rot = (d) => {
+            const x = d[0], z = d[2];
             d[0] = x * ca - z * sa;
             d[2] = x * sa + z * ca;
-          }
-          const tx = K.thumb[0], tz = K.thumb[2];
-          K.thumb[0] = tx * ca - tz * sa;
-          K.thumb[2] = tx * sa + tz * ca;
-          K.wrist[2] += 0.5 * a;
+          };
+          for (let f = 0; f < 4; f++) rot(K.fingers[f]);
+          rot(K.thumb);
+          rot(K.pole);
+          // the wrist about the wing root (chest frame, left wing: root at A.wingRoot)
+          const b = a * (SW.arm ?? 0), cb = Math.cos(b), sb = Math.sin(b);
+          const ox = K.wrist[0] - A.wingRoot[0], oz = K.wrist[2] - A.wingRoot[2];
+          K.wrist[0] = A.wingRoot[0] + ox * cb - oz * sb;
+          K.wrist[2] = A.wingRoot[2] + ox * sb + oz * cb;
         }
       }
       this._wp(w.root, out.root);
