@@ -22,6 +22,7 @@ in an ASCII look inspired by @Ansenjeo's ASCII MMORPG. Today it is a single-zone
 npm run dev      # http://localhost:5173 (zero-dependency static server, no build step)
 npm test         # headless integration sims (real game modules, mocked DOM/WebGL) + glyph check
 npm run build    # single-file dist/index.html (what Vercel serves)
+npm run hero-parts  # regenerate src/entities/player/heroParts.js (needs Blender 4.2+; ADR-037)
 ```
 In the dev server: append `?lab` to the URL (or press **F1**) for the **Lab** — trigger any boss
 ability / phase / transition, god mode, time scale, hitbox overlay. Console: `__game` (everything),

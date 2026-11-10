@@ -131,11 +131,20 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Pleated six-panel coat with drawn fold lines; four-ribbon torn cape
 - [ ] Still unlike the reference (the session was stopped here):
   - [ ] Open, flared long coat with a few broad folds; the legs visible again from behind
-  - [ ] Cape as a wide torn sheet, not stiff ribbons
-  - [ ] Big hair mop, face lines, a tall winged collar
-  - [ ] Dark legs with knee guards; a layered pauldron with short spikes; a jagged glowing blade
-  - [ ] Darker masses with sparse bright edges; blade angle ~44° (now ~37°)
+  - [x] Cape as a wide torn sheet, not stiff ribbons (M1.10)
+  - [x] Big hair mop, a tall winged collar (M1.10); [ ] face lines
+  - [x] A jagged glowing blade, a layered pauldron with short blades (M1.10); [ ] dark legs with knee guards
+  - [x] Darker masses (M1.10); [ ] sparse bright edge detail; blade angle ~44° (now ~37°)
   - [ ] Check the 36 m game camera in the grass, a phone, and the frame cost
+
+## M1.10 — Blender-built hero parts (2026-11-09, `look/hero-blender-parts`, partial)
+- [x] Headless Blender part pipeline: `npm run hero-parts` → `heroParts.js` (ADR-037)
+- [x] Hair, collar, lapels, blade, cape and pauldron sculpted in Blender
+- [ ] Still unlike the reference:
+  - [ ] Coat as Blender-built panels: broad folds, long tattered tails
+  - [ ] Face: brow, nose and jaw lines under the fringe
+  - [ ] Arm and leg armour, belts and buckles as sculpted parts
+  - [ ] The reference's density of small bright detail
 
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions

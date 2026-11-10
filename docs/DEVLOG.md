@@ -5,6 +5,49 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-09 — Session 9: Blender-built hero parts (single-figure reference, round 3)
+**Owner:** "use blender headless to help you out" with the single-figure reference match that
+Session 8 left part-way. Branch `look/hero-blender-parts`.
+
+**Done:**
+- **Blender part pipeline (ADR-037):** `npm run hero-parts` (`scripts/blender/build-hero-parts.mjs`)
+  dumps `DIM`, `BODY`, `REST`, `HAIR_CLUSTERS` and `CAPE_SHEETS` from `model.js` to JSON, runs
+  `scripts/blender/hero_parts.py` in a headless Blender (5.2 here; `BLENDER` env var or PATH) and
+  writes `src/entities/player/heroParts.js`: 33 parts, 7.2k vertices, 9.6k triangles, packed base64
+  (positions and `aGUV` Int16 / 8192, normals Int8, `aPart` Uint8 / 200, Uint16 indices), ~210 KB.
+  `partGeometry(key)` in `model.js` decodes a part; JS still picks the joint and the material. The
+  generated file is committed, so the game, the tests and the Vercel build need no Blender.
+- **Sculpted in Blender:** the hair (a rounder mop of ~60 locks over a scalp cap, per spring cluster,
+  dark mass + sheened tips), the winged stand collar and its rim, the lapels and their piping, the
+  blade (forte, faceted core, barbed cyan edges), the cape (four wide torn sheets with holes and a
+  clawed hem, `CAPE_SHEETS`) and the pauldron (a cap and a pointed lame with bevelled edges and four
+  short blades).
+- **In `model.js`:** darker cloth and lining, brighter skin, both eyes on the skull's surface (the one
+  eye sat 6 mm under it), the arm strap rings and the left bracer's bands removed, three shirt
+  buttons instead of seven, wider and more flared coat panels, a narrower blade. The JS builders the
+  parts replaced are deleted (`hairGeometries`, `hairCap`, `collarGeometry`, `collarRimGeometry`,
+  `bladeGeometry`, `domeShell`, `domeRim`).
+- The interactive Blender MCP link timed out on every call, so Blender is driven from its command
+  line (`--background --python`); nothing depends on a running Blender.
+
+**Verification:** `npm test` green, `npm run build` OK (1615 KB). Captures (session scratchpad): the
+reference angle next to the reference image, front / back / right, the head close-up in ASCII and
+solid, the gameplay camera from behind, and every move from the back and the right side: the cape
+streams behind in the run, the grip stays in the right hand, no gross clipping. Not checked: a phone,
+frame cost, the far gameplay camera in a real fight.
+
+**Honest state:** closer again in silhouette (hair mass, collar, one big torn cape off the armoured
+shoulder, a narrower jagged blade, darker masses), still clearly NOT a match. The face is a pale
+oval with dot eyes; the coat is a pleated bell of straight fold lines, not the reference's long
+ragged tails; the pauldron is two plates with fins, not a stack of ornate spiked lames; the arms and
+legs are plain tubes and plates without the reference's belts, buckles and layered armour; the
+reference's density of small bright detail is not there.
+
+**Next:** the coat as Blender-built panels (broad folds, long tattered tails), the face (brow, nose
+and jaw lines), arm and leg armour as sculpted parts, the belts and buckles. See ROADMAP M1.10.
+
+---
+
 ## 2026-11-09 — Session 8: single-figure reference, round 2 (stopped part-way)
 **Owner:** the hero "still does not look like the attached reference image on terms of detail and
 feel"; mirror the single-figure image as closely as possible; the sword hold and its angle are
