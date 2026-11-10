@@ -155,6 +155,12 @@ Six pieces of work since 0.4.0:
   its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
 
 ### Fixed
+- Bullets (PR #9 review): the phase-2 Cinder fan (8 embers) opened with the hero in a gap, so its
+  opening flash came about a second before anything landed; the first fan now has an ember dead on
+  him at every count. A homing wisp that missed after its cue could come round and hit without a
+  second cue; it announces every pass now (or fizzles). A wisp swarm roared at a hero 25–30 m away
+  flashed when the wyrm finished the move, up to 0.7 s before the first wisp landed; the flash now
+  waits for the lead wisp.
 - The front coat panels no longer hang through the sword when the hero stands idle.
 - Hero: returning from the light combo's finish to the idle, the blade cut through the sword arm's
   shoulder for a frame (a near half-turn now goes round the front).

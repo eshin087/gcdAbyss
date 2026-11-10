@@ -839,6 +839,15 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
   `count(kind?)`, `live`, `clear()`.
 - A pattern's headline beat follows its lead bullet: `setLead(b)`, `leadAlive()`, `leadPos(out)`,
   `leadTti()`; the beat part `'bullet'` in `dragon.partPos` resolves to it (the mouth when none).
+  `headlined(kind, tti)`: the brain has flashed the headline, so the lead's impact is announced
+  (it covers the clump and stamps the lead's `cueAt`). `holdFlash(a, beat, kind)` → true when the
+  field takes over a headline flash that the ending action could not send yet (the lead is still
+  flying): the field then calls `dragon.flashTell(a, beat)` `flashLead` before the lead's impact,
+  at once if the lead dies or is deflected, and never after a clear / fizzle / the wyrm's death
+  (the same as an interrupted pattern: a tell without a flash). One held flash at a time.
+- A bullet cue stands for one predicted impact (`cueAt`, in the bullet's own time). A homing wisp
+  still flying `TUNING.bullets.recue` s after that moment is cued again on its next approach, or
+  is a dud when that cue could only come too late.
 - The wheel: `startWheel({ attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn,
   knockback, max, headline })`, `stopWheel()`, `wheel` (the record: `on`, `lit`, `ang`, `hits`, ...).
 - Hits go through `dragon.hitPlayer({ ..., bullet: true, perfect, plunge: false })`: the damage is

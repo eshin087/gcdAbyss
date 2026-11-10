@@ -54,6 +54,20 @@ blobs (the additive rule in STYLE.md).
 - Frame cost of ~200 live bullets on a phone: not measured.
 - The AI pick-share paragraph in COMBAT.md is v0.5's.
 
+**Review fixes (PR #9, same day):** three cue bugs found by the automated review, each reproduced
+by a new BULLETS check that fails on the old code and passes now.
+- Even-count fan (phase 2, 8 embers): the centring was inverted, so the first fan had no ember on
+  the hero and no lead bullet; the headline flash came 1.03 s before the first hit. Now 0.33 s
+  (`fanOnHero` / `fanOffset` in `bulletAttacks.js`).
+- A homing wisp's cue was for life: sidestepped after its cue, it came round and hit 1.23 s after
+  its only cue. A cue now stands for one impact (`cueAt`, `TUNING.bullets.recue` 0.12 s); the
+  second pass is cued 0.35 s ahead, or the wisp is a dud.
+- Wisp swarm at 28 m: the lead wisp lands after the action ends, and the end-of-action flush
+  flashed 0.72 s early. The field now holds that flash for the lead (`bullets.holdFlash`); 0.33 s.
+  The window is narrower than the review said: the lead outruns the action only beyond about
+  24.5 m (the AI roars the swarm up to 30 m).
+- Not looked at in the browser: these change when a cue fires, not what is drawn.
+
 **Next:** playtest; then the follow-ups in ROADMAP M1.11.
 
 ---

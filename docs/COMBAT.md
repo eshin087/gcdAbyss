@@ -259,7 +259,10 @@ the arena with small fire projectiles that fly at the hero's chest height. Three
   `{hazard: true, bullet: true}` (a ping, no music dip). Impacts within 0.3 s of an announced one ride
   on that cue. A bullet that could only be announced later than 0.24 s before impact fizzles on
   touch when it is younger than 0.6 s (spawned point-blank); an older one hits (the hero ran into
-  it).
+  it). A cue stands for one impact: a homing wisp that misses and comes round again (still flying
+  0.12 s after the impact it announced, `recue`) announces the second pass too, and fizzles when
+  it could only do that too late. A pattern's opening flash follows its lead bullet even when the
+  wyrm has already finished the move (a wisp swarm roared at a hero 25–30 m away).
 - **No melting.** After a bullet hit every touching bullet fizzles for 0.45 s, and each pattern has
   a hit cap (below). The field is cleared on a phase change, the wyrm's death and a reset, and
   fizzles when its posture breaks.
@@ -268,7 +271,7 @@ the arena with small fire projectiles that fly at the hero's chest height. Three
 | Pattern (phase ≥) | Tell | P1 timing (s) | What flies | Hit cap | Weight [P1, P2, P3] / cooldown | AI gate |
 |---|---|---|---|---|---|---|
 | Ember storm `emberStorm` (1) | N | windup 1.1 · cast [3.4, 3.8, 4.2] · recovery 1.0 | [4, 4, 5] spiral arms of embers round the body (one per arm every 0.11 s, 7.5 m/s, the arms turning 1.05 rad/s); P2+ a ring of 8 / 10 red orbs every 1.6 s (5.5 m/s, one aimed at you); P3 three more arms winding the other way | 4 | [1.4, 1.8, 1.8] / 14 | ≤ 26 m |
-| Cinder fan `fanVolley` (1) | N | windup 1.0 · [3, 4, 5] wing beats 0.7 apart · recovery 0.9 | each beat a fan of [7, 8, 9] embers over ±0.62 rad at 9 m/s, every second fan offset half a gap; P2+ the last beat is a wave of 5 red orbs (7 m/s) | 3 | [2.2, 2.6, 2.6] / 9 | 5–30 m |
+| Cinder fan `fanVolley` (1) | N | windup 1.0 · [3, 4, 5] wing beats 0.7 apart · recovery 0.9 | each beat a fan of [7, 8, 9] embers over ±0.62 rad at 9 m/s; the first fan has an ember dead on you whatever the count, every second fan puts you in a gap; P2+ the last beat is a wave of 5 red orbs (7 m/s) | 3 | [2.2, 2.6, 2.6] / 9 | 5–30 m |
 | Wisp swarm `wispSwarm` (2) | B | windup 1.0 · cast 1.3 · recovery 0.8 | [–, 7, 9] wisps roared out of the maw: they hang, then home in 0.45 s apart (cruise 5.2 m/s, turning 1.9 rad/s and tighter with age, 6.5 s of life); they outlive the roar | 4 | [0, 1.6, 1.8] / 16 | ≤ 30 m |
 | Fire wheel `fireWheel` (2) | R | windup 1.3 (red lines on the ground) · burns [4.2, 4.2, 5.0] · recovery 1.2 | [4, 4, 5] walls of fire from 3.2 to 26 m, 1.1 m thick, turning like spokes at 1.05 rad/s and reversing once: roll through a spoke or run with it. 20 + burn 1.5, kb 4; each approaching spoke flashes | 2 | [0, 1.2, 1.5] / 20 | ≤ 24 m |
 
@@ -279,7 +282,8 @@ punish.
 Checked by `npm test` → BULLETS: every answer above per bullet kind, the cue's lead, the clump
 rule, the grace, the hit caps, the point-blank dud, the clears, and each pattern in each phase it
 runs in (a standing hero is hit at most `maxHits` times; a hero who answers the cues takes fewer
-hits than one who stands still).
+hits than one who stands still); the even-count fan's centring, a sidestepped wisp's second cue,
+and the opening flash of a wisp swarm roared from 28 m.
 
 ## Current numbers (v0.6 "bullet hell", 2026-11-09)
 Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,
