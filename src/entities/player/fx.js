@@ -25,6 +25,7 @@ const COL = {
   hurt: [2.2, 1.8, 1.6], hurtEnd: [0.6, 0.15, 0.08],
   parry: [4.0, 3.4, 2.2], parryEnd: [1.6, 0.9, 0.25],
   parryBlue: [1.6, 2.6, 4.6], parryBlueEnd: [0.25, 0.6, 1.8],
+  moon: [2.6, 3.4, 4.8], moonEnd: [0.3, 0.7, 1.9], // the moonlit blade's steel light (deflect slash)
   block: [2.3, 2.0, 1.5], blockEnd: [0.7, 0.35, 0.1],
   break: [1.5, 1.5, 1.6], breakEnd: [0.3, 0.3, 0.38],
   ghost: [1.3, 1.75, 2.6], ghostEnd: [0.12, 0.25, 0.75],
@@ -410,6 +411,30 @@ export class PlayerFx {
             glyph: '-', rot: s, stretch: 2.2, color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0,
           });
         }
+      }
+    }
+    // the moonlit blade's own light: one cold slash of steel through the contact on every deflect
+    // (laid along a screen diagonal, alternating with the chain), and sparks that fall, still lit
+    {
+      const rx = CAM ? CAM[0] : 1, ry = CAM ? CAM[1] : 0, rz = CAM ? CAM[2] : 0;
+      const ux = CAM ? CAM[4] : 0, uy = CAM ? CAM[5] : UP_Y, uz = CAM ? CAM[6] : UP_Z;
+      const s = (n % 2 ? 0.62 : -0.62) + R(-0.12, 0.12), cs = Math.cos(s), sn = Math.sin(s);
+      for (let j = -5; j <= 5; j++) {
+        const o = j * 0.15 * k;
+        fx.spawn({
+          x: x + o * (cs * rx + sn * ux), y: y + o * (cs * ry + sn * uy), z: z + o * (cs * rz + sn * uz),
+          life: 0.16 - 0.012 * Math.abs(j), size: 0.3 - 0.03 * Math.abs(j), sizeEnd: 0.05,
+          glyph: '-', rot: s, stretch: 2.6, color: COL.moon, colorEnd: COL.moonEnd, alpha: 1, alphaEnd: 0,
+        });
+      }
+      for (let i = 0; i < Math.round(9 * k); i++) {
+        const a = R(0, Math.PI * 2), sp = R(1.5, 5);
+        fx.spawn({
+          x, y, z,
+          vx: Math.cos(a) * sp + fdx * 3, vy: R(2.5, 7), vz: Math.sin(a) * sp + fdz * 3,
+          life: R(0.5, 0.9), size: R(0.13, 0.22), sizeEnd: 0.03,
+          glyph: ".'`•", color: i % 3 ? c0 : COL.moon, colorEnd: i % 3 ? c1 : COL.moonEnd, alpha: 1, alphaEnd: 0, gravity: -16, drag: 0.9, flicker: 0.3,
+        });
       }
     }
     // (the core flash stays compact: the wyrm's own parry burst lands on the same spot, and two big

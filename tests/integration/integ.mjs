@@ -846,7 +846,7 @@ async function scenarioBlock() {
   settle(G);
   place(G, 5.5, 0.5);
   const r = forceAttack(G, 'swipe', { hold: true });
-  const want = TUNING.attacks.swipe.damage * (1 - DEFENSE.blockReduction.normal);
+  const want = TUNING.attacks.swipe.damage * (TUNING.damageScale ?? 1) * (1 - DEFENSE.blockReduction.normal);
   out(`   swipe: tell ${r.tell} result ${r.res} hp ${r.hp0} → ${r.hpAtHit} (expected -${want.toFixed(2)})`);
   assert(r.tell === TELL.NORMAL, 'swipe announces a normal tell');
   assert(r.res === RESULT.BLOCKED, `held guard → 'blocked' (got ${r.res})`);
@@ -856,7 +856,7 @@ async function scenarioBlock() {
   settle(G);
   place(G, 6);
   const b = forceAttack(G, 'bite', { hold: true });
-  const wantB = TUNING.attacks.bite.damage * (1 - DEFENSE.blockReduction.blue);
+  const wantB = TUNING.attacks.bite.damage * (TUNING.damageScale ?? 1) * (1 - DEFENSE.blockReduction.blue);
   out(`   bite: result ${b.res} hp ${b.hp0} → ${b.hpAtHit} (expected -${wantB.toFixed(2)})`);
   assert(b.res === RESULT.BLOCKED && near(b.hp0 - b.hpAtHit, wantB, 0.01), `blocked blue bite chips by DEFENSE.blockReduction.blue (${(b.hp0 - b.hpAtHit).toFixed(2)})`);
   assert(p.blocking === true || p.state === 'block', 'guard still up after a blocked blue hit');
@@ -1015,7 +1015,7 @@ async function scenarioRed() {
   out(`   tail vs guard: tell ${gb.tell} result ${gb.res} hp ${gb.hp0} → ${gb.hpAtHit} state ${p.state}`);
   assert(gb.tell === TELL.RED, 'tail announces a red tell');
   assert(gb.res === RESULT.HIT && evn(gb, 'player:guardBreak') === 1, `guard break on a red attack (got ${gb.res})`);
-  assert(near(gb.hp0 - gb.hpAtHit, TUNING.attacks.tail.damage, 0.01), `guard break takes full damage (${gb.hp0 - gb.hpAtHit})`);
+  assert(near(gb.hp0 - gb.hpAtHit, TUNING.attacks.tail.damage * (TUNING.damageScale ?? 1), 0.01), `guard break takes full damage (${gb.hp0 - gb.hpAtHit})`);
   assert(evn(gb, 'player:block') === 0, 'no player:block on a red attack');
   // a timed RMB tap does not parry red either
   settle(G);
@@ -1347,6 +1347,332 @@ async function scenarioDeflect() {
 }
 
 // ================================================================== scenario: Lab + debug APIs
+// ---- BULLETS: the bullet field (bullets.js) and the four patterns (bulletAttacks.js), docs/COMBAT.md "Bullets"
+async function scenarioBullets() {
+  out('\n== scenario BULLETS (deflect / block / roll / cut the small ones, dodge the red ones; the cue, the caps, the clears) ==');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const d = game.dragon, p = game.player, B = d.bullets, K = TUNING.bullets;
+  const lead = TUNING.flashLead;
+  assert(B && K && typeof B.spawn === 'function' && B.live === 0, 'dragon.bullets exists, empty at the start');
+  const NAMES = ['emberStorm', 'fanVolley', 'wispSwarm', 'fireWheel'];
+  const listed = new Set(d.debug.abilities().map((a) => a.name));
+  assert(NAMES.every((n) => listed.has(n) && TUNING.attacks[n]?.tell), 'the four patterns are Lab abilities with tuning data');
+  const KIND = { ember: 0, wisp: 1, orb: 2 };
+  /**
+   * `n` bullets flown at the standing hero from `from` m (`gap` s apart), answered off the bullet's own
+   * cue: answer = parry (RMB tap 0.12 s before impact) | roll (Space 0.1 s before) | swing (LMB on the
+   * cue) | none; hold = guard held throughout; cap = the pattern's hit budget.
+   */
+  const shot = (kind, o = {}) => {
+    settle(G);
+    B.clear();
+    run(G, 0.8, { passive: true });
+    place(G, 7);
+    d.posture = 0;
+    const c0 = { ...G.counts }, h0 = G.hits.length, hp0 = p.hp;
+    const rec = { cues: [], flashAt: [], light: null, parried: [], postureAtHit: null, state: [] };
+    G.watch = (n, e) => {
+      if (n === 'combat:tell' && e?.bullet) rec.cues.push({ t: game.time, impactIn: e.impactIn, tell: e.tell, hazard: e.hazard });
+      if (n === 'combat:flash' && e?.bullet) rec.flashAt.push(game.time);
+      if (n === 'player:parry') rec.light = e.light;
+      if (n === 'dragon:parried') rec.parried.push(e);
+    };
+    const from = o.from ?? 6, speed = o.speed ?? 9, n = o.n ?? 1;
+    const dx = d.position.x - p.position.x, dz = d.position.z - p.position.z, l = Math.hypot(dx, dz) || 1;
+    const ux = dx / l, uz = dz / l;
+    const sx = p.position.x + ux * from, sz = p.position.z + uz * from;
+    const yaw = Math.atan2(-ux, -uz);
+    const grp = o.cap ? B.group(o.cap) : -1;
+    let spawned = 0, next = game.time, answered = 0, seenHits = 0;
+    if (o.hold) input.press(2);
+    for (let i = 0; i < Math.round((o.T ?? 2.4) / DT); i++) {
+      while (spawned < n && game.time >= next - 1e-9) {
+        B.spawn(kind, 'emberStorm', sx, 1.0, sz, yaw, speed, grp);
+        spawned++;
+        next += o.gap ?? 0;
+      }
+      aimAt(G);
+      input.axis = { x: 0, y: 0 };
+      if (answered < rec.flashAt.length) {
+        const left = rec.flashAt[answered] + lead - game.time - DT;
+        if (o.answer === 'parry' && left <= 0.12) { answered++; input.click(2); }
+        else if (o.answer === 'roll' && left <= 0.1) { answered++; input.axis = { x: ux, y: -uz }; input.tap('Space'); }
+        else if (o.answer === 'swing' && left <= (o.swingLead ?? 0.3)) { answered++; input.click(0); }
+        else if (!o.answer || o.answer === 'none') answered++;
+      }
+      G.tick(DT);
+      const hs = G.hits.length - h0;
+      if (hs > seenHits) { seenHits = hs; if (rec.postureAtHit === null) rec.postureAtHit = d.posture; rec.state.push(p.state); }
+    }
+    if (o.hold) input.up(2);
+    G.watch = null;
+    rec.hits = G.hits.slice(h0);
+    rec.res = rec.hits.map((h) => h.r);
+    rec.lost = rec.hits.reduce((s, h) => s + (h.hp0 - h.hp1), 0);
+    rec.hp = hp0 - p.hp;
+    rec.ev = {};
+    for (const k in G.counts) rec.ev[k] = G.counts[k] - (c0[k] || 0);
+    rec.live = B.live;
+    return rec;
+  };
+  const cnt = (r, what) => r.res.filter((x) => x === what).length;
+
+  // --- an ember: announced, hits a standing hero for its own (unscaled) damage
+  const st = shot(KIND.ember);
+  const cueLead = st.hits[0] ? st.hits[0].t - st.flashAt[0] : NaN;
+  out(`   ember, no answer: ${st.res.join(' ')} · −${st.lost} HP · cues ${st.cues.length} (${st.cues[0]?.tell}, hazard ${st.cues[0]?.hazard}) · flash ${cueLead.toFixed(3)} s before impact`);
+  assert(st.res.length === 1 && st.res[0] === RESULT.HIT && near(st.lost, K.ember.damage, 0.01), `an ember hits a standing hero for K.ember.damage, not x damageScale (${st.lost})`);
+  assert(st.cues.length === 1 && st.flashAt.length === 1 && st.cues[0].tell === TELL.NORMAL && st.cues[0].hazard === true, 'one paired combat:tell + combat:flash { hazard, bullet } per bullet');
+  assert(cueLead >= K.cueMin - DT && cueLead <= lead + 2 * DT, `the cue leads the impact by ~flashLead (${cueLead.toFixed(3)} s)`);
+
+  // --- deflect: a parry off the cue sends it back at the wyrm (posture, light clash, no recoil of the wyrm)
+  const pa = shot(KIND.ember, { answer: 'parry' });
+  out(`   ember, parried: ${pa.res.join(' ')} · −${pa.hp} HP · posture ${pa.postureAtHit} · light ${pa.light} · dragon:parried ${JSON.stringify(pa.parried)} · live ${pa.live}`);
+  assert(pa.res.length === 1 && pa.res[0] === RESULT.PARRIED && pa.hp === 0, 'a timed parry deflects the ember (no damage)');
+  assert(near(pa.postureAtHit, K.ember.posture, 0.5), `the deflect adds K.ember.posture (${pa.postureAtHit})`);
+  assert(pa.light === true && pa.ev['player:parry'] === 1, 'player:parry { light: true }: a light clash');
+  assert(pa.parried.length === 1 && pa.parried[0].bullet === true && pa.parried[0].attack === 'emberStorm', 'dragon:parried { bullet: true } once (the wyrm is not interrupted)');
+  assert(pa.live === 0, 'the deflected ember flew back to the head and burst');
+  const wi = shot(KIND.wisp, { answer: 'parry' });
+  out(`   wisp, parried: ${wi.res.join(' ')} · posture ${wi.postureAtHit} · cue ${wi.cues[0]?.tell}`);
+  assert(wi.res[0] === RESULT.PARRIED && near(wi.postureAtHit, K.wisp.posture, 0.5) && wi.cues[0]?.tell === TELL.BLUE, 'a wisp is a blue tell: deflected for K.wisp.posture');
+
+  // --- block (chip) and roll (i-frames, no Ghostep off a small bullet)
+  const bl = shot(KIND.ember, { hold: true });
+  out(`   ember, guard held: ${bl.res.join(' ')} · −${bl.lost.toFixed(2)} HP`);
+  assert(bl.res[0] === RESULT.BLOCKED && bl.lost < K.ember.damage && (bl.ev['player:guardBreak'] || 0) === 0, 'a held guard blocks the ember for chip');
+  const ro = shot(KIND.ember, { answer: 'roll' });
+  out(`   ember, rolled: ${ro.res.join(' ')} · perfectDodge ${ro.ev['player:perfectDodge'] || 0} · ghostep ${ro.ev['player:ghostep'] || 0} · −${ro.hp} HP`);
+  assert(cnt(ro, RESULT.DODGED) >= 1 && cnt(ro, RESULT.HIT) === 0 && ro.hp === 0, 'rolling through an ember dodges it');
+  assert(!(ro.ev['player:perfectDodge'] || 0) && !(ro.ev['player:ghostep'] || 0), 'no Ghostep off a small bullet (hit.perfect === false)');
+
+  // --- the red orb: dodge only
+  const ob = shot(KIND.orb);
+  out(`   orb, no answer: ${ob.res.join(' ')} · −${ob.lost} HP at the hit · cue ${ob.cues[0]?.tell}`);
+  assert(ob.res[0] === RESULT.HIT && near(ob.lost, K.orb.damage, 0.01) && ob.cues[0]?.tell === TELL.RED, 'an orb is a red tell and hits for K.orb.damage');
+  const op = shot(KIND.orb, { answer: 'parry' });
+  const oh = shot(KIND.orb, { hold: true });
+  out(`   orb, parry tap: ${op.res.join(' ')} · guard held: ${oh.res.join(' ')} (guardBreak ${oh.ev['player:guardBreak'] || 0})`);
+  assert(cnt(op, RESULT.PARRIED) === 0 && cnt(op, RESULT.BLOCKED) === 0 && op.hp > 0, 'an orb cannot be parried');
+  assert(cnt(oh, RESULT.BLOCKED) === 0 && oh.hp > 0, 'an orb cannot be blocked');
+  const od = shot(KIND.orb, { answer: 'roll' });
+  out(`   orb, rolled 0.1 s before impact: ${od.res.join(' ')} · perfectDodge ${od.ev['player:perfectDodge'] || 0} · states ${od.state.join(',')} · −${od.hp} HP`);
+  assert(od.res[0] === RESULT.PERFECT && od.ev['player:perfectDodge'] === 1 && od.hp === 0, 'a timed roll through an orb is a perfect dodge (Ghostep)');
+  assert(!od.state.includes('plunge') && p.state !== 'plunge', 'the Ghostep off a bullet never plunges (plunge: false)');
+
+  // --- the blade cuts small bullets out of the air
+  let cutOk = null;
+  for (const sl of [0.34, 0.28, 0.22, 0.16]) {
+    const cu = shot(KIND.ember, { answer: 'swing', swingLead: sl, speed: 6, from: 5 });
+    out(`   ember, swing ${sl} s before impact: hits [${cu.res.join(' ')}] · live ${cu.live} · swings ${cu.ev['player:attack'] || 0}`);
+    if (cu.res.length === 0 && cu.live === 0 && cu.hp === 0) { cutOk = sl; break; }
+  }
+  assert(cutOk !== null, `a swing in time cuts the ember out of the air (no hit resolved; swing ${cutOk} s before impact)`);
+
+  // --- one cue, one parry for a clump; the grace after a hit; the pattern's hit budget; point-blank duds
+  const vo = shot(KIND.ember, { n: 5, gap: 0.05, answer: 'parry' });
+  out(`   5 embers 0.05 s apart, one parry: ${vo.res.join(' ')} · cues ${vo.cues.length} · live ${vo.live} · −${vo.hp} HP`);
+  assert(vo.cues.length === 1 && cnt(vo, RESULT.PARRIED) === 1 && cnt(vo, RESULT.HIT) === 0 && vo.hp === 0 && vo.live === 0, 'impacts within cueGap ride on one cue: one parry answers the clump');
+  const gr = shot(KIND.ember, { n: 4, gap: 0.12 });
+  out(`   4 embers 0.12 s apart, no answer: ${gr.res.join(' ')} · −${gr.lost} HP`);
+  assert(cnt(gr, RESULT.HIT) === 1 && near(gr.lost, K.ember.damage, 0.01), 'after a bullet hit the next ones fizzle for K.grace s (no chain melt)');
+  const ca = shot(KIND.ember, { n: 6, gap: 0.7, cap: 2, T: 5.6 });
+  out(`   6 embers 0.7 s apart, budget 2: ${ca.res.join(' ')} · cues ${ca.cues.length}`);
+  assert(cnt(ca, RESULT.HIT) === 2 && ca.res.length === 2, "a pattern's bullets stop hurting at its hit budget (group().max)");
+  const pb = shot(KIND.ember, { from: 0.9, T: 0.6 });
+  out(`   ember spawned 0.9 m away: hits [${pb.res.join(' ')}] · cues ${pb.cues.length}`);
+  assert(pb.res.length === 0 && pb.hp === 0, 'a bullet spawned point-blank (no time for a cue) is a dud');
+
+  // --- robustness and the clears
+  settle(G);
+  B.clear();
+  assert(B.spawn(KIND.ember, 'x', NaN, 1, 0, 0, 9) === null && B.spawn(7, 'x', 0, 1, 0, 0, 9) === null && B.live === 0, 'spawn rejects NaN / unknown kinds');
+  B.update(NaN); B.update(0); B.update(-1);
+  place(G, 9);
+  for (let i = 0; i < 40; i++) B.spawn(i % 3, 'emberStorm', d.position.x + Math.sin(i) * 6, 1.5, d.position.z + Math.cos(i) * 6, i * 0.7, 3);
+  B.startWheel({ attack: 'fireWheel', x: d.position.x, z: d.position.z, n: 4, ang: 0, dir: 1, warn: 0.5, dur: 4, speed: 1, r0: 3, r1: 26, width: 1.1, damage: 20, max: 2 });
+  run(G, 0.3, { passive: true });
+  const liveBefore = B.live;
+  d.enterPhase(2);
+  run(G, 2 * DT, { passive: true });
+  out(`   phase change: ${liveBefore} bullets + wheel → ${B.live}, wheel ${B.wheel.on}`);
+  assert(liveBefore === 40 && B.live === 0 && B.wheel.on === false, 'a phase change clears the bullets and the wheel');
+  settle(G, 12);
+  for (let i = 0; i < 20; i++) B.spawn(0, 'emberStorm', d.position.x + Math.sin(i) * 7, 1.5, d.position.z + Math.cos(i) * 7, i * 0.7, 2);
+  run(G, 0.2, { passive: true });
+  d.debug.postureBreak();
+  run(G, 3 * DT, { passive: true });
+  out(`   posture break: 20 bullets → ${B.live}`);
+  assert(B.live === 0, 'a posture break clears the air');
+  run(G, 9, { passive: true }, () => !d.broken);
+  settle(G, 12);
+
+  // --- the patterns, every phase: a hero who never answers is hit at most maxHits times; a hero who
+  // answers every cue (parry the normal / blue ones, roll the red ones) comes through nearly clean
+  const pattern = (name, phase, answer, dist) => {
+    settle(G, 12);
+    if (d.phase !== phase) { d.enterPhase(phase); run(G, 0.2, { passive: true }); settle(G, 14); }
+    B.clear();
+    run(G, 1.0, { passive: true });
+    place(G, dist);
+    d.posture = 0;
+    const def = answer ? makeDefender(G) : null;
+    const h0 = G.hits.length, c0 = { ...G.counts };
+    let tells = 0, flashes = 0, peak = 0, bad = 0;
+    G.watch = (n, e) => { def?.onEvent(n, e); if (n === 'combat:tell') tells++; if (n === 'combat:flash') flashes++; };
+    const ok = game.lab.trigger(name);
+    let ended = -1;
+    for (let i = 0; i < Math.round(16 / DT); i++) {
+      aimAt(G);
+      input.axis = { x: 0, y: 0 };
+      def?.act();
+      d.posture = 0; // (the meter would break the wyrm mid-pattern and clear the air; not under test here)
+      G.tick(DT);
+      peak = Math.max(peak, B.live);
+      for (let j = 0; j < B.pool.length; j++) { const b = B.pool[j]; if (b.alive && !Number.isFinite(b.x + b.y + b.z + b.vx + b.vz)) bad++; }
+      if (ended < 0 && !d.brain.action) ended = i;
+      if (ended >= 0 && B.live === 0 && !B.wheel.on && i - ended > 30) break;
+    }
+    G.watch = null;
+    input.up(2);
+    const hs = G.hits.slice(h0).filter((h) => h.attack === name);
+    const by = (r) => hs.filter((h) => h.r === r).length;
+    return { ok, ended, tells, flashes, peak, bad, hit: by(RESULT.HIT), parried: by(RESULT.PARRIED), blocked: by(RESULT.BLOCKED), dodged: by(RESULT.DODGED) + by(RESULT.PERFECT), live: B.live, wheel: B.wheel.on, hurt: (G.counts['player:hurt'] || 0) - (c0['player:hurt'] || 0) };
+  };
+  const DIST = { emberStorm: 9, fanVolley: 11, wispSwarm: 10, fireWheel: 9 };
+
+  // --- the cue in the corners (phase 2): an even-count fan, a wisp that misses and comes round, a
+  // swarm roared at a hero so far away that its lead wisp lands after the action has ended
+  const lateCues = () => {
+    const FV = TUNING.attacks.fanVolley, WS = TUNING.attacks.wispSwarm;
+    const R = K.ember.r + (p.radius ?? 0.45);
+    /** One pattern against a standing hero at `metres`: its headline tell / flash, hits, and `each(i)` per frame. */
+    const watchPattern = (name, metres, each) => {
+      settle(G, 12);
+      B.clear();
+      run(G, 1.0, { passive: true });
+      place(G, metres / SIZE);
+      d.posture = 0;
+      const h0 = G.hits.length;
+      const r = { tells: 0, flashes: 0, headTell: null, headFlash: null, ended: null, dist: Math.hypot(p.position.x - d.position.x, p.position.z - d.position.z) };
+      G.watch = (n, e) => {
+        if (e?.attack !== name) return;
+        if (n === 'combat:tell') { r.tells++; if (!e.bullet) r.headTell = game.time; }
+        if (n === 'combat:flash') { r.flashes++; if (!e.bullet) r.headFlash = game.time; }
+      };
+      r.ok = game.lab.trigger(name);
+      for (let i = 0; i < Math.round(14 / DT); i++) {
+        aimAt(G);
+        input.axis = { x: 0, y: 0 };
+        d.posture = 0;
+        G.tick(DT);
+        each?.(r);
+        if (r.ended === null && !d.brain.action) r.ended = game.time;
+        if (r.ended !== null && B.live === 0 && game.time - r.ended > 0.5) break;
+      }
+      G.watch = null;
+      r.hits = G.hits.slice(h0).filter((h) => h.attack === name && h.r === RESULT.HIT);
+      return r;
+    };
+
+    // an even count (phase 2: 8 embers): the first volley still has an ember dead on the hero (the
+    // lead the headline flash follows) and the second still puts him in a gap
+    assert(d.phase === 2 && (perPhaseOf(FV.count, 2) & 1) === 0, `phase 2 fans have an even count (${perPhaseOf(FV.count, 2)})`);
+    const miss = [];
+    let leadSeen = false, embers = 0;
+    const fv = watchPattern('fanVolley', 11, () => {
+      if (B.leadAlive()) leadSeen = true;
+      const n = B.count(KIND.ember);
+      if (n > embers && miss.length < 2) {
+        // a volley was just flung: how far from the hero its nearest ember will pass
+        let best = Infinity;
+        for (const b of B.pool) {
+          if (!b.alive || b.kind !== KIND.ember || b.t > 1.5 * DT) continue;
+          const dx = p.position.x - b.x, dz = p.position.z - b.z, sp = Math.hypot(b.vx, b.vz) || 1;
+          best = Math.min(best, Math.abs(dx * b.vz - dz * b.vx) / sp);
+        }
+        miss.push(best);
+      }
+      embers = n;
+    });
+    const fvLag = fv.hits[0] && fv.headFlash !== null ? fv.hits[0].t - fv.headFlash : NaN;
+    out(`   P2 fan of ${perPhaseOf(FV.count, 2)} at ${fv.dist.toFixed(1)} m: lead bullet ${leadSeen} · nearest ember passes ${miss.map((m) => m.toFixed(2)).join(' / ')} m off (volley 1 / 2, touch radius ${R.toFixed(2)}) · headline flash ${fvLag.toFixed(3)} s before the first hit · tells ${fv.tells}/${fv.flashes}`);
+    assert(fv.ok && leadSeen, 'even-count fan: the first volley has a lead ember (setLead)');
+    assert(miss.length === 2 && miss[0] < 0.1 && miss[1] > R, `even-count fan: volley 1 is centred on the hero, volley 2 has him in a gap (${miss.map((m) => m.toFixed(2)).join(' / ')})`);
+    assert(fvLag >= K.cueMin - DT && fvLag <= lead + 3 * DT, `even-count fan: the headline flash leads the first impact by ~flashLead (${fvLag.toFixed(3)} s)`);
+    assert(fv.tells === fv.flashes, `even-count fan: one combat:flash per combat:tell (${fv.tells}/${fv.flashes})`);
+
+    // a homing wisp that the hero sidesteps after its cue comes round again: it has to announce the
+    // second pass too (or fizzle), never hit off the stale cue
+    settle(G, 12);
+    B.clear();
+    run(G, 0.8, { passive: true });
+    place(G, 7);
+    {
+      const h0 = G.hits.length, flashes = [];
+      G.watch = (n, e) => { if (n === 'combat:flash' && e?.bullet) flashes.push(game.time); };
+      const ux = (d.position.x - p.position.x), uz = (d.position.z - p.position.z), l = Math.hypot(ux, uz) || 1;
+      const w = B.spawn(KIND.wisp, 'wispSwarm', p.position.x + (ux / l) * 8, 1.0, p.position.z + (uz / l) * 8, Math.atan2(-ux, -uz), K.wisp.cruise);
+      w.turn = K.wisp.turn;
+      w.homeAt = 0;
+      let stepped = false, passes = 0, wasNear = false;
+      for (let i = 0; i < Math.round(7 / DT) && w.alive; i++) {
+        aimAt(G);
+        input.axis = { x: 0, y: 0 };
+        if (!stepped && flashes.length === 1 && game.time - flashes[0] >= 0.2) {
+          stepped = true; // out of its way, 0.15 s before it lands
+          p.debug.teleport(p.position.x - (uz / l) * 5, p.position.z + (ux / l) * 5);
+        }
+        G.tick(DT);
+        const near1 = Math.hypot(w.x - p.position.x, w.z - p.position.z) < 1.5;
+        if (near1 && !wasNear) passes++;
+        wasNear = near1;
+      }
+      G.watch = null;
+      const hs = G.hits.slice(h0).filter((h) => h.r === RESULT.HIT);
+      const lag = hs[0] ? hs[0].t - flashes[flashes.length - 1] : NaN;
+      out(`   wisp sidestepped after its cue: cues ${flashes.length} · hits ${hs.length}${hs[0] ? ` (${lag.toFixed(3)} s after the last cue)` : ''} · dud ${w.dud} · came near ${passes}×`);
+      assert(stepped && flashes.length >= 1, 'the wisp was cued and sidestepped');
+      assert(hs.length === 0 ? w.dud || !w.alive : flashes.length >= 2 && lag >= K.cueMin - DT && lag <= lead + K.cueGap + 2 * DT, `a wisp that missed announces its second pass before it hits (cues ${flashes.length}, lag ${lag.toFixed(3)})`);
+      assert(flashes.length >= 2 || w.dud, `the second pass is cued again, or the wisp is a dud (cues ${flashes.length}, dud ${w.dud})`);
+    }
+
+    // a far hero: the lead wisp lands after the action is over; the headline flash waits for it
+    const ws = watchPattern('wispSwarm', 28);
+    const wsLag = ws.hits[0] && ws.headFlash !== null ? ws.hits[0].t - ws.headFlash : NaN;
+    out(`   P2 wisp swarm at ${ws.dist.toFixed(1)} m: tell at ${(ws.headTell ?? NaN).toFixed(2)} · action over at ${(ws.ended ?? NaN).toFixed(2)} · headline flash at ${(ws.headFlash ?? NaN).toFixed(2)} · first hit at ${(ws.hits[0]?.t ?? NaN).toFixed(2)} (${wsLag.toFixed(3)} s after the flash) · hits ${ws.hits.length}/${WS.maxHits} · tells ${ws.tells}/${ws.flashes}`);
+    assert(ws.ok && ws.dist > 26 && ws.headTell !== null && ws.headFlash !== null, 'far wisp swarm: headline tell and flash both go out');
+    assert(ws.headFlash > ws.ended, `far wisp swarm: the lead is still flying when the action ends; the flash waits for it (${(ws.headFlash - ws.ended).toFixed(2)} s after the end)`);
+    assert(wsLag >= K.cueMin - DT && wsLag <= lead + 3 * DT, `far wisp swarm: the headline flash leads the first impact by ~flashLead (${wsLag.toFixed(3)} s)`);
+    assert(ws.tells === ws.flashes && ws.hits.length >= 1 && ws.hits.length <= WS.maxHits, `far wisp swarm: one flash per tell, hits within the budget (${ws.tells}/${ws.flashes}, ${ws.hits.length})`);
+  };
+  const perPhaseOf = (v, ph) => (Array.isArray(v) ? v[Math.min(v.length - 1, ph - 1)] : v);
+
+  for (const phase of [1, 2, 3]) {
+    for (const name of NAMES) {
+      const spec = TUNING.attacks[name];
+      if ((spec.phase ?? 1) > phase) continue;
+      const idle = pattern(name, phase, false, DIST[name]);
+      const ans = pattern(name, phase, true, DIST[name]);
+      out(`   P${phase} ${name.padEnd(10)} standing: hit ${idle.hit}/${spec.maxHits} · peak ${String(idle.peak).padStart(3)} bullets · tells ${idle.tells}/${idle.flashes}   answering: hit ${ans.hit} parried ${ans.parried} dodged ${ans.dodged} blocked ${ans.blocked} · tells ${ans.tells}/${ans.flashes}`);
+      assert(idle.ok && ans.ok && idle.ended >= 0 && ans.ended >= 0, `P${phase} ${name}: triggers and ends`);
+      assert(idle.bad === 0 && ans.bad === 0 && idle.live === 0 && !idle.wheel && ans.live === 0, `P${phase} ${name}: no NaN, the field empties afterwards`);
+      assert(idle.hit >= 1 && idle.hit <= spec.maxHits, `P${phase} ${name}: a standing hero is hit, at most maxHits times (${idle.hit}/${spec.maxHits})`);
+      assert(idle.tells === idle.flashes && ans.tells === ans.flashes && idle.tells >= 1, `P${phase} ${name}: one combat:flash per combat:tell (${idle.tells}/${idle.flashes}, ${ans.tells}/${ans.flashes})`);
+      // (the scripted defender answers one cue at a time: the phase-3 storm's crossing arms cost it a second hit)
+      assert(ans.hit < idle.hit && ans.hit <= (name === 'emberStorm' ? 2 : 1), `P${phase} ${name}: answering the cues takes fewer hits than standing still (${ans.hit} < ${idle.hit})`);
+      if (name === 'emberStorm') assert(ans.parried + ans.dodged >= 1, `P${phase} emberStorm: embers deflected / orbs rolled (${ans.parried} + ${ans.dodged})`);
+      else if (name !== 'fireWheel') assert(ans.parried >= 1, `P${phase} ${name}: bullets were deflected (${ans.parried})`);
+      else assert(ans.dodged >= 1, `P${phase} fireWheel: a spoke was rolled through (${ans.dodged})`);
+    }
+    if (phase === 2) lateCues();
+  }
+  out(`   console errors so far: ${errors.length}`);
+  return G;
+}
+
 async function scenarioLab() {
   out('\n== scenario LAB (Lab panel, every ability, posture break, time scale, flow states) ==');
   const G = build();
@@ -1624,7 +1950,7 @@ async function scenarioFire() {
   };
   const st = hazardTrial(null);
   out(`   meteor on a standing hero: ${st.res}, -${st.hp} HP, tells ${st.told}, flash at ${st.flash?.toFixed(3)} s (impact 1.2)`);
-  assert(st.res === RESULT.HIT && st.hp === 18 && st.told === 1 && near(st.flash, 1.2 - lead, 1.5 * DT), 'a meteor hits a standing hero (announced, flashed flashLead before impact)');
+  assert(st.res === RESULT.HIT && near(st.hp, 18 * (TUNING.damageScale ?? 1), 0.01) && st.told === 1 && near(st.flash, 1.2 - lead, 1.5 * DT), 'a meteor hits a standing hero (announced, flashed flashLead before impact)');
   const rl = hazardTrial(0.25, { x: 0, y: 1 });
   out(`   meteor vs a roll 0.25 s before impact: ${rl.res}, -${rl.hp} HP`);
   assert(rl.res === RESULT.DODGED && rl.hp === 0, 'a rolling hero with i-frames is not hit (dodged)');
@@ -2475,7 +2801,7 @@ async function scenarioPlungeReact() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, probe: scenarioProbe };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, probe: scenarioProbe };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());

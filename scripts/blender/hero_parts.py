@@ -433,7 +433,10 @@ def build_lapels():
 # Origin = grip centre, the blade along +Z, its width on X, the flats facing ±Y. A broad dark blade
 # with a centre ridge, three raking barbs up each edge (staggered left / right), an arrowhead point.
 # The two halves either side of the ridge carry sub-ids 0 / 1, so the ridge prints as a line.
-BLADE = {'z0': 0.11, 'zT': 1.2, 'ridge': 0.012, 'core': 0.66}
+# The profile was drawn for a 1.45 m point; BK rescales everything past the forte to DIM.drawnTip.
+BK = (DIM['drawnTip'] - 0.2) / 1.25
+bz = lambda z: 0.2 + (z - 0.2) * BK
+BLADE = {'z0': 0.11, 'zT': bz(1.2), 'ridge': 0.012, 'core': 0.66}
 
 
 def blade_base(z):
@@ -446,8 +449,9 @@ def blade_profile(side):
     base = blade_base
     pts = [(z0, 0.034), (0.132, 0.064), (0.15, 0.05), (0.17, base(0.17))]
     for j, zb in enumerate((0.38, 0.63, 0.88)):
-        zb += 0.115 if side > 0 else 0.0
-        pts += [(zb - 0.15, base(zb - 0.15)), (zb, base(zb) + 0.026 - 0.004 * j), (zb + 0.014, base(zb + 0.014) - 0.004)]
+        zb = bz(zb + (0.115 if side > 0 else 0.0))
+        za = zb - 0.15 * BK
+        pts += [(za, base(za)), (zb, base(zb) + 0.026 - 0.004 * j), (zb + 0.014, base(zb + 0.014) - 0.004)]
     pts += [(zT - 0.03, base(zT)), (zT + 0.03, 0.06), (tip, 0.0)]
     return pts
 

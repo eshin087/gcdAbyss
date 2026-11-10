@@ -3,6 +3,7 @@
 
 import { TELL } from '../../combat/rules.js';
 import { FIRE_ATTACKS } from './tuningFire.js';
+import { BULLETS, BULLET_ATTACKS } from './tuningBullets.js';
 
 const DEG = Math.PI / 180;
 
@@ -20,6 +21,12 @@ export const TUNING = {
   // v0.5 "epic wyrm fight" starting difficulty (the lead tunes after the merge): a 3-5 min fight for
   // a player who knows the moves (docs/COMBAT.md "Difficulty")
   maxHp: 4500,
+  // v0.6 "bullet hell": the wyrm attacks far more often (shorter idle gaps, two more strings, four
+  // bullet patterns), so every hit it deals through hitPlayer is scaled by this (the attack tables
+  // keep their relative numbers). Bullets and the fire wheel are exempt: tuningBullets.js holds
+  // their final damage.
+  damageScale: 0.85,
+  bullets: BULLETS, // the small projectiles of bullets.js (tuningBullets.js)
   // three phases (contract 4): phase n starts at phaseAt[n - 1] of max HP (P1 100 %, P2 66 %, P3 33 %).
   // Each threshold is a gate: with the AI on, damage stops there until the transition roar starts.
   phaseAt: [1, 0.66, 0.33],
@@ -39,9 +46,9 @@ export const TUNING = {
   // pause between attacks (walking / turning / snorting) — the main "breathing room" knob; phase 3
   // keeps the pressure on
   idleGap: [
-    [1.3, 2.1],
-    [0.9, 1.5],
-    [0.4, 0.8],
+    [1.0, 1.7],
+    [0.7, 1.2],
+    [0.35, 0.7],
   ],
   // the wyrm's heat per phase: crack glow (glowTarget) and body embers per second (phase 3 burns
   // white-hot)
@@ -202,6 +209,32 @@ export const TUNING = {
       ],
       recovery: 1.2, cooldown: 12, weight: [0, 0, 3.4], range: [2.4, 5.4], maxAng: 0.9,
     },
+    // the long clash: three quick claws, the overhead, the lunging bite. Five parries in rhythm
+    // (the deflect chain rings higher with each); lighter blows than the rending flurry's
+    stormFlurry: {
+      label: 'Storm flurry (5 hits)', tell: TELL.BLUE, phase: 1,
+      hits: [
+        { kind: 'claw', side: 1, tell: TELL.NORMAL, windup: 0.75, active: 0.25, impact: 0.15, damage: 13, knockback: 1.2, turn: 0.7 },
+        { kind: 'claw', side: -1, tell: TELL.NORMAL, windup: 0.42, active: 0.25, impact: 0.15, damage: 13, knockback: 1.2, turn: 0.8 },
+        { kind: 'claw', side: 1, tell: TELL.NORMAL, windup: 0.42, active: 0.25, impact: 0.15, damage: 13, knockback: 1.2, turn: 0.8 },
+        { kind: 'overhead', side: -1, tell: TELL.BLUE, windup: 0.6, active: 0.24, impact: 0.22, damage: 18, knockback: 2.5, lunge: 1.2 },
+        { kind: 'lungeBite', tell: TELL.BLUE, windup: 0.55, active: 0.24, impact: 0.05, damage: 20, knockback: 3.5, reach: 6.0 * S, lunge: 2.5 * S },
+      ],
+      recovery: 1.1, cooldown: 9, weight: [1.6, 2.2, 2.4], range: [2.4, 5.4], maxAng: 0.9,
+    },
+    // claws, a bite, then an overhead whose slam scatters hanging embers (`burst`: n embers that
+    // drop on the hero one by one, `wait` s after the slam and `stagger` s apart, at `speed` m/s):
+    // the string does not end on a free punish, it ends on four more parries (bullets.js)
+    cinderFlurry: {
+      label: 'Cinder flurry (4 hits + embers)', tell: TELL.BLUE, phase: 2,
+      hits: [
+        { kind: 'claw', side: 1, tell: TELL.NORMAL, windup: 0.75, active: 0.25, impact: 0.15, damage: 14, knockback: 1.2, turn: 0.7 },
+        { kind: 'claw', side: -1, tell: TELL.NORMAL, windup: 0.45, active: 0.25, impact: 0.15, damage: 14, knockback: 1.2, turn: 0.8 },
+        { kind: 'bite', tell: TELL.BLUE, windup: 0.55, active: 0.2, impact: 0.06, damage: 20, knockback: 2.5, reach: 5.4 * S },
+        { kind: 'overhead', side: 1, tell: TELL.BLUE, windup: 0.62, active: 0.24, impact: 0.22, damage: 18, knockback: 3, lunge: 1.2, burst: { n: 4, wait: 0.55, stagger: 0.34, speed: 11 } },
+      ],
+      recovery: 1.5, cooldown: 11, weight: [0, 2.2, 2.6], range: [2.4, 5.4], maxAng: 0.9,
+    },
     tail: {
       label: 'Tail sweep', tell: TELL.RED,
       // impact: player straight behind; + impactFlank for a player at the flank (~80 deg off the nose)
@@ -250,6 +283,7 @@ export const TUNING = {
   },
 };
 Object.assign(TUNING.attacks, FIRE_ATTACKS); // fire / flight attacks and spells (tuningFire.js)
+Object.assign(TUNING.attacks, BULLET_ATTACKS); // the bullet-hell patterns (tuningBullets.js)
 
 // Skeleton proportions in MODEL units (see SCALE above). Root = ground point under the torso centre,
 // facing +Z, model-left = +X. See model.js for how these are assembled and docs/art/dragon.md

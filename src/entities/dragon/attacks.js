@@ -3,6 +3,7 @@ import { TUNING, SCALE } from './tuning.js';
 import { TELL } from '../../combat/rules.js';
 import { clamp, lerp, smoothstep, easeInOutSine, easeOutCubic, easeInCubic, turnToward, angleDiff } from '../../core/math.js';
 import { FIRE } from './fireAttacks.js';
+import { BULLET_HELL } from './bulletAttacks.js';
 
 /** Wing spread the actions return to (the mantled HALF sails, TUNING.rest). */
 const REST_SPREAD = TUNING.rest.spread;
@@ -376,8 +377,9 @@ function swipeRecover(d, w, k) {
 }
 
 function swipeHit(d, a, w, spec) {
-  if (a.hitDone) return;
   const ap = d.rig.pt.arms[w.wi];
+  d.fx.clawTrail?.(w.wi, ap.toe, spec?.kind === 'overhead'); // the paw's burning wake (every active frame)
+  if (a.hitDone) return;
   _b.lerpVectors(ap.elbow, ap.wrist, 0.5);
   // the paw sphere covers the four claws around the toe; plus the wrist and the forearm
   if (
@@ -1208,6 +1210,7 @@ function makeRoar(name, toPhase = 0) {
       // the transition sweeps the field: meteors, fire walls and lava pillars die with the roar
       try {
         d.hazards?.clear?.();
+        d.bullets?.clear?.();
       } catch (err) {
         console.error('[dragon] hazards.clear failed', err);
       }
@@ -1419,6 +1422,7 @@ const OVERHEAD = {
     // the claws bite into the ground: a heavy dust burst, the paw plants there
     h.plant = d.rig.clampPaw(h.wi, V().copy(h.slam));
     d.fx.dustRing(h.plant.x, h.plant.z, 0.7 * S, 22, 0.9);
+    d.fx.slamBurst?.(h.plant.x, h.plant.z, 1.3 * S);
     d.emit('dragon:step', { x: h.plant.x, z: h.plant.z, heavy: true });
     d.game.shake?.(0.22);
   },
@@ -1994,7 +1998,17 @@ export function makeString(name) {
         const prev = h.idx > 0 ? a.hits[h.idx - 1] : null;
         if (prev) prev.K.recover?.(d, a, prev, Math.min(1, k * 2), dt);
         h.K.windup(d, a, h, k, dt);
-      } else h.K.active(d, a, h, a.k, dt);
+      } else {
+        h.K.active(d, a, h, a.k, dt);
+        // a hit that scatters hanging embers where it lands (spec.burst, bullets.js): each one
+        // drops on the hero a beat later
+        const B = h.spec.burst;
+        if (B && !h.burstDone && a.t >= h.spec.impact) {
+          h.burstDone = true;
+          d.partPos(h.K.part, a, a.cur, _c);
+          if (Number.isFinite(_c.x + _c.z)) d.bullets?.burst(name, _c.x, 0.6, _c.z, B.n, B.wait, B.stagger, B.speed, -1);
+        }
+      }
     },
     hit(d, a, dt) {
       const h = curHit(a);
@@ -2018,12 +2032,15 @@ const wingBuffet = makeString('wingBuffet');
 const tailLash = makeString('tailLash');
 const pounce = makeString('pounce');
 const frenzy = makeString('frenzy');
+const stormFlurry = makeString('stormFlurry');
+const cinderFlurry = makeString('cinderFlurry');
 
 /** Every ability (AI-selectable and Lab-triggerable). Order = Lab list order (keys 1-9 = the first nine). */
 export const ATTACKS = {
   bite, swipe, clawCombo, rendingFlurry, hesitantMaw, wingBuffet, tailLash, pounce, frenzy,
-  tail, stomp, breath, fireball, charge, leap, roar,
+  tail, stomp, breath, fireball, charge, leap, roar, stormFlurry, cinderFlurry,
   ...FIRE, // fireAttacks.js: the short flights and the fire spells (contract 3)
+  ...BULLET_HELL, // bulletAttacks.js: the bullet-hell patterns (ADR-039)
 };
 
 /** Parryable close-range swings (+ every string, `def.melee`): a parry on the last hit recoils. */

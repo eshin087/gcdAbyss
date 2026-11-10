@@ -4,7 +4,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Five pieces of work since 0.4.0:
+Six pieces of work since 0.4.0:
+- **Bullet hell and the moonlit sword** (2026-11-09): the wyrm throws spirals, fans and homing swarms
+  of small fire bullets that you deflect back at it one by one (or block, roll through, or cut out
+  of the air), plus red orbs and a turning wheel of fire walls that you must dodge. Two more combos,
+  less waiting between attacks, each hit a little lighter. The hero's sword is shorter (1.25 m),
+  glows blue-white, and no longer runs through the front of his coat.
 - **Blender-built hero parts** (2026-11-09, partial): the hero's hair, collar, lapels, sword blade,
   cape and pauldron are sculpted by a headless Blender script and shipped as packed geometry. He has
   a rounder hair mop, a winged collar, one wide torn cape off the armoured shoulder and a narrower
@@ -26,6 +31,19 @@ Five pieces of work since 0.4.0:
   That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **Bullets** (ADR-039): orange **embers** and blue homing **wisps** can be parried (the bullet flies
+  back to the wyrm's head and adds posture), blocked, rolled through or cut with a swing; red
+  **orbs** are dodge-only. Every bullet glints and pings 0.35 s before it lands, one parry answers
+  a clump, and a pattern can only hit you a few times.
+- **Four bullet patterns:** **Ember storm** (spiral arms round the wyrm; orb rings from phase 2,
+  counter-rotating arms in phase 3), **Cinder fan** (wing-beat volleys; a red orb wave from phase
+  2), **Wisp swarm** (phase 2+, homing) and **Fire wheel** (phase 2+, turning walls of fire to roll
+  through). All four are in the Lab.
+- **Two combos:** **Storm flurry** (five hits to parry in rhythm) and **Cinder flurry** (phase 2+;
+  its last slam scatters four embers that drop on you one by one).
+- **Fire effects:** burning wakes behind the claws, a fire and dust burst under a slam, a sparking
+  shower on a parried blow.
+- `npm test` → **BULLETS** scenario; `Player.isSwinging()`; `dragon.bullets`.
 - **`npm run hero-parts`** (ADR-037): rebuilds `src/entities/player/heroParts.js` from
   `scripts/blender/hero_parts.py` in a headless Blender (needs Blender 4.2+; the generated file is
   committed, so playing, testing and deploying need no Blender).
@@ -63,6 +81,16 @@ Five pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **The sword** is 1.25 m (was 1.64 m) and lit blue with white-blue edges (was dark steel with cyan
+  seams). Its reach in combat is unchanged (ADR-038).
+- **The idle** holds the sword in a low ready at his right side instead of across his front.
+- **Pace and damage:** the wyrm waits less between attacks (idle gaps 1.0–1.7 / 0.7–1.2 / 0.35–0.7
+  s per phase), and every blow it lands deals 85 % of its listed damage (`TUNING.damageScale`;
+  bullets and the fire wheel list final damage).
+- **Fire look:** the breath is a dim orange stream with a yellow vein instead of a white bar; the
+  fireball's flash no longer hides its blast.
+- `player:parry` carries `light`, `dragon:parried` and the bullet tells carry `bullet` (contract
+  v0.6, ARCHITECTURE.md).
 - **The hero, Blender-built parts** (partial; ADR-037):
   - hair: a rounder mop of layered locks; collar: taller, winged, with a turned rim
   - cape: four wide torn sheets with holes and a clawed hem behind the right shoulder (was: ribbons)
@@ -127,6 +155,13 @@ Five pieces of work since 0.4.0:
   its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
 
 ### Fixed
+- Bullets (PR #9 review): the phase-2 Cinder fan (8 embers) opened with the hero in a gap, so its
+  opening flash came about a second before anything landed; the first fan now has an ember dead on
+  him at every count. A homing wisp that missed after its cue could come round and hit without a
+  second cue; it announces every pass now (or fizzles). A wisp swarm roared at a hero 25–30 m away
+  flashed when the wyrm finished the move, up to 0.7 s before the first wisp landed; the flash now
+  waits for the lead wisp.
+- The front coat panels no longer hang through the sword when the hero stands idle.
 - Hero: returning from the light combo's finish to the idle, the blade cut through the sword arm's
   shoulder for a frame (a near half-turn now goes round the front).
 - The hero's sword no longer shows through his back or legs, and his coat rarely passes through the

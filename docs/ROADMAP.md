@@ -146,6 +146,22 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.11 — Bullet hell and the moonlit sword (2026-11-09, `combat/wyrm-bullet-hell`)
+- [x] A 1.25 m blue-white sword; the idle holds it at his right side, clear of the coat (ADR-038)
+- [x] The bullet field: embers and homing wisps to deflect / block / roll / cut, red orbs to dodge;
+      every bullet cues before it lands (ADR-039)
+- [x] Four patterns: ember storm (spirals), cinder fan (wing volleys), wisp swarm (homing), fire
+      wheel (sweeping beams)
+- [x] Two more strings (Storm flurry, Cinder flurry with scattered embers); shorter idle gaps;
+      `damageScale` 0.85
+- [x] Fire look: breath, fireball, claw wakes, slam bursts, the parry clash
+- [ ] Follow-ups:
+  - [ ] A human playtest of the difficulty (bots only so far) and of bullet readability on a phone
+  - [ ] Re-measure the AI pick shares with the six new attacks in the pool
+  - [ ] Bullet sounds of their own (the patterns reuse the fire casts; a deflect reuses the parry)
+  - [ ] Look at `slamBurst`, the Storm flurry and the frame cost of a phase-3 storm on a low-end device
+  - [ ] The drawn steel is 0.44 m shorter than the hit segment: decide whether to shorten the reach
+
 ## M2 — RPG foundations (v0.3)
 - [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
 - [ ] Regular mobs (2–3 types) using the shared combat system and tell rules
