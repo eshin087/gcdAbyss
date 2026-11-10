@@ -129,12 +129,12 @@ const REST = (() => {
 // (`slant`, m); the lower part lightens into the dusty lavender torn zone and ends in claw points,
 // longest outside.
 export const COAT_PANELS = [
-  { az: 0.86, w: [0.12, 0.17, 0.24], len: [0.27, 0.27], strips: [0.07, 0.15], fork: [0, 0], out: 0.004, flare: 0.12, folds: 1, edge: -1, skew: 1, slant: 0.05 }, // front-left
-  { az: -0.86, w: [0.12, 0.17, 0.24], len: [0.27, 0.27], strips: [0.15, 0.07], fork: [0, 0], out: 0.004, flare: 0.12, folds: 1, edge: 1, skew: -1, slant: 0.05 }, // front-right
-  { az: 1.66, w: [0.12, 0.13, 0.13], len: [0.28, 0.28], strips: [0.13], fork: [0], out: 0, flare: 0.18, folds: 1 }, // left
-  { az: -1.66, w: [0.12, 0.13, 0.13], len: [0.28, 0.28], strips: [0.13], fork: [0], out: 0, flare: 0.18, folds: 1 }, // right
-  { az: 2.5, w: [0.14, 0.21, 0.29], len: [0.3, 0.3], strips: [0.18, 0.12, 0.06], fork: [0, 1, 0], out: 0.008, flare: 0.16, folds: 1, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
-  { az: -2.5, w: [0.14, 0.21, 0.29], len: [0.3, 0.3], strips: [0.06, 0.12, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.16, folds: 1, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
+  { az: 0.95, w: [0.12, 0.2, 0.3], len: [0.33, 0.33], strips: [0.08, 0.16], fork: [0, 0], out: 0.004, flare: 0.16, edge: -1, skew: 1, slant: 0.07 }, // front-left
+  { az: -0.95, w: [0.12, 0.2, 0.3], len: [0.33, 0.33], strips: [0.16, 0.08], fork: [0, 0], out: 0.004, flare: 0.16, edge: 1, skew: -1, slant: 0.07 }, // front-right
+  { az: 1.7, w: [0.13, 0.19, 0.26], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.26 }, // left
+  { az: -1.7, w: [0.13, 0.19, 0.26], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.26 }, // right
+  { az: 2.5, w: [0.14, 0.25, 0.38], len: [0.36, 0.36], strips: [0.18, 0.13, 0.08], fork: [0, 1, 0], out: 0.008, flare: 0.22, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
+  { az: -2.5, w: [0.14, 0.25, 0.38], len: [0.36, 0.36], strips: [0.08, 0.13, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.22, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
 ];
 
 /** Hair clusters: each is one merged mesh on a spring joint (pivot in head space). `tip` is the
@@ -252,7 +252,7 @@ export function sheetOffset(w, w0, skew = 0) {
  *  Local +Z = outward; the front face points out (the lining is the back face). */
 function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, fold = [0, 0, 0], t0 = 0, t1 = 1, skew = 0, w0 = wTop, slant = 0) {
   const r = rng(seed);
-  const cols = 12, rows = Math.max(2, Math.round(5 * (t1 - t0)));
+  const cols = 16, rows = Math.max(3, Math.round(8 * (t1 - t0)));
   const jitter = Array.from({ length: cols + 1 }, () => (r() - 0.5) * jag);
   // `fold` [amplitude at the top, at the bottom (m), waves across, phase]: the reference's coat
   // drapes in soft vertical folds that deepen toward the hem (a flat sheet read as a plank).
@@ -486,6 +486,27 @@ function sub(g, k) {
   g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(n).fill(k ? 1 : 0), 1));
   return g;
 }
+
+/**
+ * Drawn fold lines. The hero's ink pass draws a line wherever a mesh's sub-id (aPart, rounded per
+ * pixel) changes, so a smooth 0..1 field over ONE sheet prints its 0.5-contour as a hand-drawn
+ * crease, and the material's `sub` shade (HERO_INK) darkens the side above 0.5: lit ridge → ink
+ * line → shadowed valley. fn(x, y, z, guvX, guvY) → the field; capped at 0.9 so a plain sub(g, 1)
+ * piece (exactly 1) stays an unshaded "line only" piece. Returns g.
+ */
+function foldLines(g, fn) {
+  const p = g.attributes.position, uv = g.attributes.aGUV, n = p.count;
+  const a = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const f = fn(p.getX(i), p.getY(i), p.getZ(i), uv.getX(i), uv.getY(i));
+    a[i] = Number.isFinite(f) ? Math.min(0.9, Math.max(0, f)) : 0;
+  }
+  g.setAttribute('aPart', new THREE.BufferAttribute(a, 1));
+  return g;
+}
+/** foldLines field for a torn strip / ribbon `w` wide (x across, y down its length): one crease
+ *  wandering down it. */
+const ribbonCrease = (w, ph) => (x, y) => 0.5 + 0.7 * Math.sin((x / w) * 5.5 + y * 7 + ph);
 
 /** Merge the static meshes hung directly on each joint that share a material into one mesh
  *  (their own transforms baked in). `keep` = meshes that must stay separate (toggled ones). */
@@ -934,34 +955,30 @@ export const ART_GAIN = 1.1;
 // dark channel or depth-step gap: the face, a small pale patch walled in by the fringe and the
 // collar, would print dim). The blade is depth-tested like every other part (round 3 removed the
 // game-camera depth pull: the sword showed through his back and legs).
+// the cloth's silhouette ink: the reference's dim blue-lavender dotted outline
+const CLOTH_RIM = [0.6, 0.64, 1.0, 0.8];
 export const HERO_INK = {
-  skin: { part: 1, fill: [0.92, 0.64, 0.56], rim: 0.3, line: [1.0, 0.82, 0.76, 0.65], fillGain: 2.2, farFill: 0.8, open: true },
+  skin: { part: 1, fill: [0.92, 0.66, 0.58], rim: 0.3, line: [0.75, 0.5, 0.46, 0.8], rimLine: [1.0, 0.86, 0.8, 0.9], fillGain: 2.0, farFill: 0.8, open: true },
   eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
-  shirt: { part: 3, fill: [0.1, 0.1, 0.12], line: [1, 1, 1, 0.85], farFill: 0.35 },
-  lining: { part: 4, fill: [0.075, 0.07, 0.12], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
-  collarIn: { part: 4, fill: [0.12, 0.1, 0.26], line: [0.75, 0.72, 1.0, 0.85], farFill: 0.5 },
-  pants: { part: 5, fill: [0.12, 0.12, 0.14], line: [1, 1, 1, 0.9], farFill: 0.35 },
-  coat: { part: 6, fill: [0.175, 0.165, 0.155], folds: [34, 0.85, 1.1], farFill: 0.42 },
-  collar: { part: 6, fill: [0.175, 0.165, 0.155], farFill: 0.42 },
-  facing: { part: 7, fill: [0.13, 0.12, 0.22], line: [0.9, 0.88, 1.0, 1], farFill: 0.5 },
-  hem: { part: 8, fill: [0.3, 0.28, 0.42], rim: 1.2, line: [0.85, 0.82, 1.0, 1], dotted: true, farFill: 0.8 },
-  piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.9, 0.88, 1.0, 1], farFill: 0.6 },
-  leather: { part: 10, fill: [0.3, 0.2, 0.15], line: [1.0, 0.93, 0.85, 0.9], farFill: 0.8 },
-  // the reference's hair: near-neutral dark letters (lit mean ≈ rgb 103 99 113) with violet-white
-  // strands on the outer edges and tips, not a navy cap; the tips carry the violet
-  hair: { part: 11, fill: [0.085, 0.08, 0.12], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true, farFill: 0.5 },
-  hairTip: { part: 11, fill: [0.2, 0.16, 0.4], rim: 0.9, line: [0.8, 0.72, 1.0, 1.4], fillGain: 2.6, dotted: true, farFill: 0.5 },
-  // the reference's armour: dark steel plates whose bright white edges and glints make it the
-  // brightest thing on him (a light grey fill read as flat paper cut-outs up close)
-  armor: { part: 12, fill: [0.3, 0.3, 0.34], spec: 1.35, specPow: 18, line: [1, 1, 1, 1.3], fillGain: 1.35, farLine: 0.45, farFill: 0.78 },
-  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.35], fillGain: 1.05, farLine: 0.55, farFill: 0.9 },
-  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.2], fillGain: 1.6, farLine: 0.5, farFill: 0.85 },
+  shirt: { part: 3, fill: [0.12, 0.12, 0.135], line: [1, 1, 1, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.35 },
+  lining: { part: 4, fill: [0.085, 0.08, 0.125], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.5 },
+  collarIn: { part: 4, fill: [0.12, 0.1, 0.24], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.5 },
+  pants: { part: 5, fill: [0.15, 0.15, 0.165], line: [1, 1, 1, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.35 },
+  coat: { part: 6, fill: [0.2, 0.19, 0.185], sub: 0.72, line: [1, 1, 1, 0.8], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.42 },
+  collar: { part: 6, fill: [0.2, 0.19, 0.185], line: [1, 1, 1, 0.8], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.42 },
+  facing: { part: 7, fill: [0.15, 0.14, 0.22], line: [0.95, 0.93, 1.0, 0.95], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.5 },
+  hem: { part: 8, fill: [0.32, 0.3, 0.44], sub: 0.6, rim: 1.2, line: [0.8, 0.78, 1.0, 0.75], rimLine: [0.72, 0.72, 1.0, 0.95], dotted: true, rimDotted: true, farFill: 0.8 },
+  piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.95, 0.93, 1.0, 0.95], farFill: 0.6 },
+  leather: { part: 10, fill: [0.34, 0.23, 0.17], line: [1.0, 0.93, 0.85, 0.9], farFill: 0.8 },
+  hair: { part: 11, fill: [0.11, 0.105, 0.19], rim: 0.9, line: [0.62, 0.58, 1.0, 0.5], rimLine: [0.66, 0.62, 1.0, 0.85], fillGain: 1.5, rimDotted: true, farFill: 0.5 },
+  hairTip: { part: 11, fill: [0.2, 0.17, 0.42], rim: 0.9, line: [0.62, 0.58, 1.0, 0.5], rimLine: [0.66, 0.62, 1.0, 0.85], fillGain: 1.5, rimDotted: true, farFill: 0.5 },
+  armor: { part: 12, fill: [0.3, 0.3, 0.34], spec: 1.35, specPow: 18, line: [1, 1, 1, 1.05], rimLine: [1, 1, 1, 1.1], fillGain: 1.35, farLine: 0.45, farFill: 0.78 },
+  spike: { part: 13, fill: [0.32, 0.32, 0.36], spec: 0.8, specPow: 16, line: [1, 1, 1, 1.1], rimLine: [1, 1, 1, 1.15], fillGain: 1.05, farLine: 0.55, farFill: 0.9 },
+  bevel: { part: 14, fill: [0.5, 0.52, 0.6], spec: 0.5, line: [1, 1, 1, 1.0], fillGain: 1.6, farLine: 0.5, farFill: 0.85 },
   welt: { part: 15, fill: [0.3, 0.31, 0.36] },
-  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.25], fillGain: 1.3, farLine: 0.55, farFill: 0.95 },
-  // the reference's blade: dark steel between two glowing cyan edges and a bright ridge line (the
-  // fill letters stay dim up close; far away the whole blade reads as one bright cyan line)
-  blade: { part: 17, fill: [0.06, 0.1, 0.18], spec: 0.5, glow: 1, line: [0.45, 0.95, 1.35, 1.45], fillGain: 0.4, solid: true, farLine: 1, farFill: 1.5 },
-  bladeTip: { part: 17, fill: [0.1, 0.2, 0.32], glow: 1, line: [0.45, 0.95, 1.35, 1.45], fillGain: 0.4, solid: true, farLine: 1, farFill: 1.5 },
+  trim: { part: 16, fill: [0.36, 0.37, 0.42], spec: 0.8, line: [1, 1, 1, 1.05], fillGain: 1.3, farLine: 0.55, farFill: 0.95 },
+  blade: { part: 17, fill: [0.05, 0.075, 0.12], spec: 0.5, glow: 0.05, line: [0.5, 1.0, 1.35, 1.5], fillGain: 1.0, solid: true, farLine: 1, farFill: 1.5 },
+  bladeTip: { part: 17, fill: [0.07, 0.13, 0.2], glow: 0.09, line: [0.5, 1.0, 1.35, 1.5], fillGain: 1.0, solid: true, farLine: 1, farFill: 1.5 },
   gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1 },
   flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
@@ -1111,11 +1128,13 @@ export function createHeroMaterials(U) {
     }, { fixed: true }),
   };
   // each part's ink-line tint, letter-fill brightness and dotted-edge flag for the art pass
-  const partInk = U.uHeroPartInk?.value, partFill = U.uHeroPartFill?.value;
+  const partInk = U.uHeroPartInk?.value, partFill = U.uHeroPartFill?.value, partRim = U.uHeroPartRim?.value;
   for (const h of Object.values(HERO_INK)) {
     const l = h.line ?? [1, 1, 1, 1];
     partInk?.[h.part]?.set(l[0], l[1], l[2], l[3]);
-    partFill?.[h.part]?.set(h.fillGain ?? 1, (h.dotted ? 1 : h.solid ? 2 : 0) + (h.open ? 4 : 0), h.farLine ?? 0, h.farFill ?? 1);
+      partFill?.[h.part]?.set(h.fillGain ?? 1, (h.dotted ? 1 : h.solid ? 2 : 0) + (h.open ? 4 : 0) + (h.rimDotted ? 8 : 0), h.farLine ?? 0, h.farFill ?? 1);
+      const rl = h.rimLine ?? l;
+      partRim?.[h.part]?.set(rl[0], rl[1], rl[2], rl[3]);
   }
   return Object.fromEntries(Object.entries(specs).map(([name, s]) => [name, make(name, s.o, s.opts)]));
 }
@@ -1485,20 +1504,28 @@ export function buildHero(U) {
   const flask = mesh(arms.L.fore, orient.up(ellipsoidGeometry(0.036, 0.036, 0.055, { widthSegs: 10, heightSegs: 6 })), M.flask, 0, -DIM.foreArm - 0.03, 0.068);
   flask.visible = false;
 
-  // sleeve streamers: torn strips on springs, from the back of the right upper arm under P4 (0.54
-  // m) and the back of the left elbow (0.35 m); black at the root, lavender-grey toward the end
+  // the torn half-cape (the single-figure reference; ADR-036): long ragged ribbons from under the
+  // pauldron, behind the sword arm, on the streamer springs (anim.js; `out` = each ribbon's own
+  // outward flare). They overlap into one cloth at the shoulder blade and part toward their points,
+  // the outer ones flaring furthest out to his right; coat-black at the root, lavender at the ends.
   const streamers = [];
   {
     const defs = [
-      { arm: arms.R.upper, at: [-0.014, -0.12, -(ua0 - 0.004)], w: 0.066, len: [0.24, 0.26], seed: 501 },
-      { arm: arms.L.fore, at: [0.004, -0.012, -(ua1 - 0.002)], w: 0.06, len: [0.16, 0.17], seed: 507 },
+      { at: [-0.2, 0.17, -0.066], ry: Math.PI + 1.15, w: 0.12, len: [0.34, 0.4], out: 1.05, fork: 1, seed: 501 },
+      { at: [-0.15, 0.18, -0.086], ry: Math.PI + 0.7, w: 0.135, len: [0.38, 0.42], out: 0.8, fork: 0, seed: 507 },
+      { at: [-0.1, 0.185, -0.092], ry: Math.PI + 0.35, w: 0.135, len: [0.36, 0.38], out: 0.5, fork: 1, seed: 513 },
+      { at: [-0.045, 0.185, -0.104], ry: Math.PI + 0.1, w: 0.115, len: [0.3, 0.32], out: 0.25, fork: 0, seed: 519 },
     ];
     for (const d of defs) {
-      const s0 = joint(d.arm, ...d.at);
-      mesh(s0, tatterStrip(d.len[0] + 0.02, d.w, { tip: false, curl: 0.05, seed: d.seed }), M.hem);
+      const base = joint(chest, ...d.at);
+      base.rotation.y = d.ry; // local +Z = outward (behind him / to his right), +X = across the ribbon
+      const s0 = joint(base);
+      const g0 = foldLines(tatterStrip(d.len[0] + 0.02, d.w, { tip: false, curl: 0.04, seed: d.seed }), ribbonCrease(d.w, d.seed));
+      mesh(s0, g0, M.coat);
+      mesh(s0, g0, M.lining);
       const s1 = joint(s0, 0, -d.len[0], 0);
-      mesh(s1, tatterStrip(d.len[1], d.w * 0.95, { fork: d.seed === 507, curl: 0.15, seed: d.seed + 1 }), M.hem);
-      streamers.push({ segs: [s0, s1], len: d.len });
+      mesh(s1, foldLines(tatterStrip(d.len[1], d.w * 0.95, { fork: !!d.fork, curl: 0.12, seed: d.seed + 1 }), ribbonCrease(d.w, d.seed + 2)), M.hem);
+      streamers.push({ segs: [s0, s1], len: d.len, out: d.out });
     }
   }
 
@@ -1596,30 +1623,36 @@ export function buildHero(U) {
     const anchor = joint(pelvis, sa * R0, DIM.coatY, ca * R0);
     anchor.rotation.y = P.az; // local +Z = outward, +X = tangent
     const s0 = joint(anchor);
-    // neighbouring panels alternate ink-line sub-ids: their overlapping edges are outlined. Soft
-    // folds deepen down each panel (the same phase across the join, so the two segments meet)
-    const fph = i * 2.1 + 0.7, fw = P.folds ?? 1;
     const sk = P.skew ?? 0, w0 = P.w[0];
-    const g0 = sub(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i, [0, 0.008, fw, fph], 0, 1, sk, w0), i % 2);
+    // pleats: nF soft folds fanning out from the belt (the sheet's own waves) and the same folds
+    // DRAWN (foldLines: an ink line down each fold's flank, its valley in shadow), opening ~15 cm
+    // under the belt and wandering a little on the way down, like the reference's dashed fold lines
+    const nF = Math.max(1, Math.round(P.w[2] / 0.1)) + 0.5, fph = i * 2.1 + 0.7;
+    const L0 = P.len[0], L1 = P.len[1];
+    const wAt = (d) => (d < L0 ? lerp(P.w[0], P.w[1], d / L0) : lerp(P.w[1], P.w[2], Math.min(1, (d - L0) / L1)));
+    const pleat = (d0) => (x, y, z, u, gy) => {
+      const d = d0 - gy, w = wAt(d);
+      const s = (u - sheetOffset(w, w0, sk)) / w + 0.5;
+      const ph = Math.PI * 2 * nF * (s + 0.05 * Math.sin(d * 9 + i * 1.9)) + fph + Math.PI;
+      return 0.5 + 0.62 * (Math.sin(ph) + 0.3 * Math.sin(ph * 2.3 + 1.7)) - 0.9 * Math.max(0, 1 - d / 0.16);
+    };
+    const g0 = foldLines(skirtSheet(P.len[0], P.w[0], P.w[1], R0, 0.25, 0, 11 + i, [0.003, 0.014, nF, fph], 0, 1, sk, w0), pleat(0));
     mesh(s0, g0, M.coat);
     mesh(s0, g0, M.lining);
     const s1 = joint(s0, 0, -P.len[0], 0);
     const R1 = R0 + 0.25 * P.len[0];
-    // the lower segment lightens into the dusty lavender torn zone over its last 60 % (the
-    // reference's tails: black at the hips, grey-lavender toward the ragged points)
-    const fold = [0.008, 0.016, fw, fph];
+    const fold = [0.014, 0.03, nF, fph];
     const sl = P.slant ?? 0;
-    const g1 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.022, 31 + i, fold, 0, 0.4, sk, w0, sl), i % 2);
+    const g1 = foldLines(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.022, 31 + i, fold, 0, 0.45, sk, w0, sl), pleat(L0));
     mesh(s1, g1, M.coat);
     mesh(s1, g1, M.lining);
-    const g2 = sub(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.022, 31 + i, fold, 0.4, 1, sk, w0, sl), i % 2);
+    const g2 = foldLines(skirtSheet(P.len[1], P.w[1], P.w[2], R1, 0.25, 0.022, 31 + i, fold, 0.45, 1, sk, w0, sl), pleat(L0));
     mesh(s1, g2, M.hem);
     mesh(s1, g2, M.lining);
     if (P.edge) {
       mesh(s0, sheetEdge(P.len[0], P.w[0], P.w[1], R0, P.edge, 1, 0.25, sk, w0), M.piping);
       mesh(s1, sheetEdge(P.len[1], P.w[1], P.w[2], R1, P.edge, 0.5, 0.25, sk, w0), M.piping);
     }
-    // torn strips along the tear line: the claw points the panel ends in, overlapping a little
     const strips = [];
     const n = P.strips.length;
     const R2 = R1 + 0.25 * P.len[1];
@@ -1630,10 +1663,10 @@ export function buildHero(U) {
       const a = u / R2;
       const sj = joint(s1, Math.sin(a) * R2, -P.len[1] - sl * (sk < 0 ? 1 - sk01 : sk01), (Math.cos(a) - 1) * R2);
       sj.rotation.y = a;
-      mesh(sj, sub(tatterStrip(P.strips[k], Math.max(0.05, wr * 1.25), { fork: !!P.fork[k], curl: 0.25, seed: 1000 + i * 31 + k * 7 }), (i + k) % 2), M.hem);
+      const sw = Math.max(0.05, wr * 1.25);
+      mesh(sj, foldLines(tatterStrip(P.strips[k], sw, { fork: !!P.fork[k], curl: 0.25, seed: 1000 + i * 31 + k * 7 }), ribbonCrease(sw, i * 3.1 + k * 1.7)), M.hem);
       strips.push({ joint: sj, len: P.strips[k], rest: a, phase: (i * 1.7 + k * 2.3) % (Math.PI * 2) });
     }
-    // r0 = the sheet's radius round the hips at the anchor (the lower segment's is r0 + 0.25 × len[0])
     coat.push({ anchor, segs: [s0, s1], def: P, strips, len: [P.len[0], P.len[1] + sl + (n ? Math.max(...P.strips) * 0.8 : 0)], r0: R0 });
   });
 

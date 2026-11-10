@@ -83,9 +83,9 @@ export class Pipeline {
     // finer character grid for the hero / wyrm ASCII art (FLAG.ART), owner's choice: ~5x8 px letters
     this.artCell = new THREE.Vector2(4, 7);
     this.art = null;
-    // the hero's own, finer grid: 3x5 pixel-font letters in 4x6 cells (x2 from 2160 px tall), so he
-    // gets ~1.5x the rows of the wyrm's letters at the game camera
-    this.heroCell = new THREE.Vector2(4, 6);
+    // the hero's own, finer grid: a 3x3 micro-font in square 4x4 cells (x2 from 2160 px tall): the
+    // reference's dot matrix, and ~28 rows of it down his figure at the game camera
+    this.heroCell = new THREE.Vector2(4, 4);
     this.heroArt = null;
     this.asciiMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -109,18 +109,19 @@ export class Pipeline {
         uArtCell: { value: this.artCell },
         tHeroArt: { value: null },
         uHeroCell: { value: this.heroCell },
-        uHeroCount: { value: 22 }, // letters in the hero atlas' top row (sparse → dense)
-        uHeroCols: { value: 22 }, // hero atlas columns (row 2 = the ink-line glyphs, PIXEL_LINES)
-        // The hero as INK-LINE ART (the owner's reference): bright line glyphs on the cells where his
+        uHeroCount: { value: 29 }, // glyphs in the hero atlas (sparse → dense), set in setSize
+        uHeroCols: { value: 29 }, // hero atlas columns
+        // The hero as INK-LINE ART on a DOT MATRIX (the owner's reference): thin ink lines where his
         // silhouette, a depth step (the nearer side) or a part edge (the higher part, HERO_ART ids)
-        // runs, over a dim, dense letter fill.
-        // ink: x / y = line brightness in dark / lit cells, z = how much of the part's hue a line keeps
+        // runs, over a regular grid of tiny marks whose brightness and weight carry the tone.
+        // ink: x / y = line brightness in dark / lit cells (under the bloom threshold: plain lines do
+        // not glow, only parts with an ink gain > 1 do), z = how much of the part's hue a line keeps
         // (0 = white), w = fill left on the far side of a depth step (the dark gap beside a line)
-        uHeroInk: { value: new THREE.Vector4(0.62, 0.9, 0.62, 0.3) },
-        // fill: x / y = letter brightness at the dark / lit end, z / w = letter-ramp position there
-        // (0.04 / 0.5: the reference's close-up figure statistics, mean luma ≈ 108 / 255 with ~38 %
-        // of its pixels above 120: its letter grid is a visible grey texture, not near-black)
-        uHeroFill: { value: new THREE.Vector4(0.03, 0.6, 0.27, 1.0) },
+        uHeroInk: { value: new THREE.Vector4(0.4, 0.55, 0.62, 0.45) },
+        // fill: x / y = mark brightness at the dark / lit end (linear in the cell's light value v),
+        // z / w = glyph-ramp position there (the reference's cloth: charcoal dots, lit ≈ 110 / 255,
+        // shadow ≈ 50, occluded gaps black)
+        uHeroFill: { value: new THREE.Vector4(0.012, 0.34, 0.3, 1.0) },
         // inner lines are dimmer than the silhouette: brightness × x at a depth step, × y at a part edge,
         // × z between pieces of one part
         uHeroLine: { value: new THREE.Vector3(0.9, 0.75, 0.55) },
@@ -148,7 +149,7 @@ export class Pipeline {
         // 36 m camera, 0.7 cm in a 4.7 m close-up), z = letter brightness left in a cell an edge runs
         // through, up close (its dark channel), w = brightness of the line's second, softer pixel up
         // close (0 = one pixel wide)
-        uHeroPx: { value: new THREE.Vector4(1, 0.0015, 0.3, 0.45) },
+        uHeroPx: { value: new THREE.Vector4(1, 0.0015, 0.5, 0.3) },
         // a dark halo round the hero over the world grid (the reference figure carries its black
         // ground with it, so he cuts out of the grass at the game camera): xy = his screen centre
         // (uv), z = the radius (px) inside which pixels look for him, w = 0 (none) .. 1 its strength;
@@ -161,7 +162,11 @@ export class Pipeline {
         uHeroPartInk: U.uHeroPartInk ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },
         // ... and each part's letter-fill brightness (x), line style (y: 0 a stroke per cell, 1 dotted,
         // 2 unbroken), how much of its inner lines' light stays far away (z) and its far fill gain (w)
+        // (y + 4: an 'open' part, its marks stay lit beside an edge; y + 8: its SILHOUETTE prints dotted)
         uHeroPartFill: U.uHeroPartFill ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 0, 0, 1)) },
+        // ... and each part's silhouette ink (where it borders the world): rgb tint × gain (a). The
+        // reference's cloth has a dim blue-lavender dotted outline, its armour a white one
+        uHeroPartRim: U.uHeroPartRim ?? { value: Array.from({ length: HERO_PARTS }, () => new THREE.Vector4(1, 1, 1, 1)) },
         // per creature kind: x = hero (FLAG.ART_HERO), y = wyrm / other (FLAG.ART)
         // hero: uArtLum.x / uArtBlack.x map his flat art fill (HERO_INK) to the light value v that picks
         // his fill letters and brightness (uHeroFill); uArtMin.x is unused since the ink-line pass
@@ -169,7 +174,7 @@ export class Pipeline {
         uArtBlack: { value: new THREE.Vector2(0.06, 0.0) }, // source luma treated as black (contrast)
         uArtMin: { value: new THREE.Vector2(0.14, 0.3) }, // glyph value at the dark end of the ramp
         uArtMax: { value: 0.8 }, // glyph value at the bright end (tone-maps to white without bloom haloes)
-        uArtDither: { value: new THREE.Vector2(2.6, 1.6) }, // per-cell ramp jitter (letters): variety
+        uArtDither: { value: new THREE.Vector2(5.0, 1.6) }, // per-cell ramp jitter (glyphs): variety
         // relative depth jump that marks a part boundary (arm over coat, leg over leg). Wyrm (.y): cells
         // spanning it go black (0 = off). Hero (.x): beyond the slope a neighbour predicts, it draws an
         // ink line on the nearer side and a dim gap on the far one (0.004 = 0.14 m at the 36 m camera).
@@ -225,6 +230,7 @@ export class Pipeline {
         uniform vec4 uHeroHaloShape;
         uniform vec4 uHeroPartInk[${HERO_PARTS}];
         uniform vec4 uHeroPartFill[${HERO_PARTS}];
+        uniform vec4 uHeroPartRim[${HERO_PARTS}];
         uniform vec2 uArtLum;
         uniform vec2 uArtBlack;
         uniform vec2 uArtMin;
@@ -344,9 +350,8 @@ export class Pipeline {
         // tint of the part) where the silhouette, a depth step (its nearer side) or a part edge (the
         // higher part, HERO_ART ids in alpha) runs; a GAP (the far side of a depth step: a dark fill);
         // or FILL (dim, dense letters from the density ramp, following the source's light).
-        float heroGlyph(float idx, vec2 local, float lineRow) {
-          vec2 auv = vec2((idx + local.x) / uHeroCols, (1.0 - lineRow) * 0.5 + local.y * 0.5);
-          return texture2D(tHeroArt, auv).a;
+        float heroGlyph(float idx, vec2 local) {
+          return texture2D(tHeroArt, vec2((idx + local.x) / uHeroCols, local.y)).a;
         }
         // a neighbouring cell centre: x = its alpha (0 = not the hero), y = its view depth, z = its luma
         vec3 heroAt(vec2 uv) {
@@ -490,10 +495,13 @@ export class Pipeline {
                 // up close a cell an edge runs through prints a dim letter, so the ink line sits in a
                 // dark channel (the reference's line art); far away it keeps its letter. An 'open'
                 // part (pf.y >= 4: the face) keeps its letters lit up to its edges
-                float open = step(3.5, pf.y);
+                float open = step(3.5, mod(pf.y, 8.0));
                 float chan = lineC > 0.1 ? mix(mix(uHeroPx.z, 1.0, far), 1.0, open) : 1.0;
                 gap *= 1.0 - open;
-                col = hue * mix(uHeroFill.x, uHeroFill.y, v * v) * pf.x * hdr * mix(1.0, uHeroInk.w, gap) * mix(1.0, uHeroLod.z * pf.w, far) * chan * heroGlyph(idx, local, 0.0);
+                // the mark's colour: the part's hue, a little greyer (the reference's cloth is
+                // charcoal with a hint of its tint), brightness LINEAR in the light value
+                vec3 tone = mix(vec3(dot(hue, vec3(0.3333))), hue, mix(0.8, 1.0, smoothstep(0.25, 0.6, sat)));
+                col = tone * mix(uHeroFill.x, uHeroFill.y, v) * pf.x * hdr * mix(1.0, uHeroInk.w, gap) * mix(1.0, uHeroLod.z * pf.w, far) * chan * heroGlyph(idx, local);
               }
             }
             // ---- this pixel's ink line: exact, one pixel wide, following every curve; drawn as one
@@ -534,7 +542,9 @@ export class Pipeline {
                 // stroke style (pfP.y): 0 one stroke per cell (a 1-px gap at the letter spacing),
                 // 1 dotted (a short dash per cell: the torn tails' and the hair's specks), 2 unbroken
                 // (far away the strokes join up: a crisp, unbroken silhouette at the game camera)
-                float on = 1.0, style = mod(pfP.y, 4.0);
+                bool outer = pl > 0.9;
+                vec4 pRim = uHeroPartRim[pidP];
+                float on = 1.0, style = outer && pfP.y > 7.5 ? 1.0 : mod(pfP.y, 4.0);
                 if (style > 1.5) on = 1.0;
                 else if (style > 0.5) on = vRun ? step(abs(local.y - 0.5), 0.2) : hRun ? step(abs(local.x - 0.5), 0.2) : 1.0;
                 else if (far < 0.5) on = vRun ? step(0.1667, local.y) : hRun ? step(local.x, 0.75) : 1.0;
@@ -544,7 +554,6 @@ export class Pipeline {
                 float satP = (mxP - min(min(s.r, s.g), s.b)) / max(mxP, 1e-4);
                 float vP = 1.0 - exp(-max(luma(s) - uArtBlack.x, 0.0) * uArtLum.x);
                 float hdrP = mix(1.0, clamp(mxP, 1.0, mix(64.0, uHeroFar.w, far)), smoothstep(0.25, 0.6, satP));
-                bool outer = pl > 0.9;
                 float k = outer ? 1.0 : pl > 0.7 ? uHeroLine.x : pl > 0.5 ? uHeroLine.y : uHeroLine.z;
                 // far away: inner lines keep pfP.z of their light (cloth: dark seams; armour, blade:
                 // bright), silhouettes keep at least uHeroLod.w (a dim cool rim round the dark cloth;
@@ -552,6 +561,8 @@ export class Pipeline {
                 k *= outer ? mix(1.0, max(uHeroLod.w, pfP.z), far * step(pInk.a, 1.5)) : mix(1.0, pfP.z, far);
                 vec3 ink = mix(vec3(1.0), hueP, uHeroInk.z * (0.35 + 0.65 * satP)) * pInk.rgb;
                 vec3 lc = ink * mix(uHeroInk.x, uHeroInk.y, vP) * k * pInk.a * hdrP * soft;
+                // the silhouette takes the part's own rim ink (cloth: dim blue-lavender; armour: white)
+                if (outer) lc = pRim.rgb * (mix(uHeroInk.x, uHeroInk.y, vP) * k * pRim.a * hdrP * soft);
                 if (uHeroDebug > 2.5) lc = 0.5 * (outer ? vec3(1.0) : pl > 0.7 ? vec3(1.0, 0.08, 0.05) : pl > 0.5 ? vec3(0.1, 1.0, 0.15) : vec3(1.0, 0.85, 0.05));
                 if (on > 0.5) col = lc;
                 else if (uHeroDebug > 1.5) col = vec3(0.0);

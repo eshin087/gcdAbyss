@@ -606,3 +606,29 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - The sheet re-renders the scene from a new camera every other frame, so each tile updates at
     1/20 of the frame rate; the canvas underneath flickers, covered by the overlay.
   - Every capture in this session used it (and a headless DevTools harness that drives `__tick`).
+
+## ADR-036 — The idle is the single-figure stance; the hero's fill is a dot matrix (2026-11-09)
+- **Context:** after ADR-034 the owner judged the hero still unlike the single-figure reference "on
+  terms of detail and feel" and called the sword hold awkward: the blade hung straight down his right
+  side read as a stiff A-pose carrying a pole. The reference's tone is carried by a regular grid of
+  tiny marks (charcoal dots, sparse bright edges), not by legible letters.
+- **Decision:**
+  - Idle: the reference's stance. Weight on the left leg, right leg straight out, the sword arm
+    hanging beside the right hip, the blade a low diagonal across his front to a point above the
+    grass at his left (`IDLE_SW`), head bowed along it. This reverses ADR-034's idle; from the 58°
+    game camera the blade lies forward-left of the body, so most of it still shows from behind.
+  - Fill: a 3x3 micro-font (`PIXEL_3X3`, 29 marks sorted by density) in square 4x4 px cells replaces
+    the 3x5 letters; brightness is linear in the light value; the key light is cel-stepped
+    (`U.uArtHeroCel`); plain ink lines stay under the bloom threshold; each part has its own
+    silhouette ink (`U.uHeroPartRim`).
+  - Folds are drawn, not shaded bands: `foldLines(g, fn)` writes a smooth 0..0.9 `aPart` field, the
+    ink pass prints its 0.5 contour, `sub` (HERO_INK → `uArtSub`) darkens the valley side. `aPart`
+    exactly 1 remains the plain second sub-piece.
+  - The cape is four ribbons on the streamer springs (per-ribbon `out`); the sleeve streamers are gone.
+- **Consequences:**
+  - The hero no longer shows readable letters up close; the wyrm keeps its letter grid.
+  - The six-panel pleated coat closes round the legs again and its fold lines are busy, most of all
+    from behind: a known regression against ADR-034's "legs visible" goal, accepted as an
+    intermediate state. The session was stopped before the open coat, hair, face, collar, legs,
+    pauldron and sword were rebuilt (ROADMAP M1.9); the result is closer to the reference, not a match.
+  - Gameplay is untouched: no bone, grip target, hit segment or timing changed.

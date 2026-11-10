@@ -1769,7 +1769,7 @@ async function scenarioHero() {
   const tails = r.coat.filter((C) => Math.abs(C.def.az) > 2.2);
   assert(r.coat.length === 6 && tails.length === 2 && strips === 12 && r.coat.every((C) => !C.def.flap),
     `coat: 6 panels (2 back tails split by a vent, 2 side, 2 front), ${strips} torn strips`);
-  assert(r.streamers?.length === 2 && Object.keys(r.hair).length === 5, 'two sleeve streamers, five hair clusters');
+  assert(r.streamers?.length === 4 && Object.keys(r.hair).length === 5, 'four cape ribbons, five hair clusters');
   // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
   const v = new THREE.Vector3();
