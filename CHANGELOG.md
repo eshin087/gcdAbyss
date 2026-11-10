@@ -4,7 +4,11 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Four pieces of work since 0.4.0:
+Five pieces of work since 0.4.0:
+- **Blender-built hero parts** (2026-11-09, partial): the hero's hair, collar, lapels, sword blade,
+  cape and pauldron are sculpted by a headless Blender script and shipped as packed geometry. He has
+  a rounder hair mop, a winged collar, one wide torn cape off the armoured shoulder and a narrower
+  jagged blade. Closer to the single-figure reference, still not a match (face, coat, armour detail).
 - **Single-figure reference, round 2** (2026-11-09, partial): the hero stands in the single-figure
   image's stance with the sword in a low diagonal across his front, is drawn as a fine dot matrix
   instead of small letters, and wears a fuller pleated coat and a four-ribbon torn cape. It is closer
@@ -22,6 +26,9 @@ Four pieces of work since 0.4.0:
   That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **`npm run hero-parts`** (ADR-037): rebuilds `src/entities/player/heroParts.js` from
+  `scripts/blender/hero_parts.py` in a headless Blender (needs Blender 4.2+; the generated file is
+  committed, so playing, testing and deploying need no Blender).
 - **Lab model viewer, look-dev tools:** the reference sheet's angles (3/4 and rear 3/4 on the hero's
   right, both sides), a **Spin** turntable, a live **Sheet** of ten tiles (six reference angles, the
   left side, and the gameplay camera on his back, front and right side at ×2), and the hero looks
@@ -56,6 +63,13 @@ Four pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **The hero, Blender-built parts** (partial; ADR-037):
+  - hair: a rounder mop of layered locks; collar: taller, winged, with a turned rim
+  - cape: four wide torn sheets with holes and a clawed hem behind the right shoulder (was: ribbons)
+  - pauldron: a cap and a pointed lame with bevelled edges and short blades (was: a dome with needles)
+  - sword: a narrower blade with a dark faceted core between barbed cyan edges
+  - darker cloth and cape lining, brighter skin, both eyes visible, fewer shirt buttons, plain arms,
+    wider and more flared coat panels
 - **The hero, single-figure reference round 2** (partial; ADR-036):
   - idle: weight on the left leg, the right leg out, the sword arm at the right hip and the blade in
     a low diagonal across his front, head bowed along it (was: the blade hung at his right side)

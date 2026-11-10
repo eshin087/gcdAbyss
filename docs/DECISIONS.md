@@ -632,3 +632,33 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     intermediate state. The session was stopped before the open coat, hair, face, collar, legs,
     pauldron and sword were rebuilt (ROADMAP M1.9); the result is closer to the reference, not a match.
   - Gameplay is untouched: no bone, grip target, hit segment or timing changed.
+
+## ADR-037 — The hero's sculpted parts are built in a headless Blender and committed as packed data (2026-11-09)
+- **Context:** two rounds of matching the single-figure reference with hand-written JS geometry
+  (grids of sines) stalled on the organic parts: a hair mop, a winged collar, a torn cape, layered
+  plates. The owner offered Blender. Its interactive MCP link timed out, and a tool that needs a
+  running GUI would not be reproducible anyway.
+- **Decision:**
+  - `scripts/blender/hero_parts.py` builds the parts with Blender's Python API (bmesh, mathutils),
+    run headless by `scripts/blender/build-hero-parts.mjs` (`npm run hero-parts`). The body
+    dimensions it fits the parts to are dumped from `model.js` (`DIM`, `BODY`, `REST`,
+    `HAIR_CLUSTERS`, `CAPE_SHEETS`), so there is one source of truth for sizes.
+  - The output is `src/entities/player/heroParts.js`: `HERO_PARTS[name] = { n, p, nrm, uv, k, i }`,
+    base64 little-endian (positions Int16 / 8192 m, normals Int8 / 127, `aGUV` Int16 / 8192, `aPart`
+    Uint8 / 200, Uint16 indices). It is generated, never edited by hand, and COMMITTED.
+  - A part is geometry only, in the space of the joint it hangs on, with the same attributes as
+    every hero mesh (`aGUV`, `aPart`). `model.js` (`partGeometry(key)`) chooses the joint and the
+    material; the rig, the springs, the ink pass and the glyph systems are unchanged. No flat image
+    or billboard: the parts are meshes on the one 3D character.
+  - The cape stays four streamer records (`{ segs, len, out }`, the animator's and the tests'
+    contract); each is now a wide sheet in three parts (`cape.N.a` / `.b` on the two spring
+    segments, `.c` the torn zone).
+- **Consequences:**
+  - The game, `npm test`, `npm run build` and Vercel need no Blender; only changing a sculpted part
+    does (Blender 4.2+, tested on 5.2.1). After changing a dimension the parts are fitted to, rerun
+    `npm run hero-parts` or the parts no longer fit the body.
+  - The bundle grows by ~210 KB (1615 KB in all). Quantisation is 0.12 mm, below anything visible.
+  - Sculpted parts are not content-as-data in `tuning.js` terms: their shape parameters live in the
+    Python script. Sizes shared with the rig stay in `model.js`.
+  - The result is closer to the reference, not a match (DEVLOG Session 9): the coat, the face and
+    the limb armour are still JS geometry.
