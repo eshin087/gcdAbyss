@@ -4,8 +4,8 @@ import { limbGeometry, ellipsoidGeometry, hornGeometry, planarGUV } from '../../
 import { HERO_PARTS } from './heroParts.js';
 
 // The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md; the lean
-// reference match of 2026-11-09, ADR-034): a lean 1.80 m anime swordsman, 7.8 heads tall, with a
-// V from the shoulders to a narrow belted waist and long legs. A small head under spiky black hair
+// reference match of 2026-11-09, ADR-034, filled out to an athletic build by ADR-040): a 1.80 m
+// anime swordsman, ~7.3 heads tall, with a V from the shoulders to a belted waist and long legs. A small head under spiky black hair
 // of distinct pointed locks (crown spikes, layered back locks, nape flicks, a fringe over the
 // eyes); a tall stand collar with a turned-over rim; an OPEN black greatcoat over a buttoned shirt,
 // a shaped upper back (a yoke whose seams dip to a four-point star), a baldric from the right
@@ -42,12 +42,12 @@ import { HERO_PARTS } from './heroParts.js';
 export const DIM = {
   pivot: 1.04, // body pivot height with straight legs (the idle stands 0.015 above it)
   pelvis: [0, -0.1, 0],
-  hip: [0.1, -0.05, 0], // hip joints ±0.1 (round 3: 0.09; room for the thicker thighs)
+  hip: [0.105, -0.05, 0], // hip joints ±0.105 (room for the athletic build's thighs)
   spine: [0, 0.08, 0],
   chest: [0, 0.19, 0],
-  // shoulder joints ±0.16 (round 3: 0.21), deltoid to deltoid ≈ 0.46 m: the reference's lean V
-  // (its shoulders are ≈ 0.24 of his height across, the waist ≈ 0.12)
-  shoulder: [0.16, 0.215, 0],
+  // shoulder joints ±0.178 (lean match: 0.16, round 3: 0.21), deltoid to deltoid ≈ 0.52 m: the
+  // athletic build (ADR-040; the lean match read as lanky)
+  shoulder: [0.178, 0.215, 0],
   // the point the SWORD hand's pose targets are offsets from: where the shoulder joint was before
   // round 3 widened it, so every sword-hand target the arm can reach (and with it every attack's
   // hit segment) is unchanged by the broader frame (anim.js _handTarget, rig.arms.R.anchor)
@@ -60,7 +60,7 @@ export const DIM = {
   shin: 0.42,
   ankle: 0.07, // ankle height with the foot flat on the ground
   coatY: 0.18, // coat-skirt anchor above the pelvis joint (1.135 m: tucked under the belt stack)
-  coatR: 0.132, // skirt anchor half-width at the sides (the depth is 0.69 of it: inside the shell)
+  coatR: 0.148, // skirt anchor half-width at the sides (the depth is 0.69 of it: inside the shell)
   // the sword (sword space: origin = grip centre, blade along +Z)
   gripBack: 0.08, // grip runs from −gripBack …
   guard: 0.1, // … to the crossguard
@@ -79,8 +79,12 @@ export const DIM = {
 };
 
 /**
- * Girth: the lean anime swordsman of the owner's reference sheets (2026-11-09 lean reference match,
- * ADR-034, superseding round 3's broad build). Measured on the six-view sheet's silhouettes, in
+ * Girth: the ATHLETIC build (ADR-040, owner: "he is a bit too lanky"): a 0.39 m chest over a 0.27 m
+ * waist, shoulder joints ±0.178, upper arm r 0.066, thigh r 0.086, a head drawn 1.08× (7.3 heads),
+ * between the two builds below. Collar, pauldron, lapels and cape follow it (hero_parts.py).
+ * Before it: the lean anime swordsman of the owner's reference sheets (2026-11-09 lean reference
+ * match, ADR-034: chest 0.34 over 0.23, upper arm r 0.056, thigh r 0.07), superseding round 3's
+ * broad build. The lean build's measurements, for the record: Measured on the six-view sheet's silhouettes, in
  * fractions of his height H: shoulders ≈ 0.24 H across, the chest under the arms ≈ 0.18 H, the
  * belted waist ≈ 0.12 H, thighs ≈ 0.06 H, boots at the calf ≈ 0.05 H, torso depth ≈ 0.12 H. A V from
  * the shoulders to a narrow waist, slim arms and long legs; the armour, the collar, the coat tails
@@ -94,22 +98,25 @@ export const BODY = {
   // torso shell (the coat over the chest): rings at world idle height y, half-width rx, half-depth
   // rz, centre offset cz (the chest pushes forward), the open coat front's half-chord `gap`
   shell: [
-    { y: 1.09, rx: 0.136, rz: 0.102, gap: 0.07 },
-    { y: 1.21, rx: 0.116, rz: 0.088, gap: 0.072 },
-    { y: 1.3, rx: 0.138, rz: 0.098, cz: 0.008, gap: 0.056 },
-    { y: 1.37, rx: 0.16, rz: 0.108, cz: 0.014, gap: 0.04 },
-    { y: 1.43, rx: 0.17, rz: 0.104, cz: 0.01, gap: 0.03 },
-    { y: 1.475, rx: 0.146, rz: 0.09, cz: 0.003, gap: 0.022 },
-    { y: 1.505, rx: 0.08, rz: 0.068, gap: 0.015 },
+    { y: 1.09, rx: 0.15, rz: 0.112, gap: 0.074 },
+    { y: 1.21, rx: 0.134, rz: 0.1, gap: 0.076 },
+    { y: 1.3, rx: 0.158, rz: 0.11, cz: 0.008, gap: 0.06 },
+    { y: 1.37, rx: 0.184, rz: 0.122, cz: 0.014, gap: 0.044 },
+    { y: 1.43, rx: 0.196, rz: 0.118, cz: 0.01, gap: 0.032 },
+    { y: 1.475, rx: 0.17, rz: 0.102, cz: 0.003, gap: 0.024 },
+    { y: 1.505, rx: 0.092, rz: 0.074, gap: 0.016 },
   ],
-  hips: { c: [0, 0.012, -0.005], r: [0.128, 0.094, 0.096] }, // pelvis ellipsoid (pelvis space, x y z)
+  hips: { c: [0, 0.012, -0.005], r: [0.142, 0.1, 0.106] }, // pelvis ellipsoid (pelvis space, x y z)
   head: { c: [0, 0.154, -0.007], r: [0.105, 0.118, 0.112] }, // the hair cap round the skull (head space)
-  deltoid: [0.064, 0.062, 0.068], // shoulder cap on each upper arm (x out, y, z)
-  upperArm: [0.056, 0.048], // sleeve radius at the shoulder / the elbow
-  foreArm: [0.048, 0.041], // vambrace / bracer at the elbow / the wrist
-  thigh: [0.07, 0.05, 0.008], // r at the hip, at the knee, mid bulge
-  shin: [0.053, 0.041, 0.008], // the boot: r at the knee, at the ankle, calf bulge
-  foot: { c: [0, -0.02, 0.05], r: [0.05, 0.046, 0.138] }, // boot foot ellipsoid (foot space)
+  headScale: 1.08, // the head joint's scale (skull, face, hair): 7.3 heads tall instead of 7.8
+  neck: [0.05, 0.046], // neck radius at the collar / under the jaw (head space, before headScale)
+  deltoid: [0.074, 0.07, 0.078], // shoulder cap on each upper arm (x out, y, z)
+  upperArm: [0.066, 0.056], // sleeve radius at the shoulder / the elbow
+  foreArm: [0.057, 0.048], // vambrace / bracer at the elbow / the wrist
+  hand: 1.12, // gauntlet / glove size (× the lean build's)
+  thigh: [0.086, 0.062, 0.01], // r at the hip, at the knee, mid bulge
+  shin: [0.064, 0.049, 0.01], // the boot: r at the knee, at the ankle, calf bulge
+  foot: { c: [0, -0.02, 0.052], r: [0.056, 0.048, 0.146] }, // boot foot ellipsoid (foot space)
 };
 
 /** Idle-stance reference heights (m) of the joints the meshes hang on. */
@@ -136,12 +143,12 @@ export const REST = (() => {
 // (`slant`, m); the lower part lightens into the dusty lavender torn zone and ends in claw points,
 // longest outside.
 export const COAT_PANELS = [
-  { az: 0.95, w: [0.12, 0.21, 0.34], len: [0.33, 0.33], strips: [0.08, 0.16], fork: [0, 0], out: 0.004, flare: 0.28, edge: -1, skew: 1, slant: 0.07 }, // front-left
-  { az: -0.95, w: [0.12, 0.21, 0.34], len: [0.33, 0.33], strips: [0.16, 0.08], fork: [0, 0], out: 0.004, flare: 0.28, edge: 1, skew: -1, slant: 0.07 }, // front-right
-  { az: 1.7, w: [0.13, 0.21, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // left
-  { az: -1.7, w: [0.13, 0.21, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // right
-  { az: 2.5, w: [0.14, 0.27, 0.46], len: [0.36, 0.36], strips: [0.18, 0.13, 0.08], fork: [0, 1, 0], out: 0.008, flare: 0.5, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
-  { az: -2.5, w: [0.14, 0.27, 0.46], len: [0.36, 0.36], strips: [0.08, 0.13, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.5, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
+  { az: 0.95, w: [0.134, 0.223, 0.34], len: [0.33, 0.33], strips: [0.08, 0.16], fork: [0, 0], out: 0.004, flare: 0.28, edge: -1, skew: 1, slant: 0.07 }, // front-left
+  { az: -0.95, w: [0.134, 0.223, 0.34], len: [0.33, 0.33], strips: [0.16, 0.08], fork: [0, 0], out: 0.004, flare: 0.28, edge: 1, skew: -1, slant: 0.07 }, // front-right
+  { az: 1.7, w: [0.146, 0.223, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // left
+  { az: -1.7, w: [0.146, 0.223, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // right
+  { az: 2.5, w: [0.157, 0.286, 0.46], len: [0.36, 0.36], strips: [0.18, 0.13, 0.08], fork: [0, 1, 0], out: 0.008, flare: 0.5, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
+  { az: -2.5, w: [0.157, 0.286, 0.46], len: [0.36, 0.36], strips: [0.08, 0.13, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.5, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
 ];
 
 /** The torn half-cape: wide ragged sheets on the streamer springs (anim.js), fanned behind his
@@ -150,10 +157,10 @@ export const COAT_PANELS = [
  *  `w` = its width at the root / the torn end, `len` = the two spring segments, `out` = how far it
  *  flies out from the chest at rest (tan of the angle), `cup` = the billow baked into it. */
 export const CAPE_SHEETS = [
-  { at: [-0.2, 0.17, -0.055], ry: Math.PI + 0.3, w: [0.18, 0.4], len: [0.44, 0.5], out: 1.15, cup: 0.05, seed: 11 },
-  { at: [-0.12, 0.18, -0.09], ry: Math.PI + 0.15, w: [0.2, 0.42], len: [0.48, 0.52], out: 0.85, cup: 0.06, seed: 23 },
-  { at: [-0.03, 0.185, -0.105], ry: Math.PI, w: [0.2, 0.36], len: [0.46, 0.46], out: 0.55, cup: 0.06, seed: 37 },
-  { at: [0.05, 0.185, -0.1], ry: Math.PI - 0.2, w: [0.16, 0.24], len: [0.36, 0.34], out: 0.4, cup: 0.05, seed: 41 },
+  { at: [-0.225, 0.17, -0.062], ry: Math.PI + 0.3, w: [0.18, 0.4], len: [0.44, 0.5], out: 0.9, cup: 0.05, seed: 11 },
+  { at: [-0.135, 0.18, -0.102], ry: Math.PI + 0.15, w: [0.2, 0.42], len: [0.48, 0.52], out: 0.68, cup: 0.06, seed: 23 },
+  { at: [-0.03, 0.185, -0.119], ry: Math.PI, w: [0.2, 0.36], len: [0.46, 0.46], out: 0.46, cup: 0.06, seed: 37 },
+  { at: [0.06, 0.185, -0.113], ry: Math.PI - 0.2, w: [0.16, 0.24], len: [0.36, 0.34], out: 0.34, cup: 0.05, seed: 41 },
 ];
 
 /** Hair clusters: each is one merged mesh on a spring joint (pivot in head space). `tip` is the
@@ -1156,9 +1163,10 @@ export function buildHero(U) {
 
   // ---------------------------------------------------------------- head
   const head = joint(chest, ...DIM.neck);
+  head.scale.setScalar(BODY.headScale);
   {
     const [sx, sy, sz] = DIM.skull;
-    mesh(head, limb({ length: 0.12, r0: 0.043, r1: 0.04, radial: 8, rings: 2, capSegs: 1 }), M.skin, 0, 0.1, 0.0);
+    mesh(head, limb({ length: 0.12, r0: BODY.neck[0], r1: BODY.neck[1], radial: 8, rings: 2, capSegs: 1 }), M.skin, 0, 0.1, 0.0);
     mesh(head, orient.up(ellipsoidGeometry(0.078, 0.09, 0.1)), M.skin, sx, sy, sz);
     // slim V-jaw with a pointed chin (chin at ~1.57 m)
     const jaw = ellipsoidGeometry(0.05, 0.04, 0.056, { widthSegs: 10, heightSegs: 6 });
@@ -1189,7 +1197,7 @@ export function buildHero(U) {
   // flattened wedge (pauldron / elbow / knee points): base 2w wide, curving toward `bend`
   const wedge = (L, w, base, dir, bend, curl = 0.17) => orientTo(clumpGeometry(L, w, 0.006, { curl, taper: 1, cols: 8, rows: 3 }), base, dir, bend);
   const arms = {};
-  const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm;
+  const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
   for (const side of [-1, 1]) {
     const R = side < 0;
     const out = side; // the outer side of this arm is x = side (right arm: −X)
@@ -1227,7 +1235,7 @@ export function buildHero(U) {
         sub(limb({ length: 0.08, r0: 0.057 + v, r1: 0.053 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.105, 0), 1),
         limb({ length: 0.075, r0: 0.054 + v, r1: 0.05 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.17, 0),
         // the articulated gauntlet over the grip
-        sub(ellipsoidGeometry(0.044, 0.042, 0.058, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm - 0.008, 0.006), 1),
+        sub(ellipsoidGeometry(0.044 * HK, 0.042 * HK, 0.058 * HK, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm - 0.008, 0.006), 1),
       ]), M.armor);
       mesh(fore, mergeGeometries([
         bandGeometry(0.0605 + v, 0.0605 + v, 0.01, 14).translate(0, -0.113, 0),
@@ -1247,8 +1255,8 @@ export function buildHero(U) {
       mesh(fore, limb({ length: 0.18, r0: fa0, r1: fa1, radial: 10, rings: 3 }), M.pants, 0, -0.05, 0);
       mesh(fore, bandGeometry(fa1 + 0.002, fa1 + 0.002, 0.025, 14).translate(0, -0.236, 0), M.trim);
       mesh(fore, wedge(0.05, 0.018, [out * (fa0 - 0.015), -0.05, -0.02], [out * 0.3, 1, -0.5], [0, 0, -1], 0.12), M.spike);
-      mesh(fore, ellipsoidGeometry(0.042, 0.04, 0.055, { widthSegs: 10, heightSegs: 6 }), M.pants, 0, -DIM.foreArm - 0.006, 0.004);
-      mesh(fore, ellipsoidGeometry(0.031, 0.014, 0.021, { widthSegs: 8, heightSegs: 4 }), M.skin, 0, -DIM.foreArm - 0.046, 0.023);
+      mesh(fore, ellipsoidGeometry(0.042 * HK, 0.04 * HK, 0.055 * HK, { widthSegs: 10, heightSegs: 6 }), M.pants, 0, -DIM.foreArm - 0.006, 0.004);
+      mesh(fore, ellipsoidGeometry(0.031 * HK, 0.014 * HK, 0.021 * HK, { widthSegs: 8, heightSegs: 4 }), M.skin, 0, -DIM.foreArm - 0.046 * HK, 0.023 * HK);
     }
     arms[R ? 'R' : 'L'] = { upper, fore };
   }

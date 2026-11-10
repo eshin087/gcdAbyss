@@ -2140,15 +2140,15 @@ async function scenarioHero() {
   return G;
 }
 
-// ================================================================== scenario: hero look (lean build)
-// The lean build (model.js BODY, ADR-034) and the steel kept out of his body and his coat. Through a run, a
+// ================================================================== scenario: hero look (athletic build)
+// The athletic build (model.js BODY, ADR-040) and the steel kept out of his body and his coat. Through a run, a
 // sprint, strafes and a backpedal, stops, a roll, the light combo + slam, a charged thrust and a
 // block, the DRAWN blade (to DIM.drawnTip) never sinks > 2 cm into a body part (BODY's primitives
 // in each joint's frame) and passes through a coat panel's sheet on only a few of the moving frames
 // (round 2: ~14 % of the run / sprint / strafe / turn frames). The game-camera depth pull
 // (heroArt.pull) is gone, so the blade is depth-tested like his body.
 async function scenarioHeroLook() {
-  out('\n== scenario HEROLOOK (lean build; the blade stays out of his body and his coat; no depth pull) ==');
+  out('\n== scenario HEROLOOK (athletic build; the blade stays out of his body and his coat; no depth pull) ==');
   const { BODY, sheetOffset } = await imp('src/entities/player/model.js');
   const G = build();
   const { game, input } = G;
@@ -2156,11 +2156,13 @@ async function scenarioHeroLook() {
   const p = game.player, r = p.rig, d = game.dragon, D = HERO_DIM;
   p.debug.god = true;
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
-  // the lean build (ADR-034, the reference sheet's silhouette: shoulders ≈ 0.24 of his height, the
-  // waist ≈ 0.12): a V to a narrow belted waist, slim limbs (round 3's broad build had a 0.50 m chest)
+  // the athletic build (ADR-040): between ADR-034's lean build (a 0.34 m chest, 0.07 m thighs: "a bit
+  // too lanky") and round 3's broad one (a 0.50 m chest, 0.098 m thighs: a cloaked trapezoid). Still a
+  // V to a belted waist; limbs with some weight
   const chest = Math.max(...BODY.shell.map((s) => s.rx)) * 2, waist = BODY.shell[1].rx * 2;
-  assert(chest >= 0.3 && chest <= 0.38 && waist <= 0.25 && chest / waist >= 1.4 && D.shoulder[0] >= 0.14 && D.shoulder[0] <= 0.18 && BODY.upperArm[0] <= 0.065 && BODY.thigh[0] <= 0.08,
-    `lean build: chest ${chest.toFixed(2)} m over a ${waist.toFixed(2)} m waist, shoulders ±${D.shoulder[0]} m, upper arm r ${BODY.upperArm[0]}, thigh r ${BODY.thigh[0]}`);
+  assert(chest >= 0.37 && chest <= 0.44 && waist >= 0.25 && waist <= 0.3 && chest / waist >= 1.35 && D.shoulder[0] >= 0.17 && D.shoulder[0] <= 0.2
+    && BODY.upperArm[0] >= 0.06 && BODY.upperArm[0] <= 0.075 && BODY.thigh[0] >= 0.08 && BODY.thigh[0] <= 0.095,
+    `athletic build: chest ${chest.toFixed(2)} m over a ${waist.toFixed(2)} m waist, shoulders ±${D.shoulder[0]} m, upper arm r ${BODY.upperArm[0]}, thigh r ${BODY.thigh[0]}`);
   assert(r.mats.every((m) => m.defines?.SG_HERO_PULL === undefined && !m.uniforms.uArtPull), 'no hero material is drawn nearer the camera than it is (the blade is depth-tested)');
   const v = new THREE.Vector3(), w = new THREE.Vector3();
   const restSpine = D.pivot + 0.015 + D.pelvis[1] + D.spine[1];
