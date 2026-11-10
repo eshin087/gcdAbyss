@@ -716,3 +716,30 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - The attack tables in COMBAT.md list data values before the damage scale.
   - Difficulty is measured, not guessed (ADR-033): see COMBAT.md "Difficulty" for the bots' runs on
     this build. A human playtest still decides.
+
+## ADR-040 — An athletic build, and the idle blade out to his side (2026-11-09)
+- **Context:** the owner: "review the main character ... make sure his animations and sword posture
+  looks natural and good. right now he is a bit too lanky". ADR-034's lean build (a 0.34 m chest,
+  0.07 m thighs, 7.8 heads) read as thin tubes under a small head. ADR-038's idle pointed the blade
+  nearly straight ahead from a straight hanging arm: the wrist was cocked ~50°, and from the 58° game
+  camera his body and cape hid the whole sword whenever he faced away (the usual fight view).
+- **Decision:**
+  - `BODY` / `DIM` in `model.js`: chest 0.39 m over a 0.27 m waist, shoulder joints ±0.178, hips
+    ±0.105, upper arm r 0.066, forearm 0.057, thigh 0.086, boot 0.064, hands ×1.12, the head joint
+    scaled 1.08 (`BODY.headScale`). Bone lengths, `DIM.gripShoulder` and so every sword-hand target
+    and hit segment are unchanged.
+  - `hero_parts.py`: the collar's girth follows the shell (`COL_K`), the pauldron the deltoid
+    (`PAUL_K`); parts rebuilt. Coat panel tops and cape roots widened with the body; cape flare
+    (`CAPE_SHEETS.out`) reduced by about a fifth.
+  - Idle (`guard` in `anim.js`): `IDLE_SW` [-0.725, -0.68, 0.1] (out to his right, ~43° down), the
+    elbow bent back beside the ribs so the forearm runs toward the blade's line, a shoulder-width
+    stance (right foot 0.25 m out instead of 0.33, knee soft).
+  - A light attack that finishes over his left shoulder comes home round the front (`HOME_WAY`):
+    the short way to the new idle ran behind his head and through the sword arm's shoulder.
+  - The blade's tip streak sits on the drawn point (it floated up to 0.3 m past it).
+- **Consequences:**
+  - Supersedes ADR-034's girth and ADR-038's idle blade line. The `herolook` test asserts the
+    athletic ranges and still holds the blade within 2 cm of his body over every move.
+  - Facing west or north-west at the game camera the idle blade is on his far side and still hidden;
+    facing north about half of it shows past the cape.
+  - Gameplay is untouched (hurt cylinder, reach, timings).

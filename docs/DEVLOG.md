@@ -5,6 +5,40 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-09 — Session 11: hero review, athletic build and the idle sword hold
+
+**Owner:** "review the main character and fix any details and features to make sure he looks good.
+make sure his animations and sword posture looks natural and good. right now he is a bit too lanky".
+Worked in the `combat/wyrm-bullet-hell` checkout while another session was committing to it; this
+session's files are the hero's only (model, anim, fx, parts, the `herolook` test, docs).
+
+**Done (ADR-040):**
+- **Build:** chest 0.34 → 0.39 m, waist 0.23 → 0.27, shoulder joints ±0.16 → ±0.178, hips ±0.105,
+  arms / thighs / boots ~20 % thicker, head joint ×1.08, hands ×1.12. Collar and pauldron now follow
+  the body in `hero_parts.py` (`COL_K`, `PAUL_K`); parts rebuilt with `npm run hero-parts`. Coat
+  panel tops and cape roots widened; cape flare down about a fifth.
+- **Idle:** blade out to his right (`IDLE_SW` [-0.725, -0.68, 0.1]) from a bent arm, shoulder-width
+  stance. Before, it pointed ahead from a straight arm and was hidden at the game camera when he
+  faced away.
+- **Light 1 recovery** comes home round the front (`HOME_WAY`); the short way to the new idle went
+  behind his head (the `herolook` test caught it as 4.3 cm of blade in the sword arm).
+- **Tip streak** moved onto the drawn point.
+
+**Verification:** `npm test` ALL PASSED, `npm run build` ok (1652 KB). Looked at in the Lab model
+viewer (ASCII and solid, eight angles): idle, run, light 1 and its recovery, light 2, slam, block and
+release, charge, roll, run start / stop. At the game camera: idle facing eight ways.
+
+**Not checked / open:**
+- Heal, stagger, knockdown, death, plunge, sprint and strafes with the new build (only the test's
+  blade-in-body check covers part of them).
+- Facing west / north-west the idle blade is behind him at the game camera; facing north half shows.
+- A phone, frame cost, and a real fight were not looked at.
+- `docs/art/hero.md` still describes the lean build and the old idle.
+
+**Next:** playtest; the M1.12 follow-ups.
+
+---
+
 ## 2026-11-09 — Session 10: bullet hell, two more strings, the moonlit sword
 
 **Owner:** "the pants fabric in the front keeps clipping through the sword. make the sword a little

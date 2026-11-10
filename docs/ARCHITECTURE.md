@@ -414,11 +414,12 @@ of the joint it hangs on and `model.js` picks that joint and the material. Never
 by hand; rerun the script after changing a dimension the parts are fitted to. `CAPE_SHEETS` (per
 sheet: `at` on the chest, `ry`, widths `w`, segment lengths `len`, `out`, `cup`, `seed`) must stay
 four entries (the streamer springs and the `herolook` test).
-**Idle** (`guard`, ADR-038; supersedes ADR-036's low diagonal across his front, which ran through
-the front coat panels): the single-figure reference's stance, weight on the left leg, the right leg
-straight out, the sword arm beside the right hip and outside the coat, the blade (`IDLE_SW`) in a
-low ready at his right side: forward, ~38° below level and a little outward, the point a hand above
-the grass; the head bowed a little, looking ahead. Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
+**Idle** (`guard`, ADR-040; supersedes ADR-038's blade pointing ahead, which his body and cape hid
+from the game camera): weight on the left leg, the right foot a shoulder's width out and forward
+with the knee soft, the sword arm bent beside the right hip and outside the coat, the blade
+(`IDLE_SW`) out to his right side: ~43° below level, 82° off his front, the point a hand above
+the grass; the head bowed a little, looking ahead. An attack's recovery brings a blade that finished
+over his left shoulder home round the front (`HOME_WAY` in `attackPose`). Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
 (`DIR_FLIP` 2.75 rad, below `DIR_FLIP_HIGH` 0.9 rad of elevation) goes round the front, never behind
 the shoulders (the light combo's finish → this idle).
 **Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every

@@ -370,6 +370,8 @@ def build_hair():
 # flare out beside the jaw (tips ~0.145 m out at ~1.63 m), the front open in a deep V down to the
 # chest. One sheet: model.js draws its outside with `collar` and its inside with `collarIn`.
 COL = {'y0': 1.49, 'back': 1.588, 'wing': 0.045, 'front': 1.525, 'peak': 1.05, 'z': -0.004}
+# the collar's girth follows the shell it stands on (1 on the lean build, whose shell is 0.113 there)
+COL_K = (shell_at(COL['y0'])['rx'] / 0.113) ** 0.6
 
 
 def collar_fn(s, t):
@@ -384,8 +386,8 @@ def collar_fn(s, t):
         top = lerp(COL['front'], COL['back'] + COL['wing'], wing ** 0.8)
     wing = clamp01(wing)
     f = t ** 1.35
-    rx = lerp(0.086, 0.116 + 0.052 * wing ** 1.5, f)
-    rz = lerp(0.078, 0.098 + 0.03 * wing ** 1.5, f)
+    rx = lerp(0.086, 0.116 + 0.052 * wing ** 1.5, f) * COL_K
+    rz = lerp(0.078, 0.098 + 0.03 * wing ** 1.5, f) * COL_K
     h = lerp(COL['y0'], top, t)
     co = Vector((math.sin(th) * rx, y_ch(h), math.cos(th) * rz + COL['z']))
     return (co, (th - math.pi) * 0.1, y_ch(h))
@@ -555,6 +557,10 @@ PAUL = {
 }
 
 
+# the plates follow the shoulder cap they sit on (1 on the lean build's 0.064 m deltoid)
+PAUL_K = BODY['deltoid'][0] / 0.064
+
+
 def lame_pt(L, a, u, grow=1.0):
     """a = -1 (front) .. 1 (back) round the shoulder, u = 0 (top) .. 1 (the cut lower edge)."""
     pt = max(max(0.0, 1 - abs(a - c) / 0.3) for c in L['pts'])
@@ -562,7 +568,7 @@ def lame_pt(L, a, u, grow=1.0):
     fl = (1 + L['flare'] * smooth(0.55, 1.0, u)) * grow
     ph = a * L['phi']
     h, v = math.sin(th), math.cos(th)
-    x, y, z = -math.cos(ph) * h * L['r'][0] * fl, v * L['r'][1], -math.sin(ph) * h * L['r'][2] * fl
+    x, y, z = -math.cos(ph) * h * L['r'][0] * fl * PAUL_K, v * L['r'][1] * PAUL_K, -math.sin(ph) * h * L['r'][2] * fl * PAUL_K
     ct, st = math.cos(PAUL['tilt']), math.sin(PAUL['tilt'])
     return Vector(PAUL['c']) + Vector((x * ct - y * st, x * st + y * ct, z))
 

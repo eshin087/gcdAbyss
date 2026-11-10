@@ -798,16 +798,17 @@ export class PlayerFx {
     if (!fx || !sw || !(k > 0)) return;
     const e = sw.matrixWorld.elements;
     const tip = DIM.drawnTip ?? DIM.steelTip; // the drawn point (model.js), not anim's grass-clamp point
-    // the edge-wave: a short bright streak laid along the blade 0.06–0.26 m past the drawn point
+    // the edge-wave: a short bright streak laid along the blade at the drawn point (it sat 0.06–0.26 m
+    // past it, × HERO_SCALE: a dash floating off the sword, left behind by every roll and swing)
     this.tipAcc += dt * 14;
     while (this.tipAcc >= 1) {
       this.tipAcc -= 1;
-      const zz = tip + R(0.06, 0.2);
+      const zz = tip + R(-0.03, 0.04);
       const x = e[8] * zz + e[12], y = e[9] * zz + e[13], z = e[10] * zz + e[14];
       const dl = Math.hypot(e[8], e[9], e[10]) || 1;
       if (!Number.isFinite(x + y + z) || y < 0.02) continue;
       fx.spawn({
-        x, y, z, life: 0.12, size: 0.1 * (1 + far), sizeEnd: 0.06, glyph: '|', stretch: 1.4,
+        x, y, z, life: 0.07, size: 0.1 * (1 + far), sizeEnd: 0.06, glyph: '|', stretch: 1.4,
         rot: alongRot(e[8] / dl, e[9] / dl, e[10] / dl),
         color: COL.tipStreak, colorEnd: COL.halo, alpha: Math.min(1, 0.55 + 0.25 * k), alphaEnd: 0,
       });
@@ -818,7 +819,7 @@ export class PlayerFx {
     while (this.haloAcc >= 1) {
       this.haloAcc -= 1;
       const past = Math.random() < 0.3;
-      const zz = past ? tip + R(0.02, 0.3) : R(DIM.forte, tip);
+      const zz = past ? tip + R(0.0, 0.1) : R(DIM.forte, tip);
       const xx = past ? R(-0.02, 0.02) : (Math.random() < 0.5 ? -1 : 1) * R(0.06, 0.12);
       // sword space (xx, 0, zz) → world
       const x = e[0] * xx + e[8] * zz + e[12], y = e[1] * xx + e[9] * zz + e[13], z = e[2] * xx + e[10] * zz + e[14];

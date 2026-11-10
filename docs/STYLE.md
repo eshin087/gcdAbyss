@@ -257,11 +257,16 @@ Rules of thumb:
   through his back or legs, and the coat hangs inside or drapes over it instead of passing through
   (a few run frames still cross a panel). *Superseded:* the 2026-11-08 depth pull that drew it up to
   0.65 m nearer the camera (ADR-022) put the sword through his back from behind.
-- **Build (lean reference match, ADR-034):** the six-view sheet's lean anime swordsman, measured
-  on its silhouettes (fractions of his height H): shoulders ≈ 0.24 H across, the chest ≈ 0.18 H, the
-  belted waist ≈ 0.12 H. On the same skeleton (`BODY` in `player/model.js`): chest 0.34 m over a 0.23 m
-  waist, shoulder joints ±0.16, slim arms and legs in armoured boots. *Superseded:* round 3's broad
-  build (a 0.50 m chest) and its closed A-line skirt, a cloaked trapezoid with no legs from behind.
+- **Build (athletic, ADR-040):** the owner found the lean match "a bit too lanky". On the same
+  skeleton (`BODY` in `player/model.js`): chest 0.39 m over a 0.27 m waist, shoulder joints ±0.178
+  (≈ 0.52 m across the deltoids), upper arms r 0.066, thighs r 0.086, boots r 0.064, a head drawn
+  1.08× (≈ 7.3 heads tall), bigger hands; the collar, pauldron, lapels and cape roots follow the
+  body. Still a V to a belted waist. *Superseded:* the lean reference match (ADR-034: chest 0.34 m
+  over 0.23 m, shoulders ≈ 0.24 H, 7.8 heads) and round 3's broad build (a 0.50 m chest) with its
+  closed A-line skirt, a cloaked trapezoid with no legs from behind.
+- **Idle silhouette (ADR-040):** the sword stands out to his right side, ~43° below level, so the
+  steel shows past his body and cape from the front, the side and from behind; the cape hangs a
+  little closer (`CAPE_SHEETS.out` 0.9 → 0.34, was 1.15 → 0.4).
 - **The silhouette from behind** (the usual fight view): spiky hair of pointed locks hanging toward
   the nape, a flared stand collar, the yoke seams dipping to a four-point star between the shoulder
   blades, the baldric from the right shoulder to the left hip, two belts, then two tails split by a

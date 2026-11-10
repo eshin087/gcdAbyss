@@ -225,13 +225,18 @@ function kv3(p, i, t, k) {
  *  the front keeps clipping through the sword"). ADR-034 hung it straight down his right side: a
  *  stiff A-pose carrying a pole. From the 58° game camera this blade lies forward-right of his body,
  *  so its whole length shows from behind.) */
-// blade direction (body axes): forward, ~38° below level and a little out to his right
-const IDLE_SW = [-0.3, -0.62, 0.72];
+// blade direction (body axes): ~43° below level, out to his right and a touch forward.
+// (Session 11, ADR-040: the blade used to point nearly straight ahead, 22° off his front, from a
+// straight hanging arm. Facing away from the 58° game camera, the usual fight view, his body and
+// cape hid all of it, and the wrist was cocked ~50° to hold it there. Now the elbow is bent back beside
+// the ribs, the forearm runs into the blade's line, and the steel stands out to his side, past
+// his silhouette and the cape, from every camera.)
+const IDLE_SW = [-0.725, -0.68, 0.1];
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
-  p[P.bodyX] = 0.03 + 0.008 * sw; // the hips over the left (weight) leg
-  p[P.bodyY] = -0.05 + 0.004 * br; // sunk a little into the wide stance
+  p[P.bodyX] = 0.025 + 0.008 * sw; // the hips over the left (weight) leg
+  p[P.bodyY] = -0.035 + 0.004 * br; // sunk a little into the stance
   p[P.bodyZ] = 0.0;
   p[P.pitch] = 0;
   p[P.yaw] = 0;
@@ -245,18 +250,20 @@ function guard(p, A) {
   p[P.hdX] = 0.14 - 0.03 * br; // bowed a little
   p[P.hdY] = 0.1; // ... looking ahead
   p[P.hdZ] = 0.06 + 0.012 * sw;
-  v3(p, P.rH, -0.14, -0.47 + 0.006 * br, 0.11); // the grip beside the right hip, outside the coat, the arm near straight
-  v3(p, P.rP, -0.9, -0.1, -0.45); // the elbow out and back
+  v3(p, P.rH, -0.2, -0.44 + 0.006 * br, 0.04); // the grip out beside the right hip, clear of the coat
+  v3(p, P.rP, -0.4, -0.3, -1); // the elbow bent back and a little out: the forearm runs toward the blade's line
   v3(p, P.lH, 0.07, -0.51, 0.03); // the free arm hangs relaxed beside the left hip
   v3(p, P.lP, 0.6, -0.1, -0.8);
-  v3(p, P.swD, IDLE_SW[0] + 0.01 * br, IDLE_SW[1], IDLE_SW[2] + 0.015 * sw);
-  v3(p, P.swF, 0.1, 0.76, 0.64); // the flat faces up-forward: broad to a camera in front or above
-  v3(p, P.rF, -0.33, ANK, 0.2); // the right leg straight, out to his right and forward
-  v3(p, P.lF, 0.16, ANK, -0.1); // the weight leg under the hips, a little back
-  v3(p, P.rK, -0.5, 0.1, 1);
+  v3(p, P.swD, IDLE_SW[0] + 0.01 * br, IDLE_SW[1] + 0.008 * br, IDLE_SW[2] + 0.015 * sw);
+  v3(p, P.swF, -0.68, 0.73, 0.06); // the flat faces up and out: broad to a camera in front, behind or above
+  // (the right foot stood 0.33 m out and the leg dead straight: a straddle; now a shoulder-width
+  // stance with the knee soft)
+  v3(p, P.rF, -0.25, ANK, 0.17); // the right leg out to his right and forward, the knee soft
+  v3(p, P.lF, 0.14, ANK, -0.09); // the weight leg under the hips, a little back
+  v3(p, P.rK, -0.45, 0.1, 1);
   v3(p, P.lK, 0.3, 0.05, 1);
   p[P.footFlat] = 0.95;
-  p[P.rFy] = -0.6; // toes turned out
+  p[P.rFy] = -0.5; // toes turned out
   p[P.lFy] = 0.4;
   p[P.rFf] = 1;
   p[P.lFf] = 1;
@@ -822,7 +829,12 @@ function attackPose(p, A) {
     for (let j = 0; j < FOOT_CH.length; j++) FOOT_KEEP[j] = p[FOOT_CH[j]];
     guard(SCRATCH, A);
     const b = smoothstep(home, 1, rec);
-    blend(p, p, SCRATCH, b);
+    // a finish over his LEFT shoulder (light 1) comes home round the FRONT: the ready blade now
+    // lies out to his right, and the short way there from the left-back runs behind his head and
+    // through the sword arm's shoulder
+    HOME_WAY.ok = p[P.swD] > 0;
+    HOME_WAY.d = -3;
+    blend(p, p, SCRATCH, b, HOME_WAY);
     for (let j = 0; j < FOOT_CH.length; j++) p[FOOT_CH[j]] = FOOT_KEEP[j];
     p[P.rH + 2] += 0.24 * Math.sin(Math.PI * b);
     const u = smoothstep(0.42, 0.9, rec); // home a beat before the blade crosses back in front of the legs
@@ -834,6 +846,7 @@ function attackPose(p, A) {
 }
 const FOOT_CH = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rFy, P.lFy];
 const FOOT_KEEP = new Float32Array(FOOT_CH.length);
+const HOME_WAY = { d: -3, ok: false }; // dirLerp memory: the recovery's way home (− = clockwise from above, through the front)
 
 /** Attack footwork. The rear (right) foot stays on its spot while the root lunges, dragged along
  *  only once the leg is stretched `drag` m past its stance spot; the front (left) foot steps from
