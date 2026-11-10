@@ -660,6 +660,7 @@ export class AudioEngine {
 
     // attack tells (any attacker): the player's reaction cues
     on('combat:tell', (d) => {
+      if (d.bullet) return; // a bullet's cue is its combat:flash ping alone (dozens per pattern)
       const o = this._atEvent(d);
       if (d.hazard) this.play('hazardTell', o); // a fire hazard's own tell (meteors, pillars): no brass sting
       else if (d.tell === 'blue') this.play('tellBlue', o);
@@ -671,7 +672,7 @@ export class AudioEngine {
     on('combat:flash', (d) => {
       const o = this._atEvent(d);
       o.tell = d.tell === 'blue' || d.tell === 'red' ? d.tell : 'normal';
-      if (this.play('flash', o)) this._dipMusic();
+      if (this.play('flash', o) && !d.bullet) this._dipMusic();
     });
 
     on('player:died', () => {
@@ -715,6 +716,7 @@ export class AudioEngine {
       this._staggerPending = true; // played in update() unless a posture break claims it
     });
     on('dragon:parried', (d) => {
+      if (d.bullet) return; // a deflected bullet: the clash rings (player:parry), the wyrm does not yelp
       this._painPending = false;
       this.play('dragonRecoil', this._atDragon({ tell: d.tell }));
     });

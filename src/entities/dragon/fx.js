@@ -43,6 +43,8 @@ const STREAK = '|';
 const SHOCK = ')';
 const METEOR_CORE = '@';
 const METEOR_HALO = '*';
+const BREATH_CORE = '#@*%';
+const CLAW_STREAK = '-';
 const FIRE_TALL = '^*#%&';
 const FIRE_LOW = '^~*';
 const CRACK = '~^,';
@@ -89,7 +91,11 @@ export class DragonFx {
     this.scorchTimer = 0;
     this.emberAcc = 0;
     this._bodyAcc = 0;
-    this._held = { glint: 0, warn: 0, stars: 0 };
+    this._held = { glint: 0, warn: 0, stars: 0, flare: 0 };
+    this._coreAcc = 0;
+    this._tongueAcc = 0;
+    this._sparkAcc = 0;
+    this._claw = [{ t: -9, x: 0, y: 0, z: 0 }, { t: -9, x: 0, y: 0, z: 0 }]; // clawTrail: the last toe position per foreleg
     this._warnAcc = 0;
     this.projectiles = Array.from({ length: 6 }, () => ({
       alive: false,
@@ -166,11 +172,14 @@ export class DragonFx {
     }
     this.breathAcc = this.smokeAcc = this.emberAcc = this._bodyAcc = 0;
     this.scorchTimer = 0;
-    this._held.glint = this._held.warn = this._held.stars = 0;
+    this._held.glint = this._held.warn = this._held.stars = this._held.flare = 0;
+    this._coreAcc = this._tongueAcc = this._sparkAcc = 0;
+    this._claw[0].t = this._claw[1].t = -9;
     this._warnAcc = 0;
     this.skyLights.length = 0;
     this.skyAcc = this._novaAcc = this._novaRing = this._gatherAcc = 0;
     this.d.hazards?.clear(); // (their lights were just killed with the rest)
+    this.d.bullets?.clear();
   }
 
   // ---------------------------------------------------------------- fire breath
@@ -179,7 +188,7 @@ export class DragonFx {
     this.breathing = true;
     this.breathLights.length = 0;
     for (let i = 0; i < 3; i++) {
-      const l = this._light({ x: 0, y: 1.2, z: 0, color: [1, 0.45, 0.12], intensity: 3.6 - i * 0.4, radius: (9 + i) * S, fadeIn: 0.15, fade: 0.35, flicker: 0.5 });
+      const l = this._light({ x: 0, y: 1.2, z: 0, color: [1, 0.5, 0.16], intensity: 4.2 - i * 0.5, radius: (10 + i) * S, fadeIn: 0.15, fade: 0.35, flicker: 0.5 });
       if (l) this.breathLights.push(l);
     }
   }
@@ -208,12 +217,80 @@ export class DragonFx {
       this._spawn(add, {
         x: mouth.x + rand(-0.1, 0.1), y: mouth.y + rand(-0.1, 0.1), z: mouth.z + rand(-0.1, 0.1),
         vx: Math.sin(y) * cp * sp, vy: -Math.sin(pj) * sp, vz: Math.cos(y) * cp * sp,
-        life: rand(0.55, 0.8), size: rand(0.3, 0.45) * S, sizeEnd: rand(1.3, 1.8) * S,
+        life: rand(0.55, 0.8), size: rand(0.28, 0.4) * S, sizeEnd: rand(0.95, 1.35) * S,
         glyph: FIRE,
-        color: hot ? [4.6, 3.5, 1.5] : [3.4, 1.4, 0.28],
-        colorEnd: hot ? [2.2, 0.45, 0.06] : [0.8, 0.08, 0.012],
+        // dim per glyph on purpose: ~10 of these overlap additively down the middle of the stream,
+        // so the sum is a yellow heart with an orange-red skin (bright ones clip to a white tube)
+        color: hot ? [2.0, 0.7, 0.07] : [1.4, 0.32, 0.03],
+        colorEnd: hot ? [0.9, 0.1, 0.01] : [0.5, 0.04, 0.005],
         alpha: 1, alphaEnd: 0, drag: 1.0, gravity: 2.5, spin: rand(-4, 4), rot: rand(0, 6.28), flicker: 0.25, stretch: 0.25,
       });
+    }
+    // a thin bright vein down the middle (small and yellow: a wide white core only blows the
+    // additive stream out into a blob with no glyphs left to read)
+    this._coreAcc += dt * 45;
+    n = Math.min(3, Math.floor(this._coreAcc));
+    this._coreAcc -= n;
+    while (n-- > 0) {
+      const y = aimYaw + rand(-0.02, 0.02), pj = pitch + rand(-0.015, 0.015);
+      const cp = Math.cos(pj), sp = rand(27, 32) * S;
+      const o = this._rec(mouth.x + rand(-0.05, 0.05), mouth.y + rand(-0.05, 0.05), mouth.z + rand(-0.05, 0.05), rand(0.26, 0.38), rand(0.16, 0.22) * S, rand(0.3, 0.42) * S, BREATH_CORE);
+      o.vx = Math.sin(y) * cp * sp;
+      o.vy = -Math.sin(pj) * sp;
+      o.vz = Math.cos(y) * cp * sp;
+      o.drag = 1.1;
+      o.gravity = 1.5;
+      o.rot = rand(0, 6.28);
+      o.spin = rand(-6, 6);
+      o.stretch = 0.5;
+      o.flicker = 0.15;
+      this._col(HOT, 0.5, FLAME, 0.6);
+      this._spawn(add, o);
+    }
+    // the ragged envelope: sparse, slower tongues that lick out wide of the stream and curl up.
+    // Each is a readable glyph against the dark, which is what makes it fire and not a beam.
+    this._tongueAcc += dt * 85;
+    n = Math.min(5, Math.floor(this._tongueAcc));
+    this._tongueAcc -= n;
+    while (n-- > 0) {
+      const y = aimYaw + rand(-0.3, 0.3), pj = pitch + rand(-0.14, 0.1);
+      const cp = Math.cos(pj), sp = rand(14, 23) * S;
+      const o = this._rec(mouth.x + rand(-0.12, 0.12), mouth.y + rand(-0.12, 0.12), mouth.z + rand(-0.12, 0.12), rand(0.5, 0.78), rand(0.26, 0.36) * S, rand(0.55, 0.85) * S, FIRE_TALL);
+      o.vx = Math.sin(y) * cp * sp;
+      o.vy = -Math.sin(pj) * sp;
+      o.vz = Math.cos(y) * cp * sp;
+      o.drag = 1.5;
+      o.gravity = 4.5;
+      o.rot = rand(-0.5, 0.5);
+      o.spin = rand(-2.5, 2.5);
+      o.flicker = 0.45;
+      this._col(FLAME, 0.8, DARK, 0.9);
+      this._spawn(add, o);
+    }
+    // sparks torn off the stream: they arc out sideways and fall
+    this._sparkAcc += dt * 55;
+    n = Math.min(5, Math.floor(this._sparkAcc));
+    this._sparkAcc -= n;
+    while (n-- > 0) {
+      const dd = rand(1.5, 11) * S, sd = Math.random() < 0.5 ? -1 : 1, lat = rand(2, 7) * sd;
+      const o = this._rec(mouth.x + sa * dd, Math.max(0.3, mouth.y - Math.sin(pitch) * dd) + rand(-0.3, 0.3), mouth.z + ca * dd, rand(0.5, 1.0), rand(0.3, 0.46), 0.08, EMBER_STAR);
+      o.vx = sa * rand(6, 14) + ca * lat;
+      o.vy = rand(1.5, 6.5);
+      o.vz = ca * rand(6, 14) - sa * lat;
+      o.drag = 1.6;
+      o.gravity = -9;
+      o.flicker = 0.4;
+      this._col(HOT, 1, DARK, 1);
+      this._spawn(add, o);
+    }
+    // the maw itself: one small held flare (exactly one copy per frame, see _hold)
+    const flare = this._hold(this._held, 'flare', dt);
+    if (flare > 0) {
+      const o = this._rec(mouth.x + sa * 0.4 * S, mouth.y - 0.05 * S, mouth.z + ca * 0.4 * S, flare, rand(0.75, 0.95) * S, 0.8 * S, METEOR_HALO);
+      o.rot = rand(0, 6.28);
+      o.alphaEnd = 0.8;
+      this._col(FLAME, 0.9, FLAME, 0.7);
+      this._spawn(add, o);
     }
     // smoke rolling off the far end
     this.smokeAcc += dt * 28;
@@ -284,9 +361,10 @@ export class DragonFx {
     slot.hold = 0;
     slot.p.copy(from);
     slot.v.set(dx / flight, (0 - from.y + 0.5 * T.gravity * flight * flight) / flight, dz / flight);
-    slot.light = this._light({ x: from.x, y: from.y, z: from.z, color: [1, 0.5, 0.15], intensity: 3.2, radius: 8, fade: 0.2, flicker: 0.35 });
+    slot.light = this._light({ x: from.x, y: from.y, z: from.z, color: [1, 0.55, 0.2], intensity: 4.6, radius: 10, fade: 0.2, flicker: 0.35 });
     this.game.events?.emit('dragon:fireball', { x: from.x, y: from.y, z: from.z });
-    for (let i = 0; i < 14; i++) {
+    this._spawn(this.add, { x: from.x, y: from.y, z: from.z, life: 0.14, size: 1.7, sizeEnd: 0.5, glyph: METEOR_HALO, color: HOT, colorEnd: FLAME, alpha: 1, alphaEnd: 0, rot: rand(0, 6.28) });
+    for (let i = 0; i < 24; i++) {
       this._spawn(this.add, {
         x: from.x, y: from.y, z: from.z,
         vx: slot.v.x * 0.15 + rand(-3, 3), vy: rand(-1, 3), vz: slot.v.z * 0.15 + rand(-3, 3),
@@ -313,16 +391,28 @@ export class DragonFx {
       }
       pr.light?.set(p.x, p.y, p.z);
       const life = this._hold(pr, 'hold', dt);
-      for (let i = 0; life > 0 && i < 2; i++) {
+      for (let i = 0; life > 0 && i < 3; i++) {
+        // a white-hot '@' core in a fiery '#%' shell, inside a turning '*' halo
         this._spawn(this.add, {
-          x: p.x + rand(-0.15, 0.15), y: p.y + rand(-0.15, 0.15), z: p.z + rand(-0.15, 0.15),
-          life, size: rand(0.8, 1.15), sizeEnd: 0.9, glyph: i ? '@' : '#%',
-          color: [5.2, 3.2, 1.3], alpha: 1, alphaEnd: 0.6, rot: rand(0, 6.28),
+          x: p.x + rand(-0.12, 0.12), y: p.y + rand(-0.12, 0.12), z: p.z + rand(-0.12, 0.12),
+          life, size: i === 2 ? 2.1 : rand(0.95, 1.3), sizeEnd: i === 2 ? 1.9 : 1.0, glyph: i === 2 ? METEOR_HALO : i ? METEOR_CORE : '#%',
+          color: i === 1 ? WHITE_HOT : i === 2 ? [3.4, 1.7, 0.45] : [5.2, 3.2, 1.3], alpha: i === 2 ? 0.7 : 1, alphaEnd: i === 2 ? 0.5 : 0.6,
+          rot: i === 2 ? pr.age * 9 : rand(0, 6.28),
         });
       }
-      pr.trail += dt * 70;
-      while (pr.trail >= 1) {
+      pr.trail += dt * 95;
+      let tn = 0;
+      while (pr.trail >= 1 && tn++ < 8) {
         pr.trail -= 1;
+        if (tn % 3 === 0) {
+          // sparks shed from the shell: they fall behind it
+          this._spawn(this.add, {
+            x: p.x + rand(-0.25, 0.25), y: p.y + rand(-0.25, 0.25), z: p.z + rand(-0.25, 0.25),
+            vx: pr.v.x * 0.25 + rand(-2, 2), vy: rand(-1, 2.5), vz: pr.v.z * 0.25 + rand(-2, 2),
+            life: rand(0.45, 0.8), size: rand(0.2, 0.32), sizeEnd: 0.05, glyph: EMBER_STAR,
+            color: HOT, colorEnd: DARK, alpha: 1, alphaEnd: 0, drag: 1.2, gravity: -9, flicker: 0.4,
+          });
+        }
         this._spawn(this.add, {
           x: p.x + rand(-0.2, 0.2), y: p.y + rand(-0.2, 0.2), z: p.z + rand(-0.2, 0.2),
           vx: rand(-0.6, 0.6), vy: rand(0.2, 1.2), vz: rand(-0.6, 0.6),
@@ -342,7 +432,8 @@ export class DragonFx {
   }
 
   explode(x, z, radius, volley = null) {
-    this._light({ x, y: 1.2, z, color: [1, 0.5, 0.16], intensity: 7, radius: 12, life: 0.6, fade: 0.45, flicker: 0.3 });
+    this._light({ x, y: 1.2, z, color: [1, 0.58, 0.22], intensity: 9, radius: 14, life: 0.6, fade: 0.45, flicker: 0.3 });
+    if (Number.isFinite(x + z + radius)) this._blast(x, z, radius);
     for (let i = 0; i < 60; i++) {
       const a = Math.random() * Math.PI * 2, sp = rand(3, 11);
       this._spawn(this.add, {
@@ -356,6 +447,136 @@ export class DragonFx {
     this.dustRing(x, z, radius * 0.6, 26, 1);
     this.game.world?.scorch?.burnCircle?.(x, z, radius, 0.55, 1);
     this.d.onExplosion?.(x, z, radius, volley);
+  }
+
+  /**
+   * The fireball's blast on top of its fire burst: a white-hot flash, a column of flame punching
+   * up, two shock rings of ')' racing out, embers flung high that fall back, a puff of smoke.
+   */
+  _blast(x, z, radius) {
+    const add = this.add;
+    let o = this._rec(x, 0.9, z, 0.14, 2.4, 0.9, METEOR_CORE);
+    this._col(WHITE_HOT, 1.1, HOT, 0.6);
+    this._spawn(add, o);
+    o = this._rec(x, 0.9, z, 0.22, 2.2, 4.6, METEOR_HALO);
+    o.rot = rand(0, 6.28);
+    this._col(HOT, 1, FLAME, 0.4);
+    this._spawn(add, o);
+    for (let i = 0; i < 16; i++) {
+      o = this._rec(x + rand(-0.6, 0.6), rand(0.3, 1.3), z + rand(-0.6, 0.6), rand(0.4, 0.75), rand(0.6, 1.0), 0.15, FIRE_TALL);
+      o.vx = rand(-0.8, 0.8);
+      o.vy = rand(5, 12.5);
+      o.vz = rand(-0.8, 0.8);
+      o.drag = 1.9;
+      o.flicker = 0.35;
+      o.spin = rand(-3, 3);
+      this._col(Math.random() < 0.5 ? HOT : FLAME, 1, DARK, 1);
+      this._spawn(add, o);
+    }
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * Math.PI * 2, sp = rand(2, 9);
+      o = this._rec(x, 0.6, z, rand(0.8, 1.5), rand(0.22, 0.36), 0.06, EMBER_STAR);
+      o.vx = Math.cos(a) * sp;
+      o.vy = rand(5, 12);
+      o.vz = Math.sin(a) * sp;
+      o.drag = 0.7;
+      o.gravity = -15;
+      o.flicker = 0.45;
+      this._col(HOT, 1, DARK, 1.2);
+      this._spawn(add, o);
+    }
+    this._shock(x, z, radius * 0.25, radius * 1.25, 0.24, 28, 0.5, HOT, 0.9);
+    this._shock(x, z, radius * 0.15, radius * 0.8, 0.34, 18, 0.9, FLAME, 0.8);
+    for (let i = 0; i < 7; i++) {
+      o = this._rec(x + rand(-1, 1), rand(1.0, 2.2), z + rand(-1, 1), rand(1.0, 1.6), 1.0, 2.6, SMOKE_GLYPHS);
+      o.vx = rand(-0.8, 0.8);
+      o.vy = rand(1.5, 3.2);
+      o.vz = rand(-0.8, 0.8);
+      o.drag = 0.8;
+      o.alpha = 0.5;
+      o.spin = rand(-1, 1);
+      this._col(SMOKE, 1, SMOKE, 1);
+      this._spawn(this.alpha, o);
+    }
+  }
+
+  /**
+   * A raking paw's wake (call every frame of the swing with the toe position; `wi` = foreleg 0 / 1):
+   * three burning claw lines of stretched '-' strokes laid along the paw's path, and embers torn off.
+   */
+  clawTrail(wi, toe, heavy = false) {
+    const L = this._claw[wi ? 1 : 0];
+    if (!toe || !Number.isFinite(toe.x + toe.y + toe.z)) return;
+    const t = this.d.time ?? 0;
+    const fresh = !(t - L.t >= 0 && t - L.t < 0.1);
+    const dx = toe.x - L.x, dy = toe.y - L.y, dz = toe.z - L.z;
+    L.t = t;
+    L.x = toe.x;
+    L.y = toe.y;
+    L.z = toe.z;
+    const len = Math.hypot(dx, dy, dz);
+    if (fresh || !(len > 0.12 * S) || len > 6 * S) return; // (a slow paw leaves no wake)
+    const add = this.add;
+    const n = Math.min(5, Math.ceil(len / (0.32 * S)));
+    const rot = this._screenRot(dx, dy, dz);
+    // the three claws sit across the path: stacked for a raking sweep, side by side (across the
+    // wyrm's facing) for a paw coming straight down
+    const gap = (heavy ? 0.36 : 0.3) * S;
+    const rake = Math.hypot(dx, dz) > 0.3 * len, f = this.d.fwd;
+    const ox = rake ? 0 : (f?.z ?? 1) * gap, oy = rake ? gap : 0, oz = rake ? 0 : -(f?.x ?? 0) * gap;
+    for (let i = 0; i < n; i++) {
+      const u = (i + Math.random()) / n;
+      for (let c = -1; c <= 1; c++) {
+        const o = this._rec(
+          toe.x - dx * u + ox * c, toe.y - dy * u + oy * c, toe.z - dz * u + oz * c,
+          rand(0.16, 0.26), (heavy ? 0.8 : 0.62) * S, 0.1, CLAW_STREAK,
+        );
+        o.rot = rot;
+        o.stretch = 1.8;
+        this._col(c === 0 ? WHITE_HOT : HOT, c === 0 ? 0.7 : 0.9, FLAME, 0.5);
+        this._spawn(add, o);
+      }
+    }
+    const o = this._rec(toe.x, toe.y, toe.z, rand(0.3, 0.55), rand(0.2, 0.32), 0.05, EMBER_STAR);
+    o.vx = (dx / len) * rand(3, 8) + rand(-1.5, 1.5);
+    o.vy = rand(0.5, 3.5);
+    o.vz = (dz / len) * rand(3, 8) + rand(-1.5, 1.5);
+    o.drag = 1.6;
+    o.gravity = -8;
+    o.flicker = 0.4;
+    this._col(HOT, 1, DARK, 1);
+    this._spawn(add, o);
+  }
+
+  /** A smashing paw / maw meets the ground: a fire-shot shock ring, cracks of flame, flung embers. */
+  slamBurst(x, z, r) {
+    if (!(r > 0) || !Number.isFinite(x + z)) return;
+    const add = this.add;
+    this._shock(x, z, r * 0.3, r * 1.7, 0.22, 22, 0.45, HOT, 0.75);
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, rr = rand(0.2, 1.1) * r;
+      const o = this._rec(x + Math.cos(a) * rr, 0.3, z + Math.sin(a) * rr, rand(0.3, 0.55), rand(0.4, 0.7), 0.12, FIRE_LOW);
+      o.vx = Math.cos(a) * rand(1, 4);
+      o.vy = rand(3, 7.5);
+      o.vz = Math.sin(a) * rand(1, 4);
+      o.drag = 2.2;
+      o.flicker = 0.35;
+      this._col(Math.random() < 0.4 ? HOT : FLAME, 1, DARK, 1);
+      this._spawn(add, o);
+    }
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, sp = rand(3, 8);
+      const o = this._rec(x, 0.4, z, rand(0.5, 0.9), rand(0.2, 0.32), 0.05, EMBER_STAR);
+      o.vx = Math.cos(a) * sp;
+      o.vy = rand(4, 9);
+      o.vz = Math.sin(a) * sp;
+      o.gravity = -16;
+      o.drag = 0.6;
+      o.flicker = 0.4;
+      this._col(HOT, 1, DARK, 1.2);
+      this._spawn(add, o);
+    }
+    this._light({ x, y: 0.9, z, color: [1, 0.55, 0.2], intensity: 4.5, radius: 8, life: 0.3, fade: 0.25, flicker: 0.3 });
   }
 
   // ---------------------------------------------------------------- shock / dust / roar
@@ -640,6 +861,16 @@ export class DragonFx {
         vx: Math.cos(a) * sp, vy: rand(-1, 6), vz: Math.sin(a) * sp,
         life: rand(0.2, 0.45), size: rand(0.25, 0.45), sizeEnd: 0.05, glyph: "*+x'`",
         color: Math.random() < 0.5 ? w : PARRY_GOLD, colorEnd: PARRY_END, alpha: 1, alphaEnd: 0, drag: 3, gravity: 8, stretch: 0.3,
+      });
+    }
+    // the shower: heavier sparks that arc out and fall to the ground, still glowing
+    for (let i = 0; i < (big ? 18 : 12); i++) {
+      const a = Math.random() * Math.PI * 2, sp = rand(2.5, 8);
+      this._spawn(this.add, {
+        x, y, z,
+        vx: Math.cos(a) * sp, vy: rand(3, 9), vz: Math.sin(a) * sp,
+        life: rand(0.55, 1.0), size: rand(0.16, 0.28), sizeEnd: 0.04, glyph: ".'`•",
+        color: Math.random() < 0.35 ? w : PARRY_GOLD, colorEnd: PARRY_END, alpha: 1, alphaEnd: 0, drag: 0.9, gravity: -17, flicker: 0.3,
       });
     }
     this._light({ x, y: Math.max(0.8, y), z, color: PARRY_LIGHT, intensity: big ? 6 : 5, radius: big ? 8.5 : 7, life: 0.25, fade: 0.2 });

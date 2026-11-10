@@ -256,7 +256,7 @@ export const FIRE_SFX = {
   },
 };
 
-const SPELL = { skyStrafe: 'skyRoar', diveBomb: 'diveScream', meteorRain: 'meteorCast', eruptions: 'rumble', flameRing: 'flameIgnite', flameWall: 'flameIgnite', nova: 'novaCharge' };
+const SPELL = { skyStrafe: 'skyRoar', diveBomb: 'diveScream', meteorRain: 'meteorCast', eruptions: 'rumble', flameRing: 'flameIgnite', flameWall: 'flameIgnite', nova: 'novaCharge', emberStorm: 'flameIgnite', fanVolley: 'flameIgnite', fireWheel: 'flameIgnite', wispSwarm: 'meteorCast' };
 const SPELL_OPTS = { flameRing: { length: 1.6 }, flameWall: { length: 2.6 }, nova: { time: 2.5 } };
 const HIT = { meteor: 'meteorHit', pillar: 'pillar', crash: 'crash', nova: 'novaBlast' };
 
