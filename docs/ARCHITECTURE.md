@@ -2,9 +2,9 @@
 
 Browser game, Three.js 0.180 (WebGL2), plain ES modules, no framework. `npm run dev` serves the
 repo at http://localhost:5173 ; `npm run build` emits a single-file `dist/index.html`.
-This file is the **source of truth for cross-module APIs and event names** (contract version: v0.5,
-the epic wyrm fight of 2026-11-09: strings and the deflect chain, the plunge, three phases, fire
-hazards, keep-in-view camera).
+This file is the **source of truth for cross-module APIs and event names** (contract version: v0.6,
+the bullet-hell round of 2026-11-09 on top of v0.5's epic wyrm fight: strings and the deflect chain,
+the plunge, three phases, fire hazards, keep-in-view camera, and now the bullet field).
 
 ## Conventions
 - Units: meters, seconds, radians. **Y up**, ground plane y = 0 (flat).
@@ -38,7 +38,7 @@ touch, flow, lab — constructors must not dereference modules built later.
 **Keep-in-view:** during their update, flow (a flying or rearing wyrm) and the player (the plunge)
 may call `cameraRig.keep(...)` for world spheres that must stay on screen; the rig consumes the
 requests in its update the same frame (requests last one frame). `dragon.update` also runs the fire
-hazards (`dragon.hazards.update`, guarded).
+hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, both guarded).
 
 ## The `game` context (passed to every constructor)
 | field | what |
@@ -271,8 +271,12 @@ critTimer: number                      // > 0 while the crit window is open (aft
 lockOn: boolean                        // toggled by Tab / middle mouse; facing tracks dragon.lockPoint
 get alive(): boolean
 isInvulnerable(): boolean              // roll i-frames, the whole plunge, Ghostep / plunge-landing i-frames, get-up, dead
+isSwinging(): boolean                  // a light / heavy swing's active frames (the dragon's bullets are cut on it)
 takeHit({ damage, from:{x,z}, knockback=0, knockdown=false, kind='hit', burn=0,
-          tell='normal', parryable, blockable, attack, attacker, plunge }): RESULT   // see COMBAT.md
+          tell='normal', parryable, blockable, attack, attacker, plunge, perfect, light }): RESULT   // see COMBAT.md
+                                       // perfect: false = a roll through this hit is a plain dodge, never a
+                                       // perfect dodge (small bullets); light: true = a parry of it is a light
+                                       // clash (short hit-stop, a quarter of the push; player:parry {light})
                                        // plunge: false = a perfect dodge of this hit never becomes the plunge
                                        // (fire hazards); while the plunge runs every hit returns 'ignored'
 getChestPos(out: Vector3, visual = false): Vector3   // upright gameplay body; visual = the drawn one (FX)
@@ -353,13 +357,15 @@ module (nothing outside reads the rig). It is drawn as ink-line ASCII art (ADR-0
 carries a `HERO_INK` entry (the `heroArt` source and its per-part pass data, see Render helpers).
 Three sword lengths (sword space, m from the grip centre):
 - `DIM.bladeBase → DIM.bladeTip` (0.16 → 1.5, + `REACH.tipExt`): the **hit segment** (gameplay).
-- `DIM.steelTip` 1.17: the point the **animator** poses with. `anim.js` keeps it on the grass and out
+- `DIM.steelTip` 1.17: the point the **animator** poses with. `anim.js` keeps it off the grass and out
   of the legs, and the `hero` integration scenario checks it. Unchanged, so every attack's hit
-  segment is unchanged.
-- `DIM.drawnTip` 1.45: the **drawn** point (1.64 m of drawn steel with the pommel; visual only, still
-  inside the hit segment). FX that sit on the point use `DIM.drawnTip ?? DIM.steelTip`
-  (`PlayerFx.bladeHalo`'s dots and tip streak); the cyan dot halo past the point carries the rest of
-  the reach.
+  segment is unchanged. It now lies a little past the drawn point.
+- `DIM.drawnTip` 1.06: the **drawn** point (a 1.25 m sword with the pommel, ADR-038; was 1.45 /
+  1.64 m; visual only, inside the hit segment). FX that sit on the point use `DIM.drawnTip ??
+  DIM.steelTip` (`PlayerFx.bladeHalo`'s dots and tip streak); the swing crescent and the dot halo
+  past the point carry the rest of the reach. The blade parts in `heroParts.js` are built to this
+  length (`npm run hero-parts`). `BLADE_BASE` (exported) is the blade core's unlit colour;
+  `player.js` lifts it with camera distance.
 
 **Build (the lean reference match, 2026-11-09, ADR-034; supersedes round 3's broad build, ADR-031):**
 the lean anime swordsman of the owner's six-view sheet on the same bones. `model.js` exports `BODY`,
@@ -408,10 +414,11 @@ of the joint it hangs on and `model.js` picks that joint and the material. Never
 by hand; rerun the script after changing a dimension the parts are fitted to. `CAPE_SHEETS` (per
 sheet: `at` on the chest, `ry`, widths `w`, segment lengths `len`, `out`, `cup`, `seed`) must stay
 four entries (the streamer springs and the `herolook` test).
-**Idle** (`guard`, ADR-036; supersedes ADR-034's blade hung at his right side): the single-figure
-reference's stance, weight on the left leg, the right leg straight out, the sword arm beside the
-right hip, the blade (`IDLE_SW`) a low diagonal across his front, ~37° below level, to the drawn
-point just above the grass at his left; the head bowed along it. Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
+**Idle** (`guard`, ADR-038; supersedes ADR-036's low diagonal across his front, which ran through
+the front coat panels): the single-figure reference's stance, weight on the left leg, the right leg
+straight out, the sword arm beside the right hip and outside the coat, the blade (`IDLE_SW`) in a
+low ready at his right side: forward, ~38° below level and a little outward, the point a hand above
+the grass; the head bowed a little, looking ahead. Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
 (`DIR_FLIP` 2.75 rad, below `DIR_FLIP_HIGH` 0.9 rad of elevation) goes round the front, never behind
 the shoulders (the light combo's finish → this idle).
 **Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every
@@ -505,6 +512,7 @@ hurtSpheres: Array<{x,y,z,r,part,mult}>  // world space, refreshed every update;
 bodyCircles: Array<{x,z,r}>              // ground footprint for player push-out (empty while airborne):
                                         // chest, hips, neck base, loins, then each PLANTED foot (0..4 more)
 hazards: Hazards                        // the fire hazards (hazards.js, contract 3): see "Hazards" below
+bullets: Bullets                        // the bullet field + the fire wheel (bullets.js, ADR-039): see "Bullets" below
 crashing: boolean                       // true while a plunge stops a flight: that action's end() must not land it elsewhere
 isTargetable(): boolean                 // false while sleeping/dying/dead
 lockPoint(out): Vector3                  // chest/neck base, for lock-on + camera
@@ -532,8 +540,8 @@ hitstop(sec, scale)                     // game.hitstop that won't crush a runni
 reset()                                 // back to sleeping at the nest, full HP/posture, phase 1, FX/lights/hazards cleared
 update(dt)
 debug: {                                // used by the Lab (generic shape every future enemy implements)
-  abilities(): Array<{ name, label, tell, phase }>,   // every ATTACKS entry (24: singles, strings, fire
-                                        // attacks and 'roar', the transition shock ring)
+  abilities(): Array<{ name, label, tell, phase }>,   // every ATTACKS entry (30: singles, strings, fire
+                                        // attacks, bullet patterns and 'roar', the transition shock ring)
   trigger(name): boolean,               // force an ability now (wakes/starts the fight if needed); false while busy
   setAI(enabled: boolean), aiEnabled: boolean,
   wake(), startFight(),                 // startFight skips the intro straight into combat (no-op if fighting)
@@ -544,8 +552,10 @@ debug: {                                // used by the Lab (generic shape every 
 }
 ```
 **Attacks and selection** (`attacks.js` `ATTACKS`: the singles, the strings, `roar` and, spread in,
-`FIRE` from `fireAttacks.js`; their numbers are `TUNING.attacks`, into which `tuningFire.js`
-`FIRE_ATTACKS` is merged). The AI picks any entry generically: `ai.js`
+`FIRE` from `fireAttacks.js` and `BULLET_HELL` from `bulletAttacks.js`; their numbers are
+`TUNING.attacks`, into which `tuningFire.js` `FIRE_ATTACKS` and `tuningBullets.js` `BULLET_ATTACKS`
+are merged). `dragon.hitPlayer` multiplies every blow's damage by `TUNING.damageScale` (0.85), except
+hits flagged `bullet: true`. The AI picks any entry generically: `ai.js`
 `attackWeight(def, name, d, sense)` reads `phase` (first phase, on the def or `TUNING.attacks[name]`),
 `weight` (a number, `[P1, P2, P3]` or a function of `(dragon, sense)` returning either; per-phase
 arrays go through `perPhase(v, phase)`) and `air` (usable while airborne; no entry sets it today, as
@@ -816,6 +826,41 @@ Each emits `dragon:spell {name, x, z}` at its signature moment. `meteorRain` is 
 rain or meteors are still falling. The nova keeps its 2.5 s charge in every phase (it is the tell)
 and is the phase-3 opener. Numbers and gates: COMBAT.md "Current numbers".
 
+**Bullets** (ADR-039; `src/entities/dragon/bullets.js` `class Bullets`, internal to the dragon
+module: `dragon.bullets`; rules in COMBAT.md "Bullets"): the pooled bullet field (360 records, 8
+hit-cap groups) and the fire wheel. `dragon.update` calls `bullets.update(dt)` after the hazards
+every frame (guarded: an error logs once and clears the field, never throws); cleared on `reset()`,
+on every phase change, when dying / dead, and fizzled by a posture break. No per-frame allocations.
+`bullets.js` must not import `attacks.js` (`attacks.js` → `bulletAttacks.js` → `bullets.js`).
+- Kinds `BULLET { EMBER, WISP, ORB }` (specs `TUNING.bullets.ember | wisp | orb`).
+  `spawn(kind, attack, x, y, z, yaw, speed, group = -1, life = 0)` → the record or null (pool full,
+  NaN or an unknown kind); `burst(attack, x, y, z, n, wait, stagger, speed, group)` (embers that hang
+  and drop on the hero one by one: the Cinder flurry's slam); `group(max)` → a hit-cap group id;
+  `count(kind?)`, `live`, `clear()`.
+- A pattern's headline beat follows its lead bullet: `setLead(b)`, `leadAlive()`, `leadPos(out)`,
+  `leadTti()`; the beat part `'bullet'` in `dragon.partPos` resolves to it (the mouth when none).
+- The wheel: `startWheel({ attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn,
+  knockback, max, headline })`, `stopWheel()`, `wheel` (the record: `on`, `lit`, `ang`, `hits`, ...).
+- Hits go through `dragon.hitPlayer({ ..., bullet: true, perfect, plunge: false })`: the damage is
+  final (no `TUNING.damageScale`), `player.takeHit` receives `light: true` and `perfect` (false for
+  embers and wisps: a roll is a plain dodge), and a parry does not call `dragon.onParried`.
+- Tells: a bullet (or an approaching wheel spoke) emits a paired `combat:tell` + `combat:flash` with
+  `hazard: true, bullet: true` `flashLead` before impact (`cue()`; `cover()` lets impacts within
+  `cueGap` ride on it). A deflect emits `dragon:parried {attack, tell, hit: 0, last: false, bullet:
+  true}` and adds the kind's `posture`.
+- Reads the hero through `game.player`: `isSwinging()` + `sweep` (cutting), `radius`, the sensed
+  velocity (`dragon.sense.vel`).
+- Look: `bulletFx.js` (glyph particles through `DragonFx`'s pools; STYLE.md "Bullets").
+
+**Bullet patterns** (`bulletAttacks.js` `BULLET_HELL`, numbers `tuningBullets.js` `BULLET_ATTACKS`,
+spread into `ATTACKS` like `FIRE`; the same action shape): `emberStorm`, `fanVolley`, `wispSwarm`,
+`fireWheel`. Each emits `dragon:spell {name, x, z}` at its cast. A string hit may carry `burst: { n,
+wait, stagger, speed }` (`cinderFlurry`'s overhead): embers scattered by its slam.
+
+**Melee FX hooks** (`DragonFx`, called by `attacks.js` through optional calls): `clawTrail(wi, toe,
+heavy)` (a claw's burning wake, every active frame of a claw / overhead hit) and `slamBurst(x, z, r)`
+(the ground burst under a slam).
+
 ### HUD — `src/ui/hud.js` exports `class Hud`
 ```
 constructor(game)          // builds DOM under #ui (inject its own <style>; do not edit style.css)
@@ -893,7 +938,10 @@ Every sound is procedural (no samples). 2026-11-09 additions:
   diveBomb `diveScream`, meteorRain `meteorCast`, eruptions `rumble`, flameRing / flameWall
   `flameIgnite`, nova `novaCharge`; `dragon:hazard` → meteor fall `meteorFall`, hit `meteorHit`,
   `pillar`, `crash`, `novaBlast`; a `combat:tell` with `hazard: true` → `hazardTell` (lighter than the
-  red brass sting, no music dip). Spatialised at the event's x / z.
+  red brass sting, no music dip). Spatialised at the event's x / z. Bullet patterns reuse the
+  casts: emberStorm / fanVolley / fireWheel `flameIgnite`, wispSwarm `meteorCast`. A `combat:tell`
+  with `bullet: true` plays nothing, its `combat:flash` plays the ping without the music dip, and a
+  `dragon:parried` with `bullet: true` plays no yelp (the clash is `player:parry`).
 - `dragon:phase3` replays the phase-2 sting and keeps 'boss2'; `dragon:plunged` → `dragonPain`
   (an execution: the `postureBreak` roar).
 
@@ -1006,8 +1054,8 @@ Player → hud/audio/fx/flow:
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
   `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust / plunge; kind 'plunge' = the
   head-stab, crit on an execution), `player:hurt {damage, kind, hp}`,
-  `player:block {damage, tell}`, `player:parry {tell, attack, chain}` (chain = the hero's parries in rhythm, ≤ 1.1 s
-  apart, 1 = single; it can run across two strings), `player:guardBreak {attack}`,
+  `player:block {damage, tell}`, `player:parry {tell, attack, chain, light}` (chain = the hero's parries in rhythm, ≤ 1.1 s
+  apart, 1 = single; it can run across two strings; light = a deflected bullet: a lighter clash), `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}` (every perfect dodge:
   plunge, in place or Ghostep; not on an execution),
   `player:ghostep {x, z}` (with every perfect dodge; for the plunge x/z = the hang point above the head),
@@ -1028,8 +1076,9 @@ Dragon (any attacker) → hud/audio/flow:
   every flight, and the crash of a plunged flier),
   `dragon:breathStart`, `dragon:breathEnd` (the breath and the sky strafe's pass), `dragon:fireball {x, y, z}`,
   `dragon:explosion {x, z, radius}`,
-  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last}` (hit = 0-based
-  index in its string, last = the string's last hit or a single attack: only then a recoil),
+  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last, bullet}` (hit = 0-based
+  index in its string, last = the string's last hit or a single attack: only then a recoil; bullet: true = a
+  deflected bullet, hit 0, last false: posture only, the wyrm is not interrupted and audio stays silent),
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
   `dragon:phase3`, `dragon:phase {n}` (with each of the two above, on the transition roar), `dragon:plunged {execution}`
   (contract 2: every plunge that lands, even during a transition or the killing one),
@@ -1039,6 +1088,9 @@ Dragon (any attacker) → hud/audio/flow:
   stage 'fall' = a meteor starts its visible fall, 'hit' = a meteor / pillar / the dive's crash / the nova goes off)
 - Hazard tells: a self-announcing hazard (meteors, chase pillars) emits combat:tell / combat:flash with
   source 'dragon', its spell as the attack, tell 'red' and hazard: true (audio plays a lighter cue)
+- Bullet tells: a bullet about to hit, or an approaching spoke of the fire wheel, emits combat:tell /
+  combat:flash with source 'dragon', its pattern as the attack, the bullet's tell (normal / blue / red),
+  hazard: true and bullet: true (audio: the flash ping alone, no tell sting, no music dip)
 Flow → hud/audio:
 - `state {from, to}`, `bonfire:rest`, `game:retry`, `game:victory`, `area {name}`
 

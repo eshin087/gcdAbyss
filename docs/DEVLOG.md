@@ -5,6 +5,59 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-09 — Session 10: bullet hell, two more strings, the moonlit sword
+
+**Owner:** "the pants fabric in the front keeps clipping through the sword. make the sword a little
+shorter and make it glow more blue/white ... the dragon needs to do more bullet hell moments that
+requires the player to dodge and react ... make the fire animations and overall attacks look way
+more epic and cooler." Answers to the design questions: a sword of about 1.25 m; bullets you can
+deflect or dodge; all four pattern families; about as hard as now. Branch `combat/wyrm-bullet-hell`
+(started on top of `look/hero-blender-parts`; rebased onto `main` after PR #8 merged).
+
+**Done:**
+- **Sword** (ADR-038): drawn length 1.64 → 1.25 m (`DIM.drawnTip` 1.06; blade parts rebuilt with
+  `npm run hero-parts`), lit blue with white-blue edges (`BLADE_BASE`, inks, emissive, rest glow
+  1.45). Combat reach unchanged.
+- **Idle:** the blade is held in a low ready at his right side, outside the coat, instead of across
+  his front between the coat panels. That was the clipping.
+- **Bullets** (ADR-039): `dragon/bullets.js` (pooled field + the fire wheel), `bulletAttacks.js`
+  (four patterns), `bulletFx.js`, `tuningBullets.js`. Embers / wisps: parry (flies back, adds
+  posture), block, roll, cut. Orbs and the wheel: dodge. A cue 0.35 s before every hit, one parry per
+  clump, duds for bullets that could not be announced, a grace after a hit, a hit cap per pattern.
+- **Strings:** Storm flurry (5 hits, phase 1+), Cinder flurry (4 hits + 4 scattered embers, phase
+  2+). Idle gaps shortened; `TUNING.damageScale` 0.85.
+- **Player:** `isSwinging()`, light parries (`hit.light`), plain-dodge-only hits (`hit.perfect ===
+  false`).
+- **FX:** claw wakes, slam bursts, reworked breath / fireball / parry sparks; audio and the death
+  feed know the bullets.
+- **Tests:** BULLETS scenario in `tests/integration/integ.mjs`. `npm test` ALL PASSED, `npm run
+  build` ok (1651 KB).
+- **Docs:** COMBAT.md "Bullets" + numbers v0.6, ARCHITECTURE.md contract v0.6, STYLE.md "Bullets",
+  ADR-038, ADR-039, ROADMAP M1.11, CHANGELOG.
+
+**Measured** (COMBAT.md "Difficulty", one run each): probe 95 % wins in 134 s (was 145–150 s); probe
+85 % dies at 122 s with the wyrm at 4 % (was: wins 1 of 3); `win` 177 s with 77 parries and 39
+deflect chains (was 157.5 s, 44 and 26).
+
+**Looked at in the browser** (Lab-triggered, game camera, screenshots): the idle and the sword;
+ember storm in phases 1 and 3; cinder fan; wisp swarm; fire wheel; breath; fireball; a bullet deflect.
+Two looks were wrong on first sight and fixed: the wheel's spokes and the deflect clash were white
+blobs (the additive rule in STYLE.md).
+
+**Not checked / open:**
+- No human has played it. Difficulty and readability rest on the bots.
+- `slamBurst`, the Storm flurry as a whole and the parry slash's new colour were not looked at one
+  by one; claw wakes were seen only in an early Cinder flurry sheet.
+- The scripted defender still takes up to 2 hits in a phase-3 ember storm.
+- Run and attack frames were not re-audited for coat / blade crossings; only the idle was.
+- The drawn blade is 0.44 m shorter than the hit segment.
+- Frame cost of ~200 live bullets on a phone: not measured.
+- The AI pick-share paragraph in COMBAT.md is v0.5's.
+
+**Next:** playtest; then the follow-ups in ROADMAP M1.11.
+
+---
+
 ## 2026-11-09 — Session 9: Blender-built hero parts (single-figure reference, round 3)
 **Owner:** "use blender headless to help you out" with the single-figure reference match that
 Session 8 left part-way. Branch `look/hero-blender-parts`.

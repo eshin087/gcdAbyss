@@ -191,7 +191,7 @@ an early parry), active, impact, damage and knockback; a hit with `chance` < 1 m
 Every hit announces itself (`combat:tell` at its windup start) and flashes `flashLead` (0.35 s)
 before its real impact, holds included. Data rules (checked by `npm test` → STRINGS, all phases): a
 tell per hit, the first windup ≥ 0.7 s, the flash after the tell, ≥ `minHitGap` 0.45 s from one
-impact to the next (time to release and re-press RMB). The seven strings are in *Current numbers*.
+impact to the next (time to release and re-press RMB). The nine strings are in *Current numbers*.
 **Verifier** (`npm test` → TIMING): every string and single melee attack, started through the AI's
 own start path from every placement the AI picks it at (phases 1–3, the hero standing still), lands
 each contact within ±85 ms of its flash + lead (worst 67 ms on the merged build), and every pick
@@ -233,8 +233,61 @@ not all at once after the roar.
   wyrm is on the ground for both).
 - Flash timing (`npm test` → FIRE): every blow lands within 17 ms of its flash + lead.
 
-## Current numbers (v0.5 "epic wyrm fight", 2026-11-09)
-Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`.
+## Bullets (2026-11-09, ADR-039)
+The wyrm's bullet-hell patterns (`bullets.js`, `bulletAttacks.js`; numbers `tuningBullets.js`) fill
+the arena with small fire projectiles that fly at the hero's chest height. Three kinds:
+
+| Bullet | Tell | Answers | Damage (final) |
+|---|---|---|---|
+| **Ember** (orange, small, straight) | normal | parry · block (chip) · roll through · cut with a swing | 8 |
+| **Wisp** (blue-white, hangs, then homes in) | blue | parry · block · roll · cut | 13 + burn 0.8 |
+| **Orb** (red, big, straight) | red | dodge only | 20 + burn 1.5, kb 3 |
+
+- **Deflect.** A parried ember or wisp flies back to the wyrm's head (24 m/s) and adds posture (5 /
+  12). It is a *light* clash (`player:parry {light: true}`: hit-stop 0.03 s, a quarter of the push
+  back, a small shake), so a stream of them does not freeze the game; it counts in the hero's own
+  parry rhythm (`chain`) but never recoils the wyrm and is not part of a string's `DEFLECT ×N`
+  (`dragon:parried {bullet: true}`, no `onParried`).
+- **One parry answers a clump.** A deflect opens a 0.3 s shield: small bullets that touch the hero
+  in it pop, and so do the ones within 2.2 m of him or about to land within ~0.33 s.
+- **Cut.** A light or heavy swing's active frames cut the small bullets within 0.45 m of the blade
+  (`Player.isSwinging()`, the sweep segment). **Roll.** Rolling through a small bullet is a plain
+  dodge (`hit.perfect === false`: no Ghostep, no slow-mo); the bullet flies on. An orb can be
+  perfect-dodged like any red blow (slow-mo in place; bullets never start the plunge).
+- **The cue (the fairness rule).** Every bullet that is going to hit announces itself `flashLead`
+  (0.35 s) before impact: a glint on the bullet and a paired `combat:tell` + `combat:flash`
+  `{hazard: true, bullet: true}` (a ping, no music dip). Impacts within 0.3 s of an announced one ride
+  on that cue. A bullet that could only be announced later than 0.24 s before impact fizzles on
+  touch when it is younger than 0.6 s (spawned point-blank); an older one hits (the hero ran into
+  it).
+- **No melting.** After a bullet hit every touching bullet fizzles for 0.45 s, and each pattern has
+  a hit cap (below). The field is cleared on a phase change, the wyrm's death and a reset, and
+  fizzles when its posture breaks.
+- Bullet and fire-wheel damage is final: it is **not** scaled by `TUNING.damageScale`.
+
+| Pattern (phase ≥) | Tell | P1 timing (s) | What flies | Hit cap | Weight [P1, P2, P3] / cooldown | AI gate |
+|---|---|---|---|---|---|---|
+| Ember storm `emberStorm` (1) | N | windup 1.1 · cast [3.4, 3.8, 4.2] · recovery 1.0 | [4, 4, 5] spiral arms of embers round the body (one per arm every 0.11 s, 7.5 m/s, the arms turning 1.05 rad/s); P2+ a ring of 8 / 10 red orbs every 1.6 s (5.5 m/s, one aimed at you); P3 three more arms winding the other way | 4 | [1.4, 1.8, 1.8] / 14 | ≤ 26 m |
+| Cinder fan `fanVolley` (1) | N | windup 1.0 · [3, 4, 5] wing beats 0.7 apart · recovery 0.9 | each beat a fan of [7, 8, 9] embers over ±0.62 rad at 9 m/s, every second fan offset half a gap; P2+ the last beat is a wave of 5 red orbs (7 m/s) | 3 | [2.2, 2.6, 2.6] / 9 | 5–30 m |
+| Wisp swarm `wispSwarm` (2) | B | windup 1.0 · cast 1.3 · recovery 0.8 | [–, 7, 9] wisps roared out of the maw: they hang, then home in 0.45 s apart (cruise 5.2 m/s, turning 1.9 rad/s and tighter with age, 6.5 s of life); they outlive the roar | 4 | [0, 1.6, 1.8] / 16 | ≤ 30 m |
+| Fire wheel `fireWheel` (2) | R | windup 1.3 (red lines on the ground) · burns [4.2, 4.2, 5.0] · recovery 1.2 | [4, 4, 5] walls of fire from 3.2 to 26 m, 1.1 m thick, turning like spokes at 1.05 rad/s and reversing once: roll through a spoke or run with it. 20 + burn 1.5, kb 4; each approaching spoke flashes | 2 | [0, 1.2, 1.5] / 20 | ≤ 24 m |
+
+The Cinder flurry's last blow (below) also scatters four embers that drop on the hero one by one
+(0.55 s after the slam, 0.34 s apart, 11 m/s): the string ends on four more parries, not on a free
+punish.
+
+Checked by `npm test` → BULLETS: every answer above per bullet kind, the cue's lead, the clump
+rule, the grace, the hit caps, the point-blank dud, the clears, and each pattern in each phase it
+runs in (a standing hero is hit at most `maxHits` times; a hero who answers the cues takes fewer
+hits than one who stands still).
+
+## Current numbers (v0.6 "bullet hell", 2026-11-09)
+Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,
+`tuningBullets.js`.
+**Damage scale (v0.6):** the wyrm attacks far more often than in v0.5, so every hit it deals through
+`hitPlayer` is multiplied by `TUNING.damageScale` 0.85. The damage columns of the three tables below
+are the data values *before* that scale (a 20 lands as 17). Bullets and the fire wheel are exempt
+(the Bullets table above lists their final damage).
 S = `SCALE` 1.875 (model units → metres).
 
 **Player:** HP 160, 5 flasks (+70 HP, 0.85 s), roll 0.6 s (i-frames 0.04–0.4 s), backstep 0.4 s
@@ -245,7 +298,8 @@ deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s
 - HP 4500. Phase gates at 66 % (2970 HP) and 33 % (1485 HP).
 - Per phase [P1, P2, P3]: windups and recoveries × [1, 0.85, 0.78] (the swings, the flights'
   airborne parts, the nova's charge and the transition roars keep their timings); turn [70, 110,
-  125] °/s; walk [3.0, 4.1, 4.6] m/s; idle gap [1.3–2.1, 0.9–1.5, 0.4–0.8] s; posture max [560, 640,
+  125] °/s; walk [3.0, 4.1, 4.6] m/s; idle gap [1.0–1.7, 0.7–1.2, 0.35–0.7] s (v0.5: [1.3–2.1,
+  0.9–1.5, 0.4–0.8]); posture max [560, 640,
   720]; crack glow [0, 0.5, 0.8]; body embers [0, 22, 50] / s.
 - Posture (`POSTURE`, unchanged since v0.2): parry 26 / 48 (normal / blue), weapon hit 5 / 16
   (light / heavy, ×1.25 on the head), regen after 3 s at 14 / s, break 3.2 s with ×2.2 crits. The
@@ -279,6 +333,8 @@ deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s
 | Wing buffet (1) | wing slam (N; 0.8 / 0.3 / 0.25; 18, kb 5) · pivot + the other wing (B; 0.9 / 0.3 / 0.25; 22, kb 7) | 1.0 / 6 | [2.2, 2.4, 2.4] | 6.8–8.3, any side up to 2.6 rad |
 | Tail lash (2) | claw (N; 0.75; 18) · pivot + tail lash (R; 1.0 / 0.36 / 0.245; 26) · tail sweep (R; 0.9 / 0.45 / 0.2 + flank 0.1; 30) | 1.0 / 8 | [0, 2.6, 2.4] | 2.4–5.4, ≤ 0.9 |
 | Pounce (2) | a hop onto the hero (R, ground ring r 3.3 × S; 0.8 / 0.6 / 0.6 = the landing; 30, knockdown) · bite (B; 0.55 / 0.2 / 0.06; 22) | 1.0 / 7 | [0, 2.2, 2.4] | 6–13, ≤ 1.0 |
+| Storm flurry (1) | claw (N; 0.75; 13) · claw (N; 0.42; 13) · claw (N; 0.42; 13) · overhead claw (B; 0.6 / 0.24 / 0.22; 18) · lunge bite (B; 0.55 / 0.24 / 0.05; 20) | 1.1 / 9 | [1.6, 2.2, 2.4] | 2.4–5.4, ≤ 0.9 |
+| Cinder flurry (2) | claw (N; 0.75; 14) · claw (N; 0.45; 14) · bite (B; 0.55 / 0.2 / 0.06; 20) · overhead claw (B; 0.62 / 0.24 / 0.22; 18) that scatters 4 embers (see Bullets) | 1.5 / 11 | [0, 2.2, 2.6] | 2.4–5.4, ≤ 0.9 |
 | Frenzy (3) | claw (N; 0.75; 16) · claw (N; 0.5; 16) · bite (N; 0.55; 18) · 60 %: claw (N; 0.5; 16) · a delayed claw (N; 0.5 + hold 0.3–0.75; 18) · bite (B; 0.55; 24) · stomp (R, ground ring; 0.85; 36) | 1.2 / 12 | [0, 0, 3.4] | 2.4–5.4, ≤ 0.9 |
 
 **Fire attacks** (`tuningFire.js`; every blow red; sizes in world metres):
@@ -294,24 +350,29 @@ deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s
 | Flame wall `flameWall` (3) | windup 1.2 · cast 0.3 · recovery until the sweep ends (≥ 3.15) | 28, burn 2, kb 5 | 40 m long × 2.4 m thick, springs up 4 m ahead, sweeps 30 m at 10 m/s | [0, 0, 1.6] / 14 | any |
 | Inferno nova `nova` (3) | charge 2.5 in every phase · blast 0.45 · recovery 1.6 | 70, knockdown, burn 3, kb 10; a perfect dodge may plunge | r 22 | [0, 0, 0.7] / 32 | also the P3 opener |
 
-**AI pick shares at close range** (weights summed over what can be picked; lead's measurement after
-the retune): P1 strings ~60 %, bite / stomp ~40 %; P2 strings ~39 %, fire and flights ~35 %, singles
+**AI pick shares at close range** (measured for v0.5, before the two new strings and the four bullet
+patterns joined the pool; not re-measured): P1 strings ~60 %, bite / stomp ~40 %; P2 strings ~39 %, fire and flights ~35 %, singles
 ~25 %; P3 strings ~42 %, fire ~41 %.
 
 **Difficulty (measured, ADR-033).** Integration bots (`tests/integration/integ.mjs`): `win` is a
 god-mode defender that answers every tell; the opt-in `probe` is a mortal bot that answers a share
 of them (`ABYSS_SKILL`, default 0.8; `node tests/integration/integ.mjs . probe`) and fights until it
-wins or dies. The probe runs were at 4200 HP, before the last bump to 4500 (+~7 % fight length).
+wins or dies. The v0.5 probe runs were at 4200 HP, before the last bump to 4500 (+~7 % fight length);
+the v0.6 runs are one run each at 4500 HP (the sims are seeded, but one run is one sample).
 
-| Bot | Result |
-|---|---|
-| probe, 95 % of tells | wins in 145–150 s |
-| probe, 85 % | wins 1 of 3 (129 s), dies 2 of 3 |
-| probe, 70 % | always dies |
-| `win` (god mode) at 4500 HP | 157.5 s; P2 at 51 s, P3 at 91 s; 44 of 46 parries, 26 deflect chains (longest ×5), 24 plunges, posture breaks at 25 s and 87 s |
+| Bot | v0.5 (before the bullets) | v0.6 "bullet hell" (this build) |
+|---|---|---|
+| probe, 95 % of tells | wins in 145–150 s | wins in 134 s; took 110 of 160 HP (worst hit 20), 57 parries, 30 deflect chains, 15 perfect dodges, 9 plunges |
+| probe, 85 % | wins 1 of 3 (129 s), dies 2 of 3 | dies at 122 s with the wyrm at 4 % HP (P3 reached at 99 s); 46 parries |
+| probe, 70 % | always dies | not re-run |
+| `win` (god mode) at 4500 HP | 157.5 s; P2 at 51 s, P3 at 91 s; 44 of 46 parries, 26 deflect chains (longest ×5), 24 plunges, posture breaks at 25 s and 87 s | 177 s; P2 at 60 s, P3 at 103 s; 77 of 82 parries, 39 deflect chains (longest ×5), 14 Ghosteps, 17 plunges, posture breaks at 24, 56, 100 and 136 s; 104 tells |
 
-The bots heal poorly, so the probe's death rates are pessimistic. Target: 3–5 min for a player who
-knows the moves, several deaths while learning it. A human playtest is still needed.
+Reading: the bots land where they did in v0.5 (95 % wins, 85 % is on the edge), and the `win` bot parries
+1.75× as often (77 against 44). The `win` fight is ~20 s longer because bullet patterns are time the wyrm is
+not in sword reach. The bots do not cut bullets and heal poorly, so the probe's death rates are
+pessimistic. Target: 3–5 min for a player who knows the moves, several deaths while learning it.
+**A human playtest is still needed**: a bot answers a flash in a frame; whether a person can read
+a phase-3 ember storm is not something these runs show.
 
 ## Earlier numbers (v0.2 "approachable RPG" … the reference match) — superseded
 *Superseded 2026-11-09 by "Current numbers" above: HP 1500 → 4500, one phase gate at 50 % → three

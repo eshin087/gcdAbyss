@@ -244,11 +244,14 @@ Rules of thumb:
   tight line. A dark halo (two rings round his screen position, fading in from 8 to 20 m) darkens
   the world grid next to him, so he cuts out of the grass. The outline is one letter thick: a
   two-cell band turned the ~12-letter-wide figure into a wireframe.
-- **Blade:** drawn 1.64 m (gem to point ≈ 70 % of his height, the portrait), the single-figure
-  image's sword since ADR-034: broad at the guard, one long taper to a sharp point (the last 17 %), a
-  ridge line between cyan edges, hooked barbs at the dark base, lightning notches up the lower half,
-  a guard swept up toward the blade round a violet four-point star gem. At the game camera it is a
-  crisp cyan line with a tight glow (half the far self-light, HDR cap 1.3): the old halo spread over
+- **Blade:** drawn 1.25 m with the pommel (ADR-038; the 1.64 m portrait blade was "way too long and
+  dark" and ran through the coat), the single-figure image's sword since ADR-034: broad at the
+  guard, one long taper to a sharp point, a ridge line between the edges, hooked barbs at the base,
+  lightning notches up the lower half, a guard swept up toward the blade round a violet four-point
+  star gem. It is **moonlit**: a lit blue core (`BLADE_BASE` `[0.05,0.1,0.2]`, inks `[0.3,0.52,0.9]`
+  → `[0.52,0.82,1.2]`), white-blue edges and ridge (inks to `[1.1,1.22,1.45]`, emissive
+  `[1.1,1.6,2.6]`), no dark steel left; glow 1.45 at rest. At the game camera it is a
+  crisp blue-white line with a tight glow (half the far self-light, HDR cap 1.3): the old halo spread over
   his body and the grass. It is depth-tested like the rest of him (2026-11-09, ADR-031): from behind only the
   steel beside his silhouette shows (the low idle guard shows just its point), it no longer shows
   through his back or legs, and the coat hangs inside or drapes over it instead of passing through
@@ -308,3 +311,30 @@ section), `player/fx.js` (the plunge).
   Its glyphs: `* ° | - ~ ^ ' · + x × A V . , : =`.
 - **The deflect chain:** each parry in rhythm clashes bigger and brighter, with a crossed pair of
   sparking streaks from the second one.
+
+### Bullets, the fire wheel and the melee wakes (2026-11-09, ADR-039)
+Code: `dragon/bulletFx.js` (bullets, the wheel), `dragon/fx.js` (`clawTrail`, `slamBurst`, the breath),
+all glyph particles in the dragon's `add` / `alpha` pools.
+- **The additive rule.** `fx.add` sums overlapping glyphs, and the ASCII pass clips the sum to
+  white. Anything drawn as many overlapping glyphs (a breath stream, a wall of fire, a clash on top
+  of the hero's own parry burst) keeps each glyph dim and warm (gold `[4.4,2.5,0.6]` at 0.5–0.9,
+  orange `[3.2,1.1,0.2]`), so the sum reads as a yellow heart in an orange skin. White-hot colours
+  are for single small glyphs only (a cue glint, a spark). Two rounds of this session's fire were
+  white blobs before this rule: the fire wheel's spokes and the bullet deflect.
+- **Embers** are a gold-orange `*` / `o` head with a short trail of cooling sparks; **wisps** a
+  blue head (`[1.6,2.6,4.4]`) with a pale `~` tail, the only cold thing the wyrm throws (blue =
+  parry it); **orbs** a big red `@` in a dark-red halo (red = dodge). Sizes follow the hit radii
+  (0.32 / 0.4 / 0.62 m), so what you see is what hits.
+- **The cue glint:** a crisp cross on a bullet in its tell colour (white on an ember, moon-blue on a
+  wisp, red on an orb or a wheel spoke) 0.35 s before it lands. It is the one crisp bright mark in the field on purpose: it is the timing cue.
+- **Deflect:** a small moon-blue star and a `+` at the blade, on top of the hero's own parry burst;
+  the bullet flies back to the wyrm's head and bursts there. Bullets popped by the clash or cut by a
+  swing leave a small `x` in their own colour.
+- **Fire wheel:** red ground lines warn where the spokes will ignite; lit, each spoke is a gold core
+  line under tall `^ * # %` flames (240 glyphs / s per spoke) that lean back against the turn, the
+  ground scorching as they pass.
+- **Fire breath:** a dim orange stream with a yellow vein and a ragged tongue envelope, a small maw
+  flare (the old stream summed to a white bar). **Fireball:** a toned-down flash and blast core, so
+  the fire burst and flung rocks show.
+- **Claw wakes** (`clawTrail`): a burning streak behind the toes on every active frame of a claw or
+  overhead; **slam burst** (`slamBurst`): fire and dust thrown up where an overhead lands.

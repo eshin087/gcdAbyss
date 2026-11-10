@@ -662,3 +662,57 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     Python script. Sizes shared with the rig stay in `model.js`.
   - The result is closer to the reference, not a match (DEVLOG Session 9): the coat, the face and
     the limb armour are still JS geometry.
+
+## ADR-038 — A 1.25 m moonlit sword held in a low ready at the right side (2026-11-09)
+- **Context:** the owner: "the pants fabric in the front keeps clipping through the sword ... the
+  current sword is way too long and dark". ADR-036's idle laid a 1.64 m blade in a low diagonal
+  across his front, between the thighs and the front coat panels: the cloth had nowhere to hang but
+  through the steel. The blade's flats were dark steel up close (ADR-022 kept the glow on the seams).
+- **Decision:**
+  - The drawn sword is 1.25 m with the pommel (`DIM.drawnTip` 1.45 → 1.06; the owner picked this
+    length). The Blender blade parts are rebuilt to it (`npm run hero-parts`).
+  - Gameplay reach is untouched: the hit segment (`DIM.bladeBase → bladeTip` + `REACH.tipExt`) and
+    the animator's `DIM.steelTip` keep their values; the swing crescent covers the reach past the
+    steel.
+  - The blade is lit blue with white-blue edges (`BLADE_BASE`, brighter inks, emissive and rest
+    glow), and still self-lights with distance.
+  - The idle holds it in a low ready at his right side (`IDLE_SW` forward, ~38° down, a little
+    outward; the grip outside the coat), not across his front.
+- **Consequences:**
+  - Supersedes ADR-036's blade line and ADR-022's dark flats; the stance itself (weight, legs, free
+    hand) is ADR-036's.
+  - The steel is ~0.44 m shorter than the hit segment. Hits past the drawn point are sold by the
+    crescent and the dot halo; if that reads as "hit by air", shorten the segment in a balance pass.
+  - Checked in the idle and at the game camera; the run and attack frames were not re-audited for
+    coat crossings (ROADMAP M1.7's open item stands).
+
+## ADR-039 — Bullet hell: deflectable bullets with a guaranteed cue, in a field of their own (2026-11-09)
+- **Context:** the owner wants "sekiro / phantom blade zero like clashes" and "more bullet hell
+  moments that requires the player to dodge and react", at about today's difficulty. The fire
+  hazards (ADR-029) are few, big, red and dodge-only; dozens of small projectiles need different
+  rules, and the tell contract (one flash per blow, 0.35 s ahead) cannot ring per bullet without
+  drowning the fight.
+- **Decision:**
+  - A second pooled field, `dragon.bullets` (`bullets.js`, 360 records), beside the hazards. Three
+    kinds carry the three tells: embers (normal), homing wisps (blue), orbs (red). Embers and wisps
+    can be parried one by one (the bullet flies back at the head and adds posture), blocked, rolled
+    or cut with a swing; orbs are dodge-only (the owner's choice: "deflect or dodge").
+  - **The cue is the contract:** a bullet may only hurt after it announced itself `flashLead`
+    before impact (glint + `combat:tell` / `combat:flash` with `bullet: true`). Impacts within
+    `cueGap` share a cue and one parry answers them; a bullet that cannot be announced in time is a
+    dud. After a hit, a grace window; per pattern, a hit cap.
+  - A bullet parry is a light clash (`hit.light`) and never interrupts the wyrm; rolling through a
+    small bullet is a plain dodge (`hit.perfect === false`), so a storm is not a Ghostep farm.
+  - Four patterns as ordinary attacks (`bulletAttacks.js`, data in `tuningBullets.js`): ember storm,
+    cinder fan, wisp swarm, fire wheel; plus two strings (`stormFlurry`, `cinderFlurry`, the second
+    ending on scattered embers) and shorter idle gaps.
+  - More attacks at the same difficulty: `TUNING.damageScale` 0.85 on every `hitPlayer` blow;
+    bullet numbers are final and small (8 / 13 / 20).
+- **Consequences:**
+  - Two new payload flags (`bullet`, `light`) and two hit-spec fields (`perfect`, `light`);
+    consumers that ignore them behave as before. Audio and the HUD read `bullet` to stay quiet.
+  - The fire wheel lives in `bullets.js` (it shares the cue, grace and cap rules), not in
+    `hazards.js`.
+  - The attack tables in COMBAT.md list data values before the damage scale.
+  - Difficulty is measured, not guessed (ADR-033): see COMBAT.md "Difficulty" for the bots' runs on
+    this build. A human playtest still decides.
