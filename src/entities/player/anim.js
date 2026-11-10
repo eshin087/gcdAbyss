@@ -215,17 +215,18 @@ function kv3(p, i, t, k) {
 /** Idle / ready stance (2.4 s loop), the owner's single-figure reference (ADR-036), seen from the
  *  front: the chest square to the viewer, the weight on the LEFT leg under the hips, the armoured
  *  right leg thrust out straight to his right and forward, toes out. The sword arm hangs nearly
- *  straight beside the right hip, a little away from the body; the long sword lies in a LOW DIAGONAL
- *  across his front: from the gauntlet forward and down past both legs to the point just above the
- *  grass at his left, the pommel standing up-back behind the fist. The free hand hangs relaxed at
- *  the left hip; the head is bowed and turned to his left, looking down along the blade.
+ *  straight beside the right hip, a little away from the body; the sword is held in a LOW READY at
+ *  his right side: from the gauntlet forward, down and a little outward, clear of the coat skirt and
+ *  outside the forward leg, the point a hand above the grass, the pommel standing up-back behind the
+ *  fist. The free hand hangs relaxed at the left hip; the head is bowed a little, looking ahead.
  *  Breathing + a slow weight sway; no steps.
- *  (ADR-034 hung the blade straight down his right side for the rear view: a stiff A-pose carrying
- *  a pole. From the 58° game camera this blade lies forward-left of his body, so most of its
- *  length still shows from behind.) */
-// blade direction (body axes): to his left, a little forward and ~37° below level: the drawn point
-// (model.js DIM.drawnTip) rests just above the grass through the breathing
-const IDLE_SW = [0.75, -0.58, 0.26];
+ *  (ADR-036 laid the blade in a low diagonal ACROSS his front: it ran between the thighs and the
+ *  front coat panels, so the cloth had nowhere to hang but through the steel (owner: "the fabric in
+ *  the front keeps clipping through the sword"). ADR-034 hung it straight down his right side: a
+ *  stiff A-pose carrying a pole. From the 58° game camera this blade lies forward-right of his body,
+ *  so its whole length shows from behind.) */
+// blade direction (body axes): forward, ~38° below level and a little out to his right
+const IDLE_SW = [-0.3, -0.62, 0.72];
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
@@ -241,15 +242,15 @@ function guard(p, A) {
   p[P.spX] = 0.04 + 0.01 * br;
   p[P.spY] = -0.12; // ... the chest stays square to the front
   p[P.spZ] = -0.03 - 0.015 * sw;
-  p[P.hdX] = 0.2 - 0.04 * br; // bowed
-  p[P.hdY] = 0.34; // ... and turned to his left, looking down along the blade
+  p[P.hdX] = 0.14 - 0.03 * br; // bowed a little
+  p[P.hdY] = 0.1; // ... looking ahead
   p[P.hdZ] = 0.06 + 0.012 * sw;
-  v3(p, P.rH, -0.1, -0.485 + 0.006 * br, 0.08); // the grip beside the right hip, the arm near straight
+  v3(p, P.rH, -0.14, -0.47 + 0.006 * br, 0.11); // the grip beside the right hip, outside the coat, the arm near straight
   v3(p, P.rP, -0.9, -0.1, -0.45); // the elbow out and back
   v3(p, P.lH, 0.07, -0.51, 0.03); // the free arm hangs relaxed beside the left hip
   v3(p, P.lP, 0.6, -0.1, -0.8);
   v3(p, P.swD, IDLE_SW[0] + 0.01 * br, IDLE_SW[1], IDLE_SW[2] + 0.015 * sw);
-  v3(p, P.swF, 0.12, 0.25, 0.96); // the flat faces forward-up: broad to a camera in front or above
+  v3(p, P.swF, 0.1, 0.76, 0.64); // the flat faces up-forward: broad to a camera in front or above
   v3(p, P.rF, -0.33, ANK, 0.2); // the right leg straight, out to his right and forward
   v3(p, P.lF, 0.16, ANK, -0.1); // the weight leg under the hips, a little back
   v3(p, P.rK, -0.5, 0.1, 1);

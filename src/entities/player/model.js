@@ -66,13 +66,14 @@ export const DIM = {
   guard: 0.1, // … to the crossguard
   gem: 0.116, // the violet star gem at the heart of the guard, where the quillons meet
   forte: 0.2, // end of the dark gunmetal base under the barbs (the cyan glyph blade from here on)
-  // the steel length the animator poses with (anim.js keeps this point on the grass and out of the
-  // legs; the integration test checks it): unchanged, so every attack's hit segment stays the same
+  // the steel length the animator poses with (anim.js keeps this point off the grass and out of the
+  // legs; the integration test checks it). A little past the drawn point, so the drawn steel never
+  // touches the ground
   steelTip: 1.17,
-  // the DRAWN point: 1.64 m of steel (pommel tip at −0.19). The owner's reference draws the blade
-  // from the gem to the point ≈ 70 % of his height. Visual only (the hit segment below is unchanged
-  // and the point stays inside it); the idle stance (anim.js IDLE_SW) rests this point on the grass
-  drawnTip: 1.45,
+  // the DRAWN point: a 1.25 m sword from the pommel tip (−0.19) to here (owner: "a little shorter",
+  // the 1.64 m blade was "way too long" and ran through the coat skirt). Visual only: the hit segment
+  // below is unchanged, the swing crescent (fx.js) covers the reach past the steel
+  drawnTip: 1.06,
   bladeBase: 0.16, // hit segment along +Z (hilt side) …
   bladeTip: 1.5, // … to here (+ REACH.tipExt 0.4): gameplay reach, independent of the drawn steel
 };
@@ -688,10 +689,12 @@ export const LEAN = { frac: 0.5, max: (32 * Math.PI) / 180 };
 /**
  * Drawn size of the hero (model units → world metres), owner: "a little bigger for his details to
  * show". Visual only, like the lean: hits, the hurt cylinder and the dragon's aim keep the 1.85 m
- * body (Player.unlean divides it out). The blade then draws to 1.8 m, about the gameplay reach
- * (DIM.bladeTip 1.5 + REACH.tipExt 0.4).
+ * body (Player.unlean divides it out). The sword then draws to 1.5 m; the gameplay reach
+ * (DIM.bladeTip 1.5 + REACH.tipExt 0.4) is covered by the swing crescent.
  */
 export const HERO_SCALE = 1.2;
+/** The blade core's unlit colour up close (player.js lifts it with distance). */
+export const BLADE_BASE = [0.05, 0.1, 0.2];
 
 /**
  * Make `root` compose its matrix as T · lean · R · HERO_SCALE while `lean.on` (drawing, FX, the
@@ -777,8 +780,8 @@ export const HERO_INK = {
   bevel: { part: 14, fill: [0.3, 0.31, 0.38], spec: 0.5, line: [1, 1, 1, 0.8], fillGain: 1.1, farLine: 0.5, farFill: 0.85 },
   welt: { part: 15, fill: [0.3, 0.31, 0.36] },
   trim: { part: 16, fill: [0.24, 0.25, 0.3], spec: 0.8, line: [1, 1, 1, 0.85], fillGain: 1.0, farLine: 0.55, farFill: 0.95 },
-  blade: { part: 17, fill: [0.05, 0.075, 0.12], spec: 0.5, glow: 0.05, line: [0.5, 1.0, 1.35, 1.5], fillGain: 1.0, solid: true, farLine: 1, farFill: 1.5 },
-  bladeTip: { part: 17, fill: [0.14, 0.3, 0.44], glow: 0.25, line: [0.5, 1.0, 1.35, 1.5], fillGain: 1.0, solid: true, farLine: 1, farFill: 1.5 },
+  blade: { part: 17, fill: [0.2, 0.42, 0.72], spec: 0.6, glow: 0.45, line: [0.8, 1.15, 1.4, 1.6], fillGain: 1.0, solid: true, farLine: 1, farFill: 1.5 },
+  bladeTip: { part: 17, fill: [0.62, 0.86, 1.05], glow: 0.8, line: [1.0, 1.2, 1.4, 1.7], fillGain: 1.0, solid: true, farLine: 1, farFill: 1.5 },
   gem: { part: 18, fill: [0.3, 0.06, 0.7], glow: 1, rim: 0, line: [1.1, 0.45, 1.8, 2.0], solid: true, farLine: 1 },
   flask: { part: 19, fill: [0.6, 0.45, 0.15], glow: 1, rim: 0, line: [1.2, 0.9, 0.4, 1.5], solid: true, farLine: 1 },
 };
@@ -899,21 +902,22 @@ export function createHeroMaterials(U) {
       levels: LEATHER_LEVELS, cell: [0.05, 0.035], rowShift: 0, base: [0.016, 0.011, 0.009],
       ink: [0.42, 0.36, 0.32], gain: 1.15, rim: 0.12, outline: 0.1, inkGlow: 0.3, lumScale: 3.5, glowMask: 0.5, glyphZoom: 0.7, seed: 6.6,
     }, { max: [0.04, 0.03] }),
-    // dark faceted blade: two columns of cold chevrons pointing to the tip; the cyan glow lives on
-    // the edge and ridge seams (uGlow, driven by player.js), the flats stay dark steel up close and
-    // self-light with distance (player.js), so the sword stays the brightest thing in game
+    // the moonlit blade (owner: "glow more blue/white", the dark steel read as a black pole): two
+    // columns of blue chevrons pointing to the tip on a lit blue core, the edge and ridge seams
+    // white-blue (uGlow, driven by player.js); it self-lights further with distance (player.js), so
+    // the sword stays the brightest thing in game
     blade: S({
-      levels: BLADE_LEVELS, cell: [0.045, 0.09], rowShift: 0, seamAxis: 'y', base: [0.02, 0.03, 0.05],
-      levelInk: [[0.12, 0.2, 0.34], [0.15, 0.25, 0.42], [0.18, 0.3, 0.5]], ink: [0.18, 0.3, 0.5],
-      inkAlt: [0.3, 0.5, 0.8], altChance: 0.15, lumScale: 3, glyphZoom: 0.72,
-      gain: 0.8, rim: 0.25, outline: 0.35, inkGlow: 0.3, emissive: [0.3, 1.25, 2.6], glowMask: 1, seed: 1.9,
+      levels: BLADE_LEVELS, cell: [0.045, 0.09], rowShift: 0, seamAxis: 'y', base: BLADE_BASE,
+      levelInk: [[0.3, 0.52, 0.9], [0.4, 0.66, 1.05], [0.52, 0.82, 1.2]], ink: [0.52, 0.82, 1.2],
+      inkAlt: [0.85, 1.0, 1.25], altChance: 0.2, lumScale: 3, glyphZoom: 0.72,
+      gain: 0.9, rim: 0.3, outline: 0.35, inkGlow: 0.6, emissive: [0.7, 1.4, 2.5], glowMask: 1, seed: 1.9,
     }, { lockX: true }),
     // the last 0.15 m (the taper to the point): the brightest steel
     bladeTip: S({
-      levels: ["^A", "A^", "AA"], cell: [0.045, 0.09], rowShift: 0, seamAxis: 'y', base: [0.04, 0.08, 0.12],
-      levelInk: [[0.3, 0.62, 0.9], [0.38, 0.8, 1.12], [0.45, 0.95, 1.35]], ink: [0.45, 0.95, 1.35],
+      levels: ["^A", "A^", "AA"], cell: [0.045, 0.09], rowShift: 0, seamAxis: 'y', base: [0.14, 0.26, 0.42],
+      levelInk: [[0.7, 0.92, 1.2], [0.9, 1.08, 1.32], [1.1, 1.22, 1.45]], ink: [1.1, 1.22, 1.45],
       lumScale: 3, glyphZoom: 0.72,
-      gain: 1.0, rim: 0.3, outline: 0.5, inkGlow: 0.6, emissive: [0.4, 1.4, 2.8], glowMask: 1, seed: 2.3,
+      gain: 1.0, rim: 0.3, outline: 0.5, inkGlow: 0.9, emissive: [1.1, 1.6, 2.6], glowMask: 1, seed: 2.3,
     }, { lockX: true }),
     // the violet gem: saturated violet glyphs (not blown to white), glowing seams
     gem: S({

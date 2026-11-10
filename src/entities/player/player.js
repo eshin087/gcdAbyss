@@ -3,7 +3,7 @@ import { CONFIG } from '../../core/config.js';
 import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../../core/math.js';
 import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
-import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE } from './model.js';
+import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
 import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
@@ -202,6 +202,13 @@ export class Player {
     return this.atk && (this.state === 'attack' || this.state === 'heavy') ? this.atk.t : this.stateT;
   }
 
+  /** True while the blade is cutting (a light / heavy swing's active frames): bullets.js cuts bullets on it. */
+  isSwinging() {
+    const a = this.atk;
+    if (!a || a.pending || !a.def || (this.state !== 'attack' && this.state !== 'heavy')) return false;
+    return a.t >= a.def.windup && a.t <= a.def.windup + a.def.active + 0.04;
+  }
+
   isInvulnerable() {
     if (!this.alive) return true;
     if (this.state === 'plunge') return true; // the whole plunge (takeHit ignores hits in it)
@@ -237,7 +244,7 @@ export class Player {
     // Ghostep). A stream (breath) ticks every 0.15 s, so it only counts when dodging INTO it, not
     // rolling out of it.
     const streamTick = !(fin(hit.knockback, 0) > 0) && !hit.knockdown;
-    if (this.state === 'roll' && this.stateT <= DEFENSE.perfectDodgeWindow && !(streamTick && this.chipGuard > 0)) {
+    if (hit.perfect !== false && this.state === 'roll' && this.stateT <= DEFENSE.perfectDodgeWindow && !(streamTick && this.chipGuard > 0)) {
       this._perfectDodge(attacker, attack, tell, hit.plunge !== false);
       return RESULT.PERFECT;
     }
@@ -283,7 +290,7 @@ export class Player {
       this.time - this.rmb.parryT <= DEFENSE.parryWindow &&
       this._inArc(DEFENSE.parryArc, hasFrom, fx, fz, hasAtk ? ap : null)
     ) {
-      this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN);
+      this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN, !!hit.light);
       return RESULT.PARRIED;
     }
     // (e) block / (f) guard break
@@ -839,7 +846,7 @@ export class Player {
    * rises in pitch (player:parry `chain`). No lockout: the next tap can parry the next hit at once
    * (the state allows a guard), and the guard lingers between taps (guardHold).
    */
-  _parry(tell, attack, sx, sz) {
+  _parry(tell, attack, sx, sz, light = false) {
     const g = this.game, p = this.position;
     let nx = -Math.sin(this.yaw), nz = -Math.cos(this.yaw); // the pushback: away from the blow
     if (Number.isFinite(sx) && Number.isFinite(sz)) {
@@ -859,13 +866,14 @@ export class Player {
     this.atk = null;
     this.chargeK = 0;
     this.blockStunT = 0;
-    this._setKb(nx, nz, TUNE.deflectPush * (tell === TELL.BLUE ? 1.6 : 1));
+    // light: a deflected bullet (hit.light). The same clash, without the weight of a claw behind it
+    this._setKb(nx, nz, TUNE.deflectPush * (tell === TELL.BLUE ? 1.6 : 1) * (light ? 0.25 : 1));
     this._enter('parry', 'parry', 0.03);
     this._bladePoint(0.62, this._v);
     this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE, D.n, -nx, -nz);
-    this._hitstop(0.08);
-    g.shake?.(Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
-    this._emit('player:parry', { tell, attack, chain: D.n });
+    this._hitstop(light ? 0.03 : 0.08);
+    g.shake?.(light ? 0.1 : Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
+    this._emit('player:parry', { tell, attack, chain: D.n, light });
   }
 
   _block(dmg, tell, attack, chip, nx, nz) {
@@ -2006,7 +2014,7 @@ export class Player {
       // the blade's dot halo: dim at idle, brighter while it glows (strikes, charge, crit)
       if (this.alive && this.object3d.visible !== false && !hidden) {
         const bu = this.rig.materials.blade.uniforms;
-        this.fx.bladeHalo(dt, clamp((bu.uInkGlow.value - 0.16) * 0.7, 0.25, 2), this.bladeFar);
+        this.fx.bladeHalo(dt, clamp((bu.uInkGlow.value - 0.16) * 0.8, 0.25, 2), this.bladeFar);
       }
     }
     // the violet gem: an always-on glow point, idle glints, a fast flicker while charging. Every
@@ -2071,7 +2079,7 @@ export class Player {
     // wide and its seams are sub-pixel, so the flats self-light more with distance: the sword stays
     // the brightest thing on the hero there, while close-ups keep dark steel with glowing edges.
     // (lean reference match: 2.3 → 1.25 × far: the self-lit blade bloomed into a halo that hid his body)
-    let ink = 0.16 + 1.25 * far + 0.06 * Math.sin(this.time * 2.6), glow = 1.0 + 0.12 * Math.sin(this.time * 3.7);
+    let ink = 0.6 + 1.0 * far + 0.08 * Math.sin(this.time * 2.6), glow = 1.45 + 0.15 * Math.sin(this.time * 3.7);
     const a = this.atk, st = this.state;
     if (st === 'charge') {
       const k = this.chargeK;
@@ -2115,7 +2123,7 @@ export class Player {
     // far away the chevrons grow to fill their cells, so the ~4 px blade reads as a solid cyan line
     bu.uGlyphZoom.value = tu.uGlyphZoom.value = 0.72 - 0.26 * far;
     // … and the dark steel between them lights up too (gaps are base × light)
-    bu.uBase.value.setRGB(0.02 + 0.19 * far, 0.03 + 0.4 * far, 0.05 + 0.62 * far);
+    bu.uBase.value.setRGB(BLADE_BASE[0] + 0.2 * far, BLADE_BASE[1] + 0.36 * far, BLADE_BASE[2] + 0.5 * far);
     this.bladeFar = far;
     // the violet gem breathes; burns brighter while charging and through heavy swings
     const heavyNow = st === 'charge' || (plunging && this.pl.phase <= PL.RIDE) || (!!a && !!a.def?.heavy && (st === 'attack' || st === 'heavy'));
