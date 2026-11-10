@@ -389,13 +389,25 @@ the hips at the anchor) and `len[1]` includes the slant.
 The animator (`player/anim.js`) drives: `coat` = 6 panels (`COAT_PANELS`, above), each two spring
 segments (the lower one is two meshes: `coat` above, the lavender torn zone `hem` over its last
 60 %) plus `strips` (12 torn strips, one spring each, kept above the grass; per-panel `BREEZE` /
-`IDLE_FLARE` follow the panel order); `streamers` (the torn cape since ADR-036: four two-segment
-ribbons from under the pauldron, each record `{ segs, len, out }`, `out` = its own outward flare);
+`IDLE_FLARE` follow the panel order); `streamers` (the torn cape: four two-segment
+sheets behind the right shoulder, `CAPE_SHEETS`, ADR-037; each record `{ segs, len, out }`, `out` = its own outward flare);
 `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root
 mesh (`hair`) and a sheened-tip mesh (`hairTip`); since ADR-034 the locks are layered pointed
 blades (crown spikes, top, two back layers, nape, sides, a jagged fringe, cowlicks). Static meshes
 that share a joint and a material are merged at build time (fewer draw calls; 123 meshes, ~19.7k
 triangles since the lean build); only the flask stays separate.
+**Blender-built parts** (ADR-037): the hair (scalp cap + per-cluster `mass` / `tip`), the collar and
+its rim, the lapels, the blade (`forte`, `core`, `edge`), the cape sheets (`cape.N.a` / `.b` / `.c`)
+and the pauldron (`plate`, `bevel`, `spike`) are not built in JS. `scripts/blender/hero_parts.py`
+sculpts them in a headless Blender, fitted to `DIM` / `BODY` / `REST` / `HAIR_CLUSTERS` /
+`CAPE_SHEETS` dumped from `model.js`, and `npm run hero-parts` writes them to the generated,
+committed `player/heroParts.js` (`HERO_PARTS[name] = { n, p, nrm, uv, k, i }`, base64: positions and
+`aGUV` Int16 / 8192, normals Int8 / 127, `aPart` Uint8 / 200, Uint16 indices). `partGeometry(key)` in
+`model.js` decodes one into a BufferGeometry with the usual hero attributes; a part is in the space
+of the joint it hangs on and `model.js` picks that joint and the material. Never edit `heroParts.js`
+by hand; rerun the script after changing a dimension the parts are fitted to. `CAPE_SHEETS` (per
+sheet: `at` on the chest, `ry`, widths `w`, segment lengths `len`, `out`, `cup`, `seed`) must stay
+four entries (the streamer springs and the `herolook` test).
 **Idle** (`guard`, ADR-036; supersedes ADR-034's blade hung at his right side): the single-figure
 reference's stance, weight on the left leg, the right leg straight out, the sword arm beside the
 right hip, the blade (`IDLE_SW`) a low diagonal across his front, ~37° below level, to the drawn
