@@ -27,8 +27,9 @@ export const BULLETS = {
   // every bullet that will hit announces itself with a glint + combat:tell / combat:flash flashLead s
   // before impact; impacts within cueGap s of an announced one ride on that cue (one parry answers
   // them all), a bullet that could only be announced later than cueMin s before impact fizzles when
-  // it is younger than `young` s (spawned point-blank), else it hits (the hero ran into it)
-  cueGap: 0.3, cueMin: 0.24, young: 0.6,
+  // it is younger than `young` s (spawned point-blank), else it hits (the hero ran into it); a
+  // homing wisp still flying `recue` s after the impact its cue announced is announced again
+  cueGap: 0.3, cueMin: 0.24, young: 0.6, recue: 0.12,
   ricochet: 24, // a deflected bullet's speed back to the wyrm's head (m/s)
   bound: 33, // bullets die silently this far from the wyrm
 };

@@ -8,8 +8,9 @@
 // Same contract as fireAttacks.js: defs with { name, cooldown, phases, beats, weight, start, enter,
 // update, end }; numbers in tuningBullets.js. Each pattern declares ONE headline beat (announced by
 // the brain like every attack: combat:tell at the windup, combat:flash flashLead s before the first
-// impact, re-timed every frame); every later impact is announced by the bullets' own cue
-// (bullets.js). Bullets spawned closer than flashLead of flight are cued here BEFORE they exist,
+// impact, re-timed every frame; when the lead bullet is still on its way as the action ends, the
+// field keeps the flash for it: bullets.holdFlash); every later impact is announced by the bullets'
+// own cue (bullets.js). Bullets spawned closer than flashLead of flight are cued here BEFORE they exist,
 // from the emission schedule, so hugging the wyrm is not a blind spot (nor a free pass).
 //
 // Imported only by attacks.js (circular: uses its hoisted helpers at call time, like fireAttacks.js).
@@ -46,14 +47,19 @@ function headline(d, a, kind) {
     if (Number.isFinite(tt)) b.impactIn = Math.max(0.05, a.T - b.at + tt);
   } else if (!a.covered) {
     a.covered = true;
-    d.bullets.cover(kind, Math.max(0, b.at + b.impactIn - a.T));
+    d.bullets.headlined(kind, Math.max(0, b.at + b.impactIn - a.T));
   }
 }
 
-/** A pattern that ends without its flash (the lead bullet died): keep tell / flash paired. */
-function flush(d, a, interrupted) {
+/**
+ * A pattern that ends without its flash. Its lead bullet still on its way (a far hero: the wisps
+ * outlive the roar): the field flashes flashLead s before THAT lands (bullets.holdFlash). No lead
+ * left (`kind` omitted, or it died): flash now, so tell / flash stay paired.
+ */
+function flush(d, a, interrupted, kind) {
   const b = a.beats?.[0];
   if (interrupted || !b || !b.told || b.flashed) return;
+  if (kind !== undefined && d.bullets.holdFlash(a, b, kind)) return;
   b.flashed = true;
   d.flashTell(a, b);
 }
@@ -197,7 +203,7 @@ const emberStorm = {
   },
   end(d, a, interrupted) {
     d.throat = 0;
-    flush(d, a, interrupted);
+    flush(d, a, interrupted, BULLET.EMBER);
   },
 };
 
@@ -212,10 +218,16 @@ function fanGeo(d, out) {
 }
 const _geo = { D: 0, th: 0, r0: 0 };
 
-/** Offset (in bullet spacings) of the bullet nearest the fan's centre line for volley i. */
+/** Even volleys and the orb wave put a bullet exactly on the hero; odd volleys put him in a gap. */
+const fanOnHero = (i, orbWave) => orbWave || !(i & 1);
+
+/**
+ * Shift (in bullet spacings) of volley i off the symmetric fan q = j - (n - 1) / 2, which has a
+ * bullet on the centre line only for an odd count: an even count is shifted half a spacing to get
+ * one (and an odd count to open the gap).
+ */
 function fanOffset(i, n, orbWave) {
-  const centred = n & 1 ? 0 : 0.5; // a bullet exactly on the hero
-  return orbWave || !(i & 1) ? centred : centred + 0.5; // odd volleys sit in the gaps
+  return !!(n & 1) === fanOnHero(i, orbWave) ? 0 : 0.5;
 }
 
 function fan(d, a, i, orbWave) {
@@ -229,7 +241,7 @@ function fan(d, a, i, orbWave) {
   const off = fanOffset(i, n, orbWave);
   const px = d.position.x, pz = d.position.z;
   for (let j = 0; j < n; j++) {
-    const q = j - (n - 1) / 2 + off - (n & 1 ? 0 : 0.5);
+    const q = j - (n - 1) / 2 + off;
     const ang = G.th + q * spacing;
     const b = B.spawn(kind, 'fanVolley', px + Math.sin(ang) * G.r0, FV.y0, pz + Math.cos(ang) * G.r0, ang, speed, a.grp, orbWave ? 5 : FV.life);
     if (i === 0 && Math.abs(q) < 1e-6 && b) B.setLead(b);
@@ -256,7 +268,7 @@ function fanCue(d, a) {
   if (tt > FL + (orbWave ? 0.04 : 0) || tt < BK.cueMin) return;
   const n = orbWave ? a.orb : a.cnt;
   const spacing = n > 1 ? (2 * (orbWave ? FV.orbSpread : FV.spread)) / (n - 1) : 0;
-  const q = fanOffset(a.v, n, orbWave) - (n & 1 ? 0 : 0.5); // 0 or 0.5 spacings off the hero
+  const q = fanOnHero(a.v, orbWave) ? 0 : 0.5; // spacings from the hero to the nearest bullet
   if (G.D * Math.sin(Math.min(1.5, Math.abs(q) * spacing)) > R) return;
   const px = d.position.x, pz = d.position.z;
   d.bullets.cue(orbWave ? BULLET.ORB : BULLET.EMBER, 'fanVolley', orbWave ? TELL.RED : TELL.NORMAL, tt, px + Math.sin(G.th) * G.r0, 1.6, pz + Math.cos(G.th) * G.r0);
@@ -332,7 +344,7 @@ const fanVolley = {
   },
   end(d, a, interrupted) {
     d.throat = 0;
-    flush(d, a, interrupted);
+    flush(d, a, interrupted, BULLET.EMBER);
   },
 };
 
@@ -408,7 +420,7 @@ const wispSwarm = {
   },
   end(d, a, interrupted) {
     d.throat = 0;
-    flush(d, a, interrupted);
+    flush(d, a, interrupted, BULLET.WISP);
   },
 };
 

@@ -12,6 +12,10 @@
 // around him). A bullet that could only be announced too late (K.cueMin) is a dud when it was
 // spawned point-blank (it fizzles on touch); a HIT opens K.grace s in which every touching bullet
 // fizzles, and each pattern caps its hits (group().max): a storm never melts the hero.
+// A cue stands for ONE predicted impact, not for the bullet's whole life: a homing wisp that
+// outlives it (it missed him and is coming round) is announced again, or is a dud when that could
+// only be done too late. A pattern's headline flash follows its lead bullet even after the action
+// has ended (holdFlash).
 //
 // A deflected bullet flies back to the wyrm's head and adds posture; it never interrupts the wyrm
 // (dragon.onParried is for its own blows). The field is cleared on phase changes, death, reset, and
@@ -45,6 +49,7 @@ function record(slot) {
     wait: 0, launch: 0, launched: true, born: 0,
     r: 0.3, t: 0, life: 4, arm: 0, group: -1,
     cued: false, lead: false, dud: false, deflected: false, defT: 0,
+    cueAt: Infinity, // bullet time (b.t) of the impact its cue announced; Infinity: none announced
     hold: 0, acc: 0, seed: 0,
   };
 }
@@ -65,6 +70,7 @@ export class Bullets {
     this._shield = 0;
     this._wasBroken = false;
     this._lead = null;
+    this._held = { on: false, a: null, beat: null, b: null, kind: 0 }; // holdFlash()
     this._cueSmall = new Float64Array(8).fill(NEVER);
     this._cueOrb = new Float64Array(8).fill(NEVER);
     this._ci = 0;
@@ -101,6 +107,7 @@ export class Bullets {
       }
     }
     if (!b) return null;
+    if (this._held.on && this._held.b === b) this._fireHeld(Infinity); // its record is being reused
     b.alive = true;
     b.kind = kind;
     b.attack = attack;
@@ -127,6 +134,7 @@ export class Bullets {
     b.arm = K.arm;
     b.group = group;
     b.cued = b.lead = b.dud = b.deflected = false;
+    b.cueAt = Infinity;
     b.defT = 0;
     b.hold = 0;
     b.acc = Math.random();
@@ -184,6 +192,75 @@ export class Bullets {
     return this.leadAlive() ? this.tti(this._lead) : Infinity;
   }
 
+  /** The headline flash went out `tti` s before the lead bullet's impact: register that impact. */
+  headlined(kind, tti) {
+    this.cover(kind, tti);
+    if (this.leadAlive() && Number.isFinite(tti)) this._lead.cueAt = this._lead.t + tti;
+  }
+
+  /**
+   * A pattern ended before its headline flash (beat record `beat` of the ended action `a`). While
+   * its lead bullet is still on its way to the hero the field keeps the flash and fires it
+   * flashLead s before THAT impact; at once if the lead dies first (tell / flash stay paired);
+   * dropped when the field is cleared or fizzles. Returns false when there is nothing to wait for:
+   * the caller flashes now, and a lead still in the air is handed to its own cue.
+   */
+  holdFlash(a, beat, kind) {
+    if (!a || !beat || !this.leadAlive()) return false;
+    const b = this._lead;
+    if (!Number.isFinite(this.tti(b))) {
+      b.cued = false;
+      return false;
+    }
+    const h = this._held;
+    if (h.on) this._fireHeld(Infinity); // one at a time: the older one goes out now
+    h.on = true;
+    h.a = a;
+    h.beat = beat;
+    h.b = b;
+    h.kind = kind;
+    return true;
+  }
+
+  _heldFlash() {
+    const h = this._held;
+    if (!h.on) return;
+    const b = h.b;
+    if (!b.alive || !b.lead || b.deflected) {
+      this._fireHeld(Infinity);
+      return;
+    }
+    const tt = this.tti(b);
+    if (tt <= TUNING.flashLead) this._fireHeld(tt);
+  }
+
+  _fireHeld(tt) {
+    const h = this._held, K = this.K;
+    const b = h.b, a = h.a, beat = h.beat, kind = h.kind;
+    this._dropHeld();
+    beat.flashed = true;
+    const keep = this._lead;
+    this._lead = b; // the flash is drawn at ITS bullet (dragon.partPos 'bullet')
+    try {
+      this.d.flashTell(a, beat);
+    } finally {
+      this._lead = keep;
+    }
+    if (!b.alive || !b.lead || b.deflected) return;
+    if (!Number.isFinite(tt)) b.cued = false; // flashed early: its own cue announces the impact
+    else if (tt < K.cueMin && (b.kind === BULLET.WISP || b.t - b.born < K.young)) b.dud = true;
+    else {
+      this.cover(kind, tt);
+      b.cueAt = b.t + tt;
+    }
+  }
+
+  _dropHeld() {
+    const h = this._held;
+    h.on = false;
+    h.a = h.beat = h.b = null;
+  }
+
   /** Silent: every bullet and the wheel gone (phase change, death, reset). */
   clear() {
     for (let i = 0; i < MAX; i++) this.pool[i].alive = false;
@@ -191,6 +268,7 @@ export class Bullets {
     this.wheel.on = false;
     this._grace = this._shield = 0;
     this._lead = null;
+    this._dropHeld();
     this._cueSmall.fill(NEVER);
     this._cueOrb.fill(NEVER);
   }
@@ -412,6 +490,7 @@ export class Bullets {
 
   _fizzleAll() {
     const fx = this.d.fx;
+    this._dropHeld();
     for (let i = 0; i < MAX; i++) {
       const b = this.pool[i];
       if (!b.alive) continue;
@@ -431,6 +510,7 @@ export class Bullets {
     if (st === 'dying' || st === 'dead' || st === 'sleeping') {
       if (this.live > 0) this._fizzleAll();
       if (this.wheel.on) this.wheel.on = false;
+      this._dropHeld();
       return;
     }
     if (d.broken && !this._wasBroken) this._fizzleAll(); // a posture break clears the air
@@ -442,6 +522,7 @@ export class Bullets {
     const p = pl?.position && Number.isFinite(pl.position.x + pl.position.z) ? pl.position : null;
     const hr = pl?.radius ?? 0.45;
     this._wheel(dt, p, hr);
+    this._heldFlash();
     if (this.live <= 0) return;
 
     const sw = p && pl.isSwinging?.() && pl.sweep?.valid ? pl.sweep : null;
@@ -544,12 +625,19 @@ export class Bullets {
         }
       }
       if (p) {
+        // a homing wisp still flying after the impact its cue announced (it missed him and is
+        // coming round) has to announce the next one: a cue is for one impact
+        if (b.cued && b.homing && b.turn > 0 && !b.dud && b.t > b.cueAt + K.recue) {
+          b.cued = false;
+          b.cueAt = Infinity;
+        }
         if (!b.cued && !b.dud) {
           const tt = this.tti(b);
           if (tt <= FL + (b.kind === BULLET.ORB ? 0.04 : 0)) {
             const r = this.cue(b.kind, b.attack, b.tell, tt, b.x, b.y, b.z);
             if (r === CUE.LATE && (b.kind === BULLET.WISP || b.t - b.born < K.young)) b.dud = true;
             b.cued = true;
+            b.cueAt = b.t + tt;
           }
         }
         if (b.launched && b.t >= b.arm && b.y <= HIT_Y) {

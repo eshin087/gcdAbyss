@@ -1542,6 +1542,114 @@ async function scenarioBullets() {
     return { ok, ended, tells, flashes, peak, bad, hit: by(RESULT.HIT), parried: by(RESULT.PARRIED), blocked: by(RESULT.BLOCKED), dodged: by(RESULT.DODGED) + by(RESULT.PERFECT), live: B.live, wheel: B.wheel.on, hurt: (G.counts['player:hurt'] || 0) - (c0['player:hurt'] || 0) };
   };
   const DIST = { emberStorm: 9, fanVolley: 11, wispSwarm: 10, fireWheel: 9 };
+
+  // --- the cue in the corners (phase 2): an even-count fan, a wisp that misses and comes round, a
+  // swarm roared at a hero so far away that its lead wisp lands after the action has ended
+  const lateCues = () => {
+    const FV = TUNING.attacks.fanVolley, WS = TUNING.attacks.wispSwarm;
+    const R = K.ember.r + (p.radius ?? 0.45);
+    /** One pattern against a standing hero at `metres`: its headline tell / flash, hits, and `each(i)` per frame. */
+    const watchPattern = (name, metres, each) => {
+      settle(G, 12);
+      B.clear();
+      run(G, 1.0, { passive: true });
+      place(G, metres / SIZE);
+      d.posture = 0;
+      const h0 = G.hits.length;
+      const r = { tells: 0, flashes: 0, headTell: null, headFlash: null, ended: null, dist: Math.hypot(p.position.x - d.position.x, p.position.z - d.position.z) };
+      G.watch = (n, e) => {
+        if (e?.attack !== name) return;
+        if (n === 'combat:tell') { r.tells++; if (!e.bullet) r.headTell = game.time; }
+        if (n === 'combat:flash') { r.flashes++; if (!e.bullet) r.headFlash = game.time; }
+      };
+      r.ok = game.lab.trigger(name);
+      for (let i = 0; i < Math.round(14 / DT); i++) {
+        aimAt(G);
+        input.axis = { x: 0, y: 0 };
+        d.posture = 0;
+        G.tick(DT);
+        each?.(r);
+        if (r.ended === null && !d.brain.action) r.ended = game.time;
+        if (r.ended !== null && B.live === 0 && game.time - r.ended > 0.5) break;
+      }
+      G.watch = null;
+      r.hits = G.hits.slice(h0).filter((h) => h.attack === name && h.r === RESULT.HIT);
+      return r;
+    };
+
+    // an even count (phase 2: 8 embers): the first volley still has an ember dead on the hero (the
+    // lead the headline flash follows) and the second still puts him in a gap
+    assert(d.phase === 2 && (perPhaseOf(FV.count, 2) & 1) === 0, `phase 2 fans have an even count (${perPhaseOf(FV.count, 2)})`);
+    const miss = [];
+    let leadSeen = false, embers = 0;
+    const fv = watchPattern('fanVolley', 11, () => {
+      if (B.leadAlive()) leadSeen = true;
+      const n = B.count(KIND.ember);
+      if (n > embers && miss.length < 2) {
+        // a volley was just flung: how far from the hero its nearest ember will pass
+        let best = Infinity;
+        for (const b of B.pool) {
+          if (!b.alive || b.kind !== KIND.ember || b.t > 1.5 * DT) continue;
+          const dx = p.position.x - b.x, dz = p.position.z - b.z, sp = Math.hypot(b.vx, b.vz) || 1;
+          best = Math.min(best, Math.abs(dx * b.vz - dz * b.vx) / sp);
+        }
+        miss.push(best);
+      }
+      embers = n;
+    });
+    const fvLag = fv.hits[0] && fv.headFlash !== null ? fv.hits[0].t - fv.headFlash : NaN;
+    out(`   P2 fan of ${perPhaseOf(FV.count, 2)} at ${fv.dist.toFixed(1)} m: lead bullet ${leadSeen} · nearest ember passes ${miss.map((m) => m.toFixed(2)).join(' / ')} m off (volley 1 / 2, touch radius ${R.toFixed(2)}) · headline flash ${fvLag.toFixed(3)} s before the first hit · tells ${fv.tells}/${fv.flashes}`);
+    assert(fv.ok && leadSeen, 'even-count fan: the first volley has a lead ember (setLead)');
+    assert(miss.length === 2 && miss[0] < 0.1 && miss[1] > R, `even-count fan: volley 1 is centred on the hero, volley 2 has him in a gap (${miss.map((m) => m.toFixed(2)).join(' / ')})`);
+    assert(fvLag >= K.cueMin - DT && fvLag <= lead + 3 * DT, `even-count fan: the headline flash leads the first impact by ~flashLead (${fvLag.toFixed(3)} s)`);
+    assert(fv.tells === fv.flashes, `even-count fan: one combat:flash per combat:tell (${fv.tells}/${fv.flashes})`);
+
+    // a homing wisp that the hero sidesteps after its cue comes round again: it has to announce the
+    // second pass too (or fizzle), never hit off the stale cue
+    settle(G, 12);
+    B.clear();
+    run(G, 0.8, { passive: true });
+    place(G, 7);
+    {
+      const h0 = G.hits.length, flashes = [];
+      G.watch = (n, e) => { if (n === 'combat:flash' && e?.bullet) flashes.push(game.time); };
+      const ux = (d.position.x - p.position.x), uz = (d.position.z - p.position.z), l = Math.hypot(ux, uz) || 1;
+      const w = B.spawn(KIND.wisp, 'wispSwarm', p.position.x + (ux / l) * 8, 1.0, p.position.z + (uz / l) * 8, Math.atan2(-ux, -uz), K.wisp.cruise);
+      w.turn = K.wisp.turn;
+      w.homeAt = 0;
+      let stepped = false, passes = 0, wasNear = false;
+      for (let i = 0; i < Math.round(7 / DT) && w.alive; i++) {
+        aimAt(G);
+        input.axis = { x: 0, y: 0 };
+        if (!stepped && flashes.length === 1 && game.time - flashes[0] >= 0.2) {
+          stepped = true; // out of its way, 0.15 s before it lands
+          p.debug.teleport(p.position.x - (uz / l) * 5, p.position.z + (ux / l) * 5);
+        }
+        G.tick(DT);
+        const near1 = Math.hypot(w.x - p.position.x, w.z - p.position.z) < 1.5;
+        if (near1 && !wasNear) passes++;
+        wasNear = near1;
+      }
+      G.watch = null;
+      const hs = G.hits.slice(h0).filter((h) => h.r === RESULT.HIT);
+      const lag = hs[0] ? hs[0].t - flashes[flashes.length - 1] : NaN;
+      out(`   wisp sidestepped after its cue: cues ${flashes.length} · hits ${hs.length}${hs[0] ? ` (${lag.toFixed(3)} s after the last cue)` : ''} · dud ${w.dud} · came near ${passes}×`);
+      assert(stepped && flashes.length >= 1, 'the wisp was cued and sidestepped');
+      assert(hs.length === 0 ? w.dud || !w.alive : flashes.length >= 2 && lag >= K.cueMin - DT && lag <= lead + K.cueGap + 2 * DT, `a wisp that missed announces its second pass before it hits (cues ${flashes.length}, lag ${lag.toFixed(3)})`);
+      assert(flashes.length >= 2 || w.dud, `the second pass is cued again, or the wisp is a dud (cues ${flashes.length}, dud ${w.dud})`);
+    }
+
+    // a far hero: the lead wisp lands after the action is over; the headline flash waits for it
+    const ws = watchPattern('wispSwarm', 28);
+    const wsLag = ws.hits[0] && ws.headFlash !== null ? ws.hits[0].t - ws.headFlash : NaN;
+    out(`   P2 wisp swarm at ${ws.dist.toFixed(1)} m: tell at ${(ws.headTell ?? NaN).toFixed(2)} · action over at ${(ws.ended ?? NaN).toFixed(2)} · headline flash at ${(ws.headFlash ?? NaN).toFixed(2)} · first hit at ${(ws.hits[0]?.t ?? NaN).toFixed(2)} (${wsLag.toFixed(3)} s after the flash) · hits ${ws.hits.length}/${WS.maxHits} · tells ${ws.tells}/${ws.flashes}`);
+    assert(ws.ok && ws.dist > 26 && ws.headTell !== null && ws.headFlash !== null, 'far wisp swarm: headline tell and flash both go out');
+    assert(ws.headFlash > ws.ended, `far wisp swarm: the lead is still flying when the action ends; the flash waits for it (${(ws.headFlash - ws.ended).toFixed(2)} s after the end)`);
+    assert(wsLag >= K.cueMin - DT && wsLag <= lead + 3 * DT, `far wisp swarm: the headline flash leads the first impact by ~flashLead (${wsLag.toFixed(3)} s)`);
+    assert(ws.tells === ws.flashes && ws.hits.length >= 1 && ws.hits.length <= WS.maxHits, `far wisp swarm: one flash per tell, hits within the budget (${ws.tells}/${ws.flashes}, ${ws.hits.length})`);
+  };
+  const perPhaseOf = (v, ph) => (Array.isArray(v) ? v[Math.min(v.length - 1, ph - 1)] : v);
+
   for (const phase of [1, 2, 3]) {
     for (const name of NAMES) {
       const spec = TUNING.attacks[name];
@@ -1559,6 +1667,7 @@ async function scenarioBullets() {
       else if (name !== 'fireWheel') assert(ans.parried >= 1, `P${phase} ${name}: bullets were deflected (${ans.parried})`);
       else assert(ans.dodged >= 1, `P${phase} fireWheel: a spoke was rolled through (${ans.dodged})`);
     }
+    if (phase === 2) lateCues();
   }
   out(`   console errors so far: ${errors.length}`);
   return G;
