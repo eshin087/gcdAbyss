@@ -4,7 +4,11 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Six pieces of work since 0.4.0:
+Seven pieces of work since 0.4.0:
+- **The hero filled out** (2026-11-09, ADR-040): he was "a bit too lanky". Broader chest and
+  shoulders, thicker arms and legs, a slightly bigger head and hands. He stands in a shoulder-width
+  stance with the sword held out to his right side, where it shows from the game camera, instead of
+  pointing ahead behind his own body.
 - **Bullet hell and the moonlit sword** (2026-11-09): the wyrm throws spirals, fans and homing swarms
   of small fire bullets that you deflect back at it one by one (or block, roll through, or cut out
   of the air), plus red orbs and a turning wheel of fire walls that you must dodge. Two more combos,
@@ -81,6 +85,11 @@ Six pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **Hero build** (ADR-040): chest 0.34 → 0.39 m, waist 0.23 → 0.27 m, shoulder joints ±0.16 → ±0.178,
+  upper arms, forearms, thighs and boots ~20 % thicker, head ×1.08, hands ×1.12; collar, pauldron,
+  lapels, coat panels and cape fitted to it (hero parts rebuilt). Gameplay sizes unchanged.
+- **Idle stance and sword hold** (ADR-040): the blade points out to his right and down (~43°) from a
+  bent arm; narrower stance; the cape hangs a little closer.
 - **The sword** is 1.25 m (was 1.64 m) and lit blue with white-blue edges (was dark steel with cyan
   seams). Its reach in combat is unchanged (ADR-038).
 - **The idle** holds the sword in a low ready at his right side instead of across his front.
@@ -155,6 +164,8 @@ Six pieces of work since 0.4.0:
   its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
 
 ### Fixed
+- A light attack's recovery no longer swings the blade home behind his head.
+- The blade's tip streak no longer floats off the point (most visible in rolls).
 - Bullets (PR #9 review): the phase-2 Cinder fan (8 embers) opened with the hero in a gap, so its
   opening flash came about a second before anything landed; the first fan now has an ember dead on
   him at every count. A homing wisp that missed after its cue could come round and hit without a

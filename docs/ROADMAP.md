@@ -146,6 +146,15 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.12 — Hero review: athletic build, idle sword hold (2026-11-09)
+- [x] Athletic build: broader chest and shoulders, thicker limbs, head ×1.08 (ADR-040)
+- [x] Idle: shoulder-width stance, the blade out to his right side, visible from the game camera
+- [x] Light-attack recovery comes home round the front; tip streak on the point
+- [ ] Follow-ups:
+  - [ ] Facing west / north-west the idle blade is still hidden behind him at the game camera
+  - [ ] Heal, stagger, knockdown, death and plunge poses were not re-checked with the new build
+  - [ ] docs/art/hero.md still describes the lean build and ADR-038's idle
+
 ## M1.11 — Bullet hell and the moonlit sword (2026-11-09, `combat/wyrm-bullet-hell`)
 - [x] A 1.25 m blue-white sword; the idle holds it at his right side, clear of the coat (ADR-038)
 - [x] The bullet field: embers and homing wisps to deflect / block / roll / cut, red orbs to dodge;
