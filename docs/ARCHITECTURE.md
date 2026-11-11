@@ -35,6 +35,18 @@ override is skipped for that frame (never throws, never feeds NaN).
 `dt = realDt × game.timeScale × game.debugTimeScale × hit-stop`. `realDt` is unscaled. Input edges
 (`pressed`) are valid for exactly one frame. Construction order: world, audio, player, dragon, hud,
 touch, flow, lab — constructors must not dereference modules built later.
+**`render`** = `pipeline.updateShadowCamera(focus)` then `pipeline.render()` (`render/pipeline.js`):
+```
+scene.updateMatrixWorld()            once for both scene passes (scene.matrixWorldAutoUpdate is off while they draw)
+→ rigid bone sync                    every batched mesh's matrixWorld → U.uBoneTex (render/rigidBatch.js)
+→ moon shadow map                    LAYER_CASTER with the depth material, then LAYER_CASTER_RIGID (one shadow
+                                     mesh per batched actor) with the bone-reading depth material, same map
+→ world → sceneRT → ASCII pass → FX particles (fxScene) → bloom → final grade
+```
+World matrices are therefore final when `render` starts: anything that moves an object after the
+actors' updates must do so before `pipeline.render()` (a transform changed between the two scene
+passes was never supported; now neither pass re-walks the graph). The cameras still update
+themselves (`shadowCam` in `updateShadowCamera`, the main camera by the rig / view override).
 **Keep-in-view:** during their update, flow (a flying or rearing wyrm) and the player (the plunge)
 may call `cameraRig.keep(...)` for world spheres that must stay on screen; the rig consumes the
 requests in its update the same frame (requests last one frame). `dragon.update` also runs the fire
@@ -44,7 +56,7 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | field | what |
 |---|---|
 | `THREE`, `CONFIG` | three.js namespace, `core/config.js` |
-| `renderer, scene, fxScene, camera, pipeline, U` | rendering. `U` = shared uniforms (`render/shaderLib.js`) |
+| `renderer, scene, fxScene, camera, pipeline, U` | rendering. `U` = shared uniforms (`render/shaderLib.js`), including `U.uBoneTex` (the rigid batches' bone matrices, see Rigid batching below). `pipeline.setShadowSize(texels)` resizes the moon shadow map (`pipeline.shadowSize`; main.js `applyQuality` passes the preset's `shadow`) |
 | `events` | pub/sub: `on(name, fn)` → unsubscribe fn, `emit(name, data)` |
 | `input` | `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
 | `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame; with touch controls on, the touch aim point (see Touch controls) |
@@ -60,7 +72,7 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
-| `settings` | `{ quality: 0..2, showFps: bool }`; `applyQuality()` re-applies. Touch devices start on `CONFIG.defaultQualityTouch` (LOW) unless the player picked one. |
+| `settings` | `{ quality: 0..2, showFps: bool }`; `applyQuality()` re-applies. A preset (`CONFIG.quality[i]`) is `{ name, grass, dpr, shadow }`: grass blades drawn, max device pixel ratio, moon shadow map size in texels (LOW 1024, MEDIUM / HIGH 2048; `CONFIG.render.shadowSize` 2048 is only the size before the first `applyQuality`). Touch devices start on `CONFIG.defaultQualityTouch` (LOW) unless the player picked one. |
 
 Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `DEFENSE`, `POSTURE`,
 `tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code. `DEFENSE.plunge`
@@ -249,7 +261,62 @@ Render helpers for creature modules:
   and the doc comment (`sideGlyphs`, `topGlyphs`, `mossGlyphs`, `crackGlyphs`, `strokeGlyphs`,
   `strokeLevels`, `cell`, `gain`, `lumScale`, `jitter`, `inkFloor`, `base`, `mossInk`,
   `crackAmount`, `edge`, `glyphZoom`, `fadeNearPlayer`, `side`).
-- `markCaster(object)` (`render/pipeline.js`) — casts moon shadows.
+- `markCaster(object)` (`render/pipeline.js`) — casts moon shadows: enables `LAYER_CASTER` (1) on
+  the object and its descendants. Works before or after rigid batching (below); `LAYER_CASTER` and
+  `LAYER_CASTER_RIGID` (2, reserved for the batch meshes: never set it yourself) are exported from
+  `pipeline.js` (defined in `shaderLib.js`).
+- **Rigid batching** (`render/rigidBatch.js`) — an actor made of many small rigid meshes is drawn
+  with one draw call per material in the world pass and ONE in the shadow pass, instead of one per
+  mesh in each (the hero: 138 meshes → 23 + 1 draws, the wyrm: 181 → 14 + 1, plus its 2 wing
+  membranes in each pass).
+  - `batchRigid(U, root, opts?)` → `{ meshes, shadow, sources, bones, dispose() }`. Call it once
+    the actor is built (and marked a caster), and again after `dispose()` whenever its meshes are
+    rebuilt (`player.setLoadout` does). It collects the meshes under `root` that can be batched,
+    groups them by material (+ `renderOrder`) and builds one merged geometry per group: every
+    source geometry's attributes (missing ones zero-filled, indexed or not) with the vertices still
+    in their mesh's local space, plus a per-vertex float `aRigid` = the mesh's **bone slot**. The
+    batch meshes (`meshes`: `name 'rigidBatch'`, layer 0 only) and the actor's one shadow mesh
+    (`shadow`: `name 'rigidShadow'`, positions + `aRigid` of every caster, on `LAYER_CASTER_RIGID`
+    only) are tagged `userData.rigidBatch = true`, have `frustumCulled = false`,
+    `matrixAutoUpdate = false` and no raycast, and are added under `root`, so hiding the root
+    hides them.
+  - Every batched mesh is its own bone and **stays in the scene graph** with its transform,
+    `visible` flag and layer mask: gameplay, FX, the Lab and the tests keep traversing the source
+    meshes and reading their `matrixWorld`. Only its `layers` object is swapped for one no camera
+    (or raycaster) can see, so three never draws it; `isRigidSource(mesh)` tells. Anything that
+    walks an actor's meshes for geometry (bounds, picking) must skip `userData.rigidBatch` meshes:
+    their merged geometry is not in one space (the Lab model viewer's auto-fit does).
+  - Bones: `rigidBones(U)` → the registry behind `U.uBoneTex`, a 64 × 64 RGBA32F `DataTexture`
+    (NEAREST), 4 texels per matrix (a texel = a column), 1024 slots (`RIGID_TEX`, `RIGID_MAX` in
+    `shaderLib.js`); slot 0 is reserved and means "not batched: use `modelMatrix`". `sync()` (called
+    by `pipeline.render()` right after the scene's matrix update, no allocation) writes each
+    source's `matrixWorld`, or an all-zero matrix when the source or any ancestor below the actor
+    root is not `visible` (its triangles collapse); a hidden actor root is skipped. `count`, `room`,
+    `sets`, `batches`, `casting` (a visible actor casts this frame: the pipeline then draws the
+    rigid shadow pass). `dispose()` on a set removes its meshes, frees geometry and slots (reused
+    by the next build) and gives the sources their plain layers back.
+  - Shaders: `RIGID_VERT_GLSL` (`shaderLib.js`) declares `attribute float aRigid`,
+    `uniform highp sampler2D uBoneTex` and `mat4 rigidMatrix()` (`aRigid < 0.5` → `modelMatrix`,
+    else the slot's matrix by `texelFetch`). `createSurfaceGlyphMaterial` uses it for the world
+    position and the normal in ONE program for batched and unbatched meshes (materials are never
+    cloned: their uniform objects are the shared ones the actors write every frame); a geometry
+    without `aRigid` reads 0 (`defaultAttributeValues`), and the material is tagged
+    `userData.rigid = true`. A new material family that wants batching must do the same. The
+    pipeline's `rigidShadowMat` uses it for the shadow depth.
+  - Shadows: the shadow mesh holds the sources that were casters at the build (all of them when
+    none was yet), and casts while one visible source has `LAYER_CASTER` in its mask (read every
+    sync, so `markCaster` and `dragon.setShadowCasting` work at any time): batched parts of an
+    actor cast together. The sync owns the layers of the batch and shadow meshes (never set them).
+  - Not batched (ordinary meshes, as before): materials without `userData.rigid`, instanced /
+    skinned meshes, geometry rewritten at runtime (an attribute that is not `StaticDrawUsage`: the
+    wing membranes), morph targets, a partial `drawRange`, a mesh with `onBeforeRender` /
+    `onAfterRender`, `userData.noBatch = true`, and meshes added to an actor after its
+    `batchRigid` call. A source's geometry and material must not be swapped or edited after the
+    build (rebuild the set instead); mirroring (a negative scale above a source) is baked into the
+    batch's winding at build time.
+  - `CONFIG.render.batch` (default `true`; `false` when the page URL has `?nobatch`, read once in
+    `core/config.js`): with it off `batchRigid` returns an empty set and every mesh is drawn as
+    before — an A/B switch for frame rate and image checks.
 - `gi(ch)`, `gis(str)` (`render/glyphs.js`).
 - `game.pipeline.finalMat.uniforms` — `uHurt` (red edge 0..1), `uFade` (black 0..1), `uDesat` (0..1), `uWarm` (boss grade 0..1), `uExposure`, `uBloom`. **Owned by the HUD/flow module.**
 
@@ -261,6 +328,7 @@ constructor(game)                      // builds model, adds object3d to game.sc
 object3d: THREE.Object3D;  position: THREE.Vector3 (=== object3d.position);  yaw: number;  radius = 0.45
                                        // position.y is 0 except in the plunge, where it carries the visual
                                        // lift (x / z stay the ground point under him)
+batch                                  // his rigid batches (render/rigidBatch.js batchRigid; empty with ?nobatch)
 name = 'Wanderer'
 hp, maxHp, flasks, maxFlasks: number   // (v0.2: NO stamina) TUNE: 160 HP, 5 flasks of +70 HP
 state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block'|'parry'|'ghostep'|'plunge'|'heal'|'stagger'|'guardBreak'|'knockdown'|'dead'
@@ -434,8 +502,9 @@ hung on the skeleton). Geometry builders live in `player/heroGeo.js`, the body's
 `player/heroDims.js` (`model.js` re-exports them). `player.loadout`, `player.equip(slot, id | null)`
 and `player.setLoadout(loadout)` swap gear at runtime: the rig is rebuilt under the same root
 (`object3d` and `position` stay the same objects), the animator is recreated (the pose restarts from
-the ready stance), old geometries and materials are disposed; an unknown id throws before anything
-changes. No event is emitted. Limits: the animator, `combat.js` and `fx.js` read the sword's
+the ready stance), old geometries and materials are disposed, and the rig's rigid batches
+(`player.batch`, `render/rigidBatch.js`) are disposed and rebuilt, reusing their bone slots; an
+unknown id throws before anything changes. No event is emitted. Limits: the animator, `combat.js` and `fx.js` read the sword's
 numbers from `DIM`, not from the weapon item's `dims`; `IDLE_FLARE` has six per-panel values; the
 pauldron joint is the right shoulder only.
 **Hands** (ADR-041, `heroGeo.js`): the sword hand is `gripFist`, four finger rolls, a thumb and a
@@ -529,6 +598,7 @@ Animator ↔ player hooks (`anim.js` is private to the player module):
 ```
 constructor(game)                      // builds the four-legged drake, sleeping at CONFIG.world.dragonSleep
 object3d, position (Vector3, root on ground), yaw
+batch                                   // its rigid batches (render/rigidBatch.js batchRigid; empty with ?nobatch)
 bound: number                           // radius around the arena centre the root stays inside:
                                         // min(CONFIG.world.dragonBound, TUNING.bound = 24) (move, charge, leap target)
 name = 'VAELGRIM, THE CINDER WYRM';  hp, maxHp;  phase: 1|2|3
@@ -1046,7 +1116,8 @@ changed it), every HUD layer in `#ui` is faded out (class `lab-mv`; the Lab pane
 mouse aim is pinned along its facing (it never chases the cursor through a side camera), and the
 camera follows the actor each frame (`lab.postUpdate`, before main.js applies the override). The
 auto-fit is measured at the call (and again on resize / Lab panel open-close) from the per-mesh
-bounding boxes of the current pose; with the panel open the actor is centred in the free area to its
+bounding boxes of the current pose (the source meshes; rigid batch meshes, `userData.rigidBatch`,
+are skipped); with the panel open the actor is centred in the free area to its
 right. `solo` hides the other actor only between `lab.postUpdate` and the next `lab.update` (the
 actors never see their `visible` flag change). Poses are driven as usual — `dragon.debug.trigger(name)`,
 player inputs / methods — and stepped with `__tick(dt, frames)`.
