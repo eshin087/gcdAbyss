@@ -5,14 +5,15 @@ import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
-import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
+import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
 
 // The Wanderer. Owns input → state machine → movement/collision → animation → sword hits → FX.
 // Contract: docs/ARCHITECTURE.md (Player). Combat rules: docs/COMBAT.md + src/combat/rules.js.
 // No stamina (v0.2): pacing comes from attack recovery, roll recovery and the enemy's patterns.
-// Moveset (combat.js): light sweep → backhand sweep → two-handed slam (combo finisher, ground
-// shards); hold LMB = crouched charge, release = lunging thrust. Swings hit giant targets through
+// Moveset (combat.js, ADR-041): LMB chain falling cut → rising backhand → whirl → stab → two-handed
+// slam (finisher, ground shards); LMB out of a sprint = the sprint slash, out of a forward roll = the
+// roll cut; hold LMB = crouched charge, release = lunging thrust. Swings hit giant targets through
 // a vertical reach band and step in toward a hurt surface ahead (REACH).
 
 export const TUNE = {
@@ -774,6 +775,9 @@ export class Player {
     if (a === 'light' && allowAttack) {
       this.buf.action = null;
       if (this._tryExecution()) return true;
+      // out of a sprint: the bounding slash; out of a forward roll: the low rising cut
+      if (this.state === 'sprint' && Math.hypot(fin(this.groundVel.x), fin(this.groundVel.z)) > TUNE.runSpeed * 1.05) return this._startAttack(SPRINT_ATK);
+      if (this.state === 'roll' && !this.rollBack) return this._startAttack(ROLL_ATK);
       return this._startAttack(LIGHT[0]);
     }
     if (a === 'heal' && allowHeal) {
@@ -1433,12 +1437,12 @@ export class Player {
     if (!def) return false;
     const light = def.kind === 'light';
     this.atk = {
-      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, lunge: null, travel: 0,
+      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, lunge: null, travel: fin(def.travel, 0),
       pending: light && this.lmb.held, // still held: may become a charge (the swing waits at the coil)
       damage: fin(def.damage, 30), poise: fin(def.poise, 12), charge: 0,
     };
     this.chargeK = 0;
-    this.yaw = this._aimYaw(this.yaw); // commit the swing direction
+    if (!def.keepYaw) this.yaw = this._aimYaw(this.yaw); // commit the swing direction
     // the cross-fade IS the windup: the body eases into the coil pose
     this._enter('attack', 'attack', def.windup * 0.85, true);
     if (!this.atk.pending) this._swingStarted(def, 0);
@@ -1555,12 +1559,17 @@ export class Player {
     }
     a.t = a.pending ? Math.min(W, a.t + dt) : a.t + dt; // a held light waits at the coil
     const t = a.t;
-    if (t < W) this.yaw = turnToward(this.yaw, this._aimYaw(this.yaw), TUNE.windupSteer * dt);
+    if (t < W && !d.keepYaw) this.yaw = turnToward(this.yaw, this._aimYaw(this.yaw), TUNE.windupSteer * dt);
     // lunge forward through the strike (stretched by the step-in assist); the thrust's root travel
     // is front-loaded through its active frames
     let lv = 0;
     if (d.kind === 'thrust') {
       if (t >= W && t <= W + A) lv = (a.travel / A) * (1.5 - (t - W) / A);
+    } else if (a.travel > 0) {
+      // a travelling light (the sprint slash): the run's momentum carries on through the windup and
+      // the cut, dying out (integrates to a.travel)
+      const T = W + A;
+      if (!a.pending && t <= T) lv = (a.travel / T) * (1.4 - (0.8 * t) / T);
     } else {
       const l0 = W - 0.08, l1 = W + A;
       if (!a.pending && t >= l0 && t <= l1) {

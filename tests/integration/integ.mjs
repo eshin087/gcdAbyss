@@ -917,7 +917,8 @@ async function scenarioReach() {
     aimAt(G);
   };
   const fresh = () => { d.hp = d.maxHp; d.posture = 0; run(G, 1.0, { passive: true }); settle(G); };
-  const KINDS = { L1: 'light', L2: 'light', slam: 'slam', thrust: 'thrust' };
+  const KINDS = { L1: 'light', L2: 'light', L3: 'light', L4: 'light', slam: 'slam', thrust: 'thrust' };
+  const CLICKS = { L1: 1, L2: 2, L3: 3, L4: 4, slam: 5 }; // the 5-hit chain (ADR-041): falling cut, rising cut, whirl, stab, slam
   const CHARGE_HOLD = 1.3; // s: a full charge
   /** One measured attack at `gap`; earlier combo hits swing in open air far from the wyrm. */
   const trial = (name, gap) => {
@@ -934,7 +935,7 @@ async function scenarioReach() {
       input.up(0);
       run(G, 1.0, { passive: true });
     } else {
-      const n = name === 'L1' ? 1 : name === 'L2' ? 2 : 3;
+      const n = CLICKS[name];
       if (n > 1) { p.debug.teleport(d.position.x + fx * 40, d.position.z + fz * 40); aimAt(G); }
       for (let k = 0; k < n; k++) {
         if (k === n - 1) {
@@ -944,7 +945,7 @@ async function scenarioReach() {
         }
         aimAt(G);
         input.click(0);
-        run(G, k < n - 1 ? 0.3 : 1.3, { passive: true });
+        run(G, k < n - 1 ? 0.34 : 1.3, { passive: true });
       }
     }
     G.watch = null;
@@ -953,7 +954,7 @@ async function scenarioReach() {
   // (CHARGE_HOLD hoisted above)
   const rows = [];
   for (const gap of [0, 2, 2.5, 3, 3.5]) {
-    const r = ['L1', 'L2', 'slam', 'thrust'].map((nm) => trial(nm, gap));
+    const r = ['L1', 'L2', 'L3', 'L4', 'slam', 'thrust'].map((nm) => trial(nm, gap));
     rows.push(r);
     out(`   ${gap ? `${gap.toFixed(1)} m` : 'contact'}`.padEnd(12) + r.map((t) => `${t.name} ${t.hit ? `${t.hit.kind}/${t.hit.part} ${Math.round(t.hit.damage)}` : 'MISS'} @${t.at.toFixed(2)}`.padEnd(30)).join(''));
   }
@@ -961,8 +962,8 @@ async function scenarioReach() {
     const where = t.gap ? `${t.gap} m` : 'contact';
     assert(!!t.hit && t.hit.kind === KINDS[t.name] && t.kinds[0] === KINDS[t.name], `${t.name} connects from the front at ${where} (${t.hit ? `${t.hit.kind} on ${t.hit.part}` : 'miss'}, hero ${t.at.toFixed(2)} m from the chest surface)`);
   }
-  assert(rows.every((r) => r[2].slamEv === 1), 'the slam meets the ground once per swing (player:slam)');
-  assert(rows.every((r) => r[2].hit?.heavy === true && r[3].hit?.heavy === true && r[0].hit?.heavy === false), 'slam and thrust hit heavy, light sweeps do not');
+  assert(rows.every((r) => r[4].slamEv === 1), 'the slam meets the ground once per swing (player:slam)');
+  assert(rows.every((r) => r[4].hit?.heavy === true && r[5].hit?.heavy === true && r.slice(0, 4).every((t) => t.hit?.heavy === false)), 'slam and thrust hit heavy, the four light hits do not');
   return G;
 }
 
@@ -2117,8 +2118,50 @@ async function scenarioHero() {
   go(0.4);
   input.tap('Space');
   go(0.9);
-  for (let k = 0; k < 3; k++) { input.click(0); go(0.45); }
+  // the 5-hit chain (ADR-041): falling cut → rising cut → whirl → stab → slam, then round again
+  const chain = [];
+  const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  G.watch = (n, dd) => { if (n === 'player:attack') chain.push(p.atk?.def?.name ?? dd.kind); };
+  for (let k = 0; k < 6; k++) { input.click(0); go(k === 4 ? 0.7 : 0.4); }
+  go(1.0);
+  assert(chain.join(' ') === 'fallingCut risingCut whirl stab slam fallingCut', `LMB ×6 walks the chain and wraps (${chain.join(' → ')})`);
+  assert(Math.abs(wrapA(p.anim.cur[4])) < 1e-3, `the whirl ends on a whole turn (body yaw ${p.anim.cur[4].toFixed(3)})`);
+  // LMB out of a sprint: the bounding slash keeps the run's momentum and its direction
+  chain.length = 0;
+  input.axis = { x: 0, y: 1 };
+  input.hold('ShiftLeft');
+  go(0.9);
+  const sx = p.position.x, sz = p.position.z, syaw = p.yaw;
+  input.click(0);
+  input.release('ShiftLeft');
+  input.axis = { x: 0, y: 0 };
+  go(0.3);
+  const sprintDist = Math.hypot(p.position.x - sx, p.position.z - sz);
+  assert(chain[0] === 'sprintSlash' && sprintDist > 1.8 && sprintDist < 3.4 && Math.abs(wrapA(p.yaw - syaw)) < 0.05,
+    `LMB while sprinting is the sprint slash (${chain[0]}; carried ${sprintDist.toFixed(2)} m along the run)`);
+  input.click(0);
+  go(0.5);
+  assert(chain[1] === 'risingCut', `the sprint slash counts as hit 1: the next tap is the rising cut (${chain[1]})`);
   go(0.8);
+  // LMB out of a forward roll: the low rising cut
+  chain.length = 0;
+  input.axis = { x: 0, y: 1 };
+  go(0.3);
+  input.tap('Space');
+  go(0.35);
+  input.axis = { x: 0, y: 0 };
+  input.click(0);
+  go(0.9);
+  assert(chain[0] === 'rollCut', `LMB out of a roll is the roll cut (${chain[0]})`);
+  // a backstep (Space with no direction) keeps the plain chain
+  chain.length = 0;
+  input.tap('Space');
+  go(0.25);
+  input.click(0);
+  go(0.9);
+  assert(chain[0] === 'fallingCut', `LMB out of a backstep starts the chain (${chain[0]})`);
+  G.watch = null;
+  go(0.6);
   input.press(0);
   go(1.4);
   input.up(0);
@@ -2268,11 +2311,26 @@ async function scenarioHeroLook() {
   go(0.9);
   input.axis = { x: 0, y: 0 };
   go(0.5);
-  for (let k = 0; k < 3; k++) {
+  for (let k = 0; k < 5; k++) {
     input.click(0);
-    go(0.45);
+    go(k === 4 ? 0.9 : 0.42);
   }
   go(0.8);
+  // the sprint slash and the roll cut
+  input.axis = { x: 0, y: 1 };
+  input.hold('ShiftLeft');
+  go(0.8);
+  input.click(0);
+  input.release('ShiftLeft');
+  input.axis = { x: 0, y: 0 };
+  go(1.0);
+  input.axis = { x: 0, y: 1 };
+  go(0.3);
+  input.tap('Space');
+  go(0.35);
+  input.axis = { x: 0, y: 0 };
+  input.click(0);
+  go(1.0);
   input.press(0);
   go(1.4);
   input.up(0);
