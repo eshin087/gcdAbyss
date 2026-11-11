@@ -5,6 +5,56 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-11 — Session 12: hands, the five-hit chain, a slim profile, equipment slots
+
+**Owner** (with a reference image: a cloaked swordsman, the sword low at his side): "The character
+right now has no right hand, the way he's holding the sword is a bit awkward and not natural. His
+first 2 arc swings can also be improved. Add a few more animations ... He looks weird when viewed
+from the side ... I also plan to make this a rpg where you can equip new armor and weapons so make
+sure the characters outfit can be replaced easily." Answers to four questions: idle = low at his
+side; attacks = a longer varied chain + sprint attack + roll attack; equipment = the structure
+only; side view = cape and coat shape, the rest left to judgement. Branch
+`look/hero-hands-combo-slots`.
+
+**Done:**
+- **Moveset (ADR-041):** `LIGHT` is five hits (falling cut, rising backhand, whirl, stab, slam);
+  `SPRINT_ATK`, `ROLL_ATK`. `anim.js`: `spinTurn`, `stabPose`, the `sink` and `feet: 'dash'` options;
+  the windup loop and the free hand's reach key on `anim.loop`, not on `combo === 1`.
+- **Hands (ADR-041):** `gripFist` on the sword joint, `looseHand` on the left forearm
+  (`heroGeo.js`); the undersuit has bare versions.
+- **Idle (ADR-041):** `IDLE_SW` [-0.6, -0.79, 0.12], edge down, the upper arm by the ribs.
+- **Profile (ADR-041):** `CAPE_SHEETS` (`ry`, `out`) and `COAT_PANELS` (`flare`, hem widths).
+- **Gear slots (ADR-042):** a subagent split `model.js` (1490 → 562 lines) into `heroDims.js`,
+  `heroGeo.js` and `gear/` as a pure refactor in its own worktree; it compared the default
+  loadout mesh by mesh with the old build (136 of 136 byte-identical) and ran the suite with
+  reduced loadouts. On top: `player.equip` / `setLoadout` / `loadout`, and no sword glow unarmed.
+- **Tests:** REACH covers five hits; HERO checks the chain order and wrap, the whirl's whole turn,
+  the sprint slash (name, 1.8–3.4 m, heading kept), the roll cut, the backstep, the gear slots, the
+  fist's owner, three loadout swaps and a bad id; HEROLOOK walks the new moves.
+
+**Verification:** `npm test` ALL PASSED, `npm run build` ok (1660 KB). Looked at
+in the Lab model viewer: every new move frame by frame, the idle from eight angles (ASCII and
+solid), both hands close up, both side views, four loadouts. At the game camera: the idle facing
+eight ways.
+
+**Measured:** sustained chain damage 63 /s (was 62 /s). Two `win` bot runs: 154 s and 144 s (177 s
+in Session 10). Two runs; not enough to say the fight is easier.
+
+**Not checked / open:**
+- No human has played the new chain. The whirl turns his back for ~0.1 s; the sprint slash ignores
+  the aim and the step-in assist.
+- The new moves at the game camera in a real fight; a phone; frame cost.
+- Heal, stagger, knockdown, death and plunge with the new hands (the fist rides the sword joint, so
+  it follows wherever the sword goes).
+- The undersuit was only looked at standing still.
+- Weapons of other lengths are not supported (ADR-042). `docs/art/hero.md` is out of date.
+- Facing west / north-west at the game camera the idle blade is still behind him.
+
+**Next:** playtest; the M1.13 follow-ups; a second gear set and an equip menu when the look is
+settled.
+
+---
+
 ## 2026-11-09 — Session 11: hero review, athletic build and the idle sword hold
 
 **Owner:** "review the main character and fix any details and features to make sure he looks good.

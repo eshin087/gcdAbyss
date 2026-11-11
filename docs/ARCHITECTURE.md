@@ -143,7 +143,7 @@ Render helpers for creature modules:
   pass; ADR-035). The fill is flat per part (no glyph gaps); glints only where the surface curves. Every hero
   material, the blade included, is depth-tested like any mesh: the depth pull (`heroArt.pull`,
   `SG_HERO_PULL`, `uArtPull`, ADR-022) was removed on 2026-11-09 (ADR-031).
-  - `aPart` (float vertex attribute, 0 / 1): `sub(geometry, k)` in `player/model.js`, carried through
+  - `aPart` (float vertex attribute, 0 / 1): `sub(geometry, k)` in `player/heroGeo.js`, carried through
     the static merge; a geometry without it reads 0 (`defaultAttributeValues`). It splits one part
     into pieces the pass outlines up close (coat panels, hair locks, the blade's two halves).
     `foldLines(geometry, fn)` (ADR-036) writes a smooth 0..0.9 field instead: the pass prints its
@@ -293,8 +293,9 @@ phase from the exported `PL` enum `{ VANISH, HANG, DIVE, RIDE, FLIP, LAND }`, pr
 the lift), `deflect { n, t, side }` (the parry chain), `guardHold` 0..1 (the guard lingering between
 parries), `rmb { held, upT, parryT, edge, chain }`.
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
-light combo (sweep → backhand sweep → two-handed slam finisher), LMB hold ≥ 0.3 s then release =
-charged lunging thrust · LMB tap with a posture-broken wyrm's head within 9 m = the execution ·
+light chain of five (falling cut → rising backhand → whirl → stab → two-handed slam finisher; ADR-041),
+LMB while sprinting = the sprint slash, LMB out of a forward roll = the roll cut (`SPRINT_ATK`,
+`ROLL_ATK`; both count as hit 1), LMB hold ≥ 0.3 s then release = charged lunging thrust · LMB tap with a posture-broken wyrm's head within 9 m = the execution ·
 RMB hold = block, RMB tap before impact = parry · Space = dodge roll · Shift = sprint · F = flask ·
 Tab / MMB = lock-on. (E is flow's.)
 Drawn body vs gameplay body (ADR-017): the root draws the hero `HERO_SCALE` (1.2) tall and leaned
@@ -409,16 +410,36 @@ sculpts them in a headless Blender, fitted to `DIM` / `BODY` / `REST` / `HAIR_CL
 `CAPE_SHEETS` dumped from `model.js`, and `npm run hero-parts` writes them to the generated,
 committed `player/heroParts.js` (`HERO_PARTS[name] = { n, p, nrm, uv, k, i }`, base64: positions and
 `aGUV` Int16 / 8192, normals Int8 / 127, `aPart` Uint8 / 200, Uint16 indices). `partGeometry(key)` in
-`model.js` decodes one into a BufferGeometry with the usual hero attributes; a part is in the space
-of the joint it hangs on and `model.js` picks that joint and the material. Never edit `heroParts.js`
+`heroGeo.js` decodes one into a BufferGeometry with the usual hero attributes; a part is in the space
+of the joint it hangs on, and the body (`model.js`) or the gear item that uses it picks that joint
+and the material. Never edit `heroParts.js`
 by hand; rerun the script after changing a dimension the parts are fitted to. `CAPE_SHEETS` (per
 sheet: `at` on the chest, `ry`, widths `w`, segment lengths `len`, `out`, `cup`, `seed`) must stay
 four entries (the streamer springs and the `herolook` test).
-**Idle** (`guard`, ADR-040; supersedes ADR-038's blade pointing ahead, which his body and cape hid
-from the game camera): weight on the left leg, the right foot a shoulder's width out and forward
-with the knee soft, the sword arm bent beside the right hip and outside the coat, the blade
-(`IDLE_SW`) out to his right side: ~43° below level, 82° off his front, the point a hand above
-the grass; the head bowed a little, looking ahead. An attack's recovery brings a blade that finished
+**Gear slots** (ADR-042, `player/gear/`, contract in `gear/README.md`): `model.js` builds the
+skeleton and the body (neck, head, face, hair, the flask); everything worn or held is an item
+`{ id, slot, name, build(ctx) }` in one of `SLOTS` = head, chest, shoulders, arms, legs, waist, back,
+weapon. `buildHero(U, loadout = DEFAULT_LOADOUT)` builds each slot's item (an empty chest / arms /
+legs slot gets the `base.*` undersuit), merges static meshes per joint + material + slot, and
+returns the usual rig plus `rig.loadout` (slot → id or null) and `rig.slots` (slot → the objects it
+hung on the skeleton). Geometry builders live in `player/heroGeo.js`, the body's measurements in
+`player/heroDims.js` (`model.js` re-exports them). `player.loadout`, `player.equip(slot, id | null)`
+and `player.setLoadout(loadout)` swap gear at runtime: the rig is rebuilt under the same root
+(`object3d` and `position` stay the same objects), the animator is recreated (the pose restarts from
+the ready stance), old geometries and materials are disposed; an unknown id throws before anything
+changes. No event is emitted. Limits: the animator, `combat.js` and `fx.js` read the sword's
+numbers from `DIM`, not from the weapon item's `dims`; `IDLE_FLARE` has six per-panel values; the
+pauldron joint is the right shoulder only.
+**Hands** (ADR-041, `heroGeo.js`): the sword hand is `gripFist`, four finger rolls, a thumb and a
+knuckle ridge round the grip, hung on the `sword` joint by the `arms` item so it closes round the
+grip in every pose (with no weapon it is a closed fist); the free hand is `looseHand` on the left
+forearm (palm, four curled fingers, thumb).
+**Idle** (`guard`, ADR-041; ADR-040 put the blade out to his side, where the game camera sees it):
+weight on the left leg, the right foot a shoulder's width out and forward with the knee soft, the
+upper arm hanging by the ribs with the elbow a little back, the grip beside the right hip and
+outside the coat, the blade (`IDLE_SW`) low at his right side: ~52° below level, 79° off his front,
+the EDGE down (the flat faces forward), the point just off the grass; the head bowed a little,
+looking ahead. An attack's recovery brings a blade that finished
 over his left shoulder home round the front (`HOME_WAY` in `attackPose`). Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
 (`DIR_FLIP` 2.75 rad, below `DIR_FLIP_HIGH` 0.9 rad of elevation) goes round the front, never behind
 the shoulders (the light combo's finish → this idle).
@@ -1060,7 +1081,7 @@ panel and the pause panel still scroll). Tuning: `CONFIG.touch`, sizes / look in
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:
-- `player:attack {kind:'light'|'slam'|'thrust', combo, charge}` (swing starts; slam = combo hit 3, thrust = charge release),
+- `player:attack {kind:'light'|'slam'|'thrust', combo, charge}` (swing starts; combo 1–5 = the chain hit, slam = hit 5, the sprint slash and the roll cut report 1; thrust = charge release),
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
   `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust / plunge; kind 'plunge' = the
   head-stab, crit on an execution), `player:hurt {damage, kind, hp}`,

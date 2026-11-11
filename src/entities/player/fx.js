@@ -803,7 +803,7 @@ export class PlayerFx {
     this.tipAcc += dt * 14;
     while (this.tipAcc >= 1) {
       this.tipAcc -= 1;
-      const zz = tip + R(-0.03, 0.04);
+      const zz = tip - R(0.05, 0.12); // the glyph is ~0.15 m long: centred here its far end stops at the point
       const x = e[8] * zz + e[12], y = e[9] * zz + e[13], z = e[10] * zz + e[14];
       const dl = Math.hypot(e[8], e[9], e[10]) || 1;
       if (!Number.isFinite(x + y + z) || y < 0.02) continue;

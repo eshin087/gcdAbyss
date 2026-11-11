@@ -146,6 +146,19 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.13 — Hands, the five-hit chain, equipment slots (2026-11-11, `look/hero-hands-combo-slots`)
+- [x] Real hands: a fist round the grip, a left hand with fingers (ADR-041)
+- [x] Idle: the blade low at his side, edge down; a slim side profile (cape, coat)
+- [x] LMB chain of five (falling cut, rising backhand, whirl, stab, slam); sprint slash; roll cut
+- [x] Gear slots as data, `player.equip` / `setLoadout`, the undersuit (ADR-042)
+- [ ] Follow-ups:
+  - [ ] A human playtest of the new chain (pacing, the whirl's exposed back, the sprint slash's aim)
+  - [ ] Weapons of other lengths: the animator, the hit segment and the blade FX read `DIM`
+  - [ ] A per-slot swap that keeps the pose; helmets that hide hair; per-item materials and stats
+  - [ ] An inventory / equip menu and a second gear set to prove the slots
+  - [ ] Heal, stagger, knockdown, death and plunge poses were not re-checked with the new hands
+  - [ ] docs/art/hero.md still describes the lean build, ADR-038's idle and the three-hit chain
+
 ## M1.12 — Hero review: athletic build, idle sword hold (2026-11-09)
 - [x] Athletic build: broader chest and shoulders, thicker limbs, head ×1.08 (ADR-040)
 - [x] Idle: shoulder-width stance, the blade out to his right side, visible from the game camera

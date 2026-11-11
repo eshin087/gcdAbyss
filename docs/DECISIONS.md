@@ -743,3 +743,56 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - Facing west or north-west at the game camera the idle blade is on his far side and still hidden;
     facing north about half of it shows past the cape.
   - Gameplay is untouched (hurt cylinder, reach, timings).
+
+## ADR-041 — A five-hit chain with sprint and roll attacks; real hands; a slim profile (2026-11-11)
+- **Context:** the owner, with a reference image (a cloaked swordsman, the sword low at his side):
+  "the character right now has no right hand, the way he's holding the sword is a bit awkward ...
+  his first 2 arc swings can also be improved. Add a few more animations ... instead of the same 3
+  attack patterns. He looks weird when viewed from the side." Lights 1 and 2 were one flat sweep and
+  its mirror; the sword hand was a 5 cm ellipsoid behind the guard; in profile the cape trailed
+  0.75 m behind him and the coat skirt was a bell. The owner chose: the blade low at his side, a
+  longer varied chain plus a sprint attack and a roll attack.
+- **Decision:**
+  - `LIGHT` is five hits: falling cut (high right → low left), rising backhand, whirl (one full
+    body turn to his right with the blade held out), stab, slam. `SPRINT_ATK` (LMB while sprinting:
+    a bounding slash carrying 2.4 m along the run direction) and `ROLL_ATK` (LMB out of a forward
+    roll: a low rising cut) both count as hit 1.
+  - Swing shapes stay data: `anim.kind 'h'` gained `loop`, `spin`, `sink` and `feet: 'dash'`; a new
+    `kind 'stab'`. The whirl turns the pose's body yaw and carries the foot targets round with it,
+    ending on exactly one turn written as 0.
+  - Per-hit numbers keep sustained damage level: 186 damage in 2.94 s (63 /s) against 120 in 1.94 s
+    (62 /s). The finisher comes two taps later.
+  - Hands: `gripFist` on the `sword` joint (owned by the `arms` gear slot), `looseHand` on the left
+    forearm.
+  - Idle: `IDLE_SW` [-0.6, -0.79, 0.12] (~52° below level), edge down, the upper arm by the ribs.
+  - Profile: the outer cape sheets turn to his right, the back sheets and the front coat panels hang
+    close (`CAPE_SHEETS`, `COAT_PANELS` in `gear/wanderer.js`).
+- **Consequences:**
+  - Supersedes ADR-040's idle blade angle and the three-hit chain in COMBAT.md. `player:attack`'s
+    `combo` now runs 1–5.
+  - The REACH test covers all five hits (contact to 3.5 m). One `win` bot run took 144–154 s
+    against 177 s before; too few runs to call it easier.
+  - The whirl turns his back on the target for about 0.1 s; nothing in the rules punishes that yet.
+  - The sprint slash does not use the step-in assist and does not turn to the aim.
+
+## ADR-042 — The hero's outfit and weapon are gear items in equipment slots (2026-11-11)
+- **Context:** the owner plans an RPG with equippable armor and weapons: "make sure the characters
+  outfit can be replaced easily". `buildHero` was one 550-line function building skeleton, body,
+  coat, cape, armour and sword together. The owner chose the structure only for now: no new gear,
+  no inventory.
+- **Decision:**
+  - `player/gear/`: items `{ id, slot, name, build(ctx) }` in eight slots (head, chest, shoulders,
+    arms, legs, waist, back, weapon), a registry, `DEFAULT_LOADOUT` (today's look) and the `base.*`
+    undersuit for an empty chest / arms / legs slot. `model.js` keeps the skeleton and the body.
+  - `buildHero(U, loadout)`; `rig.loadout`, `rig.slots`; static meshes merge only within a slot.
+  - `player.equip(slot, id | null)` / `player.setLoadout(loadout)` rebuild the rig under the same
+    root and recreate the animator.
+  - Geometry builders moved to `heroGeo.js`, measurements to `heroDims.js`.
+- **Consequences:**
+  - With the default loadout the refactor was checked mesh by mesh against the old build (136 of
+    136 identical) before the hand and profile changes went on top.
+  - A swap restarts the pose from the ready stance and rebuilds every mesh: fine in a menu, not
+    mid-fight.
+  - A weapon of another length is not supported yet: the animator, the hit segment and the blade FX
+    read `DIM`, not the item's `dims`. Helmets cannot hide the hair. Items carry no stats.
+  - Materials are still the shared hero set; an item cannot bring its own yet.

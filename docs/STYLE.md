@@ -264,9 +264,17 @@ Rules of thumb:
   body. Still a V to a belted waist. *Superseded:* the lean reference match (ADR-034: chest 0.34 m
   over 0.23 m, shoulders ≈ 0.24 H, 7.8 heads) and round 3's broad build (a 0.50 m chest) with its
   closed A-line skirt, a cloaked trapezoid with no legs from behind.
-- **Idle silhouette (ADR-040):** the sword stands out to his right side, ~43° below level, so the
-  steel shows past his body and cape from the front, the side and from behind; the cape hangs a
-  little closer (`CAPE_SHEETS.out` 0.9 → 0.34, was 1.15 → 0.4).
+- **Idle silhouette (ADR-040, ADR-041):** the sword hangs low at his right side, ~52° below level
+  with the edge down, so the steel shows past his body and cape from the front, the side and from
+  behind, and the guard reads as a cross from the front like the reference's.
+- **Hands (ADR-041):** a gauntlet fist closed round the grip (finger rolls with ink lines between
+  them, a bright knuckle ridge) and a loosely closed left glove with skin fingertips. The sword hand
+  used to be one small ellipsoid hidden behind the guard.
+- **Profile (ADR-041):** the cloak's width belongs to the front and back views (the reference's wide
+  A). From the side he is slim: the outer cape sheets turn to his right (`CAPE_SHEETS.ry`), the ones
+  down his back hang close (`out` 0.24 / 0.2), the front coat panels hang nearly straight (`flare`
+  0.13) and the back tails flare less (0.3). Before, the cape's hem trailed 0.75 m behind his heels
+  and the skirt was a bell.
 - **The silhouette from behind** (the usual fight view): spiky hair of pointed locks hanging toward
   the nape, a flared stand collar, the yoke seams dipping to a four-point star between the shoulder
   blades, the baldric from the right shoulder to the left hip, two belts, then two tails split by a

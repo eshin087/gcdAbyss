@@ -5,14 +5,15 @@ import { markCaster } from '../../render/pipeline.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
-import { LIGHT, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
+import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
 
 // The Wanderer. Owns input → state machine → movement/collision → animation → sword hits → FX.
 // Contract: docs/ARCHITECTURE.md (Player). Combat rules: docs/COMBAT.md + src/combat/rules.js.
 // No stamina (v0.2): pacing comes from attack recovery, roll recovery and the enemy's patterns.
-// Moveset (combat.js): light sweep → backhand sweep → two-handed slam (combo finisher, ground
-// shards); hold LMB = crouched charge, release = lunging thrust. Swings hit giant targets through
+// Moveset (combat.js, ADR-041): LMB chain falling cut → rising backhand → whirl → stab → two-handed
+// slam (finisher, ground shards); LMB out of a sprint = the sprint slash, out of a forward roll = the
+// roll cut; hold LMB = crouched charge, release = lunging thrust. Swings hit giant targets through
 // a vertical reach band and step in toward a hurt surface ahead (REACH).
 
 export const TUNE = {
@@ -451,6 +452,46 @@ export class Player {
     this.game.world?.setPusher?.(0, this.position.x, 0, this.position.z, TUNE.pusher);
   }
 
+  /** The equipped gear: slot → item id or null (gear/index.js SLOTS). */
+  get loadout() {
+    return this.rig.loadout;
+  }
+
+  /** Put item `id` (or null: take it off) in `slot`. See setLoadout. */
+  equip(slot, id) {
+    return this.setLoadout({ ...this.rig.loadout, [slot]: id ?? null });
+  }
+
+  /**
+   * Wear `loadout` (slot → gear item id or null; gear/README.md): the outfit and the weapon are
+   * rebuilt from their items and swapped in under the same root, so `object3d` / `position` stay
+   * the objects everything else holds. The animator is rebuilt with the new cloth (its pose restarts
+   * from the ready stance: equip out of combat). Throws on an unknown item id or an item in the
+   * wrong slot, before anything is changed. Build-time cost (allocates): never call it per frame.
+   */
+  setLoadout(loadout) {
+    const rig = buildHero(this.game.U, loadout);
+    const root = this.object3d, old = this.rig;
+    for (const c of [...root.children]) root.remove(c);
+    for (const c of [...rig.root.children]) root.add(c);
+    rig.root = root;
+    old.body?.traverse((o) => {
+      if (o.isMesh) o.geometry?.dispose();
+    });
+    for (const m of old.mats) m.dispose();
+    this.rig = rig;
+    const onFootstep = this.anim.onFootstep;
+    this.anim = new HeroAnimator(rig, this);
+    this.anim.onFootstep = onFootstep;
+    this.fx.rig = rig;
+    this.sweep.sword = rig.sword;
+    this.sweep.valid = false;
+    markCaster(root);
+    this._updateMaterials(0);
+    root.updateMatrixWorld(true);
+    return rig.loadout;
+  }
+
   restAtBonfire() {
     if (!this.alive) return;
     this.hp = this.maxHp;
@@ -774,6 +815,9 @@ export class Player {
     if (a === 'light' && allowAttack) {
       this.buf.action = null;
       if (this._tryExecution()) return true;
+      // out of a sprint: the bounding slash; out of a forward roll: the low rising cut
+      if (this.state === 'sprint' && Math.hypot(fin(this.groundVel.x), fin(this.groundVel.z)) > TUNE.runSpeed * 1.05) return this._startAttack(SPRINT_ATK);
+      if (this.state === 'roll' && !this.rollBack) return this._startAttack(ROLL_ATK);
       return this._startAttack(LIGHT[0]);
     }
     if (a === 'heal' && allowHeal) {
@@ -1433,12 +1477,12 @@ export class Player {
     if (!def) return false;
     const light = def.kind === 'light';
     this.atk = {
-      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, lunge: null, travel: 0,
+      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, lunge: null, travel: fin(def.travel, 0),
       pending: light && this.lmb.held, // still held: may become a charge (the swing waits at the coil)
       damage: fin(def.damage, 30), poise: fin(def.poise, 12), charge: 0,
     };
     this.chargeK = 0;
-    this.yaw = this._aimYaw(this.yaw); // commit the swing direction
+    if (!def.keepYaw) this.yaw = this._aimYaw(this.yaw); // commit the swing direction
     // the cross-fade IS the windup: the body eases into the coil pose
     this._enter('attack', 'attack', def.windup * 0.85, true);
     if (!this.atk.pending) this._swingStarted(def, 0);
@@ -1555,12 +1599,17 @@ export class Player {
     }
     a.t = a.pending ? Math.min(W, a.t + dt) : a.t + dt; // a held light waits at the coil
     const t = a.t;
-    if (t < W) this.yaw = turnToward(this.yaw, this._aimYaw(this.yaw), TUNE.windupSteer * dt);
+    if (t < W && !d.keepYaw) this.yaw = turnToward(this.yaw, this._aimYaw(this.yaw), TUNE.windupSteer * dt);
     // lunge forward through the strike (stretched by the step-in assist); the thrust's root travel
     // is front-loaded through its active frames
     let lv = 0;
     if (d.kind === 'thrust') {
       if (t >= W && t <= W + A) lv = (a.travel / A) * (1.5 - (t - W) / A);
+    } else if (a.travel > 0) {
+      // a travelling light (the sprint slash): the run's momentum carries on through the windup and
+      // the cut, dying out (integrates to a.travel)
+      const T = W + A;
+      if (!a.pending && t <= T) lv = (a.travel / T) * (1.4 - (0.8 * t) / T);
     } else {
       const l0 = W - 0.08, l1 = W + A;
       if (!a.pending && t >= l0 && t <= l1) {
@@ -1978,6 +2027,7 @@ export class Player {
       else this.healLight.set?.(p.x, 1.3, p.z);
     }
     const sw = this.sweep;
+    const armed = !!this.rig.loadout?.weapon; // no weapon equipped: no blade halo, no gem glow
     // the roll's sliding kneel (the root still carries 4-6 m/s through it): dust and torn grass
     // off the shin and the planted foot, cold sparks off the point dragging behind
     if (this.state === 'roll' && !this.rollBack && dt > 0) {
@@ -2012,7 +2062,7 @@ export class Player {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);
       // the blade's dot halo: dim at idle, brighter while it glows (strikes, charge, crit)
-      if (this.alive && this.object3d.visible !== false && !hidden) {
+      if (this.alive && this.object3d.visible !== false && !hidden && armed) {
         const bu = this.rig.materials.blade.uniforms;
         this.fx.bladeHalo(dt, clamp((bu.uInkGlow.value - 0.16) * 0.8, 0.25, 2), this.bladeFar);
       }
@@ -2028,7 +2078,7 @@ export class Player {
       gv.z = clamp((this._gem.z - gp.z) / dt, -30, 30);
     }
     gp.copy(this._gem);
-    if (this.state !== 'dead' && this.object3d.visible !== false && !hidden) {
+    if (this.state !== 'dead' && this.object3d.visible !== false && !hidden && armed) {
       const charging = this.state === 'charge';
       this.fx.gemTick(dt, this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + this.chargeK : 0.35, gv.x, gv.z, gv.y);
       this.gemT -= dt;

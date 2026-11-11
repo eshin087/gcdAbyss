@@ -225,13 +225,16 @@ function kv3(p, i, t, k) {
  *  the front keeps clipping through the sword"). ADR-034 hung it straight down his right side: a
  *  stiff A-pose carrying a pole. From the 58° game camera this blade lies forward-right of his body,
  *  so its whole length shows from behind.) */
-// blade direction (body axes): ~43° below level, out to his right and a touch forward.
+// blade direction (body axes): ~52° below level, out to his right and a touch forward, the point
+// just off the grass (the owner's reference image: the sword low at his side). The EDGE is down (the
+// flat faces forward): the way a hanging hand carries a sword, and the guard shows as a cross from
+// the front like the reference's.
 // (Session 11, ADR-040: the blade used to point nearly straight ahead, 22° off his front, from a
 // straight hanging arm. Facing away from the 58° game camera, the usual fight view, his body and
 // cape hid all of it, and the wrist was cocked ~50° to hold it there. Now the elbow is bent back beside
 // the ribs, the forearm runs into the blade's line, and the steel stands out to his side, past
 // his silhouette and the cape, from every camera.)
-const IDLE_SW = [-0.725, -0.68, 0.1];
+const IDLE_SW = [-0.6, -0.79, 0.12];
 function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
@@ -250,12 +253,12 @@ function guard(p, A) {
   p[P.hdX] = 0.14 - 0.03 * br; // bowed a little
   p[P.hdY] = 0.1; // ... looking ahead
   p[P.hdZ] = 0.06 + 0.012 * sw;
-  v3(p, P.rH, -0.2, -0.44 + 0.006 * br, 0.04); // the grip out beside the right hip, clear of the coat
-  v3(p, P.rP, -0.4, -0.3, -1); // the elbow bent back and a little out: the forearm runs toward the blade's line
+  v3(p, P.rH, -0.19, -0.435 + 0.006 * br, 0.06); // the grip out beside the right hip, clear of the coat
+  v3(p, P.rP, 0.5, -0.3, -1); // the upper arm hangs by the ribs, the elbow a little back: the forearm runs out and down, ~25° off the blade's line
   v3(p, P.lH, 0.07, -0.51, 0.03); // the free arm hangs relaxed beside the left hip
   v3(p, P.lP, 0.6, -0.1, -0.8);
   v3(p, P.swD, IDLE_SW[0] + 0.01 * br, IDLE_SW[1] + 0.008 * br, IDLE_SW[2] + 0.015 * sw);
-  v3(p, P.swF, -0.68, 0.73, 0.06); // the flat faces up and out: broad to a camera in front, behind or above
+  v3(p, P.swF, 0.15, 0.05, 1); // edge down, the flat faces forward: broad to a camera in front or behind
   // (the right foot stood 0.33 m out and the leg dead straight: a straddle; now a shoulder-width
   // stance with the knee soft)
   v3(p, P.rF, -0.25, ANK, 0.17); // the right leg out to his right and forward, the knee soft
@@ -765,6 +768,8 @@ function attackPose(p, A) {
   const W = d.windup, Ac = d.active, R = d.recovery;
   if (k.kind === 'thrust') {
     thrustPose(p, A, t, W, Ac);
+  } else if (k.kind === 'stab') {
+    stabPose(p, A, t, W, Ac, R);
   } else {
     const dir = Math.sign(k.a1 - k.a0) || 1;
     const slam = k.kind === 'slam';
@@ -804,9 +809,17 @@ function attackPose(p, A) {
     }
     if (slam) slamPose(p, A, ang, lunge);
     else slashH(p, A, ang, el, lunge);
-    if (d.combo === 1 && !slam && t < W) loopWindup(p, A, t);
+    if (k.sink) {
+      // a cut out of a crouch (the roll attack): the hips stay low through the windup and the cut
+      // and rise with the follow-through
+      const low = k.sink * (1 - smoothstep(W + Ac, W + Ac + R * 0.5, t));
+      p[P.bodyY] -= low;
+      p[P.spX] += 0.5 * low;
+      p[P.hdX] -= 0.4 * low;
+    }
+    if (k.loop && t < W) loopWindup(p, A, t);
     else if (slam && t < W) slamWindup(p, A, t);
-    if (d.combo === 1 && !slam) lightOneBody(p, A, t, W, Ac);
+    if (k.loop) lightOneBody(p, A, t, W, Ac);
     if (slam && t > W + Ac + FINISH.after) {
       // the blow's weight settles: the body sinks a little further over the planted blade and the
       // head bows, then the old follow-through hold and rise take over (after the hit-tested frames)
@@ -818,8 +831,10 @@ function attackPose(p, A) {
   }
   // footwork: the lunge is a real step (feet never skate with the root)
   if (k.kind === 'thrust') dashFeet(p, A, W);
+  else if (k.feet === 'dash') dashFeet(p, A, 0.04);
   else if (k.kind === 'slam') lungeFeet(p, A, W - 0.16, W + Ac * 0.5, 0.25, true);
   else lungeFeet(p, A, 0.03, W + Ac * 0.45, 0.22, true);
+  if (k.spin) spinTurn(p, k.spin, t, W, Ac);
   const rec = (t - W - Ac) / R;
   const home = k.kind === 'h' ? FINISH.home : 0.45; // the sweeps hold their finish a beat longer
   if (rec > home) {
@@ -844,6 +859,58 @@ function attackPose(p, A) {
     p[P.lFy] = lerp(p[P.lFy], SCRATCH[P.lFy], u);
   }
 }
+/** The whirl (combo hit 3, `anim.spin` ±1: − = he turns to his right): the whole body turns once
+ *  about its axis from just before the active frames to their end, the feet carried round with it
+ *  in two quick pivot steps (their stance spots turn with the body, each lifted in turn). The turn
+ *  ends on exactly one revolution, written as 0, so nothing unwinds afterwards. */
+function spinTurn(p, dir, t, W, Ac) {
+  const t0 = W - 0.1, t1 = W + Ac;
+  if (t <= t0 || t >= t1) return;
+  const u = (t - t0) / (t1 - t0);
+  // eased in, still fast at the end: the blade crosses the front at speed
+  const e = u * u * (2.2 - 1.2 * u);
+  const yaw = dir * TAU * e;
+  p[P.yaw] += yaw;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  for (let k = 0; k < 2; k++) {
+    const i = k ? P.lF : P.rF, x = p[i], z = p[i + 2];
+    p[i] = x * c + z * s;
+    p[i + 2] = z * c - x * s;
+    // the right foot steps round first, then the left
+    p[i + 1] += 0.07 * Math.max(0, Math.sin(Math.PI * clamp(k ? u * 2 - 1 : u * 2, 0, 1)));
+  }
+  p[P.rFy] += yaw;
+  p[P.lFy] += yaw;
+  p[P.rFf] = p[P.lFf] = 0.5; // on the balls of the feet through the turn
+  p[P.bodyY] -= 0.03 * Math.sin(Math.PI * u);
+}
+
+/** The stab (combo hit 4): out of the whirl's low finish the sword hand draws back to the right
+ *  ribs, the point on the target and the free hand reaching out along the line (windup); then the
+ *  hips and chest turn into it and the arm drives the level blade straight out, the free arm thrown
+ *  back for balance (active); it holds the extension a beat before coming home. */
+function stabPose(p, A, t, W, Ac, R) {
+  const draw = smoothstep(0, W * 0.85, t);
+  const drive = t < W ? 0 : easeOutCubic(clamp((t - W) / Ac, 0, 1));
+  const settle = smoothstep(W + Ac + R * 0.2, W + Ac + R * 0.7, t); // the arm eases off the lock
+  stance(p, A, drive);
+  p[P.bodyY] -= 0.03 * draw * (1 - drive);
+  p[P.pelvY] = lerp(-0.22 * draw, 0.3, drive);
+  p[P.spY] = lerp(-0.42 * draw, 0.46, drive);
+  p[P.spX] = lerp(0.1 + 0.08 * draw, 0.4, drive) - 0.08 * settle;
+  p[P.spZ] = 0;
+  p[P.hdY] = -(p[P.pelvY] + p[P.spY]) * 0.8; // eyes stay on the target
+  p[P.hdX] = 0.04 - 0.12 * drive;
+  v3(p, P.rH, lerp(-0.07, 0.12, drive), lerp(-0.24, -0.1, drive), lerp(-0.1, 0.52 - 0.06 * settle, drive));
+  v3(p, P.rP, -0.7, -0.6, -0.4);
+  v3(p, P.swD, lerp(0.1, 0.0, drive), lerp(0.04, -0.03, drive), 1);
+  v3(p, P.swF, 0.25, 1, 0);
+  // free hand: out along the line as he draws, thrown back as he drives
+  v3(p, P.lH, lerp(lerp(0.07, -0.02, draw), 0.26, drive), lerp(lerp(-0.5, -0.14, draw), -0.26, drive), lerp(lerp(0.03, 0.4, draw), -0.28, drive));
+  v3(p, P.lP, 0.8, -0.3, lerp(-0.3, 0.3, drive));
+  p[P.rFf] = lerp(p[P.rFf], 0.3, drive); // the rear heel peels as the hips drive in
+}
+
 const FOOT_CH = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rFy, P.lFy];
 const FOOT_KEEP = new Float32Array(FOOT_CH.length);
 const HOME_WAY = { d: -3, ok: false }; // dirLerp memory: the recovery's way home (− = clockwise from above, through the front)
