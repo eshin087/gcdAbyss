@@ -73,6 +73,8 @@ export class Pipeline {
 
     // --- shadows
     const S = CONFIG.render.shadowSize;
+    /** Live shadow map size in texels (setShadowSize; the quality presets' `shadow`). */
+    this.shadowSize = S;
     this.shadowRT = new THREE.WebGLRenderTarget(S, S, {
       depthTexture: new THREE.DepthTexture(S, S),
       minFilter: THREE.NearestFilter,
@@ -876,11 +878,20 @@ export class Pipeline {
     this.asciiMat.uniforms.uHeroPx.value.x = hs; // the ink lines are one font pixel wide
   }
 
+  /** Resize the moon shadow map to `size` × `size` texels (quality presets; main.js applyQuality). */
+  setShadowSize(size) {
+    const S = Math.round(Number(size));
+    if (!Number.isFinite(S) || S < 16 || S === this.shadowSize) return;
+    this.shadowSize = S;
+    this.shadowRT.setSize(S, S);
+    this.U.uShadowTexel.value = 1 / S;
+  }
+
   updateShadowCamera(center) {
     const E = CONFIG.render.shadowExtent;
     const dir = this.U.uMoonDir.value;
     // snap to texel grid to avoid shimmering when the center moves
-    const texel = (2 * E) / CONFIG.render.shadowSize;
+    const texel = (2 * E) / this.shadowSize;
     this.shadowCenter.set(Math.round(center.x / texel) * texel, 0, Math.round(center.z / texel) * texel);
     this.shadowCam.position.copy(this.shadowCenter).addScaledVector(dir, 160);
     this.shadowCam.lookAt(this.shadowCenter);
