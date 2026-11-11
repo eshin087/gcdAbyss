@@ -1,5 +1,5 @@
 import { ellipsoidGeometry } from '../../../render/glyphGeometry.js';
-import { shellGeometry, bandGeometry, mergeGeometries, sub, orient, limb } from '../heroGeo.js';
+import { shellGeometry, bandGeometry, mergeGeometries, sub, orient, limb, gripFist, looseHand } from '../heroGeo.js';
 
 // The undersuit: what covers the body where a loadout leaves `chest`, `arms` or `legs` empty, so
 // the figure is never missing a torso or a limb (gear/index.js BASE_LOADOUT). A plain dark shirt
@@ -16,8 +16,13 @@ function buildChest({ spine, chest, M, BODY, REST, mesh }) {
 }
 
 /** Shirt sleeves to the wrist (sub-id 1: outlined against the torso) and bare hands. */
-function buildArms({ arms, M, DIM, BODY, mesh }) {
+function buildArms({ arms, sword, M, DIM, BODY, mesh }) {
   const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
+  // the sword hand: a bare fist on the grip's own frame (heroGeo.js gripFist)
+  {
+    const F = gripFist(HK);
+    mesh(sword, mergeGeometries([F.fingers, F.thumb, F.ridge]), M.skin);
+  }
   for (const side of [-1, 1]) {
     const { upper, fore } = arms[side < 0 ? 'R' : 'L'];
     mesh(upper, mergeGeometries([
@@ -28,7 +33,12 @@ function buildArms({ arms, M, DIM, BODY, mesh }) {
       sub(limb({ length: 0.09, r0: ua1, r1: ua1 - 0.003 }), 1),
       sub(limb({ length: 0.18, r0: fa0, r1: fa1, radial: 10, rings: 3 }).translate(0, -0.05, 0), 1),
     ]), M.shirt);
-    mesh(fore, ellipsoidGeometry(0.042 * HK, 0.04 * HK, 0.055 * HK, { widthSegs: 10, heightSegs: 6 }), M.skin, 0, -DIM.foreArm - 0.006, 0.004);
+    if (side < 0) {
+      mesh(fore, ellipsoidGeometry(0.036 * HK, 0.04 * HK, 0.04 * HK, { widthSegs: 10, heightSegs: 6 }), M.skin, 0, -DIM.foreArm + 0.02, 0.004); // the wrist under the fist
+    } else {
+      const H = looseHand(DIM.foreArm - 0.03, side, HK);
+      mesh(fore, mergeGeometries([H.palm, H.fingers, H.tips, H.thumb]), M.skin);
+    }
   }
 }
 

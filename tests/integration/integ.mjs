@@ -2180,6 +2180,43 @@ async function scenarioHero() {
     `glyph cells scale with the view distance (coat row ${farY.toFixed(3)} m at 36 m → ${nearY.toFixed(3)} m at 3 m)`);
   setHeroGlyphScale(r.mats, NaN);
   assert(r.mats.every((m) => Number.isFinite(m.uniforms.uCell.value.x + m.uniforms.uCell.value.y + m.uniforms.uGlyphZoom.value)), 'a bad view distance leaves every glyph cell finite');
+  // equipment slots (ADR-042): the outfit and the weapon are gear items in slots; a loadout swap
+  // rebuilds them under the same root and the animator carries on with whatever cloth there is
+  {
+    const { SLOTS, DEFAULT_LOADOUT, getItem } = await imp('src/entities/player/gear/index.js');
+    const root = p.object3d, pos = p.position;
+    const meshes = () => { let n = 0; root.traverse((o) => { if (o.isMesh) n++; }); return n; };
+    const finite = () => { let ok = true; root.traverse((o) => { const e = o.matrixWorld.elements; for (let i = 0; i < 16; i++) if (!Number.isFinite(e[i])) ok = false; }); return ok; };
+    const n0 = meshes();
+    assert(SLOTS.join() === 'head,chest,shoulders,arms,legs,waist,back,weapon' && SLOTS.every((sl) => DEFAULT_LOADOUT[sl] == null || getItem(DEFAULT_LOADOUT[sl])?.slot === sl) && SLOTS.every((sl) => p.loadout[sl] === (DEFAULT_LOADOUT[sl] ?? null)),
+      `gear slots: ${SLOTS.join(', ')}; the default loadout fills ${SLOTS.filter((sl) => DEFAULT_LOADOUT[sl]).length} of them`);
+    // the sword hand is a fist on the grip's own frame, owned by the arms slot (not by the weapon)
+    const fist = p.rig.sword.children.filter((o) => o.isMesh && o.userData.slot === 'arms');
+    assert(fist.length >= 1 && p.rig.slots.weapon.length > 0 && p.rig.slots.weapon.every((o) => o.userData.slot === 'weapon'), `the sword hand's fist hangs on the grip (${fist.length} arms-slot meshes on the sword joint)`);
+    const drive = () => {
+      input.axis = { x: 0, y: 1 };
+      for (let i = 0; i < 30; i++) G.tick(DT);
+      input.axis = { x: 0, y: 0 };
+      input.click(0);
+      for (let i = 0; i < 40; i++) G.tick(DT);
+      input.tap('Space');
+      for (let i = 0; i < 50; i++) G.tick(DT);
+    };
+    p.equip('back', null);
+    p.equip('waist', null);
+    drive();
+    assert(p.rig.streamers.length === 0 && p.rig.coat.length === 0 && p.loadout.back === null && p.object3d === root && p.position === pos && meshes() < n0 && finite(),
+      `cape and coat tails off: ${meshes()} meshes (was ${n0}), same root, the rig stays finite through a run, a swing and a roll`);
+    p.setLoadout({});
+    drive();
+    assert(p.loadout.weapon === null && p.loadout.chest === 'base.chest' && p.rig.slots.weapon.length === 0 && finite(), `an empty loadout wears the undersuit and no weapon (${meshes()} meshes), and still animates`);
+    let threw = false;
+    try { p.equip('back', 'no.such.item'); } catch { threw = true; }
+    assert(threw && p.loadout.back === null, 'an unknown item id throws and changes nothing');
+    p.setLoadout(DEFAULT_LOADOUT);
+    drive();
+    assert(meshes() === n0 && p.rig.coat.length === 6 && p.rig.streamers.length === 4 && p.sweep.sword === p.rig.sword && finite(), `back in the default set: ${meshes()} meshes, 6 coat panels, 4 cape sheets`);
+  }
   return G;
 }
 

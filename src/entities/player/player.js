@@ -452,6 +452,46 @@ export class Player {
     this.game.world?.setPusher?.(0, this.position.x, 0, this.position.z, TUNE.pusher);
   }
 
+  /** The equipped gear: slot → item id or null (gear/index.js SLOTS). */
+  get loadout() {
+    return this.rig.loadout;
+  }
+
+  /** Put item `id` (or null: take it off) in `slot`. See setLoadout. */
+  equip(slot, id) {
+    return this.setLoadout({ ...this.rig.loadout, [slot]: id ?? null });
+  }
+
+  /**
+   * Wear `loadout` (slot → gear item id or null; gear/README.md): the outfit and the weapon are
+   * rebuilt from their items and swapped in under the same root, so `object3d` / `position` stay
+   * the objects everything else holds. The animator is rebuilt with the new cloth (its pose restarts
+   * from the ready stance: equip out of combat). Throws on an unknown item id or an item in the
+   * wrong slot, before anything is changed. Build-time cost (allocates): never call it per frame.
+   */
+  setLoadout(loadout) {
+    const rig = buildHero(this.game.U, loadout);
+    const root = this.object3d, old = this.rig;
+    for (const c of [...root.children]) root.remove(c);
+    for (const c of [...rig.root.children]) root.add(c);
+    rig.root = root;
+    old.body?.traverse((o) => {
+      if (o.isMesh) o.geometry?.dispose();
+    });
+    for (const m of old.mats) m.dispose();
+    this.rig = rig;
+    const onFootstep = this.anim.onFootstep;
+    this.anim = new HeroAnimator(rig, this);
+    this.anim.onFootstep = onFootstep;
+    this.fx.rig = rig;
+    this.sweep.sword = rig.sword;
+    this.sweep.valid = false;
+    markCaster(root);
+    this._updateMaterials(0);
+    root.updateMatrixWorld(true);
+    return rig.loadout;
+  }
+
   restAtBonfire() {
     if (!this.alive) return;
     this.hp = this.maxHp;
@@ -1987,6 +2027,7 @@ export class Player {
       else this.healLight.set?.(p.x, 1.3, p.z);
     }
     const sw = this.sweep;
+    const armed = !!this.rig.loadout?.weapon; // no weapon equipped: no blade halo, no gem glow
     // the roll's sliding kneel (the root still carries 4-6 m/s through it): dust and torn grass
     // off the shin and the planted foot, cold sparks off the point dragging behind
     if (this.state === 'roll' && !this.rollBack && dt > 0) {
@@ -2021,7 +2062,7 @@ export class Player {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);
       // the blade's dot halo: dim at idle, brighter while it glows (strikes, charge, crit)
-      if (this.alive && this.object3d.visible !== false && !hidden) {
+      if (this.alive && this.object3d.visible !== false && !hidden && armed) {
         const bu = this.rig.materials.blade.uniforms;
         this.fx.bladeHalo(dt, clamp((bu.uInkGlow.value - 0.16) * 0.8, 0.25, 2), this.bladeFar);
       }
@@ -2037,7 +2078,7 @@ export class Player {
       gv.z = clamp((this._gem.z - gp.z) / dt, -30, 30);
     }
     gp.copy(this._gem);
-    if (this.state !== 'dead' && this.object3d.visible !== false && !hidden) {
+    if (this.state !== 'dead' && this.object3d.visible !== false && !hidden && armed) {
       const charging = this.state === 'charge';
       this.fx.gemTick(dt, this._gem.x, this._gem.y, this._gem.z, charging ? 0.5 + this.chargeK : 0.35, gv.x, gv.z, gv.y);
       this.gemT -= dt;

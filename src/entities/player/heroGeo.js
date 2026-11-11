@@ -452,3 +452,52 @@ export const limb = (o) => orient.down(limbGeometry({ flip: true, ...o }));
 /** A flattened wedge (pauldron / elbow / knee points): base 2w wide, from `base` along `dir`,
  *  curving toward `bend`. Parent space. */
 export const wedge = (L, w, base, dir, bend, curl = 0.17) => orientTo(clumpGeometry(L, w, 0.006, { curl, taper: 1, cols: 8, rows: 3 }), base, dir, bend);
+
+// ---------------------------------------------------------------- hands
+// (ADR-041: the sword hand was one small ellipsoid on the wrist, hidden by the guard: "the character
+// has no right hand".)
+
+/**
+ * The SWORD hand: a closed fist round a grip that runs along local Z through the origin (sword
+ * space: blade +Z, edges ±X, flats ±Y), so it hangs on the `sword` joint and closes round the grip
+ * in every pose. Four finger rolls stacked along the grip (alternating ink sub-ids: a line between
+ * each pair), a thumb laid along the grip on the +Y flat toward the guard, and the knuckle ridge.
+ * The rolls are rings round the grip, so the fist reads the same whichever way the forearm comes
+ * into it. `k` = size (BODY.hand). Returns { fingers, thumb, ridge } geometries (the caller picks
+ * the materials: plate, skin, ...).
+ */
+export function gripFist(k = 1) {
+  const fingers = [];
+  for (let i = 0; i < 4; i++) {
+    const z = (-0.034 + i * 0.0235) * k + 0.006;
+    // the index finger (nearest the guard) is the thickest roll, the little finger the thinnest
+    const r = (0.036 + 0.0025 * i) * k;
+    fingers.push(sub(ellipsoidGeometry(r * 1.12, r * 0.94, 0.0135 * k, { widthSegs: 12, heightSegs: 5 }).translate(0, 0, z), i & 1));
+  }
+  const thumb = sub(place(ellipsoidGeometry(0.0135 * k, 0.012 * k, 0.034 * k, { widthSegs: 8, heightSegs: 5 }), 0.012 * k, 0.034 * k, 0.03 * k + 0.006, 0.18, 0, 0), 1);
+  // the knuckle ridge: a raised strip across the four rolls on the +X edge side
+  const ridge = boxGeometry(0.012 * k, 0.03 * k, 0.088 * k, 0.04 * k, 0, 0.006);
+  return { fingers: mergeGeometries(fingers), thumb, ridge };
+}
+
+/**
+ * The FREE hand: a loosely closed hand hanging off the end of a forearm (fore space: the arm runs
+ * down −Y, the wrist at y = −len). The palm faces the body (the hand is thin across X), four
+ * fingers hang side by side along Z and curl in toward the palm, the thumb lies in front (+Z).
+ * `side` = +1 left arm / −1 right arm (which way "toward the body" is), `k` = size (BODY.hand).
+ * Returns { palm, fingers, tips, thumb } geometries (tips = the last finger joints: skin on a
+ * fingerless glove).
+ */
+export function looseHand(len, side, k = 1) {
+  const inX = -side; // toward the body
+  const palm = ellipsoidGeometry(0.024 * k, 0.046 * k, 0.04 * k, { widthSegs: 10, heightSegs: 6 }).translate(0, -len - 0.034 * k, 0.002);
+  const fingers = [], tips = [];
+  for (let i = 0; i < 4; i++) {
+    const z = (0.03 - i * 0.02) * k; // index in front, little finger behind
+    const L = (0.03 - 0.003 * Math.abs(i - 1.2)) * k;
+    fingers.push(sub(place(ellipsoidGeometry(0.0105 * k, L, 0.0098 * k, { widthSegs: 6, heightSegs: 5 }), inX * 0.008 * k, -len - 0.078 * k, z, 0, 0, inX * 0.45), i & 1));
+    tips.push(place(ellipsoidGeometry(0.0095 * k, 0.014 * k, 0.009 * k, { widthSegs: 6, heightSegs: 4 }), inX * 0.027 * k, -len - 0.098 * k, z, 0, 0, inX * 1.0));
+  }
+  const thumb = sub(place(ellipsoidGeometry(0.0115 * k, 0.028 * k, 0.0125 * k, { widthSegs: 6, heightSegs: 5 }), inX * 0.01 * k, -len - 0.05 * k, 0.047 * k, 0.35, 0, inX * 0.2), 1);
+  return { palm, fingers: mergeGeometries(fingers), tips: mergeGeometries(tips), thumb };
+}

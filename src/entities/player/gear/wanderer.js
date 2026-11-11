@@ -4,6 +4,7 @@ import { DIM as HERO_DIM } from '../heroDims.js';
 import {
   gridGeometry, shellGeometry, skirtSheet, tatterStrip, arcPlate, strapGeometry, boxGeometry, kiteGeometry, sheetEdge, starGeometry,
   mergeGeometries, sub, partGeometry, foldLines, ribbonCrease, spike, bandGeometry, place, sheetOffset, lerp, orient, ring, limb, wedge,
+  gripFist, looseHand,
 } from '../heroGeo.js';
 
 // The Wanderer's outfit, "Shadow Swordsman": the default gear set (gear/index.js DEFAULT_LOADOUT),
@@ -30,12 +31,12 @@ import {
 // (`slant`, m); the lower part lightens into the dusty lavender torn zone and ends in claw points,
 // longest outside.
 export const COAT_PANELS = [
-  { az: 0.95, w: [0.134, 0.223, 0.34], len: [0.33, 0.33], strips: [0.08, 0.16], fork: [0, 0], out: 0.004, flare: 0.28, edge: -1, skew: 1, slant: 0.07 }, // front-left
-  { az: -0.95, w: [0.134, 0.223, 0.34], len: [0.33, 0.33], strips: [0.16, 0.08], fork: [0, 0], out: 0.004, flare: 0.28, edge: 1, skew: -1, slant: 0.07 }, // front-right
+  { az: 0.95, w: [0.134, 0.21, 0.28], len: [0.33, 0.33], strips: [0.08, 0.16], fork: [0, 0], out: 0.004, flare: 0.13, edge: -1, skew: 1, slant: 0.07 }, // front-left
+  { az: -0.95, w: [0.134, 0.21, 0.28], len: [0.33, 0.33], strips: [0.16, 0.08], fork: [0, 0], out: 0.004, flare: 0.13, edge: 1, skew: -1, slant: 0.07 }, // front-right
   { az: 1.7, w: [0.146, 0.223, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // left
   { az: -1.7, w: [0.146, 0.223, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // right
-  { az: 2.5, w: [0.157, 0.286, 0.46], len: [0.36, 0.36], strips: [0.18, 0.13, 0.08], fork: [0, 1, 0], out: 0.008, flare: 0.5, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
-  { az: -2.5, w: [0.157, 0.286, 0.46], len: [0.36, 0.36], strips: [0.08, 0.13, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.5, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
+  { az: 2.5, w: [0.157, 0.27, 0.42], len: [0.36, 0.36], strips: [0.18, 0.13, 0.08], fork: [0, 1, 0], out: 0.008, flare: 0.3, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
+  { az: -2.5, w: [0.157, 0.27, 0.42], len: [0.36, 0.36], strips: [0.08, 0.13, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.3, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
 ];
 
 /** The torn half-cape: wide ragged sheets on the streamer springs (anim.js), fanned behind his
@@ -43,11 +44,14 @@ export const COAT_PANELS = [
  *  the sheet's root on the chest joint, `ry` = the way its outer face looks (π = straight back),
  *  `w` = its width at the root / the torn end, `len` = the two spring segments, `out` = how far it
  *  flies out from the chest at rest (tan of the angle), `cup` = the billow baked into it. */
+// (ADR-041, the side view: the sheets used to fly out BEHIND him, the hem 0.75 m behind his heels: a
+// sail in profile. The outer sheets now turn to his right side (`ry`), where the spread shows from
+// the front and the back like the reference's wide cloak, and the sheets down his back hang close.)
 export const CAPE_SHEETS = [
-  { at: [-0.225, 0.17, -0.062], ry: Math.PI + 0.3, w: [0.18, 0.4], len: [0.44, 0.5], out: 0.9, cup: 0.05, seed: 11 },
-  { at: [-0.135, 0.18, -0.102], ry: Math.PI + 0.15, w: [0.2, 0.42], len: [0.48, 0.52], out: 0.68, cup: 0.06, seed: 23 },
-  { at: [-0.03, 0.185, -0.119], ry: Math.PI, w: [0.2, 0.36], len: [0.46, 0.46], out: 0.46, cup: 0.06, seed: 37 },
-  { at: [0.06, 0.185, -0.113], ry: Math.PI - 0.2, w: [0.16, 0.24], len: [0.36, 0.34], out: 0.34, cup: 0.05, seed: 41 },
+  { at: [-0.225, 0.17, -0.062], ry: Math.PI + 0.95, w: [0.18, 0.4], len: [0.44, 0.5], out: 0.8, cup: 0.05, seed: 11 },
+  { at: [-0.135, 0.18, -0.102], ry: Math.PI + 0.45, w: [0.2, 0.42], len: [0.48, 0.52], out: 0.5, cup: 0.06, seed: 23 },
+  { at: [-0.03, 0.185, -0.119], ry: Math.PI + 0.05, w: [0.2, 0.36], len: [0.46, 0.46], out: 0.24, cup: 0.06, seed: 37 },
+  { at: [0.06, 0.185, -0.113], ry: Math.PI - 0.35, w: [0.16, 0.24], len: [0.36, 0.34], out: 0.2, cup: 0.05, seed: 41 },
 ];
 
 // ---------------------------------------------------------------- chest: the open greatcoat
@@ -241,8 +245,16 @@ function buildPauldron({ pauldron, arms, M, BODY, mesh }) {
 // ---------------------------------------------------------------- arms (asymmetric)
 /** Coat sleeves with deltoid caps on both arms; a plate vambrace and gauntlet on the right (the
  *  sword arm), a leather bracer and a fingerless glove on the left. */
-function buildArms({ arms, M, DIM, BODY, mesh }) {
+function buildArms({ arms, sword, M, DIM, BODY, mesh }) {
   const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
+  // the sword hand: an articulated gauntlet closed round the grip. It hangs on the `sword` joint
+  // (the grip's own frame), so the fingers wrap the grip in every pose; the back-of-the-hand plate
+  // and the cuff below stay on the forearm and meet it at the wrist
+  {
+    const F = gripFist(HK * 1.08);
+    mesh(sword, mergeGeometries([F.fingers, F.thumb]), M.armor);
+    mesh(sword, F.ridge, M.bevel);
+  }
   for (const side of [-1, 1]) {
     const R = side < 0;
     const out = side; // the outer side of this arm is x = side (right arm: −X)
@@ -262,8 +274,8 @@ function buildArms({ arms, M, DIM, BODY, mesh }) {
         limb({ length: 0.085, r0: 0.06 + v, r1: 0.056 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.035, 0),
         sub(limb({ length: 0.08, r0: 0.057 + v, r1: 0.053 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.105, 0), 1),
         limb({ length: 0.075, r0: 0.054 + v, r1: 0.05 + v, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.17, 0),
-        // the articulated gauntlet over the grip
-        sub(ellipsoidGeometry(0.044 * HK, 0.042 * HK, 0.058 * HK, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm - 0.008, 0.006), 1),
+        // the gauntlet's back-of-the-hand plate, over the wrist (the fist itself is on the grip, above)
+        sub(ellipsoidGeometry(0.046 * HK, 0.05 * HK, 0.05 * HK, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.foreArm + 0.022, 0.004), 1),
       ]), M.armor);
       mesh(fore, mergeGeometries([
         bandGeometry(0.0605 + v, 0.0605 + v, 0.01, 14).translate(0, -0.113, 0),
@@ -283,8 +295,10 @@ function buildArms({ arms, M, DIM, BODY, mesh }) {
       mesh(fore, limb({ length: 0.18, r0: fa0, r1: fa1, radial: 10, rings: 3 }), M.pants, 0, -0.05, 0);
       mesh(fore, bandGeometry(fa1 + 0.002, fa1 + 0.002, 0.025, 14).translate(0, -0.236, 0), M.trim);
       mesh(fore, wedge(0.05, 0.018, [out * (fa0 - 0.015), -0.05, -0.02], [out * 0.3, 1, -0.5], [0, 0, -1], 0.12), M.spike);
-      mesh(fore, ellipsoidGeometry(0.042 * HK, 0.04 * HK, 0.055 * HK, { widthSegs: 10, heightSegs: 6 }), M.pants, 0, -DIM.foreArm - 0.006, 0.004);
-      mesh(fore, ellipsoidGeometry(0.031 * HK, 0.014 * HK, 0.021 * HK, { widthSegs: 8, heightSegs: 4 }), M.skin, 0, -DIM.foreArm - 0.046 * HK, 0.023 * HK);
+      // the free hand: a loosely closed fingerless glove, skin at the last finger joints
+      const H = looseHand(DIM.foreArm - 0.03, side, HK);
+      mesh(fore, mergeGeometries([H.palm, H.fingers, H.thumb]), M.pants);
+      mesh(fore, H.tips, M.skin);
     }
   }
 }
