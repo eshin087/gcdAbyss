@@ -128,14 +128,19 @@ hazard red ground warning from its spawn     its ring flares, red glyphs + a red
   HUD adds only the red edge flash (not for hazards).
 
 ## Player moveset (owner concept sheet "Combat key poses")
-Numbers live in `src/entities/player/combat.js` (`LIGHT`, `THRUST`, `CHARGE`, `REACH`); movement /
-defence timings in `TUNE` (`player.js`).
+Numbers live in `src/entities/player/combat.js` (`LIGHT`, `SPRINT_ATK`, `ROLL_ATK`, `THRUST`,
+`CHARGE`, `REACH`); movement / defence timings in `TUNE` (`player.js`). The LMB chain is five hits
+(ADR-041; it was sweep, backhand, slam: "the same 3 attack patterns").
 
 | Move | Input | Timing (windup / active / recovery) | Damage | Posture | Notes |
 |---|---|---|---|---|---|
-| Light 1 — sweep | LMB tap | 0.14 / 0.11 / 0.22 s (0.47 s) | 30 | 5 | coiled low at the right hip (blade back-right, 15° down), sweeps round the front at chest height to left-back, then rises up-left over the head; cyan crescent |
-| Light 2 — backhand | LMB tap in the recovery | 0.14 / 0.11 / 0.22 s | 32 | 5 | left → right, the mirror of light 1 (rising finish) |
-| Slam — combo finisher | 3rd tap | 0.40 / 0.12 / 0.48 s (1.0 s) | 58 | 16 | two-handed: the blade rises past the head and hangs down the back at the apex (torso arched), then slams into the ground; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
+| 1 — falling cut | LMB tap | 0.14 / 0.11 / 0.22 s (0.47 s) | 30 | 5 | cocked over the right shoulder (blade up-back-right), a diagonal down across the front, ending low at the left hip; cyan crescent |
+| 2 — rising backhand | LMB tap in the recovery | 0.14 / 0.11 / 0.22 s | 32 | 5 | from low at the left hip up across the front to high right |
+| 3 — whirl | 3rd tap | 0.16 / 0.17 / 0.24 s (0.57 s) | 36 | 5 | he follows the backhand round to his right: one full turn with the blade held out level; it crosses the front about two thirds of the way round, inside the active frames |
+| 4 — stab | 4th tap | 0.12 / 0.09 / 0.22 s (0.43 s) | 30 | 5 | one-handed: the hand draws back to the right ribs, then drives the level blade straight out, the free arm thrown back |
+| 5 — slam (finisher) | 5th tap | 0.40 / 0.12 / 0.48 s (1.0 s) | 58 | 16 | two-handed: the blade rises past the head and hangs down the back at the apex (torso arched), then slams into the ground; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
+| Sprint slash | LMB while sprinting (faster than a run) | 0.14 / 0.14 / 0.36 s | 40 | 5 | a bounding rising slash, low right → high left; carries 2.4 m along the RUN direction (it does not snap to the aim); counts as hit 1 (the next tap is the rising backhand) |
+| Roll cut | LMB out of a forward roll | 0.10 / 0.11 / 0.26 s | 34 | 5 | a low cut rising out of the crouch, right → left; counts as hit 1. A backstep (Space with no direction) starts the plain chain |
 | Thrust — charged | hold LMB ≥ 0.3 s, release | 0.07 / 0.20 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | deep crouched charge, sword two-handed at the right hip pointing back-down (moves at ×0.4; lightning crawls on the blade past half charge); the release lunges 2.2–3.6 m along the facing with both arms driven out; a thin straight cyan beam |
 
 - Poses follow the owner's key-pose sheets (`docs/art/hero.md` §4); the timings above are unchanged
@@ -150,8 +155,11 @@ defence timings in `TUNE` (`player.js`).
   counts when it overlaps the blade's swept wall extended `up` 2.6 m above (the slam: 1.0 m) and
   `down` 0.5 m below it; the hit segment runs 0.4 m past the steel (the edge wave). Swings **step
   in** toward a hurt surface within 4.8 m and 0.8 rad of the facing (lunge stretched by ≤ 1.3 m).
-  Result (`npm test` → scenario REACH): light 1, light 2, the slam and the thrust all connect from
-  the front of an idle wyrm from contact out to 3.5 m from its chest surface.
+  Result (`npm test` → scenario REACH): all five chain hits and the thrust connect from the front
+  of an idle wyrm from contact out to 3.5 m from its chest surface.
+- **Chain pacing (ADR-041):** the five hits deal 186 damage in 2.94 s (63 per second); the old three
+  dealt 120 in 1.94 s (62 per second), so sustained damage is about the same and the finisher comes
+  two taps later. One `win` bot run after the change: 154 s (177 s before); one run, not a trend.
 - The broad build (2026-11-09) kept the bones: the REACH table is unchanged; the hit segment moved
   by ≤ 2.5 cm on some active frames (ARCHITECTURE.md, animator).
 - Not in the table: **the plunge** (a perfect dodge of the wyrm) and **the execution** (an attack

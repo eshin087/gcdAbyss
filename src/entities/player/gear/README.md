@@ -32,7 +32,7 @@ gets the `base.*` item for it. Any other slot may be empty.
 | `head` | helmets, hoods, masks. Hair, face and neck are the body, not gear | `head` | none |
 | `chest` | the torso from the hips' top (1.09 m) to the collar: shell, shirt, buttons, belts, baldric, lapels, collar, yoke, emblem | `spine`, `chest` | `wanderer.coat` |
 | `shoulders` | shoulder armour: the pauldron on its own joint, and any lames riding on the upper arms | `pauldron`, `arms.R.upper`, `arms.L.upper` | `wanderer.pauldron` |
-| `arms` | both arms from the shoulder joint to the hand: sleeves, deltoid caps, vambrace / bracer, gauntlet / glove (the hands), elbow and wrist points | `arms.{R,L}.{upper,fore}` | `wanderer.arms` |
+| `arms` | both arms from the shoulder joint to the hand: sleeves, deltoid caps, vambrace / bracer, gauntlet / glove (the hands), elbow and wrist points. The SWORD hand's fist (`gripFist`) hangs on the `sword` joint, the grip's own frame, so it closes round the grip in every pose; it belongs to this slot, not to `weapon` | `arms.{R,L}.{upper,fore}`, `sword` (the fist) | `wanderer.arms` |
 | `legs` | hips, thighs, shins, feet, and what is strapped to them: hip straps, knee straps, boots, greaves, knee guards | `pelvis`, `legs.{R,L}.{thigh,shin,foot}` | `wanderer.legs` |
 | `waist` | cloth hanging from the belt line: skirt panels, tassets | `pelvis` | `wanderer.skirt` |
 | `back` | cloaks and capes | `chest` | `wanderer.cape` |
@@ -170,11 +170,11 @@ any item:
 
 ## Next steps (not built yet)
 
-- **Swapping at runtime.** For a slot: remove `rig.slots[slot]` from their parents, dispose their
-  geometries (materials are shared, keep them), build the new item with a fresh `ctx`, merge and
-  re-collect that slot. `buildHero` does these steps once for all slots; they need to be split out
-  into an `equip(rig, slot, id)`. The animator sizes its coat / strip / streamer spring state in
-  its constructor, so after a `waist` or `back` swap it must rebuild that state.
+- **Cheaper swapping.** Runtime swapping exists: `player.equip(slot, id | null)` and
+  `player.setLoadout(loadout)` (`player.js`) rebuild the WHOLE rig under the same root and recreate
+  the animator, so the pose restarts from the ready stance (equip out of combat). A per-slot swap
+  (remove `rig.slots[slot]`, dispose, build that one item, re-merge) that keeps the animator and
+  only rebuilds its coat / strip / streamer spring state is not built.
 - **Weapons of other sizes.** `anim.js`, `combat.js` and `fx.js` read the sword's numbers from
   `DIM`; they should read the equipped weapon's `dims` (through the rig) instead, with `DIM` as the
   fallback for an empty hand.

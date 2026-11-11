@@ -71,7 +71,7 @@ src/core       config, input, camera rig, math, rng, events
 src/render     glyph atlases, shared shader lib, materials, particles, lights, frame pipeline
 src/world      ground, grass, forest/stones/bones/bonfire, scorch map, atmosphere, colliders
 src/combat     shared combat rules: hit resolution, guard/parry/dodge, attack tells
-src/entities   player/  dragon/   (future: enemies/<name>/, npcs/)
+src/entities   player/ (gear/ = equipment slot items)  dragon/   (future: enemies/<name>/, npcs/)
 src/ui         HUD, menus           src/game   flow (title, boss intro, death, victory)
 src/audio      procedural WebAudio  src/dev    Lab / debug tools
 tests/         headless integration sims + static checks

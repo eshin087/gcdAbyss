@@ -4,7 +4,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Seven pieces of work since 0.4.0:
+Eight pieces of work since 0.4.0:
+- **Hands, a longer combo and equipment slots** (2026-11-11, ADR-041, ADR-042): the hero has real
+  hands (a gauntlet fist closed round the grip, a left hand with fingers), holds the sword low at his
+  side like the reference image, and is slim in profile. Left-click now chains five different hits
+  (falling cut, rising backhand, whirl, stab, slam), with a sprint slash and a roll cut. His outfit
+  and weapon are items in eight equipment slots that can be swapped while the game runs.
 - **The hero filled out** (2026-11-09, ADR-040): he was "a bit too lanky". Broader chest and
   shoulders, thicker arms and legs, a slightly bigger head and hands. He stands in a shoulder-width
   stance with the sword held out to his right side, where it shows from the game camera, instead of
@@ -35,6 +40,13 @@ Seven pieces of work since 0.4.0:
   That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **Light chain of five** (ADR-041): falling cut → rising backhand → whirl → stab → slam (was sweep,
+  backhand, slam). **Sprint slash** (LMB while sprinting) and **roll cut** (LMB out of a forward
+  roll); both count as hit 1.
+- **Equipment slots** (ADR-042): `player/gear/` items in head / chest / shoulders / arms / legs /
+  waist / back / weapon; `player.equip(slot, id | null)`, `player.setLoadout(loadout)`,
+  `player.loadout`. Today's look is the default loadout; an undersuit covers empty body slots.
+- **Hands:** a fist round the sword grip in every pose and a left hand with fingers and a thumb.
 - **Bullets** (ADR-039): orange **embers** and blue homing **wisps** can be parried (the bullet flies
   back to the wyrm's head and adds posture), blocked, rolled through or cut with a swing; red
   **orbs** are dodge-only. Every bullet glints and pings 0.35 s before it lands, one parry answers
@@ -85,6 +97,12 @@ Seven pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **Idle sword hold** (ADR-041): the blade hangs ~52° below level at his right side with the edge
+  down, the arm relaxed by the ribs (was ~43°, flat up).
+- **Side profile** (ADR-041): the cape's outer sheets spread to his right, not behind him; the
+  front coat panels hang nearly straight.
+- `model.js` is split: geometry builders in `heroGeo.js`, measurements in `heroDims.js`, the outfit
+  in `gear/wanderer.js`.
 - **Hero build** (ADR-040): chest 0.34 → 0.39 m, waist 0.23 → 0.27 m, shoulder joints ±0.16 → ±0.178,
   upper arms, forearms, thighs and boots ~20 % thicker, head ×1.08, hands ×1.12; collar, pauldron,
   lapels, coat panels and cape fitted to it (hero parts rebuilt). Gameplay sizes unchanged.
@@ -164,6 +182,8 @@ Seven pieces of work since 0.4.0:
   its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
 
 ### Fixed
+- The blade's tip streak stops at the point (its far end still reached past it).
+- No blade halo or gem glow when no weapon is equipped.
 - A light attack's recovery no longer swings the blade home behind his head.
 - The blade's tip streak no longer floats off the point (most visible in rolls).
 - Bullets (PR #9 review): the phase-2 Cinder fan (8 embers) opened with the hero in a gap, so its
