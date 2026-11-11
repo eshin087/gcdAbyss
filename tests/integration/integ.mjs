@@ -3,7 +3,7 @@
 // src/main.js (construction order, frame order, debugTimeScale in dt). World is a light mock built on
 // the real Colliders. A bot drives the input: it moves, attacks, blocks, parries and dodges.
 // usage: node integ.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI, ABYSS_TRACE=1 logs combat events)
-//   scenario: gate | hero | breath | parry | block | reach | red | plunge | deflect | lab | strings | plungeReact |
+//   scenario: gate | hero | batch | breath | parry | block | reach | red | plunge | deflect | lab | strings | plungeReact |
 //             timing | fire | herolook | win | die | touch | all (default all)
 //   (timing: ABYSS_TM=name,name... probes only those attacks; ABYSS_TMV=1 prints its per-placement map)
 import fs from 'node:fs';
@@ -2921,7 +2921,215 @@ async function scenarioPlungeReact() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, probe: scenarioProbe };
+// ================================================================== scenario: rigid batching
+// render/rigidBatch.js: the hero and the wyrm are drawn with one mesh per material, plus one
+// shadow mesh each (their ~320 rigid meshes stay in the graph as bones and are never drawn
+// themselves); a bone follows its source mesh's world matrix and collapses to a zero matrix while
+// the source (or a joint above it) is hidden; shadow casting follows the sources' LAYER_CASTER
+// bit; a loadout rebuild reuses the bone slots; CONFIG.render.batch = false (the `?nobatch` URL
+// flag) leaves everything as it was.
+async function scenarioBatch() {
+  out('\n== scenario BATCH (rigid batching: one drawn mesh per material, bones follow their source meshes) ==');
+  const { rigidBones, isRigidSource, batchRigid } = await imp('src/render/rigidBatch.js');
+  const { LAYER_CASTER, LAYER_CASTER_RIGID, markCaster } = await imp('src/render/pipeline.js');
+  const { RIGID_MAX } = await imp('src/render/shaderLib.js');
+  const G = build();
+  const { game } = G;
+  fightSetup(G);
+  const p = game.player, d = game.dragon, reg = rigidBones(game.U);
+  const view = new THREE.Layers(), shadow = new THREE.Layers(), shadowRigid = new THREE.Layers();
+  shadow.set(LAYER_CASTER);
+  shadowRigid.set(LAYER_CASTER_RIGID);
+  const meshes = (root, pred = () => true) => { const l = []; root.traverse((o) => { if (o.isMesh && pred(o)) l.push(o); }); return l; };
+  const drawn = (root, layers = view) => meshes(root, (o) => o.layers.test(layers));
+  // what pipeline.render does before the passes: one matrix update, then the bones
+  const sync = () => { game.scene.updateMatrixWorld(); reg.sync(); };
+  const slotOf = (m) => { for (const b of reg.batches) { const i = b.sources.indexOf(m); if (i >= 0) return b.slots[i]; } return -1; };
+  const bone = (m) => Array.from(reg.data.subarray(slotOf(m) * 16, slotOf(m) * 16 + 16));
+  const isZero = (a) => a.length === 16 && a.every((v) => v === 0);
+  const follows = (m) => { const e = m.matrixWorld.elements, b = bone(m); return b.every((v, i) => v === Math.fround(e[i])) && Math.abs(b[15] - 1) < 1e-6; };
+  const shown = (m, root) => { for (let o = m; o !== root; o = o.parent) if (!o || !o.visible) return false; return true; };
+  // a bone is its source's world matrix, or all zero while the source is hidden
+  const live = (m, root) => (shown(m, root) ? follows(m) : isZero(bone(m)));
+  sync();
+
+  // one drawn mesh per material; every source is kept in the graph
+  const heroAll = meshes(p.object3d), heroDrawn = drawn(p.object3d), heroSrc = heroAll.filter(isRigidSource);
+  const wyrmAll = meshes(d.object3d), wyrmDrawn = drawn(d.object3d), wyrmSrc = wyrmAll.filter(isRigidSource);
+  const heroMats = new Set(heroSrc.map((m) => m.material)).size, wyrmMats = new Set(wyrmSrc.map((m) => m.material)).size;
+  out(`   hero: ${heroSrc.length} source meshes → ${heroDrawn.length} drawn (${heroMats} materials) · wyrm: ${wyrmSrc.length} → ${wyrmDrawn.length} drawn (${wyrmMats} materials + ${wyrmDrawn.filter((m) => !m.userData.rigidBatch).length} unbatched) · ${reg.count} bones of ${RIGID_MAX - 1}`);
+  assert(heroSrc.length > 100 && heroDrawn.length === heroMats && heroDrawn.length <= p.rig.mats.length && heroDrawn.every((m) => m.userData.rigidBatch && m.parent === p.object3d && !m.frustumCulled),
+    `the hero draws one batch per material (${heroDrawn.length} meshes for ${heroSrc.length} parts)`);
+  const membranes = d.model.wings.map((w) => w.membrane.mesh);
+  assert(wyrmSrc.length > 150 && wyrmDrawn.length === wyrmMats + membranes.length && membranes.every((m) => wyrmDrawn.includes(m) && !isRigidSource(m)),
+    `the wyrm draws one batch per material plus its two wing membranes (${wyrmDrawn.length} meshes for ${wyrmSrc.length} parts)`);
+  assert(heroAll.length === heroSrc.length + p.batch.meshes.length + 1 && p.batch.bones === heroSrc.length && d.batch.bones === wyrmSrc.length && reg.count === heroSrc.length + wyrmSrc.length
+    && heroSrc.every((m) => m.geometry.attributes.position && m.visible !== undefined) && p.rig.flask.parent && isRigidSource(p.rig.flask),
+    `the source meshes stay in the scene graph as bones (${reg.count} bones)`);
+  // a batch holds its sources' vertices, each tagged with its bone's slot
+  {
+    const b = reg.batches.filter((x) => x.root === p.object3d).reduce((a, x) => (x.sources.length > a.sources.length ? x : a));
+    const g = b.mesh.geometry, n = b.sources.reduce((s, m) => s + m.geometry.attributes.position.count, 0);
+    const ix = b.sources.reduce((s, m) => s + (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count), 0);
+    let same = true, tagged = true, at = 0;
+    b.sources.forEach((m, k) => {
+      const src = m.geometry.attributes.position;
+      for (let i = 0; i < src.count * 3; i++) if (g.attributes.position.array[at * 3 + i] !== Math.fround(src.array[i])) same = false;
+      for (let i = 0; i < src.count; i++) if (g.attributes.aRigid.array[at + i] !== b.slots[k]) tagged = false;
+      at += src.count;
+    });
+    let inRange = true;
+    for (let i = 0; i < g.index.count; i++) if (g.index.array[i] >= n) inRange = false;
+    assert(b.sources.length > 5 && g.attributes.position.count === n && g.index.count === ix && same && tagged && inRange && new Set(b.slots).size === b.sources.length && [...b.slots].every((s) => s >= 1 && s < RIGID_MAX)
+      && b.sources.every((m) => Object.keys(m.geometry.attributes).every((k) => g.attributes[k]?.count === n)),
+      `a batch merges its sources' geometry in their local space, tagged per bone (${n} vertices, ${b.sources.length} bones)`);
+  }
+
+  // bones follow the source meshes through the animation; hidden sources collapse
+  for (let i = 0; i < 20; i++) G.tick(DT);
+  sync();
+  const flask = p.rig.flask;
+  let bad = 0, moving = 0;
+  for (const m of heroSrc) if (!live(m, p.object3d)) bad++;
+  for (const m of wyrmSrc) if (!live(m, d.object3d)) bad++;
+  for (const m of [...heroSrc, ...wyrmSrc]) if (!isZero(bone(m))) moving++;
+  assert(bad === 0 && moving >= heroSrc.length + wyrmSrc.length - 4 && reg.data.every(Number.isFinite), `every part's bone is its world matrix (${moving} of ${heroSrc.length + wyrmSrc.length} bones shown)`);
+  assert(flask.visible === false && isZero(bone(flask)), 'the hidden flask writes a zero matrix (its triangles collapse)');
+  flask.visible = true;
+  sync();
+  assert(follows(flask) && !isZero(bone(flask)), 'the shown flask writes its world matrix');
+  const fore = flask.parent;
+  fore.visible = false;
+  sync();
+  const armHidden = meshes(fore, isRigidSource).every((m) => isZero(bone(m)));
+  fore.visible = true;
+  flask.visible = false;
+  sync();
+  assert(armHidden && isZero(bone(flask)) && follows(heroSrc.find((m) => m !== flask && m.parent === fore) ?? heroSrc[0]), 'a hidden joint collapses every part below it, and they come back with it');
+
+  // shadows: the sources keep LAYER_CASTER (never drawn); each actor's ONE shadow mesh (all its
+  // casters' triangles) is the only thing of it on LAYER_CASTER_RIGID, and is never in the world pass
+  const worldOnly = (set) => set.meshes.every((m) => m.layers.test(view) && !m.layers.test(shadowRigid) && !m.layers.test(shadow));
+  const casts = (set, root) => worldOnly(set) && drawn(root, shadowRigid).length === 1 && drawn(root, shadowRigid)[0] === set.shadow && set.shadow.parent === root
+    && set.shadow.userData.rigidBatch && !set.shadow.layers.test(view) && !set.shadow.layers.test(shadow);
+  const tris = (list) => list.reduce((s, m) => s + (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3, 0);
+  assert(drawn(p.object3d, shadow).length === 0 && drawn(d.object3d, shadow).length === membranes.length && casts(p.batch, p.object3d) && casts(d.batch, d.object3d) && reg.casting === true
+    && heroSrc.every((m) => (m.layers.mask & (1 << LAYER_CASTER)) !== 0) && tris([p.batch.shadow]) === tris(heroSrc) && tris([d.batch.shadow]) === tris(wyrmSrc)
+    && new Set(p.batch.shadow.geometry.attributes.aRigid.array).size === heroSrc.length,
+    `each actor casts its moon shadow with one mesh on LAYER_CASTER_RIGID (hero ${tris([p.batch.shadow])} triangles, wyrm ${tris([d.batch.shadow])}); only the membranes are left on LAYER_CASTER`);
+  d.setShadowCasting(false);
+  sync();
+  const off = worldOnly(d.batch) && drawn(d.object3d, shadowRigid).length === 0 && drawn(d.object3d, shadow).length === 0 && casts(p.batch, p.object3d) && reg.casting === true;
+  d.setShadowCasting(true);
+  markCaster(p.object3d); // (again, after the build: must not put a source or a batch on a drawn caster layer)
+  sync();
+  assert(off && casts(d.batch, d.object3d) && casts(p.batch, p.object3d) && drawn(p.object3d, shadow).length === 0 && drawn(p.object3d).length === heroDrawn.length,
+    'dragon.setShadowCasting and a late markCaster reach the shadow meshes, and never draw a source');
+  // a hidden actor is skipped; its bones are written again when it is shown
+  d.object3d.visible = false;
+  p.object3d.visible = false;
+  sync();
+  const idle = reg.casting === false;
+  d.object3d.visible = true;
+  p.object3d.visible = true;
+  sync();
+  assert(idle && reg.casting === true, 'hidden actors cast nothing (the rigid shadow pass is skipped)');
+
+  // a loadout rebuild frees the old rig's bones and batches
+  const n0 = reg.count, top0 = reg.top, b0 = reg.batches.length;
+  const stale = () => meshes(p.object3d, (o) => o.userData.rigidBatch).filter((m) => !p.batch.meshes.includes(m) && m !== p.batch.shadow).length;
+  const loadout = { ...p.loadout };
+  for (let i = 0; i < 4; i++) p.setLoadout(loadout);
+  sync();
+  assert(reg.count === n0 && reg.top === top0 && reg.batches.length === b0 && reg.sets.length === 2 && stale() === 0 && drawn(p.object3d).length === heroDrawn.length && casts(p.batch, p.object3d) && heroSrc.every((m) => !isRigidSource(m)),
+    `four loadout rebuilds leave the bone count at ${reg.count} (slots reused, no stale batch)`);
+  p.equip('back', null);
+  sync();
+  const fewer = reg.count;
+  p.setLoadout(loadout);
+  for (let i = 0; i < 10; i++) G.tick(DT);
+  sync();
+  assert(fewer < n0 && reg.count === n0 && reg.top === top0 && stale() === 0 && meshes(p.object3d, isRigidSource).every((m) => live(m, p.object3d)),
+    `the cape off: ${fewer} bones; back on: ${reg.count}, every bone live`);
+  // dispose puts the meshes back as they were
+  const set = p.batch;
+  set.dispose();
+  set.dispose();
+  const plain = meshes(p.object3d);
+  assert(set.meshes.length === 0 && set.shadow === null && reg.sets.length === 1 && plain.every((m) => !m.userData.rigidBatch && !isRigidSource(m) && m.layers.test(view) && m.layers.test(shadow)) && drawn(p.object3d).length === plain.length && reg.count === d.batch.bones,
+    `dispose() restores the plain meshes (${plain.length} drawn, casters again) and frees their bones`);
+  p.setLoadout(loadout); // batched again for the rest of the run
+  assert(reg.count === n0 && drawn(p.object3d).length === heroDrawn.length, 'a rebuild batches the hero again');
+
+  // the builder's corner cases on a small actor, batched BEFORE it is marked a caster: an indexed
+  // and a non-indexed part, one of them mirrored, an attribute only one has, an opted-out part and
+  // a part with another material
+  {
+    const { createSurfaceGlyphMaterial } = await imp('src/render/materials.js');
+    const root = new THREE.Group();
+    const mat = createSurfaceGlyphMaterial(game.U, {});
+    const box = new THREE.BoxGeometry(1, 1, 1);
+    box.setAttribute('aGUV', new THREE.BufferAttribute(new Float32Array(box.attributes.position.count * 2).fill(0.5), 2));
+    const a = new THREE.Mesh(box, mat), b = new THREE.Mesh(new THREE.SphereGeometry(0.5, 6, 4).toNonIndexed(), mat);
+    const optOut = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat), other = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial());
+    b.position.set(2, 0, 0);
+    b.scale.x = -1;
+    optOut.userData.noBatch = true;
+    root.add(a, b, optOut, other);
+    game.scene.add(root);
+    const set = batchRigid(game.U, root);
+    const g = set.meshes[0]?.geometry, na = box.attributes.position.count, nb = b.geometry.attributes.position.count;
+    const ix = g?.index.array, ia = box.index.count;
+    const flipped = !!g && ix[ia] === na && ix[ia + 1] === na + 2 && ix[ia + 2] === na + 1 && ix[0] === box.index.array[0] && ix[1] === box.index.array[1] && ix[2] === box.index.array[2];
+    const zeroFill = !!g && g.attributes.aGUV.array.subarray(0, na * 2).every((v) => v === 0.5) && g.attributes.aGUV.array.subarray(na * 2).every((v) => v === 0);
+    assert(set.meshes.length === 1 && set.bones === 2 && isRigidSource(a) && isRigidSource(b) && !isRigidSource(optOut) && !isRigidSource(other)
+      && g.attributes.position.count === na + nb && g.index.count === ia + nb && flipped && zeroFill && drawn(root).length === 3,
+      'the builder merges indexed and non-indexed parts, zero-fills a missing attribute, flips a mirrored part and leaves opted-out / other-material meshes alone');
+    sync();
+    const before = set.shadow && drawn(root, shadowRigid).length === 0 && drawn(root, shadow).length === 0;
+    markCaster(root);
+    sync();
+    assert(before && drawn(root, shadowRigid).length === 1 && drawn(root, shadowRigid)[0] === set.shadow && tris([set.shadow]) === tris([a, b]) && drawn(root, shadow).length === 2 && drawn(root).length === 3,
+      'an actor batched before markCaster casts once it is marked (its unbatched parts on LAYER_CASTER, the rest through its shadow mesh)');
+    set.dispose();
+    game.scene.remove(root);
+    mat.dispose();
+    assert(reg.count === n0 && reg.sets.length === 2 && root.children.length === 4 && drawn(root, shadow).length === 4, 'and dispose() leaves its four meshes as plain casters');
+  }
+
+  // CONFIG.render.batch = false (`?nobatch`): nothing is batched
+  CONFIG.render.batch = false;
+  try {
+    const G2 = build();
+    const p2 = G2.game.player, d2 = G2.game.dragon, reg2 = rigidBones(G2.game.U);
+    G2.game.scene.updateMatrixWorld();
+    reg2.sync();
+    const all = [...meshes(p2.object3d), ...meshes(d2.object3d)];
+    assert(reg2.count === 0 && reg2.batches.length === 0 && reg2.sets.length === 0 && reg2.casting === false && p2.batch.meshes.length === 0 && d2.batch.meshes.length === 0 && p2.batch.shadow === null
+      && all.length === heroSrc.length + wyrmSrc.length + membranes.length && all.every((m) => !m.userData.rigidBatch && !isRigidSource(m) && m.layers.test(view) && m.layers.test(shadow)),
+      `CONFIG.render.batch = false leaves all ${all.length} meshes unbatched, drawn and casting as before`);
+    p2.setLoadout({ ...p2.loadout });
+    assert(reg2.count === 0 && p2.batch.meshes.length === 0, '... also after a loadout rebuild');
+  } finally {
+    CONFIG.render.batch = true;
+  }
+  // the URL flag itself: a fresh copy of core/config.js loaded with ?nobatch in the address
+  {
+    const had = 'location' in globalThis, prev = globalThis.location;
+    const load = async (search, tag) => {
+      globalThis.location = { search };
+      return (await import(`${pathToFileURL(`${ROOT}/src/core/config.js`).href}?${tag}`)).CONFIG;
+    };
+    const offCfg = await load('?lab&nobatch', 'batch-off'), onCfg = await load('?lab', 'batch-on');
+    if (had) globalThis.location = prev;
+    else delete globalThis.location;
+    assert(offCfg.render.batch === false && onCfg.render.batch === true && CONFIG.render.batch === true, '?nobatch in the URL turns CONFIG.render.batch off');
+  }
+  assert(CONFIG.quality.map((q) => q.shadow).join() === '1024,2048,2048', `quality presets carry a shadow map size (${CONFIG.quality.map((q) => `${q.name} ${q.shadow}`).join(', ')})`);
+  return G;
+}
+
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, batch: scenarioBatch, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, probe: scenarioProbe };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());
