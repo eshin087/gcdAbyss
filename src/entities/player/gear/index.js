@@ -1,4 +1,5 @@
 import { WANDERER_ITEMS } from './wanderer.js';
+import { SHROUD_ITEMS } from './shroud.js';
 import { BASE_ITEMS, BASE_LOADOUT } from './base.js';
 
 // The hero's equipment, as data. A LOADOUT maps each slot to the id of the item worn there (or
@@ -27,10 +28,24 @@ export function getItem(id) {
   return typeof id === 'string' && Object.hasOwn(GEAR, id) ? GEAR[id] : null;
 }
 
-for (const item of [...WANDERER_ITEMS, ...BASE_ITEMS]) registerItem(item);
+for (const item of [...WANDERER_ITEMS, ...SHROUD_ITEMS, ...BASE_ITEMS]) registerItem(item);
 
-/** What the hero wears today: the Wanderer's set. No helmet (hair and face are the body). */
+/** What the hero wears today: the Shrouded set (gear/shroud.js, ADR-043: a hood, a wrap tunic,
+ *  bound sleeves and the tattered cloak) over the Wanderer's boots, coat tails and sword. No
+ *  shoulder armour: the mantle carries the shoulders. */
 export const DEFAULT_LOADOUT = Object.freeze({
+  head: 'shroud.hood',
+  chest: 'shroud.tunic',
+  shoulders: null,
+  arms: 'shroud.arms',
+  legs: 'wanderer.legs',
+  waist: 'wanderer.skirt',
+  back: 'shroud.cloak',
+  weapon: 'wanderer.sword',
+});
+
+/** The outfit before ADR-043: the Wanderer's greatcoat, pauldron and half-cape, bare-headed. */
+export const WANDERER_LOADOUT = Object.freeze({
   head: null,
   chest: 'wanderer.coat',
   shoulders: 'wanderer.pauldron',

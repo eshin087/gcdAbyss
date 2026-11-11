@@ -86,6 +86,7 @@ async function boot() {
   const applyQuality = () => {
     const q = CONFIG.quality[game.settings.quality];
     game.world.setGrassQuality?.(q.grass);
+    pipeline.setShadowSize(q.shadow ?? CONFIG.render.shadowSize);
     const dpr = Math.min(q.dpr, devicePixelRatio || 1, CONFIG.render.maxPixelRatio);
     pipeline.setSize(innerWidth, innerHeight, dpr);
     // an upscaled canvas (LOW on a phone: a 1x render on a 3x screen) stays crisp: the hero's

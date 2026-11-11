@@ -194,13 +194,15 @@ export const HERO_INK = {
   skin: { part: 1, fill: [0.92, 0.66, 0.58], rim: 0.3, line: [0.75, 0.5, 0.46, 0.8], rimLine: [1.0, 0.86, 0.8, 0.9], fillGain: 3.0, farFill: 0.6, open: true },
   eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
   shirt: { part: 3, fill: [0.07, 0.07, 0.085], line: [1, 1, 1, 0.45], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.35 },
-  lining: { part: 4, fill: [0.05, 0.048, 0.07], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.5 },
-  collarIn: { part: 4, fill: [0.12, 0.1, 0.24], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.5 },
+  lining: { part: 4, fill: [0.05, 0.048, 0.07], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.6 },
+  collarIn: { part: 4, fill: [0.12, 0.1, 0.24], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.6 },
   pants: { part: 5, fill: [0.085, 0.085, 0.1], line: [1, 1, 1, 0.45], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.35 },
-  coat: { part: 6, fill: [0.115, 0.11, 0.118], sub: 0.72, line: [1, 1, 1, 0.5], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.42 },
-  collar: { part: 6, fill: [0.115, 0.11, 0.118], line: [1, 1, 1, 0.5], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.42 },
+  // (ADR-043: the cloak is most of the figure now, and at the game camera a 0.42 far fill left him
+  // a dark blob in the dark grass; the reference's cloak is a field of mid-grey letters)
+  coat: { part: 6, fill: [0.115, 0.11, 0.118], sub: 0.72, line: [1, 1, 1, 0.5], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.8 },
+  collar: { part: 6, fill: [0.115, 0.11, 0.118], line: [1, 1, 1, 0.5], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.8 },
   facing: { part: 7, fill: [0.15, 0.14, 0.22], line: [0.95, 0.93, 1.0, 0.95], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.5 },
-  hem: { part: 8, fill: [0.32, 0.3, 0.44], sub: 0.6, rim: 1.2, line: [0.8, 0.78, 1.0, 0.75], rimLine: [0.72, 0.72, 1.0, 0.95], dotted: true, rimDotted: true, farFill: 0.8 },
+  hem: { part: 8, fill: [0.32, 0.3, 0.44], sub: 0.6, rim: 1.2, line: [0.8, 0.78, 1.0, 0.75], rimLine: [0.72, 0.72, 1.0, 0.95], dotted: true, rimDotted: true, farFill: 1.1 },
   piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.95, 0.93, 1.0, 0.95], farFill: 0.6 },
   leather: { part: 10, fill: [0.34, 0.23, 0.17], line: [1.0, 0.93, 0.85, 0.9], farFill: 0.8 },
   hair: { part: 11, fill: [0.085, 0.08, 0.14], rim: 0.9, line: [0.5, 0.48, 0.8, 0.3], rimLine: [0.6, 0.58, 0.95, 0.7], fillGain: 1.3, rimDotted: true, farFill: 0.5 },
@@ -479,6 +481,9 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
   const sword = joint(body);
 
   // ---------------------------------------------------------------- body: head and hair
+  // (a head item with `hidesHair`, a hood or a closed helm, leaves the hair out: the joints stay)
+  const worn = resolveLoadout(loadout);
+  const hideHair = worn.some(({ item }) => item?.hidesHair);
   {
     const [sx, sy, sz] = DIM.skull;
     mesh(head, limb({ length: 0.12, r0: BODY.neck[0], r1: BODY.neck[1], radial: 8, rings: 2, capSegs: 1 }), M.skin, 0, 0.1, 0.0);
@@ -498,12 +503,14 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
     // the visible LEFT eye (the right one is under the fringe): a dark half-lidded almond, large
     // enough to print as a few dark letters with a violet rim between the fringe strands
     for (const ex of [0.032, -0.032]) mesh(head, ellipsoidGeometry(0.017, 0.008, 0.006, { widthSegs: 8, heightSegs: 4 }), M.eye, sx + ex, sy - 0.012, sz + 0.089);
-    mesh(head, partGeometry('hair.cap'), M.hair);
+    if (!hideHair) mesh(head, partGeometry('hair.cap'), M.hair);
   }
-  for (const c of HAIR_CLUSTERS) {
-    const j = hair[c.name];
-    mesh(j, partGeometry(`hair.${c.name}.mass`), M.hair);
-    mesh(j, partGeometry(`hair.${c.name}.tip`), M.hairTip);
+  if (!hideHair) {
+    for (const c of HAIR_CLUSTERS) {
+      const j = hair[c.name];
+      mesh(j, partGeometry(`hair.${c.name}.mass`), M.hair);
+      mesh(j, partGeometry(`hair.${c.name}.tip`), M.hairTip);
+    }
   }
 
   // ---------------------------------------------------------------- gear
@@ -512,7 +519,7 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
   const skeleton = { root, body, pelvis, spine, chest, head, arms, legs, pauldron, sword };
   const handles = { coat: [], streamers: [], keep: [], gem: null, flask: null };
   const equipped = {};
-  for (const { slot, item } of resolveLoadout(loadout)) {
+  for (const { slot, item } of worn) {
     equipped[slot] = item ? item.id : null;
     if (!item) continue;
     const h = item.build({ ...skeleton, M, DIM, BODY, REST, slot, item, ...helpers(slot) });

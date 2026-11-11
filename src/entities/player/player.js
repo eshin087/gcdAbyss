@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CONFIG } from '../../core/config.js';
 import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../../core/math.js';
 import { markCaster } from '../../render/pipeline.js';
+import { batchRigid } from '../../render/rigidBatch.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
@@ -183,6 +184,8 @@ export class Player {
     this.sweep = new SwordSweep(this.rig.sword, (v) => this.unlean(v));
 
     markCaster(this.object3d);
+    // one draw call per material instead of one per mesh (render/rigidBatch.js)
+    this.batch = batchRigid(game.U, this.object3d);
     game.scene.add(this.object3d);
     const s = CONFIG.world.playerSpawn;
     this.respawn(s.x, s.z);
@@ -472,6 +475,7 @@ export class Player {
   setLoadout(loadout) {
     const rig = buildHero(this.game.U, loadout);
     const root = this.object3d, old = this.rig;
+    this.batch?.dispose(); // the old rig's rigid batches (their bone slots are reused below)
     for (const c of [...root.children]) root.remove(c);
     for (const c of [...rig.root.children]) root.add(c);
     rig.root = root;
@@ -487,6 +491,7 @@ export class Player {
     this.sweep.sword = rig.sword;
     this.sweep.valid = false;
     markCaster(root);
+    this.batch = batchRigid(this.game.U, root);
     this._updateMaterials(0);
     root.updateMatrixWorld(true);
     return rig.loadout;

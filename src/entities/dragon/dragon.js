@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../../core/config.js';
 import { markCaster, LAYER_CASTER } from '../../render/pipeline.js';
+import { batchRigid } from '../../render/rigidBatch.js';
 import { damp, lerp, clamp, turnToward, yawTo, angleDiff, wrapAngle } from '../../core/math.js';
 import { TELL, TELL_STYLE, RESULT, POSTURE, tellDefaults } from '../../combat/rules.js';
 import { TUNING, SCALE } from './tuning.js';
@@ -114,6 +115,9 @@ export class Dragon {
     this.debug = createDebug(this);
 
     markCaster(this.object3d);
+    // one draw call per material instead of one per mesh (render/rigidBatch.js; the wing membranes,
+    // rewritten every frame, stay their own meshes)
+    this.batch = batchRigid(game.U, this.object3d);
     game.scene.add(this.object3d);
     this.reset();
   }

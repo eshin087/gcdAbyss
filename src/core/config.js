@@ -1,4 +1,15 @@
 // Central tuning knobs. Gameplay numbers for the player/dragon live in their own modules.
+
+// `?nobatch` in the URL (read once): draw the hero and the wyrm mesh by mesh instead of through
+// rigid batches (render/rigidBatch.js). An A/B switch for frame-rate and image checks.
+const NO_BATCH = (() => {
+  try {
+    return typeof location !== 'undefined' && new URLSearchParams(location.search).has('nobatch');
+  } catch {
+    return false;
+  }
+})();
+
 export const CONFIG = {
   seed: 1337,
 
@@ -45,18 +56,19 @@ export const CONFIG = {
 
   render: {
     maxPixelRatio: 2,
-    shadowSize: 2048,
+    shadowSize: 2048, // default moon shadow map size (texels); the quality presets set their own
     shadowExtent: 80, // half-size in meters of the moon's orthographic shadow frustum
+    batch: !NO_BATCH, // rigid batching of the hero and the wyrm (false with ?nobatch)
     exposure: 1.55,
     bloomStrength: 0.85,
     bloomThreshold: 0.55,
   },
 
-  // Quality presets (cycle with F2). grass = blade instances drawn.
+  // Quality presets (cycle with F2). grass = blade instances drawn, shadow = moon shadow map size.
   quality: [
-    { name: 'LOW', grass: 90000, dpr: 1 },
-    { name: 'MEDIUM', grass: 170000, dpr: 1.25 },
-    { name: 'HIGH', grass: 260000, dpr: 2 },
+    { name: 'LOW', grass: 90000, dpr: 1, shadow: 1024 },
+    { name: 'MEDIUM', grass: 170000, dpr: 1.25, shadow: 2048 },
+    { name: 'HIGH', grass: 260000, dpr: 2, shadow: 2048 },
   ],
   defaultQuality: 2,
   defaultQualityTouch: 0, // touch devices start on LOW (phones with DPR 3 + 260k blades crawl)

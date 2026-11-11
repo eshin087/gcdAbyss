@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COMMON_GLSL, HERO_PARTS } from './shaderLib.js';
+import { COMMON_GLSL, HERO_PARTS, RIGID_VERT_GLSL } from './shaderLib.js';
 import { gi } from './glyphs.js';
 
 // Material families (see STYLE.md):
@@ -403,6 +403,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
     uniforms: {
       ...pickShared(U, SHARED),
       ...pickShared(U, SURFACE_SHARED),
+      uBoneTex: U.uBoneTex ?? { value: null }, // rigid batches' bone matrices (RIGID_VERT_GLSL)
       ...(o.wyrm != null ? pickShared(U, ['uCamRight', 'uCamUp']) : {}), // the wyrm source's key light
       ...(o.heroArt != null ? pickShared(U, HERO_ART_SHARED) : {}),
       ...feat.uniforms,
@@ -432,6 +433,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uArtGain: { value: o.artGain ?? 1 },
     },
     vertexShader: /* glsl */ `
+      ${RIGID_VERT_GLSL}
       attribute vec2 aGUV;
       varying vec3 vW;
       varying vec3 vN;
@@ -450,9 +452,11 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       varying float vPart;
 #endif
       void main() {
-        vec4 wp = modelMatrix * vec4(position, 1.0);
+        // the mesh's own matrix, or its bone's when it is drawn as part of a rigid batch
+        mat4 mm = rigidMatrix();
+        vec4 wp = mm * vec4(position, 1.0);
         vW = wp.xyz;
-        vN = normalize(mat3(modelMatrix) * normal);
+        vN = normalize(mat3(mm) * normal);
         vG = aGUV;
 #ifdef SG_AXIS
         vNO = normal; // object space: glowAxis / inkAxis stay glued to the part
@@ -979,8 +983,14 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
     blending: THREE.NoBlending,
   });
   if (Object.keys(feat.defines).length) mat.defines = feat.defines;
+  // Rigid batching (rigidBatch.js): the vertex shader takes each vertex's matrix from the bone
+  // texture when the geometry carries aRigid ≥ 1; a geometry without the attribute reads 0 = its own
+  // modelMatrix. One program draws both (no material clone: the uniforms stay the shared objects).
+  mat.userData.rigid = true;
+  mat.defaultAttributeValues = { ...mat.defaultAttributeValues, aRigid: [0] };
+  mat.index0AttributeName = 'position'; // an attribute without an array never sits on location 0
   // a hero geometry without the aPart attribute reads sub-id 0
-  if (o.heroArt != null) mat.defaultAttributeValues = { ...mat.defaultAttributeValues, aPart: [0] };
+  if (o.heroArt != null) mat.defaultAttributeValues.aPart = [0];
   return mat;
 }
 

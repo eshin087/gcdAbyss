@@ -5,6 +5,80 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-11 — Session 13: a hooded cloak, arms that bend, fewer draw calls
+
+**Owner** (with the reference again: a hooded swordsman in a huge ragged cloak, the sword low at his
+side): "The main character hand motion and animation looks very unnatural and can be improved. Also
+the game performance seem to have slowed down while testing it on my iphone ... If you think
+recreating the character from scratch will help to make this easier and look similar to the
+reference image, let me know." Answers to four questions: a new outfit on the same skeleton (not a
+full rebuild); every motion looks wrong (standing, running, attacks, block / roll / heal); slow all
+the time, not only in the fight; an iPhone 15 / 16 / 17 Pro, Low Power Mode off. Branch
+`player/natural-arms-mobile-perf`.
+
+**Found:**
+- Frame cost: about 510 draw calls in the fight on the phone preset (852 x 393, LOW), 575 in a
+  1024 x 768 window. The hero is 138 meshes and the wyrm 183, and nearly all of them are drawn
+  twice (the shadow pass alone was 324 of the 575). GPU timer
+  queries on a desktop: the hero or the wyrm alone costs the same into a 4 x 4 target as at full
+  size, so it is per-draw overhead, not fill; grass, forest and the ASCII pass are small next to it.
+  About 2,500 GL calls a frame.
+- The arms: over the five-hit chain the sword arm reached 4 deg of elbow bend in four of the five
+  hits, and the forearm-to-blade angle stayed within 24-40 deg through the whole rising cut and
+  whirl. `slashH` held the hand at or past full reach with the blade exactly radial to it.
+
+**Done:**
+- **Outfit (ADR-043):** `gear/shroud.js`, the Shrouded set, is `DEFAULT_LOADOUT`: hood (`hidesHair`),
+  wrap tunic, bound sleeves with bare hands, a mantle and seven cloak sheets on the streamer springs
+  (`lag` 0.5, `max` 1.45; wrapped along the body while tumbling). The cloak covers his back and left
+  side; the sword arm is clear. The old outfit is `WANDERER_LOADOUT`. Cloth far fill raised.
+- **Arms (ADR-044):** `slashH` `ext` / `lead` driven by `SWING`: a cocked arm in the coil, the fist
+  leading the blade, the arm opening through the cut and folding in the finish; the blade's own
+  direction unchanged. `_arm` soft reach (`ARM_SOFT`). Light 1's free hand guards before the chest.
+  The slam's hands go behind the head at the apex. The run's sword hand swings with the stride.
+- **Draw calls (ADR-045; built by a background agent in its own worktree, cherry-picked here):**
+  `render/rigidBatch.js`: every rigid part of the hero and the wyrm is a bone in one shared float
+  texture (`U.uBoneTex`); each actor draws one merged mesh per material and one shadow mesh
+  (`LAYER_CASTER_RIGID`). The source meshes stay in the scene graph, hidden from the cameras. One
+  scene matrix update per frame instead of two. Quality presets carry a shadow map size (LOW 1024).
+  `?nobatch` in the URL turns the batching off.
+- **Tests:** HERO checks the cloak's sheets, the hood hiding the hair, the Wanderer's set still
+  building, and both elbows keeping more than 23 deg (measured 40 and 46). A new BATCH scenario (22 checks): the
+  batches, the bones, hidden parts, shadows, loadout rebuilds, dispose, `?nobatch`.
+
+**Verification:** `npm test` ALL PASSED (635 checks), `npm run build` ok (1675 KB). In the browser on
+the merged tree: no console or GL errors, 23 programs link. Looked at in the Lab model viewer (solid and ASCII): the idle from six
+angles, the five-hit chain frame by frame, the run from the side, block, heal, roll, the slam and
+the thrust. At the phone-size game camera: the idle facing four ways and the first three hits.
+
+**Measured:** sword-arm elbow bend over the chain 46-146 deg (was 4-146); the slam's apex wrist 99
+deg (was 147). Draw calls per frame at 852 x 393, LOW, with the new outfit
+(`renderer.info`, 30-frame averages): title 432 → 55, fight 509 → 56 (`?nobatch` against batched).
+The agent's pixel comparison of batched against unbatched on the same frozen frame, made with the
+OLD outfit: 0 of 334,836 pixels differ in the fight and model views at phone size, up to 25 of
+786,432 at 1024 x 768, a median of 3 per frame over 120 action frames, and one frame with 717 that
+it could not reproduce (it puts the residue down to shadow depth rounding at the bias threshold).
+`pipeline.render()` CPU time on a desktop RTX 4090: about 0.92 → 0.39 ms.
+
+**Not checked / open:**
+- No human has played it, and nothing here was run on a phone: the frame-rate gain on the iPhone is
+  not measured. `?nobatch` in the URL turns the batching off for an A/B on the device.
+- The pixel comparison was not repeated with the new outfit; batched, it was only looked at (model
+  viewer and the phone-size game camera).
+- Batched parts are not frustum-culled one by one (about 30k more triangles a frame; an off-screen
+  wyrm still costs 14 draws), and LOW's 1024 shadow map softens shadow edges on desktop too.
+- Damage per second and the bot win time were not re-measured after the arm changes (the grip sits
+  up to ~5 cm nearer the shoulder at a full stretch; REACH passes).
+- The cloak has no collision: it passes through the legs, the coat tails and the ground, and fans
+  out wide in a roll. A 145 deg wrist remains for ~3 frames in the slam's windup.
+- Idle, block, heal, roll and thrust poses were looked at and left as they were (soft reach only).
+  Stagger, knockdown, death and the plunge were not looked at with the new outfit.
+- `docs/art/hero.md` describes the Wanderer's set and the old arm.
+
+**Next:** the owner's phone test of the Vercel preview; then whatever still reads wrong in motion.
+
+---
+
 ## 2026-11-11 — Session 12: hands, the five-hit chain, a slim profile, equipment slots
 
 **Owner** (with a reference image: a cloaked swordsman, the sword low at his side): "The character

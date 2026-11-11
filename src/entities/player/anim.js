@@ -418,8 +418,11 @@ function loco(p, A) {
   // and the low ready guard lies across the legs, which swing through it when walking backward.
   // (round 3: the hand trails OUT beside the coat, not under it, and the blade angles out past the
   // tails: the grip used to ride inside the skirt and the steel came out through the cloth)
-  const amp = 0.05 * cs * mz, ws = A.swordW, bw = A.backW;
-  to3(p, P.rH, lerp(lerp(-0.12, -0.15, s), -0.02, bw), lerp(lerp(-0.48, -0.37, s) + 0.012 * st, -0.38, bw), lerp(lerp(-0.1 + amp, -0.28, s), 0.3, bw), ws);
+  // (ADR-044: the hand hung 0.5 m below the shoulder, the end of the arm's reach, so the stride's
+  // swing was lost in a straight arm; it rides a little higher now and swings 9 cm with the stride,
+  // against the free arm)
+  const amp = 0.09 * cs * mz, ws = A.swordW, bw = A.backW;
+  to3(p, P.rH, lerp(lerp(-0.13, -0.15, s), -0.02, bw), lerp(lerp(-0.44, -0.37, s) + 0.02 * st, -0.38, bw), lerp(lerp(-0.08 + amp, -0.28 + amp * 0.6, s), 0.3, bw), ws);
   to3(p, P.rP, lerp(-0.75, -0.85, bw), lerp(lerp(-0.3, 0.2, s), -0.3, bw), lerp(-0.85, -0.5, bw), ws);
   dirLerp(SW_T, 0, lerp(-0.42, -0.36, s), lerp(-0.56, -0.2, s) - 0.03 * st * (1 - s), lerp(-0.71, -0.91, s), -0.15, -0.22, 1, bw);
   dirTo(p, P.swD, SW_T[0], SW_T[1], SW_T[2], ws);
@@ -460,7 +463,16 @@ function stance(p, A, lunge) {
  *  (§4.6): the hips and chest wind with it (twist −35° coiled, +55° at the strike), the eyes stay
  *  on the target; the sword hand travels round the body, low at the right hip in the coil, across
  *  the chest at the strike, up at the left shoulder on the rising finish. */
-function slashH(p, A, th, elev, lunge) {
+// (ADR-044, the arm: the hand used to ride a 0.42 m circle with the blade exactly radial to it, a
+// target at or past the arm's full reach all the way round, so the swing was one locked stick
+// turning at the shoulder: elbow straight, wrist fixed. Now `ext` (0..1) is how far the arm has
+// opened: folded in the coil (the fist by the shoulder, the elbow out), opening through the cut,
+// folding again across the body in the finish; and `lead` (rad) is how far the HAND runs ahead of
+// the blade round the body: the fist goes first, the blade trails behind a cocked wrist and whips
+// through as the lead closes. The BLADE's own direction is still `th` / `elev`, so the arc the hit
+// test sweeps is the one the attack data describes.)
+const SLASH_R = [0.23, 0.42]; // the sword hand's radius round the shoulder: folded … open
+function slashH(p, A, th, elev, lunge, ext = 1, lead = 0) {
   stance(p, A, lunge);
   const s = Math.sin(th), c = Math.cos(th);
   const tw = clamp(th, -2.4, 2.3);
@@ -470,8 +482,13 @@ function slashH(p, A, th, elev, lunge) {
   p[P.spZ] = -0.06 * s;
   p[P.hdY] = -(p[P.pelvY] + p[P.spY]) * 0.75; // eyes stay on the target
   p[P.hdX] = 0.02 - 0.2 * Math.max(0, elev);
-  v3(p, P.rH, s * 0.42, -0.34 + elev * 0.55 + 0.14 * Math.max(0, s), c * 0.42 + 0.14);
-  v3(p, P.rP, -0.3, -1, -0.45);
+  const ha = th + lead, hs = Math.sin(ha), hc = Math.cos(ha);
+  const r = lerp(SLASH_R[0], SLASH_R[1], ext);
+  // folded, the fist sits nearer shoulder height (a cocked arm), whatever the blade's pitch
+  const hy = lerp(-0.2 + elev * 0.3, -0.34 + elev * 0.55, ext) + 0.14 * Math.max(0, hs) * ext;
+  v3(p, P.rH, hs * r, hy, hc * r + 0.14 * ext);
+  // the elbow: under the arm when it is open, out to the side and back when it is cocked
+  v3(p, P.rP, lerp(-0.85, -0.3, ext), lerp(-0.45, -1, ext), lerp(-0.3, -0.45, ext));
   v3(p, P.swD, s * Math.cos(elev), Math.sin(elev), c * Math.cos(elev));
   v3(p, P.swF, -s * Math.sin(elev), Math.cos(elev), -c * Math.sin(elev)); // the flat (and its glow) faces the sky
   // free arm: across the chest in the coil, pulled back to the hip, flung out behind at the strike
@@ -485,12 +502,20 @@ function slashH(p, A, th, elev, lunge) {
  *  coiling, so at the apex the blade HANGS down the back with the torso arched and the head up;
  *  then everything folds hard over the impact, the blade into the ground ahead. */
 const SLAM_E = [-0.9, 1.7]; // hand-circle limits (rad): knee height in front … straight overhead
+// (ADR-044: at the apex the hands stopped straight overhead while the blade hung down the back,
+// 147° between the forearm and the steel: no wrist bends that far. The hands now carry on past the
+// top to BEHIND the head, on a tighter circle (the elbows fold up and forward), and on the way down
+// they run SLAM_LEAD ahead of the blade: the arms pull first, the steel whips over after them.)
+const SLAM_BACK = 2.45, SLAM_BACK_R = 0.3, SLAM_LEAD = 0.35;
 function slamPose(p, A, ang, lunge) {
   stance(p, A, lunge);
   const e = clamp(ang, SLAM_E[0], SLAM_E[1]);
   const q = clamp((SLAM_E[1] - e) / (SLAM_E[1] - SLAM_E[0]), 0, 1); // 0 raised → 1 struck
-  const sE = Math.sin(e), cE = Math.cos(e);
-  v3(p, P.rH, lerp(0.13, 0.17, q), 0.5 * sE, 0.5 * cE + 0.02);
+  // the hands' own angle on their circle, and its radius
+  const eh = clamp(ang - SLAM_LEAD * smoothstep(SLAM_E[0], SLAM_E[1], ang), SLAM_E[0], SLAM_BACK);
+  const rh = lerp(0.5, SLAM_BACK_R, smoothstep(Math.PI / 2, SLAM_BACK, eh));
+  const sE = Math.sin(eh), cE = Math.cos(eh);
+  v3(p, P.rH, lerp(0.13, 0.17, q), rh * sE, rh * cE + 0.02);
   v3(p, P.rP, -0.9, 0.1, -0.4);
   v3(p, P.lP, 0.9, 0.1, -0.4);
   v3(p, P.swD, 0.02, Math.sin(ang), Math.cos(ang));
@@ -736,10 +761,12 @@ const FINISH = { after: 0.035, rise: 0.04, home: 0.55 };
 function lightOneBody(p, A, t, W, Ac) {
   const reach = smoothstep(0.03, W - 0.02, t) * (1 - smoothstep(W, W + Ac * 0.85, t));
   const fling = smoothstep(W + Ac * 0.25, W + Ac + 0.03, t);
-  to3(p, P.lH, 0.05, -0.15, 0.42, reach);
-  to3(p, P.lP, 0.75, -0.35, -0.3, reach);
-  to3(p, P.lH, 0.3, -0.3, -0.22, fling);
-  to3(p, P.lP, 0.9, -0.2, 0.25, fling);
+  // (ADR-044: the reach was a straight arm out ahead and the fling a straight arm out behind: with
+  // the sword arm cocked, a T-pose. A bent guard hand before the chest, then drawn back by the hip.)
+  to3(p, P.lH, 0.0, -0.2, 0.31, reach);
+  to3(p, P.lP, 0.8, -0.5, -0.2, reach);
+  to3(p, P.lH, 0.2, -0.36, -0.13, fling);
+  to3(p, P.lP, 0.9, -0.3, -0.3, fling);
   p[P.rFf] = lerp(p[P.rFf], 0.3, smoothstep(W - 0.02, W + Ac * 0.6, t));
 }
 /** crPath for one channel: keys K[i][0] → o[off]. */
@@ -753,6 +780,12 @@ function crScalar(K, ks, u, o, off) {
   o[off] = (2 * s3 - 3 * s2 + 1) * K[j][0] + (s3 - 2 * s2 + s) * h * m0 + (-2 * s3 + 3 * s2) * K[j + 1][0] + (s3 - s2) * h * m1;
 }
 
+// The sword arm through a sweep (slashH `ext` 0 folded … 1 open, `lead` rad of the fist ahead of
+// the blade): `coil` / `open` / `fold` = how far the arm is open in the coil, at the cut, in the
+// finish; `cock` = the lead held in the coil (the wrist cocked), `whip` = the extra lead as the cut
+// starts, `over` = how far the blade passes the fist in the finish.
+const SWING = { coil: 0.18, open: 0.94, fold: 0.5, cock: 0.3, whip: 0.3, over: 0.3 };
+const SWING_SPIN = { coil: 0.5, open: 0.9, fold: 0.6, cock: 0.2, whip: 0.15, over: 0.2 };
 /** Light sweeps, the slam and the thrust. Windup coils (the cross-fade carries the body into the
  *  coil; the slam raises the blade up past the head through its windup), the active frames sweep
  *  the arc a0 → a1, recovery follows through (the light sweeps RISE to elev2) then eases back to
@@ -775,6 +808,11 @@ function attackPose(p, A) {
     const slam = k.kind === 'slam';
     const coil = k.a0 - dir * (slam ? 0.12 : 0.15);
     let ang, lunge, u, el;
+    // the sword arm through a sweep (slashH `ext`, `lead`; SWING): cocked in the coil, the fist
+    // leading the blade into the cut and the arm opening through it, the blade passing the fist and
+    // the arm folding across the body in the finish. A whirl keeps the arm out (the turn throws it)
+    const SW = k.spin ? SWING_SPIN : SWING;
+    let ext = SW.coil, lead = dir * SW.cock;
     const e0 = k.elev0 ?? k.elev ?? -0.1, e1 = k.elev ?? -0.1;
     if (t < W) {
       const v = t / W;
@@ -796,6 +834,10 @@ function attackPose(p, A) {
       lunge = e;
       u = e;
       el = lerp(e0, e1, u);
+      // the fist goes first (the lead grows over the first third), then the wrist releases and the
+      // blade catches it up by the end of the cut; the arm is open by two thirds of the way
+      ext = lerp(SW.coil, SW.open, smoothstep(0, 0.65, v));
+      lead = dir * (SW.cock + SW.whip * Math.sin(Math.PI * Math.min(1, v * 1.5))) * (1 - smoothstep(0.4, 1, v));
     } else {
       let f = easeOutCubic(clamp((t - W - Ac) / (R * 0.45), 0, 1));
       // the sweeps snap up into their rising finish and HOLD it (a 4-frame pose hold, then a
@@ -806,9 +848,12 @@ function attackPose(p, A) {
       lunge = 1;
       u = 1;
       el = lerp(e1, k.elev2 ?? e1, f);
+      // the blade runs on past the fist (the wrist rolls over) while the arm folds in
+      ext = lerp(SW.open, SW.fold, f);
+      lead = -dir * SW.over * f;
     }
     if (slam) slamPose(p, A, ang, lunge);
-    else slashH(p, A, ang, el, lunge);
+    else slashH(p, A, ang, el, lunge, ext, lead);
     if (k.sink) {
       // a cut out of a crouch (the roll attack): the hips stay low through the windup and the cut
       // and rise with the follow-through
@@ -1802,6 +1847,9 @@ const STRIP_A = [-1.5, 0.8], STRIP_B = 0.8, STRIP_FLOOR = 0.03;
 // sleeve streamers: two-segment springs that stream back almost horizontally when running
 const STREAM_K = [55, 40], STREAM_C = [6, 4.5], STREAM_LAG = [0.3, 0.4], STREAM_OUT = 0.36;
 const STREAM_A = 2.6, STREAM_B = 1.3;
+// soft reach: where the arm's reach starts to give / the most it opens, as fractions of its length
+// (0.955: the elbow keeps ~35° at a full stretch)
+const ARM_SOFT = [0.78, 0.955];
 const TWO_HAND_GRIP = 0.11; // m down the grip from the sword hand to the off hand (two-handed)
 const PAULDRON_FOLLOW = 0.35; // how much of the sword arm's swing the shoulder armour follows
 // the thrust charge's updraft (× A.updraft 0..1): extra outward flare of the coat panels and the
@@ -2383,7 +2431,7 @@ export class HeroAnimator {
       r.chest.worldToLocal(_G);
       _T.copy(_TL).lerp(_G, two);
     }
-    this._arm(r.arms.L, _T, p, P.lP, false);
+    this._arm(r.arms.L, _T, p, P.lP, false, two);
     // the pauldron rides on the shoulder, following part of the sword arm's swing
     r.pauldron.quaternion.slerpQuaternions(_qId, r.arms.R.upper.quaternion, PAULDRON_FOLLOW);
     this._leg(r.legs.R, p, P.rF, P.rK, P.rFy, P.rFf);
@@ -2517,9 +2565,23 @@ export class HeroAnimator {
     return _T;
   }
 
-  _arm(arm, T, p, pi, holdsSword) {
+  _arm(arm, T, p, pi, holdsSword, lock = 0) {
     _S.copy(arm.upper.position);
     if (T !== _T) _T.copy(T);
+    // soft reach (ADR-044): a target near or past the arm's length is reached with the elbow still
+    // bent. The last fifth of the reach is compressed, so the arm never locks into a straight
+    // stick, however far out a pose asks for the hand; `lock` 0..1 (the off hand on the grip)
+    // gives the full reach back, so two hands still meet
+    {
+      const L = DIM.upperArm + DIM.foreArm, d0 = ARM_SOFT[0] * L;
+      _v.subVectors(_T, _S);
+      const d = _v.length();
+      if (d > d0 && lock < 1) {
+        const span = (ARM_SOFT[1] - ARM_SOFT[0]) * L;
+        const d2 = d0 + span * (1 - Math.exp(-(d - d0) / span));
+        _T.copy(_S).addScaledVector(_v, lerp(d2, d, lock) / d);
+      }
+    }
     // hands never reach into the ground
     this.rig.chest.localToWorld(_w.copy(_T));
     if (_w.y < HAND_FLOOR) {
@@ -2914,6 +2976,8 @@ export class HeroAnimator {
     const steps = dt > 0 ? Math.min(6, Math.ceil(dt / (1 / 120))) : 0;
     const h = steps ? dt / steps : 0;
     r.chest.getWorldPosition(_G);
+    // how far the torso is from upright (0 standing … 1 at 70° or more)
+    const tumble = smoothstep(0.75, 0.3, _e.set(0, 1, 0).applyQuaternion(r.chest.getWorldQuaternion(_q1)).y);
     for (let i = 0; i < r.streamers.length; i++) {
       const S = r.streamers[i], st = this.streamState[i];
       const j0 = S.segs[0];
@@ -2934,13 +2998,27 @@ export class HeroAnimator {
       oz /= ol;
       const ph = this.time * (3 + 5 * Math.min(1, sp / 5)) + i * 2.1;
       const so = S.out ?? STREAM_OUT; // a ribbon's own outward flare (model.js: the cape)
+      // a sheet's own weight: `lag` < 1 trails less (the heavy cloak hangs ~40° back at a run, where
+      // a light ribbon streams out level)
+      const lg = S.lag ?? 1;
+      // … and its own swing limit: `max` rad from hanging (a ribbon may whip up past level, 2.6;
+      // the cloak stops near level, so a whirl or a lunge never stands a sheet up over his head)
+      const mA = S.max ?? STREAM_A;
       for (let s = 0; s < 2; s++) {
         const c = st.segs[s], j = S.segs[s];
-        const lag = STREAM_LAG[s] * (1 + 0.08 * sp);
+        const lag = STREAM_LAG[s] * lg * (1 + 0.08 * sp);
         const wob = (0.08 + 0.12 * Math.min(1, sp / 4)) * Math.sin(ph + s * 1.4);
         _v.set(ox * so - vel.x * lag - oz * wob, -1 - vel.y * lag * 0.5 + Math.abs(wob) * 0.5, oz * so - vel.z * lag + ox * wob);
         _v.normalize().applyQuaternion(_qInv2.copy(_q0).invert());
-        const tA = clamp(Math.atan2(-_v.z, -_v.y), -STREAM_A, STREAM_A);
+        if (tumble > 0) {
+          // tumbling (a roll, a fall, lying down): the cloth stays wrapped along the body instead of
+          // reaching for the world's down, which stood every sheet out like a spine
+          _v.x *= 1 - tumble;
+          _v.y += (-1 - _v.y) * tumble;
+          _v.z += (0.25 * so - _v.z) * tumble;
+          _v.normalize();
+        }
+        const tA = clamp(Math.atan2(-_v.z, -_v.y), -mA, mA);
         const tB = clamp(Math.asin(clamp(_v.x, -1, 1)), -STREAM_B, STREAM_B);
         const K = STREAM_K[s], Cd = STREAM_C[s];
         for (let n = 0; n < steps; n++) {
@@ -2954,7 +3032,7 @@ export class HeroAnimator {
           c.z = tB;
           c.vx = c.vz = 0;
         }
-        c.x = clamp(c.x, -STREAM_A, STREAM_A);
+        c.x = clamp(c.x, -mA, mA);
         c.z = clamp(c.z, -STREAM_B, STREAM_B);
         j.rotation.set(c.x, 0, c.z);
         _q0.multiply(_qs.setFromEuler(_eul.set(c.x, 0, c.z, 'YXZ')));

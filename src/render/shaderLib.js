@@ -8,8 +8,36 @@ export const MAX_PL = 8; // dynamic point lights visible at once
 export const MAX_PUSH = 10; // grass pushers (feet, bodies)
 export const HERO_PARTS = 20; // hero ink-line part ids (HERO_ART in materials.js, HERO_INK in player/model.js)
 
+// Render layers of the moon shadow pass (pipeline.js re-exports them). Objects on LAYER_CASTER are
+// drawn into the shadow map with a plain depth material; the shadow meshes of rigid-batched actors
+// (rigidBatch.js) sit on LAYER_CASTER_RIGID and are drawn with a depth material that reads the
+// bone texture.
+export const LAYER_CASTER = 1;
+export const LAYER_CASTER_RIGID = 2;
+
+// The bone texture of the rigid batches (rigidBatch.js): RIGID_TEX × RIGID_TEX RGBA32F texels, one
+// world matrix per 4 texels (a texel = a matrix column), RIGID_TEX / 4 matrices per row. Slot 0 is
+// reserved: aRigid 0 (also what a geometry without the attribute reads) means "use modelMatrix".
+export const RIGID_TEX = 64;
+export const RIGID_MAX = (RIGID_TEX * RIGID_TEX) / 4;
+/** Vertex GLSL: `rigidMatrix()` = the vertex's model matrix, its bone's or the mesh's own. */
+export const RIGID_VERT_GLSL = /* glsl */ `
+attribute float aRigid;
+uniform highp sampler2D uBoneTex;
+mat4 rigidMatrix() {
+  if (aRigid < 0.5) return modelMatrix;
+  int i = int(aRigid + 0.5);
+  ivec2 t = ivec2((i % ${RIGID_TEX / 4}) * 4, i / ${RIGID_TEX / 4});
+  return mat4(
+    texelFetch(uBoneTex, t, 0), texelFetch(uBoneTex, t + ivec2(1, 0), 0),
+    texelFetch(uBoneTex, t + ivec2(2, 0), 0), texelFetch(uBoneTex, t + ivec2(3, 0), 0));
+}
+`;
+
 export function createSharedUniforms() {
   return {
+    // rigid batches: every batched mesh's world matrix (rigidBatch.js creates and fills the texture)
+    uBoneTex: { value: null },
     uTime: { value: 0 },
     // points TOWARD the moon: south-west, so camera-facing sides are lit and shadows fall up-right
     uMoonDir: { value: new THREE.Vector3(-0.55, 1.0, 0.32).normalize() },

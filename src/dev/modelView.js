@@ -449,7 +449,8 @@ export class ModelViewer {
     const v = this._v;
     obj.updateMatrixWorld(true);
     obj.traverseVisible((o) => {
-      const g = o.isMesh ? o.geometry : null;
+      // (a rigid batch's merged geometry is in its bones' local spaces: its sources are measured)
+      const g = o.isMesh && !o.userData.rigidBatch ? o.geometry : null;
       const pos = g?.attributes?.position;
       if (!pos) return;
       if (!g.boundingBox || pos.usage === THREE.DynamicDrawUsage) g.computeBoundingBox();

@@ -4,7 +4,15 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Eight pieces of work since 0.4.0:
+Nine pieces of work since 0.4.0:
+- **A hooded cloak, arms that bend, fewer draw calls** (2026-11-11, ADR-043, ADR-044, ADR-045): the hero
+  wears a pointed hood and a huge tattered cloak, like the reference image; the old coat-and-pauldron
+  outfit is still there as a loadout. His sword arm no longer swings as one straight stick: the
+  elbow stays bent, the arm cocks back before a cut and opens through it, and the blade trails the
+  hand and whips through. The hero and the wyrm are each drawn in a few batches instead of hundreds of
+  small parts: about 56 draw calls a frame in the fight on the phone preset instead of about 509.
+  That is aimed at the slowdown on phones and has not been measured on one yet; add `?nobatch` to
+  the URL to compare.
 - **Hands, a longer combo and equipment slots** (2026-11-11, ADR-041, ADR-042): the hero has real
   hands (a gauntlet fist closed round the grip, a left hand with fingers), holds the sword low at his
   side like the reference image, and is slim in profile. Left-click now chains five different hits
