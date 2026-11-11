@@ -502,12 +502,20 @@ function slashH(p, A, th, elev, lunge, ext = 1, lead = 0) {
  *  coiling, so at the apex the blade HANGS down the back with the torso arched and the head up;
  *  then everything folds hard over the impact, the blade into the ground ahead. */
 const SLAM_E = [-0.9, 1.7]; // hand-circle limits (rad): knee height in front … straight overhead
+// (ADR-044: at the apex the hands stopped straight overhead while the blade hung down the back,
+// 147° between the forearm and the steel: no wrist bends that far. The hands now carry on past the
+// top to BEHIND the head, on a tighter circle (the elbows fold up and forward), and on the way down
+// they run SLAM_LEAD ahead of the blade: the arms pull first, the steel whips over after them.)
+const SLAM_BACK = 2.45, SLAM_BACK_R = 0.3, SLAM_LEAD = 0.35;
 function slamPose(p, A, ang, lunge) {
   stance(p, A, lunge);
   const e = clamp(ang, SLAM_E[0], SLAM_E[1]);
   const q = clamp((SLAM_E[1] - e) / (SLAM_E[1] - SLAM_E[0]), 0, 1); // 0 raised → 1 struck
-  const sE = Math.sin(e), cE = Math.cos(e);
-  v3(p, P.rH, lerp(0.13, 0.17, q), 0.5 * sE, 0.5 * cE + 0.02);
+  // the hands' own angle on their circle, and its radius
+  const eh = clamp(ang - SLAM_LEAD * smoothstep(SLAM_E[0], SLAM_E[1], ang), SLAM_E[0], SLAM_BACK);
+  const rh = lerp(0.5, SLAM_BACK_R, smoothstep(Math.PI / 2, SLAM_BACK, eh));
+  const sE = Math.sin(eh), cE = Math.cos(eh);
+  v3(p, P.rH, lerp(0.13, 0.17, q), rh * sE, rh * cE + 0.02);
   v3(p, P.rP, -0.9, 0.1, -0.4);
   v3(p, P.lP, 0.9, 0.1, -0.4);
   v3(p, P.swD, 0.02, Math.sin(ang), Math.cos(ang));
