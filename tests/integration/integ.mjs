@@ -2096,13 +2096,24 @@ async function scenarioHero() {
   const tails = r.coat.filter((C) => Math.abs(C.def.az) > 2.2);
   assert(r.coat.length === 6 && tails.length === 2 && strips === 12 && r.coat.every((C) => !C.def.flap),
     `coat: 6 panels (2 back tails split by a vent, 2 side, 2 front), ${strips} torn strips`);
-  assert(r.streamers?.length === 4 && Object.keys(r.hair).length === 5, 'four cape ribbons, five hair clusters');
+  // the Shrouded set (ADR-043): the cloak's sheets ride the streamer springs (heavier than a ribbon:
+  // lag < 1), and the hood leaves the hair out (its five spring joints stay for the animator)
+  {
+    const hairMeshes = Object.values(r.hair).reduce((n, j) => n + j.children.filter((o) => o.isMesh).length, 0);
+    assert(r.streamers?.length === 7 && r.streamers.every((S) => S.lag > 0 && S.lag < 1) && Object.keys(r.hair).length === 5 && hairMeshes === 0 && r.slots.head.length > 0,
+      `the cloak: ${r.streamers?.length} sheets on springs; the hood is on and the hair is not built (${hairMeshes} hair meshes, 5 hair joints)`);
+  }
   // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
   const v = new THREE.Vector3();
   let bad = 0, low = Infinity, tipLow = Infinity, frames = 0;
+  // the elbows (ADR-044): the smallest bend of each arm over everything below (rad; 0 = a straight
+  // arm). The off hand is skipped while it is on the grip (two-handed: it reaches where the grip is)
+  let bendR = Infinity, bendL = Infinity;
   const probe = () => {
     frames++;
+    bendR = Math.min(bendR, -r.arms.R.fore.rotation.x);
+    if (p.anim.cur[45] < 0.05) bendL = Math.min(bendL, -r.arms.L.fore.rotation.x);
     p.object3d.traverse((o) => { const e = o.matrixWorld.elements; for (let i = 0; i < 16; i++) if (!Number.isFinite(e[i])) { bad++; break; } });
     for (const C of r.coat) for (const S of C.strips) { v.set(0, -S.len, 0).applyMatrix4(S.joint.matrixWorld); low = Math.min(low, v.y); }
     v.set(0, 0, HERO_DIM.steelTip).applyMatrix4(r.sword.matrixWorld);
@@ -2169,6 +2180,7 @@ async function scenarioHero() {
   assert(!bad, `rig matrices stay finite through every move (${frames} frames)`);
   assert(low > -0.02, `torn strip tips stay above the grass (lowest ${low.toFixed(3)} m)`);
   assert(tipLow > -0.06, `the steel point never sinks into the ground (lowest ${tipLow.toFixed(3)} m)`);
+  assert(bendR > 0.4 && bendL > 0.4, `neither arm locks straight: the elbows keep at least ${(Math.min(bendR, bendL) * 57.3).toFixed(0)} deg of bend through the run, the roll and every attack (sword arm ${(bendR * 57.3).toFixed(0)}, off arm ${(bendL * 57.3).toFixed(0)})`);
   // glyph cells follow the view distance: the in-game size at the 36 m camera, finer in close-ups
   // (small parts capped, the blade's two columns fixed); a bad distance never yields NaN
   const coatU = r.materials.coat.uniforms.uCell.value;
@@ -2215,7 +2227,18 @@ async function scenarioHero() {
     assert(threw && p.loadout.back === null, 'an unknown item id throws and changes nothing');
     p.setLoadout(DEFAULT_LOADOUT);
     drive();
-    assert(meshes() === n0 && p.rig.coat.length === 6 && p.rig.streamers.length === 4 && p.sweep.sword === p.rig.sword && finite(), `back in the default set: ${meshes()} meshes, 6 coat panels, 4 cape sheets`);
+    assert(meshes() === n0 && p.rig.coat.length === 6 && p.rig.streamers.length === 7 && p.sweep.sword === p.rig.sword && finite(), `back in the default set: ${meshes()} meshes, 6 coat panels, 7 cloak sheets`);
+    // the outfit before ADR-043 is still a loadout: bare-headed (the hair is built again), the
+    // pauldron, the half-cape
+    const { WANDERER_LOADOUT } = await imp('src/entities/player/gear/index.js');
+    p.setLoadout(WANDERER_LOADOUT);
+    drive();
+    const hair = Object.values(p.rig.hair).reduce((n, j) => n + j.children.filter((o) => o.isMesh).length, 0);
+    assert(p.rig.streamers.length === 4 && hair > 0 && p.rig.slots.shoulders.length > 0 && p.rig.slots.head.length === 0 && finite(),
+      `the Wanderer's set still builds: 4 cape sheets, ${hair} hair meshes, the pauldron, no hood`);
+    p.setLoadout(DEFAULT_LOADOUT);
+    drive();
+    assert(meshes() === n0 && finite(), `and back to the Shrouded set (${meshes()} meshes)`);
   }
   return G;
 }
