@@ -28,6 +28,8 @@ import {
  * (1 = a light ribbon that streams out level at a run; SHROUD_LAG by default).
  */
 const SHROUD_LAG = 0.5;
+/** How far a cloak sheet may swing from hanging (rad): just short of level. */
+const SHROUD_MAX = 1.45;
 export const SHROUD_SHEETS = [
   // down his back
   { on: 'chest', at: [0, 0.2, -0.128], ry: Math.PI, w: [0.26, 0.4, 0.56], len: [0.5, 0.5], out: 0.16, wrap: 0.24, strips: [0.22, 0.12, 0.3, 0.16, 0.24], fork: [0, 1, 0, 0, 1], seed: 3 },
@@ -222,7 +224,7 @@ function buildCloak({ chest, arms, M, REST, mesh, joint }) {
       const m = mesh(s1, foldLines(tatterStrip(d.strips[k], sw, { fork: !!d.fork[k], curl: 0.2, seed: 500 + d.seed * 13 + k * 7 }), ribbonCrease(sw, i * 2.7 + k * 1.3)), M.hem, Math.sin(a) * R2, -L1 + 0.012, (Math.cos(a) - 1) * R2);
       m.rotation.y = a;
     }
-    streamers.push({ segs: [s0, s1], len: d.len, out: d.out, lag: d.lag ?? SHROUD_LAG });
+    streamers.push({ segs: [s0, s1], len: d.len, out: d.out, lag: d.lag ?? SHROUD_LAG, max: SHROUD_MAX });
   });
   return { streamers };
 }

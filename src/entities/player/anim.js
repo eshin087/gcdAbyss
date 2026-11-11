@@ -2976,6 +2976,8 @@ export class HeroAnimator {
     const steps = dt > 0 ? Math.min(6, Math.ceil(dt / (1 / 120))) : 0;
     const h = steps ? dt / steps : 0;
     r.chest.getWorldPosition(_G);
+    // how far the torso is from upright (0 standing … 1 at 70° or more)
+    const tumble = smoothstep(0.75, 0.3, _e.set(0, 1, 0).applyQuaternion(r.chest.getWorldQuaternion(_q1)).y);
     for (let i = 0; i < r.streamers.length; i++) {
       const S = r.streamers[i], st = this.streamState[i];
       const j0 = S.segs[0];
@@ -2999,13 +3001,24 @@ export class HeroAnimator {
       // a sheet's own weight: `lag` < 1 trails less (the heavy cloak hangs ~40° back at a run, where
       // a light ribbon streams out level)
       const lg = S.lag ?? 1;
+      // … and its own swing limit: `max` rad from hanging (a ribbon may whip up past level, 2.6;
+      // the cloak stops near level, so a whirl or a lunge never stands a sheet up over his head)
+      const mA = S.max ?? STREAM_A;
       for (let s = 0; s < 2; s++) {
         const c = st.segs[s], j = S.segs[s];
         const lag = STREAM_LAG[s] * lg * (1 + 0.08 * sp);
         const wob = (0.08 + 0.12 * Math.min(1, sp / 4)) * Math.sin(ph + s * 1.4);
         _v.set(ox * so - vel.x * lag - oz * wob, -1 - vel.y * lag * 0.5 + Math.abs(wob) * 0.5, oz * so - vel.z * lag + ox * wob);
         _v.normalize().applyQuaternion(_qInv2.copy(_q0).invert());
-        const tA = clamp(Math.atan2(-_v.z, -_v.y), -STREAM_A, STREAM_A);
+        if (tumble > 0) {
+          // tumbling (a roll, a fall, lying down): the cloth stays wrapped along the body instead of
+          // reaching for the world's down, which stood every sheet out like a spine
+          _v.x *= 1 - tumble;
+          _v.y += (-1 - _v.y) * tumble;
+          _v.z += (0.25 * so - _v.z) * tumble;
+          _v.normalize();
+        }
+        const tA = clamp(Math.atan2(-_v.z, -_v.y), -mA, mA);
         const tB = clamp(Math.asin(clamp(_v.x, -1, 1)), -STREAM_B, STREAM_B);
         const K = STREAM_K[s], Cd = STREAM_C[s];
         for (let n = 0; n < steps; n++) {
@@ -3019,7 +3032,7 @@ export class HeroAnimator {
           c.z = tB;
           c.vx = c.vz = 0;
         }
-        c.x = clamp(c.x, -STREAM_A, STREAM_A);
+        c.x = clamp(c.x, -mA, mA);
         c.z = clamp(c.z, -STREAM_B, STREAM_B);
         j.rotation.set(c.x, 0, c.z);
         _q0.multiply(_qs.setFromEuler(_eul.set(c.x, 0, c.z, 'YXZ')));
