@@ -1,4 +1,15 @@
 // Central tuning knobs. Gameplay numbers for the player/dragon live in their own modules.
+
+// `?nobatch` in the URL (read once): draw the hero and the wyrm mesh by mesh instead of through
+// rigid batches (render/rigidBatch.js). An A/B switch for frame-rate and image checks.
+const NO_BATCH = (() => {
+  try {
+    return typeof location !== 'undefined' && new URLSearchParams(location.search).has('nobatch');
+  } catch {
+    return false;
+  }
+})();
+
 export const CONFIG = {
   seed: 1337,
 
@@ -47,6 +58,7 @@ export const CONFIG = {
     maxPixelRatio: 2,
     shadowSize: 2048,
     shadowExtent: 80, // half-size in meters of the moon's orthographic shadow frustum
+    batch: !NO_BATCH, // rigid batching of the hero and the wyrm (false with ?nobatch)
     exposure: 1.55,
     bloomStrength: 0.85,
     bloomThreshold: 0.55,

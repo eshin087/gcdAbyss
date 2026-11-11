@@ -1,23 +1,32 @@
 import * as THREE from 'three';
 import { CONFIG } from '../core/config.js';
-import { FS_VERT, HERO_PARTS } from './shaderLib.js';
+import { FS_VERT, HERO_PARTS, LAYER_CASTER, LAYER_CASTER_RIGID, RIGID_VERT_GLSL } from './shaderLib.js';
+import { rigidBones } from './rigidBatch.js';
 import { createGridAtlas, createPixelArtAtlas, pixelArtCell, GRID_COLS, GRID_ROW } from './glyphs.js';
 import { createWyrmArtAtlas, wyrmArtCell, wyrmArtScale } from './wyrmGlyphs.js';
 import { HERO_ART } from './materials.js';
 
 // Frame pipeline:
-//   1. moon shadow map  (casters = objects on LAYER_CASTER)
+//   0. one scene-graph matrix update, then the rigid batches' bone matrices (rigidBatch.js)
+//   1. moon shadow map  (casters = objects on LAYER_CASTER, then the batched actors' shadow
+//      meshes on LAYER_CASTER_RIGID with a depth material that reads the bone texture)
 //   2. world -> sceneRT (HDR colour, alpha = ASCII flag, + depth texture)
 //   3. ASCII pass: flagged pixels become a screen-space character grid  -> compRT
 //   4. FX pass: glyph particles, soft depth-tested against sceneRT depth   -> compRT
 //   5. bloom + tone map + grade + vignette + feedback overlays             -> screen
 
-export const LAYER_CASTER = 1;
+export { LAYER_CASTER, LAYER_CASTER_RIGID };
 /** World radius (m) round the hero's screen point inside which the art pass draws his dark halo. */
 const HERO_HALO_R = 2.1;
-/** Make an object (and children) cast moon shadows. */
+/**
+ * Make an object (and children) cast moon shadows. Works before or after rigid batching
+ * (rigidBatch.js): a batched source keeps its layer mask without being drawn, and its actor's
+ * shadow mesh casts for it (the bone sync puts that mesh on LAYER_CASTER_RIGID).
+ */
 export function markCaster(obj) {
-  obj.traverse((o) => o.layers.enable(LAYER_CASTER));
+  obj.traverse((o) => {
+    if (!o.userData.rigidBatch) o.layers.enable(LAYER_CASTER);
+  });
   return obj;
 }
 
@@ -73,6 +82,24 @@ export class Pipeline {
     this.shadowCam = new THREE.OrthographicCamera(-E, E, E, -E, 1, 320);
     this.shadowCam.layers.set(LAYER_CASTER);
     this.shadowMat = new THREE.MeshDepthMaterial({ side: THREE.DoubleSide });
+    // rigid batches (rigidBatch.js): the same depth, each vertex placed by its bone's matrix
+    this.rigid = rigidBones(U);
+    this.rigidShadowMat = new THREE.ShaderMaterial({
+      uniforms: { uBoneTex: U.uBoneTex },
+      vertexShader: /* glsl */ `
+        ${RIGID_VERT_GLSL}
+        void main() {
+          gl_Position = projectionMatrix * viewMatrix * (rigidMatrix() * vec4(position, 1.0));
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        void main() {
+          gl_FragColor = vec4(1.0); // only the depth texture is read
+        }
+      `,
+      side: THREE.DoubleSide,
+    });
+    this.rigidShadowMat.index0AttributeName = 'position';
     this.shadowBias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
     U.uShadowMap.value = this.shadowRT.depthTexture;
     this.shadowCenter = new THREE.Vector3();
@@ -865,23 +892,44 @@ export class Pipeline {
   }
 
   render() {
-    const r = this.renderer;
+    const r = this.renderer, scene = this.scene;
     const prevAutoClear = r.autoClear;
 
-    // 1. shadows
-    this.scene.overrideMaterial = this.shadowMat;
-    r.setRenderTarget(this.shadowRT);
-    r.setClearColor(0xffffff, 1);
-    r.clear();
-    r.render(this.scene, this.shadowCam);
-    this.scene.overrideMaterial = null;
+    // 0. the scene graph's world matrices, once for both scene passes (three would walk it again
+    // in each render), then the rigid batches' bones from them (the drawn state: the hero's lean
+    // is on by now)
+    const prevAutoUpdate = scene.matrixWorldAutoUpdate;
+    scene.updateMatrixWorld();
+    this.rigid.sync();
+    scene.matrixWorldAutoUpdate = false;
+    try {
+      // 1. shadows: the plain casters, then the batched actors (one draw each) into the same map
+      scene.overrideMaterial = this.shadowMat;
+      r.setRenderTarget(this.shadowRT);
+      r.setClearColor(0xffffff, 1);
+      r.clear();
+      r.render(scene, this.shadowCam);
+      if (this.rigid.casting) {
+        scene.overrideMaterial = this.rigidShadowMat;
+        this.shadowCam.layers.set(LAYER_CASTER_RIGID);
+        r.autoClear = false;
+        r.render(scene, this.shadowCam);
+      }
 
-    // 2. world
-    const fog = this.U.uFogColor.value;
-    r.setRenderTarget(this.sceneRT);
-    r.setClearColor(fog, 0);
-    r.clear();
-    r.render(this.scene, this.camera);
+      // 2. world
+      scene.overrideMaterial = null;
+      r.autoClear = prevAutoClear;
+      const fog = this.U.uFogColor.value;
+      r.setRenderTarget(this.sceneRT);
+      r.setClearColor(fog, 0);
+      r.clear();
+      r.render(scene, this.camera);
+    } finally {
+      scene.overrideMaterial = null;
+      this.shadowCam.layers.set(LAYER_CASTER);
+      r.autoClear = prevAutoClear;
+      scene.matrixWorldAutoUpdate = prevAutoUpdate;
+    }
 
     // 3. ASCII grid
     this._updateAsciiCamera();
