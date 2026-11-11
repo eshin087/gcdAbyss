@@ -146,6 +146,20 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.14 — A hooded cloak, arms that bend, fewer draw calls (2026-11-11, `player/natural-arms-mobile-perf`)
+- [x] The Shrouded set as the default outfit: hood, wrap tunic, bound sleeves, tattered cloak (ADR-043)
+- [x] Swings with a bent elbow and a trailing blade; no pose locks an arm straight (ADR-044)
+- [x] Rigid batching: the hero and the wyrm draw one mesh per material and one shadow mesh each;
+      509 → 56 draw calls in the fight on the phone preset (ADR-045)
+- [x] One scene matrix update per frame; LOW quality uses a 1024 shadow map; `?nobatch` for an A/B
+- [ ] Follow-ups:
+  - [ ] The owner's phone test: frame rate with and without `?nobatch`, and how the motion reads
+  - [ ] Cloak collision (legs, ground, coat tails) and a calmer cloak in the roll
+  - [ ] The slam's windup still bends the wrist 145° for ~3 frames
+  - [ ] Idle, block, heal, roll, thrust, stagger, knockdown, death and plunge with the new outfit
+  - [ ] Re-measure damage per second and the bot win time after the arm changes
+  - [ ] docs/art/hero.md: the Shrouded set and the new arm
+
 ## M1.13 — Hands, the five-hit chain, equipment slots (2026-11-11, `look/hero-hands-combo-slots`)
 - [x] Real hands: a fist round the grip, a left hand with fingers (ADR-041)
 - [x] Idle: the blade low at his side, edge down; a slim side profile (cape, coat)
@@ -154,8 +168,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] Follow-ups:
   - [ ] A human playtest of the new chain (pacing, the whirl's exposed back, the sprint slash's aim)
   - [ ] Weapons of other lengths: the animator, the hit segment and the blade FX read `DIM`
-  - [ ] A per-slot swap that keeps the pose; helmets that hide hair; per-item materials and stats
-  - [ ] An inventory / equip menu and a second gear set to prove the slots
+  - [ ] A per-slot swap that keeps the pose; per-item materials and stats (a hood that hides the
+        hair: done, ADR-043)
+  - [ ] An inventory / equip menu (a second gear set exists: the Shrouded set, ADR-043)
   - [ ] Heal, stagger, knockdown, death and plunge poses were not re-checked with the new hands
   - [ ] docs/art/hero.md still describes the lean build, ADR-038's idle and the three-hit chain
 
@@ -209,6 +224,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Hero readability at default zoom (~4 cells wide): consider a stronger rim or a ground ring
       (drawn bigger and leaned, ADR-017; a dark figure with a rim and a halo, ADR-021)
 - [ ] Separate freeze vs slow-mo timers in `game.hitstop` (today actors guard against it)
-- [ ] Merge static dragon parts (spikes/horns/claws) to cut draw calls (~100 meshes today)
+- [x] Merge static dragon parts (spikes/horns/claws) to cut draw calls (rigid batching, ADR-045:
+      181 parts in 14 world draws and 1 shadow draw)
+- [ ] Fewer hero materials (18 world draws today), e.g. per-part parameters in a texture; grass is
+      about 600k of the ~690k triangles a frame
 - [ ] Dissolve-aware shadow material for dying creatures
 - [ ] TypeScript or JSDoc types for the contracts once the API stabilises

@@ -859,3 +859,39 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     remains for about three frames in the windup, between the gather and the raise.
   - Idle, block, heal, roll and the thrust were looked at with the new arms and left as they were,
     apart from the soft reach.
+
+## ADR-045 — Rigid batching: one draw per material per actor (2026-11-11)
+- **Context:** the owner: the game "seem[s] to have slowed down" on an iPhone 15 / 16 / 17 Pro,
+  all the time, not only in the fight. Measured: about 510 draw calls a frame in the fight on the
+  phone preset (575 in a 1024 x 768 window), the hero 138 meshes and the wyrm 183, nearly all drawn
+  twice (shadow pass + world pass). GPU timer
+  queries on a desktop showed the hero or the wyrm alone costs the same into a 4 x 4 target as at
+  full size: per-draw overhead, not fill. Grass, forest and the fullscreen ASCII pass were small
+  next to it. Not measured on a phone.
+- **Decision:**
+  - `render/rigidBatch.js`: a shared RGBA32F bone texture (`U.uBoneTex`); `batchRigid(U, root)`
+    merges an actor's surface-glyph meshes per material into one mesh with a per-vertex `aRigid`
+    slot, plus one positions-only shadow mesh per actor on `LAYER_CASTER_RIGID`.
+  - Every source mesh is its own bone and stays in the scene graph (hidden from the cameras by its
+    layers), so per-mesh transforms, `visible` flags, the tests, the Lab and the FX that read
+    joints keep working with no list of what is static. A hidden mesh writes a zero matrix.
+  - One shader program per material for batched and unbatched meshes: slot 0 means "use
+    modelMatrix". No material cloning (the shared uniform objects must stay shared).
+  - `pipeline.render()` updates the scene's matrices once, syncs the bones, and renders both scene
+    passes without three walking the graph again.
+  - `CONFIG.render.batch` (`?nobatch` in the URL turns it off) for an A/B on a device.
+  - Quality presets carry a shadow map size: LOW 1024, MEDIUM and HIGH 2048.
+- **Alternatives:** `THREE.BatchedMesh` (needs `WEBGL_multi_draw` for a single draw; its fallback is
+  one draw per part); merging the materials themselves (a larger change to the hero's ink-line
+  look); shadow proxies only (leaves the world pass as it was).
+- **Consequences:**
+  - Draw calls per frame at 852 x 393, LOW, the Shrouded set: title 432 → 55, fight 509 → 56.
+  - Batched parts are not frustum-culled one by one, and draw order within a material is build
+    order. A pixel can differ from the unbatched picture where a shadow depth sits at the bias
+    threshold (float32 on the GPU).
+  - Baked at build time: each part's geometry, material and mirroring. A mesh added to an actor
+    after `batchRigid` draws unbatched. The hero's rig rebuild disposes and rebuilds its batches.
+  - Raycasts do not see the hidden source meshes. Nothing raycasts actors today.
+  - World matrices must be final before `pipeline.render()`.
+  - Whether this restores the frame rate on the owner's iPhone is not known until it is tried
+    there.
