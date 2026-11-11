@@ -8,16 +8,18 @@ says which item sits in which slot.
 import { buildHero } from '../model.js';
 import { DEFAULT_LOADOUT } from './index.js';
 
-buildHero(U);                                             // the Wanderer's set (DEFAULT_LOADOUT)
-buildHero(U, { ...DEFAULT_LOADOUT, back: null });         // the same without the cape
+buildHero(U);                                             // the Shrouded set (DEFAULT_LOADOUT)
+buildHero(U, WANDERER_LOADOUT);                           // the greatcoat, pauldron and half-cape
+buildHero(U, { ...DEFAULT_LOADOUT, back: null });         // the default without the cloak
 buildHero(U, { ...DEFAULT_LOADOUT, chest: 'my.plate' });  // another chest piece
 buildHero(U, {});                                         // the plain undersuit, no weapon
 ```
 
 | File | What it holds |
 | --- | --- |
-| `index.js` | `SLOTS`, the `GEAR` registry, `registerItem`, `getItem`, `DEFAULT_LOADOUT`, `BASE_LOADOUT`, `resolveLoadout` |
-| `wanderer.js` | the default set, one item per slot, plus its data (`COAT_PANELS`, `CAPE_SHEETS`) |
+| `index.js` | `SLOTS`, the `GEAR` registry, `registerItem`, `getItem`, `DEFAULT_LOADOUT`, `WANDERER_LOADOUT`, `BASE_LOADOUT`, `resolveLoadout` |
+| `shroud.js` | the Shrouded set (the default since ADR-043): hood, wrap tunic, bound sleeves, the tattered cloak (`SHROUD_SHEETS`). Built from `heroGeo.js` sheets only, no sculpted parts |
+| `wanderer.js` | the Wanderer's set, one item per slot, plus its data (`COAT_PANELS`, `CAPE_SHEETS`). Its legs, coat tails and sword are part of the default loadout |
 | `base.js` | the undersuit: fallback items for `chest`, `arms`, `legs` |
 | `../heroGeo.js` | the geometry builders every item is made of |
 | `../heroDims.js` | `DIM`, `BODY`, `REST`, `HAIR_CLUSTERS` (the body's measurements) |
@@ -29,13 +31,13 @@ gets the `base.*` item for it. Any other slot may be empty.
 
 | Slot | Covers | Hangs on | Default item |
 | --- | --- | --- | --- |
-| `head` | helmets, hoods, masks. Hair, face and neck are the body, not gear | `head` | none |
-| `chest` | the torso from the hips' top (1.09 m) to the collar: shell, shirt, buttons, belts, baldric, lapels, collar, yoke, emblem | `spine`, `chest` | `wanderer.coat` |
-| `shoulders` | shoulder armour: the pauldron on its own joint, and any lames riding on the upper arms | `pauldron`, `arms.R.upper`, `arms.L.upper` | `wanderer.pauldron` |
-| `arms` | both arms from the shoulder joint to the hand: sleeves, deltoid caps, vambrace / bracer, gauntlet / glove (the hands), elbow and wrist points. The SWORD hand's fist (`gripFist`) hangs on the `sword` joint, the grip's own frame, so it closes round the grip in every pose; it belongs to this slot, not to `weapon` | `arms.{R,L}.{upper,fore}`, `sword` (the fist) | `wanderer.arms` |
+| `head` | helmets, hoods, masks. Hair, face and neck are the body, not gear; an item with `hidesHair: true` leaves the hair out | `head` | `shroud.hood` |
+| `chest` | the torso from the hips' top (1.09 m) to the collar: shell, shirt, buttons, belts, baldric, lapels, collar, yoke, emblem | `spine`, `chest` | `shroud.tunic` |
+| `shoulders` | shoulder armour: the pauldron on its own joint, and any lames riding on the upper arms | `pauldron`, `arms.R.upper`, `arms.L.upper` | none (`wanderer.pauldron` in the Wanderer's set) |
+| `arms` | both arms from the shoulder joint to the hand: sleeves, deltoid caps, vambrace / bracer, gauntlet / glove (the hands), elbow and wrist points. The SWORD hand's fist (`gripFist`) hangs on the `sword` joint, the grip's own frame, so it closes round the grip in every pose; it belongs to this slot, not to `weapon` | `arms.{R,L}.{upper,fore}`, `sword` (the fist) | `shroud.arms` |
 | `legs` | hips, thighs, shins, feet, and what is strapped to them: hip straps, knee straps, boots, greaves, knee guards | `pelvis`, `legs.{R,L}.{thigh,shin,foot}` | `wanderer.legs` |
 | `waist` | cloth hanging from the belt line: skirt panels, tassets | `pelvis` | `wanderer.skirt` |
-| `back` | cloaks and capes | `chest` | `wanderer.cape` |
+| `back` | cloaks and capes | `chest`, and `arms.{R,L}.upper` for sheets draped over an arm | `shroud.cloak` |
 | `weapon` | the weapon in the right hand: blade, grip, guard, pommel, gem | `sword` | `wanderer.sword` |
 
 `arms` and `legs` own the limb itself (there is no skin mesh under the sleeves or the pants), so an
@@ -94,7 +96,7 @@ The `head` joint is scaled by `BODY.headScale`, so head gear is modelled at 1.0 
 | Handle | From | Shape |
 | --- | --- | --- |
 | `coat` | `waist` | array of panels `{ anchor, segs: [upper, lower], def, strips, len: [upper, lower], r0 }` (below) |
-| `streamers` | `back` | array of `{ segs: [root, tip], len: [l0, l1], out }` (below) |
+| `streamers` | `back` | array of `{ segs: [root, tip], len: [l0, l1], out, lag?, max? }` (below) |
 | `gem` | `weapon` | an Object3D on the weapon whose world position is where the gem glows |
 | `flask` | any | a mesh shown only while he drinks (the animator sets its `visible` and `scale`) |
 | `keep` | any | meshes of yours that must not be merged (see "Merging") |
@@ -148,7 +150,14 @@ any item:
   six panels (`IDLE_FLARE`); later ones get none. `COAT_PANELS` in `wanderer.js` is the worked
   example.
 - **Streamers** (`streamers`). Two-segment springs: `segs[0]` at the root, `segs[1]` at
-  `−len[0]` below it; `out` is the resting outward flare.
+  `−len[0]` below it; `out` is the resting outward flare; `lag` (default 1) scales how far the
+  sheet trails the motion: 1 is a light ribbon that streams out level at a run, the cloak uses 0.5;
+  `max` (default 2.6 rad) is how far a segment may swing from hanging, the cloak uses 1.45.
+  The root may hang on any joint (the cloak drapes one sheet over each upper arm); the springs have
+  no collision, so keep sheets off the sword arm's side or short there.
+- **The arms.** `_arm` compresses the last fifth of each arm's reach (ADR-044), so a hand target at
+  full stretch is reached with the elbow bent ~35°: model sleeves and hands for a bent arm, and do
+  not rely on a pose locking the elbow.
 - **The weapon.** The animator's ground clamp and blade-in-body checks (`steelTip`, `forte`,
   `drawnTip`), the hit segment in `combat.js` (`bladeBase`, `bladeTip`) and the sword FX in `fx.js`
   (`forte`, `drawnTip`) read the sword's numbers from `DIM`. The weapon item carries a copy of
@@ -178,6 +187,6 @@ any item:
 - **Weapons of other sizes.** `anim.js`, `combat.js` and `fx.js` read the sword's numbers from
   `DIM`; they should read the equipped weapon's `dims` (through the rig) instead, with `DIM` as the
   fallback for an empty hand.
-- **Helmets.** The `head` slot hangs meshes on the head; hiding or trimming the hair under a
-  helmet (the hair clusters are body) needs a way for the item to say so.
+- **Helmets.** `hidesHair: true` on a head item leaves all the hair out (the hood). Trimming
+  only part of it under an open helm is not built.
 - **Stats and inventory.** Items carry only `id`, `slot`, `name` and geometry today.

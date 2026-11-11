@@ -796,3 +796,66 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - A weapon of another length is not supported yet: the animator, the hit segment and the blade FX
     read `DIM`, not the item's `dims`. Helmets cannot hide the hair. Items carry no stats.
   - Materials are still the shared hero set; an item cannot bring its own yet.
+
+## ADR-043 — The Shrouded set: a hooded tattered cloak is the default outfit (2026-11-11)
+- **Context:** the owner sent a reference again (a hooded swordsman in a huge ragged cloak, seen
+  from behind, the sword low in his right hand) and asked whether rebuilding the character would
+  make the motion easier to fix and the look closer. Asked to choose, the owner picked "new outfit,
+  same skeleton" over keeping the white-haired coat design or a full rebuild.
+- **Decision:**
+  - A new gear set, `gear/shroud.js`: `shroud.hood` (head; `hidesHair`), `shroud.tunic` (chest),
+    `shroud.arms` (cloth sleeves, leather-bound forearms, bare hands), `shroud.cloak` (back: a
+    mantle on the chest and `SHROUD_SHEETS`, seven ragged two-segment sheets on the streamer
+    springs). Built from `heroGeo.js` sheets and shells only: no sculpted parts, no Blender step.
+  - `DEFAULT_LOADOUT` is that set over `wanderer.legs`, `wanderer.skirt` and `wanderer.sword`, with
+    no shoulder item. The old outfit stays selectable as `WANDERER_LOADOUT`.
+  - The cloak is asymmetric: it covers his back and his LEFT side and arm (one sheet hangs on the
+    left upper arm and lifts with it), and is thrown back behind the sword shoulder, so the sword
+    arm and the blade are never behind cloth.
+  - Streamers take `lag` (default 1). The cloak uses 0.5: about 40° of trail at a run. At 1 the big
+    sheets stood out level from the shoulders.
+  - `HERO_INK` far fill: coat 0.42 → 0.8, hem 0.8 → 1.1, lining 0.5 → 0.6. The cloak is most of the
+    figure now; at 0.42 he was a dark blob in dark grass on a phone.
+  - No new materials or ink-line part ids: the set reuses `coat`, `lining`, `hem`, `shirt`,
+    `leather`, `trim`, `skin` (the part ids are full at 20 and live in a narrow alpha band).
+- **Consequences:**
+  - The skeleton, the animator, combat timing and the hit segment are untouched by the outfit.
+  - The far-fill change also brightens the Wanderer's coat when that loadout is worn.
+  - The cloak's springs have no collision: sheets can pass through the legs, the coat tails and,
+    in a roll, each other. Nothing keeps them off the ground.
+  - The face is still built under the hood; it shows from eye level, not from the game camera.
+  - `docs/art/hero.md` describes the Wanderer's set, not this one.
+
+## ADR-044 — The sword arm folds, leads and never locks (2026-11-11)
+- **Context:** the owner: "the hand motion and animation looks very unnatural", for standing,
+  running, attacks and the defensive moves alike. Measured over the five-hit chain (elbow bend and
+  the angle between the forearm and the blade, every frame): the sword arm reached 4° of bend, a
+  straight stick, in the falling cut, the rising cut, the whirl and the stab, and the forearm-to-
+  blade angle stayed within 24–40° through the whole rising cut and the whole whirl. Cause: `slashH` put the hand on a 0.42 m
+  circle round the shoulder, at or past the arm's 0.55 m reach once the forward offset was added,
+  with the blade exactly radial to it. In light 1's windup the free arm was also sent out straight,
+  so both arms stood out from the body.
+- **Decision:**
+  - `slashH(p, A, th, elev, lunge, ext, lead)`: `ext` (0 folded … 1 open) sets the hand's radius
+    (0.23–0.42 m) and height, and moves the elbow pole out and back when the arm is cocked; `lead`
+    (rad) puts the hand ahead of the blade round the body. `attackPose` drives them from `SWING`
+    (`SWING_SPIN` for the whirl): cocked in the coil, the fist leading into the cut while the arm
+    opens, the blade passing the fist while the arm folds in the finish.
+  - The blade's direction is still `th` / `elev`, so the arc the hit test sweeps is the one in the
+    attack data; only the grip point moves.
+  - `_arm` compresses the last fifth of the reach (`ARM_SOFT` 0.78–0.955 of the arm's length), for
+    both arms and every pose. The off hand gets its full reach back as `twoHand` rises, so two hands
+    still meet on the grip.
+  - Light 1's free hand: a bent guard before the chest, then drawn back beside the hip.
+  - Run: the sword hand rides 4 cm higher and swings 9 cm with the stride.
+- **Consequences:**
+  - Sword-arm bend over the chain: 46–146° (was 4–146°). The `HERO` test asserts both elbows keep
+    more than 23° through the run, the roll and every attack (measured: 40° and 46°).
+  - The grip sits up to ~5 cm nearer the shoulder at a full stretch. REACH still passes for all five
+    hits; damage per second was not re-measured.
+  - The slam's apex: the hands used to stop straight overhead with the blade hanging down the
+    back, 147° between forearm and steel. They now go on to behind the head on a tighter circle
+    (`SLAM_BACK`), and lead the blade on the way down (`SLAM_LEAD`): 99° at the apex. A 145° peak
+    remains for about three frames in the windup, between the gather and the raise.
+  - Idle, block, heal, roll and the thrust were looked at with the new arms and left as they were,
+    apart from the soft reach.

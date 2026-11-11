@@ -396,8 +396,12 @@ the hips at the anchor) and `len[1]` includes the slant.
 The animator (`player/anim.js`) drives: `coat` = 6 panels (`COAT_PANELS`, above), each two spring
 segments (the lower one is two meshes: `coat` above, the lavender torn zone `hem` over its last
 60 %) plus `strips` (12 torn strips, one spring each, kept above the grass; per-panel `BREEZE` /
-`IDLE_FLARE` follow the panel order); `streamers` (the torn cape: four two-segment
-sheets behind the right shoulder, `CAPE_SHEETS`, ADR-037; each record `{ segs, len, out }`, `out` = its own outward flare);
+`IDLE_FLARE` follow the panel order); `streamers` (two-segment spring sheets: the Shrouded set's
+cloak, seven sheets on the chest and the upper arms, `SHROUD_SHEETS` in `gear/shroud.js`, ADR-043;
+or the Wanderer's torn cape, four sheets behind the right shoulder, `CAPE_SHEETS`, ADR-037; each
+record `{ segs, len, out, lag?, max? }`, `out` = its own outward flare, `lag` = how much it trails
+the motion (default 1 = a light ribbon, the cloak 0.5), `max` = how far it may swing from hanging
+(rad; default 2.6, the cloak 1.45));
 `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root
 mesh (`hair`) and a sheened-tip mesh (`hairTip`); since ADR-034 the locks are layered pointed
 blades (crown spikes, top, two back layers, nape, sides, a jagged fringe, cowlicks). Static meshes
@@ -419,7 +423,11 @@ four entries (the streamer springs and the `herolook` test).
 **Gear slots** (ADR-042, `player/gear/`, contract in `gear/README.md`): `model.js` builds the
 skeleton and the body (neck, head, face, hair, the flask); everything worn or held is an item
 `{ id, slot, name, build(ctx) }` in one of `SLOTS` = head, chest, shoulders, arms, legs, waist, back,
-weapon. `buildHero(U, loadout = DEFAULT_LOADOUT)` builds each slot's item (an empty chest / arms /
+weapon. `DEFAULT_LOADOUT` is the Shrouded set (ADR-043: `shroud.hood`, `shroud.tunic`,
+`shroud.arms`, `shroud.cloak` over `wanderer.legs`, `wanderer.skirt`, `wanderer.sword`; no shoulder
+item); `WANDERER_LOADOUT` is the outfit before it. A head item with `hidesHair: true` (the hood)
+leaves the hair meshes out; the five hair joints stay. `buildHero(U, loadout = DEFAULT_LOADOUT)`
+builds each slot's item (an empty chest / arms /
 legs slot gets the `base.*` undersuit), merges static meshes per joint + material + slot, and
 returns the usual rig plus `rig.loadout` (slot → id or null) and `rig.slots` (slot → the objects it
 hung on the skeleton). Geometry builders live in `player/heroGeo.js`, the body's measurements in
