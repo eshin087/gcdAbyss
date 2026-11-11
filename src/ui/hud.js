@@ -102,7 +102,7 @@ export class Hud {
     const head = el('div', 'ab-pf-head', null, pf);
     this.nameEl = el('span', 'ab-pf-name', String(this.game.player?.name || 'Wanderer').toUpperCase(), head);
     el('span', 'ab-pf-lv', 'Lv 12', head);
-    el('div', 'ab-pf-sub', 'Swordsman  ·  Black Coat', pf);
+    el('div', 'ab-pf-sub', 'Swordsman  ·  Tattered Shroud', pf);
 
     const hpRow = el('div', 'ab-row', null, pf);
     el('span', 'lbl', 'HP', hpRow);
