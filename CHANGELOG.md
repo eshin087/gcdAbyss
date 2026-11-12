@@ -4,7 +4,22 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Thirteen pieces of work since 0.4.0:
+Fourteen pieces of work since 0.4.0:
+- **Techniques: the Ash Disciple's reward** (2026-11-12, ADR-054): beating Shen Hui teaches the
+  **Ash Riposte**, a counter stance. Press Q (or the new button above BLOCK on the phone) with a full
+  Qi meter: a normal or blue blow that meets the raised blade is turned aside and answered with a
+  lightning thrust that goes through his guard and staggers him. Red blows still need a dodge; if
+  nothing comes, you lunge. The Qi meter (in the player frame, once a technique is equipped) fills
+  with parries, deflect chains, perfect dodges and strikes that land. Two slots (Q, R); change them
+  from the pause menu → TECHNIQUES. What you learn is saved in the browser and works in both levels.
+  - Added: `src/entities/player/techniques/` (registry, the Ash Riposte, the book, the stance pose),
+    `src/game/save.js` (localStorage), `src/ui/techniques.js` (Qi row, reward card, equip panel),
+    touch buttons for the slots, Lab buttons (learn / forget / Qi full / infinite Qi), four sounds,
+    `tests/integration/technique.mjs` (in `npm test`); events `player:technique`,
+    `player:techniqueDenied`, `player:qiFull`, `technique:learned`, `technique:equip`.
+  - Changed: the hero's `takeHit` turns blows in the stance before the parry; a strike may carry
+    `posture`, `pierce` and `technique` to the boss; the Ash Disciple's guard gives way to `pierce`;
+    a level may name a `reward`.
 - **The Ash Disciple, a second level** (2026-11-12, ADR-058 – ADR-063): a new boss and a new place,
   loaded on their own with `?level=ash` or from the stage picker on the title screen (and the Lab's
   LEVEL row). The Ashfall Courtyard: a ruined sword sect under falling ash, a bonfire at the foot of a

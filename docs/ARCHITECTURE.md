@@ -332,7 +332,8 @@ object3d: THREE.Object3D;  position: THREE.Vector3 (=== object3d.position);  yaw
 batch                                  // his rigid batches (render/rigidBatch.js batchRigid; empty with ?nobatch)
 name = 'Wanderer'
 hp, maxHp, flasks, maxFlasks: number   // (v0.2: NO stamina) TUNE: 160 HP, 5 flasks of +70 HP
-state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block'|'parry'|'ghostep'|'plunge'|'heal'|'stagger'|'guardBreak'|'knockdown'|'lock'|'mikiri'|'dead'
+state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block'|'parry'|'ghostep'|'plunge'|'technique'|'heal'|'stagger'|'guardBreak'|'knockdown'|'lock'|'mikiri'|'dead'
+                //  ('technique' = a technique's counter stance; its counter / lunge run as 'heavy': see Techniques)
                 //  ('attack' = light sweeps + the slam finisher, 'heavy' = the released charge thrust,
                 //   'ghostep' = a perfect dodge without the plunge, 'plunge' = the head-stab, contract 2,
                 //   'lock' = blades crossed with a duelist, 'mikiri' = stepping on a perilous thrust)
@@ -382,7 +383,8 @@ thrust that lunges to him; its first active frame calls `onExecute({ damage: DEF
 instead of the sweep test and emits `player:plunge` / `player:plungeHit {execution: true}` and
 `player:hitDragon {kind: 'execute'}`) ·
 RMB hold = block, RMB tap before impact = parry · Space = dodge roll · Shift = sprint · F = flask ·
-Tab / MMB = lock-on. (E is flow's.)
+Q / R = technique slot 1 / 2 (paid from the Qi meter; see Techniques) · Tab / MMB = lock-on. (E is flow's;
+R also restarts on flow's victory screen, where the hero takes no input.)
 Drawn body vs gameplay body (ADR-017): the root draws the hero `HERO_SCALE` (1.2) tall and leaned
 away from the camera (`model.js` `LEAN`, `installLean`). The animator runs with `lean.on = false`
 (plain upright 1.85 m body, so IK and ground clamps work in metres); the drawn transform is applied
@@ -1193,7 +1195,7 @@ and scrolls inside (`touch-action: pan-y`). VIEW → **Touch UI** switches the t
 Debug panel to test the fight without playing it: trigger any `dragon.debug.abilities()` (the
 strings and fire attacks show up on their own), Phase 2 / Phase 3 (`dragon.debug.phase3()`: the
 transition roar; with the AI on it opens with the nova) / stagger / posture break / kill / reset,
-jump flow states, god mode, infinite flasks, time scale, AI on/off, hitbox overlay, teleport. Talks
+jump flow states, god mode, infinite flasks, techniques (learn / forget / Qi full / infinite Qi), time scale, AI on/off, hitbox overlay, teleport. Talks
 only to the `debug` APIs above, plus the `game.viewOverride` and `world.debug.setVisible` hooks for
 the model viewer. The timing trainer also logs `combat:deflectChain`, `dragon:phase3`,
 `dragon:phase` and `dragon:plunged`. Captures start the plunge with `player.debug.plunge(execution)`.
@@ -1259,6 +1261,7 @@ timings are the real device's):
 | BLOCK | `Mouse2` | hold = block, tap just before impact = parry |
 | DODGE | `Space` | roll / perfect dodge |
 | FLASK · LOCK · PAUSE (glyph `\|\|`) | `KeyF` · `Tab` · `Escape` | flask count, LOCK lit while locked on |
+| TECH (slot 1 above BLOCK, slot 2 left of it; ADR-054) | `KeyQ` · `KeyR` | shown while the slot holds a technique: its icon and `short` name, an ASCII Qi meter `[###...]`, READY and lit when the meter pays |
 | the HUD prompt | `Key<letter>` from its `[E]` / `[R]` token | rest at the bonfire / fight again |
 | a bare-screen tap on title / death | `Mouse0` | "press any key" |
 | two bare-screen fingers in play | `cameraRig.zoom` | pinch (distance × start / now) |
@@ -1349,6 +1352,71 @@ breather, ground-covering moves × `TUNING.punish.weight`). Numbers: tuning.js.
 **HeroAnimator** (anim.js): `new HeroAnimator(rig, player, poses = null)` — `poses` merges extra clips
 over the hero's table for that instance (a key it shares replaces the hero's clip for that instance
 only). Exported for other pose tables: `P, v3, to3, dirLerp, kf, guard, loco, turnTwist`.
+**Pierce** (2026-11-12, ADR-054): a hit with `pierce: true` (a technique's counter) goes through his
+guard and staggers him (`react 'stagger'`) whether his guard was up or not; the wyrm ignores the flag.
+
+## Techniques (2026-11-12, ADR-054; numbers: COMBAT.md "Techniques")
+The boss rush's fixed rewards: each boss teaches a technique that changes how the hero fights.
+`src/entities/player/techniques/`:
+- `index.js`: `TECHNIQUES` (id → definition), `TECHNIQUE_IDS`, `getTechnique(id)` (or null),
+  `SLOT_COUNT` 2, `SLOT_KEYS` `['KeyQ', 'KeyR']` (slot 1 / 2), `SLOT_LABELS`, `QI` (the meter's
+  numbers) and `qiForParry(tell, chain, light)`.
+- One file per technique (data only; `ashRiposte.js`). A definition: `{ id, name, short` (≤ 8, the
+  touch button and the slot chip) `, icon` (one HUD-only character, never fed to the world atlas)
+  `, from` (who teaches it) `, level, kind, cost` (Qi, ≤ `QI.max`) `, desc, hint }` plus the kind's
+  data. Kind **`counter`** (the only one so far): `stance { dur, open, arc, rollAfter, turn,
+  counterRange }`, `counter` and `lunge` (thrust strikes in player.js's attack shape: `kind:
+  'thrust'`, windup / active / recovery, damage, poise, `posture`, `pierce`, `travel` (m, or
+  [min, max] for the counter), `stopShort`, `iframes`, `assist`, reach, hitstop, shake).
+- `book.js` `TechniqueBook` (= `player.techniques`): `learned` (Set), `slots` (array of
+  `SLOT_COUNT` ids or null), `has(id)`, `list()` (registry order), `slotOf(id)`, `inSlot(i)` (the
+  definition or null), `equippedAny`, `learn(id)` → `{ id, slot, first }` (the first time it goes
+  into the first empty slot) or null, `equip(i, id | null)` → bool (only learned ids; a technique in
+  the other slot swaps places), `learnAll()` / `forget()` (Lab), `saved` (the last change reached
+  storage). It listens for `game:victory` and learns `game.level.reward.technique`. Events:
+  `technique:learned {id, slot, first}` (every learn, first = new), `technique:equip {slot, id,
+  slots}` (slot −1 = forget).
+- `poses.js` `TECH_POSES` (`{ technique }`: the stance clip; the hero's animator gets it as its
+  per-instance table); `RIPOSTE_STANCE` (the Ash Disciple's jian guard on the hero).
+**The save** (`src/game/save.js`): `SAVE_KEY` `'abyss.save.v1'`, `loadSave()` → the record (`{}`
+when none, unparseable or storage is blocked), `writeSave(patch)` merges top-level sections and
+writes `{ ...record, ...patch, v: 1 }` → bool. Section `techniques: { learned: [id], slots: [id |
+null] }`; unknown ids are dropped on load. Never throws (no storage → memory for this page load).
+**Player** (contract additions): `techniques` (the book), `qi` / `qiMax` (`QI.max` 100), `tech`
+(`{ def, slot }` while the stance runs, else null), `gainQi(n)` (clamped; emits `player:qiFull`
+once as it fills while a technique is equipped), `techReady(i)` (slot i holds a technique the Qi
+pays for), `debug.infiniteQi` (techniques cost nothing), `debug.qiFull()`. State **`'technique'`**
+= a counter stance (rooted, turning to the aim, `_canGuard()` false). Q / R (`SLOT_KEYS`) buffer
+`'tech0'` / `'tech1'`, started like an attack: from neutral, the guard, a parry or a Ghostep after
+their cancel points, a roll after `attackAfter`, an attack's recovery after `rollCancel`, a charge
+(cancels it). Too little Qi → `player:techniqueDenied {slot, id, qi, cost}`; an empty slot → nothing.
+The Qi is spent as it starts. `qi` resets to 0 in `respawn` (death, retry); `restAtBonfire` keeps it.
+Gains: `_parry` (`qiForParry`), `_perfectDodge` (`QI.perfectDodge`), `_applyHit` (`QI.hit`, only
+when it dealt damage and was not a technique's own strike).
+`takeHit` order gains **(d0)** after the i-frames: in state `'technique'`, a parryable blow from the
+stance's cone once raised (`stateT ≥ stance.open`) is turned (`RESULT.PARRIED`, so the attacker runs
+its parry reaction; `player:parry {…, technique}`). A thrown blow (`light`: bullets, sword qi) or an
+attacker whose nearest hurt surface is farther than `stance.counterRange` is only turned (the
+stance holds, `recoil` 0.6); otherwise the counter starts (`_techStrike`): a thrust (state
+`'heavy'`, `atk.tech = { id, counter, posture, pierce, assist }`) aimed at that hurt surface, lunging
+to stop `stopShort` short of it, i-frames `counter.iframes`. With nothing turned by `stance.dur`
+the lunge (along the aim). A technique strike's `_applyHit` passes `posture`, `pierce` and
+`technique` (id) in the boss's `takeHit` object; `assist`: a counter the blade's sweep misses still
+lands on a hurt sphere within reach + 0.4 m along the facing from mid-active.
+`player:technique {id, slot, phase}`: `'stance'` (raised), `'counter'` (a blow turned and answered),
+`'lunge'` (nothing came). Red or unparryable blows fall through to the usual rules (they land).
+**HUD** (`src/ui/techniques.js`, own stylesheet `#ab-tech-style`): `QiRow` in the player frame (a
+Qi bar and one chip per slot: `[Q]` / `[R]` keycaps on a keyboard, the technique's icon, lit when
+ready; hidden until a technique is equipped; flashes on `player:techniqueDenied` / `player:qiFull`),
+`RewardCard` (`hud.rewardUi`: "TECHNIQUE LEARNED", shown 2.6 s after a first `technique:learned`,
+gone on leaving the victory screen; a re-learn only logs a line), `TechniquePanel` (pause menu →
+TECHNIQUES: a tap on a slot cycles it through the learned techniques and empty; the list shows
+learned ones and who teaches the locked ones). Call-out `tech` (the technique's `short`) on a
+`counter` instead of PARRY. **Touch** (`ui/touch.js`): `tech0` / `tech1` buttons above BLOCK feed
+`KeyQ` / `KeyR`, shown while their slot is filled, with an ASCII Qi meter (`[###...]`, READY and lit
+when it pays). **Audio**: `techStance`, `techCounter`, `qiFull`, `techDenied` (sfx.js). **Lab**
+(PLAYER): Learn techs, Qi full, Inf. Qi, Forget techs.
+**Levels**: a level may carry `reward: { technique: id }` (Ashfall: `ashRiposte`).
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:
@@ -1368,7 +1436,14 @@ Player → hud/audio/fx/flow:
   `player:footstep {x, z, sprint}` (a planted foot's touchdown while moving, and the thrust dash's
   two bounding steps), `player:lockOn {on}`,
   `player:lock {phase}` (the blade lock with a duelist: phase start / push / won / lost),
-  `player:mikiri {attack}` (a roll into a perilous thrust stepped on the blade)
+  `player:mikiri {attack}` (a roll into a perilous thrust stepped on the blade),
+  `player:technique {id, slot, phase}` (phase 'stance' | 'counter' | 'lunge'; see Techniques),
+  `player:techniqueDenied {slot, id, qi, cost}` (a slot key without the Qi), `player:qiFull {qi}` (the meter
+  fills while a technique is equipped). player:parry carries the technique's id (field technique) when a stance turned the blow;
+  player:hitDragon carries technique (the id, or null)
+Techniques (player.techniques, the book) → hud/touch/lab:
+- `technique:learned {id, slot, first}` (a victory's reward or the Lab; first = newly learned, slot = where it
+  sits, −1 none), `technique:equip {slot, id, slots}` (slots = both after the change; slot −1 = all forgotten)
 Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash Disciple, emits the same
 `dragon:*` names, see "Levels and the boss slot") → hud/audio/flow:
 - `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit, so once per hit of a

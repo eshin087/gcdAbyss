@@ -17,7 +17,7 @@ status line instead of throwing.
   canvas still gets clicks everywhere else. Buttons never keep keyboard focus, so Space and WASD
   stay game keys.
 - While the panel is closed, an ember badge at the top centre (`LAB · god · x0.25`) reminds you
-  of active cheats (god mode, infinite flasks, time scale, loop, AI off). Click it to reopen.
+  of active cheats (god mode, infinite flasks, infinite Qi, time scale, loop, AI off). Click it to reopen.
 - Section collapse state, the hitbox toggle and the loop period persist in `localStorage`
   (`abyss.lab.v1`). Storage is optional, so private mode works.
 
@@ -32,7 +32,7 @@ death, victory or intro screen first jump the flow to `boss` (`flow.debug.toStat
 starts the fight), so the HUD, music and arena match the forced fight. The jump always happens
 **before** the action: a later `startFight` could cancel the ability just forced. From `explore`
 nothing is needed, as the flow follows the dragon into `boss` on its own.
-| **PLAYER** | God mode · Infinite flasks (toggle `player.debug.god` / `.infiniteFlasks`) · Full heal · Teleport 8 m in front of the dragon or 8 m behind it (facing it, clamped inside the clearing), or to the bonfire spawn. |
+| **PLAYER** | God mode · Infinite flasks (toggle `player.debug.god` / `.infiniteFlasks`) · Full heal · Techniques (ADR-054): Learn techs (every technique, each into a free slot; saved) · Qi full · Inf. Qi (`player.debug.infiniteQi`) · Forget techs (clears the save's techniques) · Teleport 8 m in front of the dragon or 8 m behind it (facing it, clamped inside the clearing), or to the bonfire spawn. |
 | **TIME** | `game.debugTimeScale` = 0 (freeze) / 0.1 / 0.25 / 0.5 / 1 / 2. Game time only: the panel, camera and HUD keep running on real time. |
 | **STATE** | Explore · Boss · Dead · Victory via `flow.debug.toState(name)`. Jumping anywhere but Boss ends Loop. |
 | **VIEW** | Hitbox overlay: `dragon.debug.hitboxes()` as wireframe spheres (cyan = hurt, red = active attack, falling back to `hurtSpheres`), plus the player's radius ring, facing line and parry arc. The ring turns blue when blocking, gold in the crit window and violet during i-frames. The overlay is one `THREE.LineSegments` in `game.fxScene` with `depthTest: false`. Its fixed buffers are rewritten in place each frame, and it is removed from the scene when toggled off or when the Lab closes. **Showroom** (look-dev preset) and **Camera default**. **MODEL VIEW** (see below): Hero / Dragon pick the target and enter the viewer, Dark toggles the world, Exit returns to the game camera; Front / 3/4 L / 3/4 R / Left / Right / Back / Rear R / Rear L = yaw 0 / 35 / 325 / 90 / 270 / 180 / 215 / 145 at pitch 8 (R = the hero's right side, his pauldron and sword side: the reference sheet's 3/4 and rear 3/4), Game = the gameplay camera (58°, world-fixed yaw, the rig's current distance: normal play size, centred on the actor's root), **Spin** = a turntable at eye level. **Sheet** = every angle at once (below). Looks: **ASCII** (the game render), **Solid** (the bare geometry plain-lit, no ASCII pass: geometry vs renderer problems), **Source** (the pass input), **Lines** (only the ink lines). The line under the buttons shows the framing. |

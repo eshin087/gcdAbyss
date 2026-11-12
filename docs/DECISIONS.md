@@ -1088,6 +1088,47 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     A human who walks out takes a couple. Watch this in the playtest.
   - The timing check pairs each blow with the flash at its own centre (impacts 0.12 s apart).
 
+## ADR-054 — Techniques: a Qi meter, two slots, the Ash Riposte as the first reward (2026-11-12)
+- **Context:** ADR-059 made rewards fixed: each boss teaches something that changes how the hero
+  fights. The Ash Disciple shipped without his (the owner chose "fight first, reward next PR"). Four
+  owner answers (2026-11-12): a technique fires on a **button paid from a meter** that parries and
+  perfect dodges fill (not an automatic trigger after a deflect chain); his technique is a **counter
+  stance**, the Ash Riposte; **two slots on two keys** (Q / R); on the phone the button sits **above
+  BLOCK**.
+- **Decision:**
+  - A technique is data (`player/techniques/<id>.js`: timings, damage, posture, cost) with a `kind`
+    that player.js runs; the registry is `techniques/index.js`. The first kind is `counter`.
+  - **The Qi meter** (`player.qi`, max 100): parries 20 (blue 30, +5 per parry in a deflect chain,
+    at most +15), a deflected bullet 3, a perfect dodge 40, a strike that deals damage 3 (heavy 6).
+    A technique spends its cost as it starts (the Ash Riposte: a full meter). Death and retries
+    empty it; the bonfire keeps it. Defence fills it, so the reward pays out for the skill the boss
+    tested.
+  - **Two slots** on Q / R, one meter for both. The book (`player.techniques`) holds what is
+    learned and equipped; the first time a technique is learned it goes into the first empty slot.
+    A level's `reward: { technique }` is learned on `game:victory`.
+  - **The Ash Riposte**: a 0.8 s stance (the disciple's own jian guard on the hero). A normal or blue
+    blow from its 150° front cone is turned (the attacker is parried, so its own deflect / recoil
+    rules apply) and answered by a counter-thrust: 140 damage, 80 posture, `pierce` (through a
+    duelist's guard; he staggers), i-frames 0.45 s so a string's next blow passes, and an assist so
+    a turned blow's counter cannot whiff on a target in reach. Thrown blows (bullets, sword qi) and
+    attackers farther than 6 m are only turned and the stance holds. Red blows land: the dodge stays
+    the only answer to red. Nothing comes: a plain 70-damage lunge. A roll may cancel it after
+    0.15 s (the Qi stays spent).
+  - **The save** (`game/save.js`): one localStorage record (`abyss.save.v1`), sections merged on
+    write, guarded so blocked storage keeps the state in memory and never throws. The first M2
+    "save / load" piece; settings and cleared bosses can join the record later.
+  - The UI: a Qi row in the player frame (hidden until something is equipped), a reward card after
+    the victory, an equip panel from the pause menu (a tap cycles a slot), touch buttons per filled
+    slot with an ASCII meter.
+- **Alternatives:** an automatic trigger after a 3-deflect chain (no button: nothing to equip or
+  choose, and it fires when the player did not want it); a meter that decays (punishes waiting for
+  the right blow, which is the skill); a counter that also turns red blows (it would replace the
+  perfect dodge); one slot (simpler on the phone, but the second boss's reward would force a rework).
+- **Consequences:** the hero's `takeHit` gains a step (d0) before the parry; the boss slot's
+  `takeHit` may receive `posture`, `pierce` and `technique`; five new events. Balance is unmeasured
+  against a human: the bots in `npm test` check the mechanics, not how often a player fills the
+  meter. If parries alone fill it too slowly or too fast, the numbers are in `QI`.
+
 ## ADR-055 — Attack variants: each light hit has 2–3 looks, picked at random (2026-11-12)
 - **Context:** the owner: "something about his left clicks is meh to me so lets try to make his
   attack animations and motions cooler and natural looking. i also dont want him to show the same
