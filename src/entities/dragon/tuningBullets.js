@@ -39,6 +39,9 @@ export const BULLETS = {
   ricochet: 24, // a deflected bullet's speed back to the wyrm's head (m/s)
   returnSpeed: 34, // a perfectly parried bullet's speed back to the head (m/s; drawn x returnSize)
   returnSize: 1.8,
+  // HP one pattern's returns may deal in all (~8 % of a phase's 1500 HP: 4 embers, or one wisp);
+  // past it a perfect parry is a plain deflect. 13 wisps x 70 would be ~3x the sword's damage rate
+  returnBudget: 120,
   bound: 33, // bullets die silently this far from the wyrm
   // a breathed bullet leaves at mouth height and reaches `height` after drop = clamp(dropK x the
   // mouth-to-hero distance / speed, dropMin, dropMax) s: a close hero is not flown over

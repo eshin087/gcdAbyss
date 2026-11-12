@@ -63,7 +63,8 @@ export class Bullets {
     this.pool = [];
     for (let i = 0; i < MAX; i++) this.pool.push(record(i));
     this.groups = [];
-    for (let i = 0; i < MAX_GROUPS; i++) this.groups.push({ hits: 0, max: 99 });
+    // hits / max: the pattern's hit cap; ret / retMax: the HP its perfect-parry returns may deal
+    for (let i = 0; i < MAX_GROUPS; i++) this.groups.push({ hits: 0, max: 99, ret: 0, retMax: Infinity });
     this.time = 0;
     this.live = 0;
     this._cursor = 0;
@@ -173,10 +174,14 @@ export class Bullets {
   }
 
   /** A hit budget for one pattern: its bullets stop hurting after `max` hits. Returns the group id. */
-  group(max) {
+  /** A hit budget for one pattern; `retMax`: the HP its returned shots may deal (TUNING.bullets.returnBudget). */
+  group(max, retMax = this.K?.returnBudget ?? Infinity) {
     const i = this._gi++ % MAX_GROUPS;
-    this.groups[i].hits = 0;
-    this.groups[i].max = max > 0 ? max : 99;
+    const g = this.groups[i];
+    g.hits = 0;
+    g.max = max > 0 ? max : 99;
+    g.ret = 0;
+    g.retMax = retMax >= 0 ? retMax : Infinity;
     return i;
   }
 
@@ -843,8 +848,12 @@ export class Bullets {
    */
   _deflect(b, spec, p, perfect = false) {
     const d = this.d, fx = d.fx, K = this.K;
+    const grp = b.group >= 0 ? this.groups[b.group] : null;
     b.deflected = true;
-    b.returned = !!perfect && spec.returnDamage > 0;
+    // a pattern gives back at most its group's return budget (a well-played pattern returns <= ~8 %
+    // of a phase's HP): past it a perfect parry is a plain deflect
+    b.returned = !!perfect && spec.returnDamage > 0 && (!grp || grp.ret + spec.returnDamage <= grp.retMax + 1e-6);
+    if (b.returned && grp) grp.ret += spec.returnDamage;
     b.defT = 0;
     b.lead = false;
     b.y0 = b.yH = b.y;

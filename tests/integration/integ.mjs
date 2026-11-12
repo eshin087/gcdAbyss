@@ -1387,7 +1387,7 @@ async function scenarioBullets() {
     const ux = dx / l, uz = dz / l;
     const sx = p.position.x + ux * from, sz = p.position.z + uz * from;
     const yaw = Math.atan2(-ux, -uz);
-    const grp = o.cap ? B.group(o.cap) : -1;
+    const grp = o.grp ?? (o.cap ? B.group(o.cap) : -1);
     let spawned = 0, next = game.time, answered = 0, seenHits = 0;
     if (o.hold) input.press(2);
     for (let i = 0; i < Math.round((o.T ?? 2.4) / DT); i++) {
@@ -1464,6 +1464,20 @@ async function scenarioBullets() {
   out(`   ember, RMB ${pn.gap.toFixed(3)} s before impact: ${pn.res.join(' ')} · perfect ${pn.perfect} · wyrm −${pn.dmg} HP · posture ${pn.postureEnd.toFixed(1)}`);
   assert(pn.res[0] === RESULT.PARRIED && pn.perfect === false && pn.gap > PW, `a parry ${pn.gap.toFixed(3)} s before impact is a normal deflect`);
   assert(pn.dmg === 0 && pn.returned.length === 0 && near(pn.postureEnd, K.ember.posture, 0.5), 'a normal deflect: no HP damage, the kind\'s posture only');
+  // a pattern's returns are budgeted (TUNING.bullets.returnBudget): past it a perfect parry deflects
+  {
+    let dealt = 0, plain = 0, perf = 0;
+    const grp = B.group(9);
+    const per = K.ember.returnDamage, budget = B.groups[grp].retMax;
+    for (let i = 0; i < Math.floor(budget / per) + 2; i++) {
+      const r = shot(KIND.ember, { answer: 'parry', parryLead: 0.05, grp });
+      if (r.perfect) perf++;
+      dealt += r.dmg;
+      if (r.perfect && r.returned.length === 0) plain++;
+    }
+    out(`   ${perf} perfect parries in one pattern (budget ${budget} HP): returned ${dealt} HP, ${plain} past the budget were plain deflects`);
+    assert(budget === K.returnBudget && dealt <= budget && dealt === Math.floor(budget / per) * per && plain >= 1, `a pattern's returns deal at most its budget (${dealt} / ${budget} HP), then perfect parries deflect`);
+  }
   const po = shot(KIND.orb, { answer: 'parry', parryLead: 0.05 });
   out(`   orb, RMB on the perfect timing: ${po.res.join(' ')} · wyrm −${po.dmg} HP`);
   assert(cnt(po, RESULT.PARRIED) === 0 && po.dmg === 0 && po.returned.length === 0, 'an orb cannot be parried, even on the perfect timing');

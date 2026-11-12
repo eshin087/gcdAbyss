@@ -986,7 +986,9 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
 - Kinds `BULLET { EMBER, WISP, ORB }` (specs `TUNING.bullets.ember | wisp | orb`).
   `spawn(kind, attack, x, y, z, yaw, speed, group = -1, life = 0)` → the record or null (pool full,
   NaN or an unknown kind); `burst(attack, x, y, z, n, wait, stagger, speed, group)` (embers that hang
-  and drop on the hero one by one: the Cinder flurry's slam); `group(max)` → a hit-cap group id;
+  and drop on the hero one by one: the Cinder flurry's slam); `group(max, retMax =
+  TUNING.bullets.returnBudget)` → a group id: the pattern's hit cap and the HP its returned shots
+  may deal in all (past it a perfect parry is a plain deflect);
   `count(kind?)`, `live`, `clear()`.
 - A pattern's headline beat follows its lead bullet: `setLead(b)`, `leadAlive()`, `leadPos(out)`,
   `leadTti()`; the beat part `'bullet'` in `dragon.partPos` resolves to it (the mouth when none).
