@@ -94,6 +94,14 @@ const alongRot = (dx, dy, dz) => {
   return Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
 };
 
+// a parry's sparks are born this many s along their way (the freeze-frame shows them mid-burst)
+const PRE = 0.045;
+// colours near the contact, kept below the bloom's blow-out (a freeze-frame holds them for 0.1 s+)
+const CENTER = [2.4, 2.2, 1.8];
+const MOON_SOFT = [1.7, 2.2, 3.0];
+// the parry shockwave's rings (shockwave): bright, but not so hot that bloom swallows the duel
+const RING = { white: [1.5, 1.55, 1.75], warm: [1.6, 1.3, 0.8], gold: [2.0, 1.45, 0.45] };
+
 export class PlayerFx {
   constructor(game, rig) {
     this.game = game;
@@ -375,6 +383,11 @@ export class PlayerFx {
   parry(x, y, z, blue, chain = 1, dx = 0, dz = 0) {
     const fx = this.add;
     if (!fx || !Number.isFinite(x + y + z)) return;
+    // the blade point is sampled from the pose BEFORE the parry snaps up (the idle blade hangs low):
+    // keep the clash at a blade's height, and its light well off the floor (a light ~0.3 m above the
+    // paving blows it out into a white disc, worse with every parry of a long string)
+    const ly = Math.max(1, y);
+    y = Math.max(0.75, y);
     const c0 = blue ? COL.parryBlue : COL.parry, c1 = blue ? COL.parryBlueEnd : COL.parryEnd;
     const n = Math.max(1, Math.min(6, Number.isFinite(chain) ? chain : 1));
     const k = 1 + 0.16 * (n - 1);
@@ -382,10 +395,12 @@ export class PlayerFx {
     for (let i = 0; i < Math.round(26 * k); i++) {
       const a = (i / 26) * Math.PI * 2 + R(-0.12, 0.12);
       const sp = R(3, 7) * (0.9 + 0.1 * k);
+      // the clash sprays back toward the blow and up; born a step along their way (PRE s), so the
+      // parry's freeze-frame shows a burst frozen in the air, not every spark stacked on the contact
+      const vx = Math.cos(a) * sp + fdx * 2, vy = R(-1, 3.5) + 0.5 * (n - 1), vz = Math.sin(a) * sp + fdz * 2, pre = R(0.5, 1) * PRE;
       fx.spawn({
-        x, y, z,
-        // the clash sprays back toward the blow and up
-        vx: Math.cos(a) * sp + fdx * 2, vy: R(-1, 3.5) + 0.5 * (n - 1), vz: Math.sin(a) * sp + fdz * 2,
+        x: x + vx * pre, y: y + vy * pre, z: z + vz * pre,
+        vx, vy, vz,
         life: R(0.16, 0.34) * (0.9 + 0.1 * k), size: R(0.18, 0.3), sizeEnd: 0.04,
         glyph: '+x*×', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -6, drag: 3.5, spin: R(-8, 8),
       });
@@ -393,7 +408,7 @@ export class PlayerFx {
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       fx.spawn({
-        x: x + Math.cos(a) * 0.15, y, z: z + Math.sin(a) * 0.15,
+        x: x + Math.cos(a) * (0.15 + 9 * k * PRE), y, z: z + Math.sin(a) * (0.15 + 9 * k * PRE),
         vx: Math.cos(a) * 9 * k, vy: 0, vz: Math.sin(a) * 9 * k,
         life: 0.12, size: 0.3, sizeEnd: 0.1, stretch: 2.5, rot: -a,
         glyph: '-', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, drag: 10,
@@ -412,7 +427,7 @@ export class PlayerFx {
           fx.spawn({
             x: x + o * (cs * rx + sn * ux), y: y + o * (cs * ry + sn * uy), z: z + o * (cs * rz + sn * uz),
             life: 0.1 + 0.02 * Math.abs(j), size: 0.26, sizeEnd: 0.08,
-            glyph: '-', rot: s, stretch: 2.2, color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0,
+            glyph: '-', rot: s, stretch: 2.2, color: CENTER, colorEnd: c1, alpha: 1, alphaEnd: 0,
           });
         }
       }
@@ -428,14 +443,15 @@ export class PlayerFx {
         fx.spawn({
           x: x + o * (cs * rx + sn * ux), y: y + o * (cs * ry + sn * uy), z: z + o * (cs * rz + sn * uz),
           life: 0.16 - 0.012 * Math.abs(j), size: 0.3 - 0.03 * Math.abs(j), sizeEnd: 0.05,
-          glyph: '-', rot: s, stretch: 2.6, color: COL.moon, colorEnd: COL.moonEnd, alpha: 1, alphaEnd: 0,
+          glyph: '-', rot: s, stretch: 2.6, color: MOON_SOFT, colorEnd: COL.moonEnd, alpha: 1, alphaEnd: 0,
         });
       }
       for (let i = 0; i < Math.round(9 * k); i++) {
         const a = R(0, Math.PI * 2), sp = R(1.5, 5);
+        const vx = Math.cos(a) * sp + fdx * 3, vy = R(2.5, 7), vz = Math.sin(a) * sp + fdz * 3, pre = R(0.5, 1) * PRE;
         fx.spawn({
-          x, y, z,
-          vx: Math.cos(a) * sp + fdx * 3, vy: R(2.5, 7), vz: Math.sin(a) * sp + fdz * 3,
+          x: x + vx * pre, y: y + vy * pre, z: z + vz * pre,
+          vx, vy, vz,
           life: R(0.5, 0.9), size: R(0.13, 0.22), sizeEnd: 0.03,
           glyph: ".'`•", color: i % 3 ? c0 : COL.moon, colorEnd: i % 3 ? c1 : COL.moonEnd, alpha: 1, alphaEnd: 0, gravity: -16, drag: 0.9, flicker: 0.3,
         });
@@ -443,10 +459,48 @@ export class PlayerFx {
     }
     // (the core flash stays compact: the wyrm's own parry burst lands on the same spot, and two big
     // blooms hid the hero's deflect snap for a few frames)
-    fx.spawn({ x, y, z, life: 0.1, size: 1.25 * k, sizeEnd: 0.25, glyph: '*', color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
-    fx.spawn({ x, y, z, life: 0.14, size: 0.8 * k, sizeEnd: 1.6 * k, glyph: '°', color: c0, colorEnd: c1, alpha: 0.6, alphaEnd: 0 });
+    fx.spawn({ x, y, z, life: 0.08, size: 0.7 * Math.min(k, 1.3), sizeEnd: 0.2, glyph: '*', color: [2.6, 2.3, 1.7], colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
+    fx.spawn({ x, y, z, life: 0.12, size: 0.5 * Math.min(k, 1.3), sizeEnd: 1.0 * Math.min(k, 1.3), glyph: '°', color: c1, colorEnd: c1, alpha: 0.4, alphaEnd: 0 });
     // (the light barely grows with the chain: the wyrm's own parry light lands on top of it)
-    this._light({ x, y, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5 * (1 + 0.05 * (n - 1)), radius: 7, life: 0.2, fade: 0.18 });
+    this._light({ x, y: ly, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5 * (1 + 0.05 * (n - 1)), radius: 7, life: 0.2, fade: 0.18 });
+  }
+
+  /**
+   * A blade's parry, layered on the clash (player.js _parry): a white shockwave ring in the screen's
+   * plane bursting out of the contact (`big`: blue or perfect, wider, a second slower ring), a hard
+   * white core flash; `perfect` adds a gold ring and a spray of gold sparks.
+   */
+  shockwave(x, y, z, big = false, perfect = false) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    const rx = CAM ? CAM[0] : 1, ry = CAM ? CAM[1] : 0, rz = CAM ? CAM[2] : 0;
+    const ux = CAM ? CAM[4] : 0, uy = CAM ? CAM[5] : UP_Y, uz = CAM ? CAM[6] : UP_Z;
+    // (the ring is born already open: the parry's freeze-frame holds it there, a crisp ring round the
+    // clash; born at the centre, its strokes stacked into one blooming white blot for the whole freeze)
+    const rings = big ? [[0.55, 1.9, 0.2, 20, RING.white], [0.42, 1.2, 0.28, 14, perfect ? RING.gold : RING.warm]] : [[0.48, 1.4, 0.18, 16, RING.white]];
+    for (const [R0, R1, life, n, col] of rings) {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+        const dx = rx * ca + ux * sa, dy = ry * ca + uy * sa, dz = rz * ca + uz * sa;
+        const sp = (R1 - R0) / life;
+        fx.spawn({
+          x: x + dx * R0, y: y + dy * R0, z: z + dz * R0, vx: dx * sp, vy: dy * sp, vz: dz * sp,
+          life, size: 0.17, sizeEnd: 0.06, glyph: '-', rot: a + Math.PI / 2, stretch: 1.4,
+          color: col, colorEnd: COL.parryEnd, alpha: 1, alphaEnd: 0, drag: 1.5,
+        });
+      }
+    }
+    // (no core of its own: parry() has one, and stacked cores bloom into a white blot that hides
+    // both fighters through the freeze-frame)
+    if (perfect) {
+      for (let i = 0; i < 14; i++) {
+        const a = R(0, Math.PI * 2), sp = R(5, 10);
+        fx.spawn({
+          x, y, z, vx: (rx * Math.cos(a) + ux * Math.sin(a)) * sp, vy: (ry * Math.cos(a) + uy * Math.sin(a)) * sp + R(0, 2), vz: (rz * Math.cos(a) + uz * Math.sin(a)) * sp,
+          life: R(0.18, 0.3), size: R(0.18, 0.28), sizeEnd: 0.04, glyph: "*+'", color: [4.2, 2.9, 0.9], colorEnd: [1.4, 0.5, 0.1], alpha: 1, alphaEnd: 0, drag: 3,
+        });
+      }
+    }
   }
 
   /**

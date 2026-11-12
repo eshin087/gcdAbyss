@@ -179,14 +179,23 @@ Spec: `docs/specs/ash-disciple.md`.
 - [x] Nine moves and a counter in P1, three more in P2, the Kindling transition; feints that never
       glint; Ash Crescent projectiles
 - [x] His guard and counters, the Ghostep behind him, the execution thrust (ADR-061)
+- [x] Owner rework: a small hat, a long slender jian in a high guard (pick C of three sheets), four
+      new moves (Falling Star, Piercing Ash, Rain of Ashes, Hundred Petals), a PBZ-fast pace
+- [x] The duel's moments (ADR-062): the full deflect, the blade lock, the mikiri, `flow.cinematic`;
+      MOMENTS tests; film strips of each with real input
+- [x] Owner rework 2 (ADR-063): the classic jian guard (pick A of three), the hand driven by the blade,
+      PBZ-boss speed, step-ins that lead the hero, sprints, strings that stop, flask punish; hit stun
+      both ways, the layered parry (freeze, shockwave, flash, clang, perfect slow-mo), his sweep trail;
+      PRESSURE + IMPACT tests
 - [x] Duel tests (`tests/integration/duel.mjs`: levels, data rules, timing, guard, deflect, Ghostep,
       execution, phases, flow, a bot win; `probe` opt-in); `npm test` + build green
 - [ ] Owner review of the PR preview (`?level=ash`, and on the phone); merge
 - [ ] A human playtest: is the guard readable, are the feints fair, is he too easy (bots: ~1 min)?
 - Follow-ups:
   - [x] **The reward** (ADR-059): the technique system and his Ash Riposte (M1.17, ADR-054)
-  - [ ] Look at every move and reaction frame by frame (only Plum Thrust, Swallow Flicks and Crane
-        Spins were filmed; the rest were checked by the tests, not by eye)
+  - [ ] Look at every move and reaction frame by frame (filmed: Plum Thrust, Swallow Flicks, Crane
+        Spins, Rain of Ashes, Falling Star, Piercing Ash, Hundred Petals; the rest by the tests only)
+  - [ ] The blade lock's mash rate on a phone (tap ATTACK): is 8 taps / s to win in ~1.5 s fair?
   - [ ] Sounds of his own: a jian whoosh per swing, a step / glide, the Kindling (today: the cues,
         the parry and block clangs, no creature voice)
   - [ ] His hit zones are not his blade: check the zones against the poses in the Lab hitbox overlay

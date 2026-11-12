@@ -1262,3 +1262,71 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Alternatives:** no guard (the owner's other option); a guard that holds through whole windups (the
   fencer then never trades, and nothing teaches the commit point); hits during his windups
   interrupting them (makes mashing the answer).
+
+## ADR-062 — The duel's moments: the full deflect, the blade lock, the mikiri, the cinematic (2026-11-12)
+- **Context:** the owner wanted Shen Hui to give "sekiro/phantom blade zero parries opportunities for
+  epic combat and moments", and picked all four offered: long deflect strings, a blade lock, perilous
+  counters and cinematic finishers, at a relentless, PBZ-fast pace.
+- **Decision:**
+  - **Moments are data on a move's beats**, read by the duelist (`moves.js`): `lock: true` (a perfect
+    parry of it crosses the blades), `mikiri: true` (a perilous red thrust: `hitPlayer` passes
+    `mikiri`, its flash `perilous`); the full deflect is a rule on any string of ≥ 5 hits. The numbers
+    live in `tuning.js` (`fullDeflect`, `lock`, `mikiri`, `cinematic`, `chain`, `idleGap`).
+  - **The hero owns the inputs, the attacker owns the outcome.** `player.startBladeLock(att, L)` runs
+    the mash (a meter, a prompt, `player:lock`) and calls `att.onLockEnd(won)`; `player.takeHit` checks
+    `hit.mikiri` against a roll into the blade (the roll's direction against the attacker's facing:
+    his blade's line, since a dashing thrust is often alongside at the impact) and calls
+    `att.onMikiri()`. The wyrm offers neither and is untouched; any later duelist reuses both.
+  - **A blade lock needs a perfect parry** (0.08 s), not any parry, so it stays a moment and not a
+    tax on every heavy blow. Time-out is not a loss when the hero held his ground (≥ 0.6): pressing
+    steadily is enough, pressing nothing loses.
+  - **`flow.cinematic`** is the one place that slows time and pulls the camera in for a moment, and
+    its slow motion is the flow's own time scale, not a hitstop (the hitstop min-merges its scale, so
+    the parry's 0.04 freeze stretched over the moment). The camera uses `cameraRig.cine`, an
+    additive pull-in that never fights the boss framing.
+  - **The pace:** short idle gaps and a chance to chain one move into the next; the tell rules still
+    hold for every chained move (first windup ≥ 0.7 s, hits ≥ 0.45 s apart: the DATA test).
+  - **His look (owner pick C of three rendered sheets):** a small hat, a long slender jian, a high
+    guard (the sword hand by the temple, the blade slanting down at the hero).
+- **Tuned on bots:** the god-mode fencer wins in 52–61 s; mortal bots reading 85 % of the tells win
+  (3 of 3), 70 % die (3 of 3), 60 % die (2 of 3). The bots use neither the lock nor the mikiri.
+- **Alternatives:** a lock on any parry of a heavy blow (too frequent; it would slow the PBZ pace it
+  is meant to punctuate); mikiri as a separate button (the roll the player already has, read by
+  direction, keeps the controls as they are and works on touch); the slow motion through `hitstop`
+  (the bug above); a scripted camera orbit for each moment (more to tune, and it fights the boss
+  framing on a phone).
+
+## ADR-063 — PBZ speed, pressure that reaches, and impact you can feel (2026-11-12)
+- **Context:** after playing Shen Hui the owner found "his animation, motions, and weapon stance and
+  attacks look bad", his attacks slow, and his AI "stupid": it attacked when it could not reach the
+  hero, and the hero could kite him. They asked for an epic fast duel with sword clashes and
+  parry / dodge moments, an "epic and impactful" parry, and "more impactful hit stun" both ways.
+  Answers: PBZ-boss speed; your hits jolt him but interrupt only footwork and recovery; the parry
+  "everything, layered"; he sprints in and punishes a flask. Stance: "A", the classic jian guard.
+- **Decision:**
+  - **The hand follows the blade.** His clips may drive the sword arm from the blade's direction
+    (`arm` / `ext` / `lead`, poses.js), as the hero's swings do; a cut is authored as the blade's
+    path through the hero (moves.js `slashKeys`: gather, cock, a ~0.1 s snap, follow-through) and the
+    hips, chest and front foot go with it. Keyed hands stay for two-handed and special poses.
+  - **Speed with the cue intact:** openers 0.46–0.6 s, a string's hits ~0.34 s apart; the flash lead
+    drops to 0.3 s and the minimum impact gap to 0.32 s so every flash still comes after the hit
+    before it (the DATA test checks it per phase).
+  - **No blow at air:** every beat steps in through its windup within a budget (`close`), and
+    every step-in, windup track and dash leads the hero's velocity. A string whose next hit cannot
+    reach stops. Footwork circles only inside striking range, runs beyond it and sprints past 5.5 m at
+    8.6 m/s (above the hero's 7.2). A drinking hero is punished.
+  - **Impact is time:** a parry of a blade freezes the frame (0.1–0.15 s), a blow on either fighter
+    freezes it too (him 0.065–0.12 s with a jolt layered on his pose; the hero 0.085–0.13 s). The
+    parry's FX are built for the freeze: sparks born mid-burst and a shockwave ring born open (born at
+    the contact they stacked into one blooming white blot that hid both fighters for the freeze). A
+    white screen flash (`grade.flashPulse`) and a heavier clang; a perfect parry adds a short slow
+    motion through `flow.cinematic`.
+  - His damage × 1.15 (was 1.35): his pressure lands more blows, so each one hurts less.
+- **Measured:** god-mode bot ~45 s; 85 % bots win 3 / 3 in 48–52 s; 70 % die 3 / 3 with him at
+  8–10 %. Every non-red glint reaches a hero who stands his ground (29 / 29); a hero sprinting circles
+  is caught (0.8 m) and hit.
+- **Alternatives:** keep the keyed hands and add more keys (the arm still fights the blade between
+  them); faster windups with the old 0.35 s flash (a string's flashes would arrive before the hit
+  they follow); a homing hit test instead of the step-in (blows that land without his body getting
+  there read as unfair); particles on real time during a hitstop (every slow motion would lose its
+  frozen sparks).

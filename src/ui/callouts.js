@@ -22,6 +22,11 @@ const KINDS = {
   ret: { text: 'RETURN', life: 1.0, rise: 34, pop: 1.5, cls: 'return' },
   // a duelist's guard turned the hero's strike (dragon:guard; the Ash Disciple)
   guard: { text: 'GUARDED', life: 0.7, rise: 16, pop: 1.15 },
+  // the duel's moments (player:lock, player:mikiri, dragon:deflected)
+  lock: { text: 'BLADE LOCK', life: 1.1, rise: 20, pop: 1.5, cls: 'deflect' },
+  lockWon: { text: 'BREAKTHROUGH', life: 1.3, rise: 30, pop: 1.6, cls: 'deflect' },
+  mikiri: { text: 'MIKIRI', life: 1.3, rise: 30, pop: 1.7, cls: 'deflect', streak: true },
+  fullDeflect: { text: 'PERFECT DEFLECT', life: 1.5, rise: 32, pop: 1.7, cls: 'deflect', streak: true },
   // a technique's counter (player:technique {phase: 'counter'}): the text is the technique's name
   tech: { text: 'RIPOSTE', life: 1.3, rise: 30, pop: 1.6 },
 };
@@ -86,6 +91,12 @@ export class Callouts {
       if (d?.execution) this.call('exec');
     });
     game.events?.on?.('dragon:guard', () => this.call('guard'));
+    game.events?.on?.('player:lock', (d) => {
+      if (d?.phase === 'start') this.call('lock');
+      else if (d?.phase === 'won') this.call('lockWon');
+    });
+    game.events?.on?.('player:mikiri', () => this.call('mikiri'));
+    game.events?.on?.('dragon:deflected', () => this.call('fullDeflect'));
   }
 
   /** Pop a call-out over the player's head. kind ∈ KINDS; `text` replaces the kind's own. */

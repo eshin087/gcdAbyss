@@ -109,6 +109,8 @@ export class GameFlow {
     this.autoPause = false;
     this.swallowInput = false;
     this.debugVictoryT = -1;
+    this.cine = null; // a running cinematic moment (cinematic())
+    this.cineScale = 1; // its time scale this frame (multiplies the flow's own slow-mo)
     this._ghostAt = -10;
     this._errors = 0;
 
@@ -145,7 +147,11 @@ export class GameFlow {
       this.stats.hits++;
     });
     ev?.on('player:dodge', () => this.stats.dodges++);
-    ev?.on('player:parry', () => this.stats.parries++);
+    ev?.on('player:parry', (d) => {
+      this.stats.parries++;
+      // a blade met: a white flash on the clash (a perfect parry: a bright one); a deflected bullet: none
+      if (!d?.light) this.grade.flashPulse(d?.perfect ? 0.85 : d?.tell === 'blue' ? 0.4 : 0.28);
+    });
     ev?.on('player:block', () => this.stats.blocks++);
     ev?.on('player:guardBreak', () => this.stats.guardBreaks++);
     // a perfect dodge and its Ghostep blink normally arrive together: count / pulse once
@@ -188,7 +194,7 @@ export class GameFlow {
       this._report('update', err);
     }
     // always keep time + screen grade coherent, even after an error
-    g.timeScale = g.state === 'paused' ? 0 : clamp(this.slowmo, 0.05, 1);
+    g.timeScale = g.state === 'paused' ? 0 : clamp(Math.min(this.slowmo, this.cineScale), 0.05, 1);
     try {
       this._gradeTargets();
       this.grade.update(rdt);
@@ -211,7 +217,7 @@ export class GameFlow {
       const to = PLAY.has(this.pausedFrom) ? this.pausedFrom : 'explore';
       this.pausedFrom = null;
       this._setState(to);
-      g.timeScale = clamp(this.slowmo, 0.05, 1);
+      g.timeScale = clamp(Math.min(this.slowmo, this.cineScale), 0.05, 1);
       g.hud?.showPause?.(false);
     }
   }
@@ -232,6 +238,47 @@ export class GameFlow {
     g.settings.quality = q;
     this._try(() => g.applyQuality?.(), 'applyQuality');
     this._log(`Quality: ${CONFIG.quality[q].name}`, 'system');
+  }
+
+  /**
+   * A cinematic moment (a duel's full deflect, blade lock, mikiri, execution): time slows to `slowmo`
+   * for `dur` real seconds while the camera pulls in (`zoom` m, negative = closer) and leans `weight`
+   * toward (x, z). The slow-mo drops in at once and eases back over the last third; the camera eases
+   * in over the first fifth and out over the last two fifths. The slow-mo is the flow's own time
+   * scale (cineScale), not a hitstop: an actor's short freeze (hitstop, min-merged) would otherwise
+   * stretch over the whole moment. A newer moment replaces a running one. Emits 'game:cinematic'.
+   */
+  cinematic(o = {}) {
+    const x = finite(o.x, NaN), z = finite(o.z, NaN);
+    if (!Number.isFinite(x + z) || !PLAY.has(this.game.state)) return false;
+    const dur = clamp(finite(o.dur, 0.8), 0.1, 3);
+    const slowmo = clamp(finite(o.slowmo, 0.3), 0.05, 1);
+    this.cine = { t: 0, dur, x, z, slowmo, zoom: finite(o.zoom, -9), weight: clamp(finite(o.weight, 0.6), 0, 1) };
+    this.cineScale = slowmo;
+    this.game.events?.emit('game:cinematic', { kind: String(o.kind ?? 'moment') });
+    return true;
+  }
+
+  _updateCinematic(rdt) {
+    const rig = this.game.cameraRig, C = this.cine;
+    if (!C) {
+      this.cineScale = 1;
+      if (rig?.cine) rig.cine.w = rig.cine.zoom = 0;
+      return;
+    }
+    C.t += rdt;
+    const u = C.t / C.dur;
+    this.cineScale = u >= 1 ? 1 : C.slowmo + (1 - C.slowmo) * Math.max(0, (u - 0.66) / 0.34);
+    if (!rig?.cine) {
+      if (u >= 1) this.cine = null;
+      return;
+    }
+    const k = u >= 1 ? 0 : Math.min(1, u / 0.2) * Math.min(1, (1 - u) / 0.4);
+    rig.cine.x = C.x;
+    rig.cine.z = C.z;
+    rig.cine.w = C.weight * k;
+    rig.cine.zoom = C.zoom * k;
+    if (u >= 1) this.cine = null;
   }
 
   toggleMute() {
@@ -289,6 +336,7 @@ export class GameFlow {
       }
     }
     if (this.restCooldown > 0) this.restCooldown -= rdt;
+    this._updateCinematic(rdt);
     if (this.slowmoHold > 0) this.slowmoHold -= rdt;
     else if (this.slowmo < 1) {
       this.slowmo = damp(this.slowmo, 1, 1.8, rdt);
@@ -733,6 +781,8 @@ export class GameFlow {
     this.deadPollT = 0;
     this.slowmo = 1;
     this.slowmoHold = 0;
+    this.cine = null;
+    this.cineScale = 1;
     this.hitWhileAsleep = false;
     this.queue.length = 0; // drop stale events from the previous attempt
     this._ovW = 0;

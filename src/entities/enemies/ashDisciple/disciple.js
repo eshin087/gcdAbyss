@@ -91,6 +91,9 @@ export class AshDisciple {
     this._tip = new THREE.Vector3();
     this._tipPrev = new THREE.Vector3();
     this._hilt = new THREE.Vector3();
+    this._hiltPrev = new THREE.Vector3();
+    this._clash = new THREE.Vector3();
+    this.jolt = 0; // the hit jolt 0..1 (TUNING.hitStun; the pilot's `recoil`, poses.js jolt)
     this._tipOk = false;
     this._lastParry = -9;
     this._lastHurtPt = new THREE.Vector3();
@@ -208,6 +211,12 @@ export class AshDisciple {
       dz = p ? this.position.z - p.z : 1;
     }
     const l = Math.hypot(dx, dz) || 1;
+    // hit stun: a freeze-frame, his chest and head snapped back (poses.js jolt), a shove along the
+    // blow; it never cancels a windup (only footwork and his recovery: brain.onStruck)
+    const HS = TUNING.hitStun, hs = heavy || crushed ? HS.heavy : HS.light;
+    this.hitstop(crit ? Math.max(hs.stop, HS.critStop) : hs.stop, 0.03);
+    this.jolt = Math.max(this.jolt, hs.jolt);
+    if (this.mode !== 'broken' && this.position.y < 0.2) this.moveBy((dx / l) * hs.push, (dz / l) * hs.push);
     const pt = o.point;
     if (pt && Number.isFinite(pt.x + pt.y + pt.z)) {
       this.fx.hitSpark(pt.x, pt.y, pt.z, dx / l, dz / l, heavy || crit);
@@ -248,6 +257,7 @@ export class AshDisciple {
     this.broken = false;
     this.posture = 0;
     this.emitPosture(true);
+    this._cinematic('execution');
     if (this.hp <= 0) {
       this._die();
       return dmg;
@@ -277,10 +287,83 @@ export class AshDisciple {
       a.chain = (a.chain ?? 0) + 1;
       if (a.chain >= 2) this.emit('combat:deflectChain', { count: a.chain });
     }
-    this.fx.parrySpark(this._tip.x, this._tip.y, this._tip.z, tell);
+    const cp = this._clashPoint();
+    this.fx.parrySpark(cp.x, cp.y, cp.z, tell);
     this.flash = Math.max(this.flash, 0.5);
     this.addPosture(POSTURE.parry[tell] ?? POSTURE.parry.normal);
-    if (this.mode === 'act' && last) this.brain.startReact('recoil');
+    if (this.mode !== 'act' || !a) return; // the parry broke his posture (broken) or the move is gone
+    if (a) a.parried = (a.parried ?? 0) + 1;
+    // the blade lock: a PERFECT parry of a blow marked `lock` crosses the blades
+    if (b?.def?.lock && this.game.player?.deflect?.perfect && this.brain.startLock()) return;
+    // the full deflect: every real hit of a long string parried → he reels (a cinematic moment)
+    const F = TUNING.fullDeflect;
+    if (last && a.hits >= F.minHits && a.parried >= a.hits) {
+      this.emit('dragon:deflected', { count: a.hits });
+      this.addPosture(F.posture);
+      this._cinematic('fullDeflect');
+      if (this.mode === 'act') this.brain.startReact('reeling');
+      return;
+    }
+    if (last) this.brain.startReact('recoil');
+  }
+
+  /** The blade lock is decided (player.js _endLock). Won by the hero: he reels, a cinematic moment;
+   *  lost: he shoves the hero back and comes straight in with the Riposte. */
+  onLockEnd(won) {
+    if (this.mode === 'dying' || this.mode === 'dead' || this.brain.react?.kind !== 'lock') return;
+    const L = TUNING.lock;
+    if (won) {
+      this.addPosture(L.posture);
+      this.hitstop(0.08, 0.05);
+      this._cinematic('bladeLock');
+      if (!this.broken) this.brain.startReact('reeling');
+      return;
+    }
+    const p = this.game.player;
+    try {
+      p?.takeHit?.({
+        damage: L.shove.damage * (TUNING.damageScale ?? 1), from: { x: this.position.x, z: this.position.z }, knockback: L.shove.knockback,
+        kind: 'shove', tell: TELL.RED, parryable: false, blockable: false, attack: 'bladeLock', attacker: this, perfect: false,
+      });
+    } catch (err) {
+      console.error('[disciple] the shove failed', err);
+    }
+    this.game.shake?.(0.25);
+    this.brain.startReact('clash');
+    this.brain.counter.pending = true;
+  }
+
+  /** A mikiri (player.js _mikiri): the hero stepped on his perilous thrust. Pinned, he stumbles. */
+  onMikiri() {
+    if (this.mode !== 'act') return;
+    this.warn = 0;
+    this.addPosture(TUNING.mikiri.posture);
+    this.emit('dragon:stagger');
+    this._cinematic('mikiri');
+    if (!this.broken) this.brain.startReact('trampled');
+  }
+
+  /** Where the blades meet: the point of his blade (from mid-blade to the tip) nearest the hero's
+   *  chest, so his parry burst lands on the hero's own (player fx.parry) as one clash. */
+  _clashPoint() {
+    const h = this._hilt, t = this._tip, out = this._clash;
+    const p = this.game.player;
+    if (typeof p?.getChestPos !== 'function') return out.copy(t);
+    p.getChestPos(this._v2, true);
+    const bx = t.x - h.x, by = t.y - h.y, bz = t.z - h.z, l2 = bx * bx + by * by + bz * bz;
+    const u = l2 > 1e-6 ? ((this._v2.x - h.x) * bx + (this._v2.y - h.y) * by + (this._v2.z - h.z) * bz) / l2 : 1;
+    const k = Math.min(1, Math.max(0.45, Number.isFinite(u) ? u : 1));
+    out.set(h.x + bx * k, h.y + by * k, h.z + bz * k);
+    if (!Number.isFinite(out.x + out.y + out.z)) out.copy(t);
+    return out;
+  }
+
+  /** A cinematic moment on the clash between him and the hero (flow.cinematic, TUNING.cinematic,
+   *  any field overridden by `o`). */
+  _cinematic(kind, o = null) {
+    const p = this.game.player?.position, C = o ? { ...TUNING.cinematic, ...o } : TUNING.cinematic;
+    if (!p) return;
+    this.game.flow?.cinematic?.({ x: (p.x + this.position.x) / 2, z: (p.z + this.position.z) / 2, zoom: C.zoom, weight: C.weight, slowmo: C.slowmo, dur: C.dur, kind });
   }
 
   reset() {
@@ -434,8 +517,10 @@ export class AshDisciple {
     if (Number.isFinite(x + y + z)) this.fx.clash(x, y, z, heavy);
     else if (point) this.fx.clash(point.x, point.y, point.z, heavy);
     this.emit('dragon:guard', { heavy });
-    this.hitstop(G.clashStop, 0.06);
-    this.game.shake?.(heavy ? 0.16 : 0.08);
+    // steel on steel: a freeze, a kick, his blade jolted
+    this.hitstop(heavy ? G.clashStop * 1.6 : G.clashStop, 0.03);
+    this.game.shake?.(heavy ? 0.3 : 0.18);
+    this.jolt = Math.max(this.jolt, heavy ? 0.5 : 0.3);
     if (!this.broken) this.brain.onGuarded();
   }
 
@@ -464,6 +549,7 @@ export class AshDisciple {
         attack: o.attack ?? 'strike',
         attacker: this,
         light: !!o.crescent,
+        mikiri: !!o.mikiri, // a perilous thrust: a roll INTO it is the mikiri (player.js)
       });
     } catch (err) {
       console.error('[disciple] player.takeHit failed', err);
@@ -481,6 +567,8 @@ export class AshDisciple {
   // ---------------------------------------------------------------- frame
   _animate(dt) {
     const pl = this.pilot, b = this.brain;
+    this.jolt = Math.max(0, this.jolt - dt * TUNING.hitStun.joltDecay);
+    pl.recoil = this.jolt;
     pl.yaw = this.yaw;
     pl.stateT = b.clipT;
     pl.animT = b.clipT;
@@ -540,11 +628,15 @@ export class AshDisciple {
   _drawnPoints() {
     const s = this.rig.sword;
     this._tipPrev.copy(this._tip);
+    this._hiltPrev.copy(this._hilt);
     const ok = this._tipOk;
     this._hilt.set(0, 0, JIAN.guard).applyMatrix4(s.matrixWorld);
     this._tip.set(0, 0, JIAN.tip).applyMatrix4(s.matrixWorld);
-    this._tipOk = Number.isFinite(this._tip.x + this._tip.y + this._tip.z);
-    if (!ok) this._tipPrev.copy(this._tip);
+    this._tipOk = Number.isFinite(this._tip.x + this._tip.y + this._tip.z) && Number.isFinite(this._hilt.x + this._hilt.y + this._hilt.z);
+    if (!ok) {
+      this._tipPrev.copy(this._tip);
+      this._hiltPrev.copy(this._hilt);
+    }
   }
 
   /** Where a beat's glint pops: the blade's tip (or at his feet for a ring). */

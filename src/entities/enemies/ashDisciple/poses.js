@@ -15,7 +15,14 @@ import { clamp, lerp, smoothstep, TAU } from '../../../core/math.js';
 //   ('s' smooth, the default; 'l' linear; 'i' ease-in (a strike accelerating); 'o' ease-out; 'h' hold),
 //   bX bY bZ pitch yaw roll hip hipZ hipX spX spY spZ hdX hdY hdZ two flat rFy lFy   (scalars)
 //   rH rP lH lP swF rK lK   ([x, y, z])      rF lF   ([x, z] on the ground, or [x, y, z])
-//   sw   ([az, el] of the blade) }
+//   sw   ([az, el] of the blade)
+//   arm ext lead   (not pose channels: the blade-driven arm, below) }
+// The blade-driven arm: with `arm` 1 the sword hand is not keyed but follows the blade, as the hero's
+// swings do (anim.js slashH): the fist on a circle round the shoulder at the blade's azimuth (+ `lead`
+// rad: the fist runs ahead of the blade into a strike and the blade whips past it after), out to
+// `ext` (0 folded … 1 at full reach), higher as the blade rises; the chest and hips turn with the
+// blade. `arm` 0..1 blends from the keyed hand, so a clip eases in from the guard. A cut is then
+// authored as the blade's path alone, and the arm can never fight the steel.
 // A field missing from a key is interpolated between the keys that have it; before its first key it
 // comes from the stance (the clip starts from his guard) and, unless the clip says `hold: true`, it
 // returns to the stance at the clip's end.
@@ -27,22 +34,24 @@ const SCALAR = {
   hdX: P.hdX, hdY: P.hdY, hdZ: P.hdZ, two: P.twoHand, flat: P.footFlat, rFy: P.rFy, lFy: P.lFy,
 };
 const VEC = { rH: P.rH, rP: P.rP, lH: P.lH, lP: P.lP, swF: P.swF, rK: P.rK, lK: P.lK, rF: P.rF, lF: P.lF };
+/** The blade-driven arm's channels (not pose channels: evalClip applies them; their guard values). */
+const ARM = { arm: 0, ext: 0.75, lead: 0 };
 const FEET = new Set(['rF', 'lF']);
 
-/** His guard (no breathing): the static pose clips start from and return to. Exported for the data. */
-export const GUARD = Object.freeze({
-  // a jian guard: right foot forward, the body turned to lead with the sword side, sunk low; the jian
-  // held out at chest height pointing at the opponent, edge up; the free hand in a sword-finger held
-  // forward beside the sword wrist (raised behind the head, the other classic guard, it hid under
-  // the wide douli's brim from every camera that matters)
-  bX: 0.02, bY: -0.1, bZ: 0.02, pitch: 0, yaw: 0.38, roll: 0,
-  hip: -0.02, hipZ: 0.03, hipX: 0.02, spX: 0.07, spY: -0.12, spZ: -0.02,
-  hdX: 0.08, hdY: -0.28, hdZ: 0.02, two: 0, flat: 0.95, rFy: -0.2, lFy: 0.75,
-  rH: [0.06, -0.13, 0.4], rP: [-0.7, -0.55, -0.35], lH: [-0.04, -0.1, 0.36], lP: [0.8, -0.4, -0.3],
-  swF: [1, 0.15, 0], rK: [-0.25, 0, 1], lK: [0.55, 0, 0.8],
-  rF: [-0.1, ANK, 0.3], lF: [0.17, ANK, -0.24],
-  sw: [-0.36, 0.1],
+/** His guard (no breathing): the static pose clips start from and return to. Exported for the data.
+ *  The owner's pick of three (2026-11-12, "A"): the classic jian guard. Side-on and sunk, the right
+ *  foot forward; the jian held out at chest height pointing straight at the opponent; the free hand's
+ *  sword-finger raised in an arc over the head. */
+const GUARD_BASE = Object.freeze({
+  bX: 0.02, bY: -0.16, bZ: 0.02, pitch: 0.02, yaw: 0.62, roll: 0,
+  hip: 0.08, hipZ: 0.03, hipX: 0.02, spX: 0.06, spY: -0.18, spZ: -0.02,
+  hdX: 0.04, hdY: -0.5, hdZ: 0.02, two: 0, flat: 0.95, rFy: -0.25, lFy: 0.9,
+  rH: [0.02, -0.12, 0.44], rP: [-0.7, -0.6, -0.2], lH: [-0.08, 0.5, -0.04], lP: [0.8, 0.4, -0.3],
+  swF: [0, 1, 0], rK: [-0.3, 0, 1], lK: [0.6, 0, 0.8],
+  rF: [-0.12, ANK, 0.36], lF: [0.2, ANK, -0.3],
+  sw: [-0.52, 0.14],
 });
+export const GUARD = GUARD_BASE;
 
 const _az = [0, 0];
 /** [az, el] of a direction (body axes). */
@@ -87,6 +96,7 @@ export function duelLoco(p, A) {
   const w = A.moveW;
   if (w < 0.002 && A.swordW < 0.002) {
     turnTwist(p, A);
+    jolt(p, A);
     return;
   }
   // the hero's gait into scratch, without its turn twist (applied once, below, to the whole pose)
@@ -97,7 +107,8 @@ export function duelLoco(p, A) {
   // circling he keeps his body turned (the stance's yaw); running he squares up to the run
   const runK = smoothstep(2.4, 4.2, A.speedS);
   for (const i of LEGS) p[i] += (SCR[i] - p[i]) * w;
-  p[P.yaw] = lerp(0.3, 0.06, runK) * (1 - 0.3 * w) + 0.08 * w * (1 - runK);
+  // (walking he keeps most of his side-on guard; running he squares up to the run)
+  p[P.yaw] = lerp(GUARD.yaw, lerp(0.45, 0.06, runK), w);
   p[P.spY] = lerp(GUARD.spY, 0, runK);
   p[P.hdY] = lerp(GUARD.hdY + 0.06, -0.04, runK);
   // the sword arm: guard while walking → trailing low behind at a run
@@ -113,6 +124,25 @@ export function duelLoco(p, A) {
   to3(p, P.lH, SCR[P.lH], SCR[P.lH + 1], SCR[P.lH + 2], k);
   to3(p, P.lP, SCR[P.lP], SCR[P.lP + 1], SCR[P.lP + 2], k);
   turnTwist(p, A);
+  jolt(p, A);
+}
+
+/**
+ * The hit jolt (A.recoil 0..1: the pilot's `recoil`, set by disciple.js when a blow lands on him and
+ * decaying over ~0.2 s): the chest and head snap back from the blow, the sword hand is knocked back,
+ * the body sags a little. Additive on any pose, so a strike landed mid-move shows without cancelling it.
+ */
+function jolt(p, A) {
+  const k = clamp(A?.recoil ?? 0, 0, 1);
+  if (!(k > 0.001)) return;
+  p[P.spX] -= 0.24 * k;
+  p[P.hdX] -= 0.28 * k;
+  p[P.pitch] -= 0.1 * k;
+  p[P.bodyZ] -= 0.07 * k;
+  p[P.bodyY] -= 0.04 * k;
+  p[P.spZ] += 0.08 * k;
+  p[P.rH + 2] -= 0.1 * k;
+  p[P.rH + 1] += 0.05 * k;
 }
 
 // ---------------------------------------------------------------- clips
@@ -130,6 +160,7 @@ duelStance(STANCE, null);
 /** A field's value in the guard (the implicit first / last key). */
 function guardValue(k) {
   if (k === 'sw') return [GUARD.sw[0], GUARD.sw[1]];
+  if (k in ARM) return ARM[k];
   const v = GUARD[k];
   return Array.isArray(v) ? v.slice() : v;
 }
@@ -147,7 +178,7 @@ function normValue(k, v) {
 export function compileClip(keys, dur, { hold = false } = {}) {
   const list = keys.filter((k) => k && Number.isFinite(k.t)).sort((a, b) => a.t - b.t);
   const fields = new Set();
-  for (const k of list) for (const f of Object.keys(k)) if (f !== 't' && f !== 'e' && (f in SCALAR || f in VEC || f === 'sw')) fields.add(f);
+  for (const k of list) for (const f of Object.keys(k)) if (f !== 't' && f !== 'e' && (f in SCALAR || f in VEC || f in ARM || f === 'sw')) fields.add(f);
   const tracks = [];
   for (const f of fields) {
     const T = [], V = [], E = [];
@@ -168,15 +199,22 @@ export function compileClip(keys, dur, { hold = false } = {}) {
       V.push(guardValue(f));
       E.push('s');
     }
-    tracks.push({ f, T, V, E, vec: f in VEC, sw: f === 'sw', ch: f in VEC ? VEC[f] : SCALAR[f] });
+    tracks.push({ f, T, V, E, vec: f in VEC, sw: f === 'sw', arm: f in ARM, ch: f in VEC ? VEC[f] : SCALAR[f] });
   }
   return { tracks, dur };
 }
 
+const AX = { arm: 0, ext: 0.75, lead: 0 };
 /** Evaluate a compiled clip at time t into p (over the guard). */
 export function evalClip(p, clip, t, A) {
   duelStance(p, A);
-  if (!clip?.tracks) return;
+  AX.arm = ARM.arm;
+  AX.ext = ARM.ext;
+  AX.lead = ARM.lead;
+  if (!clip?.tracks) {
+    jolt(p, A);
+    return;
+  }
   for (const tr of clip.tracks) {
     const T = tr.T, n = T.length;
     let i = 1;
@@ -195,8 +233,34 @@ export function evalClip(p, clip, t, A) {
     }
     if (tr.sw) setSw(p, a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u);
     else if (tr.vec) v3(p, tr.ch, a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u);
+    else if (tr.arm) AX[tr.f] = a + (b - a) * u;
     else p[tr.ch] = a + (b - a) * u;
   }
+  bladeArm(p, AX.arm, AX.ext, AX.lead);
+  jolt(p, A);
+}
+
+const ARM_R = [0.2, 0.46]; // the fist's radius round the shoulder: folded … full reach
+/** The sword hand (and elbow, chest, hips) from the blade (see the header): blended in by `w`. */
+function bladeArm(p, w, ext, lead) {
+  if (!(w > 0.001)) return;
+  w = Math.min(1, w);
+  const dx = p[P.swD], dy = p[P.swD + 1], dz = p[P.swD + 2];
+  const az = Math.atan2(dx, dz), el = Math.asin(clamp(dy, -1, 1));
+  const e = clamp(ext, 0, 1);
+  const ha = az + lead, hs = Math.sin(ha), hc = Math.cos(ha);
+  const r = lerp(ARM_R[0], ARM_R[1], e);
+  // folded, the fist sits nearer shoulder height whatever the blade's pitch (a cocked arm)
+  const hy = lerp(-0.18 + el * 0.3, -0.32 + el * 0.55, e) + 0.12 * Math.max(0, hs) * e;
+  to3(p, P.rH, hs * r, hy, hc * r + 0.12 * e, w);
+  to3(p, P.rP, lerp(-0.85, -0.35, e), lerp(-0.4, -0.95, e), lerp(-0.3, -0.4, e), w);
+  // the chest and hips turn with the blade, the eyes stay on the opponent
+  const tw = clamp(az, -2.3, 2.2);
+  p[P.pelvY] += tw * 0.12 * w;
+  p[P.spY] += tw * 0.2 * w;
+  p[P.hdY] -= tw * 0.24 * w;
+  // a blade low across the body leans the chest over it; raised, the chest opens
+  p[P.spX] += (0.08 - 0.08 * Math.max(0, el)) * w * e;
 }
 
 /** The clip the animator plays under the key 'duel': the pilot's atk.def is a compiled clip. */
