@@ -305,7 +305,8 @@ ground), and the deflect chain (a move's non-final hit is deflected, its last re
   A heavy strike with posture ≥ 48 (the charged thrust from ~90 % charge; THRUST.poise 30–50) crushes
   the guard: it lands and he staggers (0.8 s). The chain's slam (posture 40) is turned aside.
 - **Openings:** his recoveries; the recoil (1.0 s) after his last hit is parried; the Ghostep (a
-  perfect dodge blinks the hero 3.2 m behind him: he offers no plunge, and his back is never guarded);
+  perfect dodge blinks the hero 1.5 m behind him, his `ghostepBehind`: the wyrm's 3.2 m is out of
+  sword reach of a man's back; he offers no plunge, and his back is never guarded);
   the posture break. Strikes that land in his footwork make him flinch (his guard comes straight back
   up); after 2 within 1.6 s he backsteps out.
 - **Feints never glint:** a feint has no tell and no flash. Only real impacts are cued.
@@ -316,7 +317,7 @@ ground), and the deflect chain (a move's non-final hit is deflected, its last re
   kb 6) at 1.75 s. In P2 windups × 0.92 and recoveries × 0.85; three moves join.
 - **Footwork:** he circles at 3.0–5.6 m with his guard up, runs in beyond 7.5 m, backsteps (60 %)
   when the hero is closer than 1.9 m, and sidesteps a charged thrust levelled at him (45 %, once
-  per 3 s). Idle gaps between moves: P1 0.55–1.1 s, P2 0.3–0.75 s.
+  per 3 s). Idle gaps between moves: P1 0.45–0.95 s, P2 0.25–0.65 s.
 
 **Moves** (`moves.js`; N normal, B blue, R red; P1 windup s (damage); hits test a zone from his
 root through their active frames: sector r / ±ang, line r × w, ring r, metres):
@@ -338,12 +339,13 @@ root through their active frames: sector r / ±ang, line r × w, ring r, metres)
 
 Numbers (`tuning.js`): HP 3000, phases at [1, 0.5]; posture max [320, 380], regen after 2.5 s at
 20 / s, parries `POSTURE.parry` (26 / 48), weapon hits 5 / 16 that land, guarded 8 / 20, a parried
-Ash Crescent 8. Part multipliers head 1.3, body 1, legs 0.9. Damage is final (no damage scale).
+Ash Crescent 8. Part multipliers head 1.3, body 1, legs 0.9. Every blow he deals (the table's
+damage, the crescents) × `damageScale` 1.35 (a 26 lands as 35).
 **Difficulty (measured, `npm test` → DUEL WIN, `node tests/integration/duel.mjs . probe`):** a god-mode
-fencing bot that answers every tell wins in 53–59 s (three seeds; 3–4 breaks and executions);
-mortal bots that read 95 / 85 / 70 % of the tells win in 56 / 68 / 69 s, taking 2 / 10 / 15 hits
-(worst 26 damage) with 5 / 3 / 0 flasks left. Target: 1.5–2.5 min for a player who knows him.
-No human has played him yet.
+fencing bot that answers every tell wins in 50–54 s (three seeds; 3–4 breaks and executions);
+mortal bots reading 85 % of the tells win in 54 s taking 1 hit; 70 % wins in 70–75 s on two seeds
+with 1 and 0 flasks left (12–13 hits, worst 35); 60 % dies with him at 10 % HP. Target: 1.5–2.5 min
+for a player who knows him. No human has played him yet.
 
 ## Current numbers (v0.6 "bullet hell", 2026-11-09)
 Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,

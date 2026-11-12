@@ -56,9 +56,14 @@ slam and every charged thrust passed; then a break was worth ~1250 of his 2000 H
 picker, the Lab row, the courtyard from above and at the game camera, the disciple from eight angles
 (ASCII), film strips of Plum Thrust, Swallow Flicks and Crane Spins; the phone preset (852 x 393, LOW).
 
+**Rebased onto #13 / #14** (the two-handed hero): my ADRs became 050–053. The new swings missed his
+back after a Ghostep from the wyrm's 3.2 m, so an attacker may now set the distance (`ghostepBehind`,
+his 1.5 m), and the probes showed him too soft (70 % kept 4 flasks): his blows × 1.35, idle gaps a
+little shorter.
+
 **Measured:** phone preset, Ashfall: 51 draw calls a frame in the duel (the wyrm fight: 56), ~360k
-triangles (Cinderwood ~690k: the thinner grass). WIN: 53–59 s on three seeds; probe 95 / 85 / 70 %:
-wins in 56 / 68 / 69 s with 5 / 3 / 0 flasks left.
+triangles (Cinderwood ~690k: the thinner grass). WIN: 50–54 s on three seeds; probe 85 %: wins in
+54 s (1 hit); 70 %: wins in 70–75 s with 1 / 0 flasks left; 60 %: dies with him at 10 %.
 
 **Not checked / open:**
 - No human has played it; nothing ran on a phone. Is the guard readable? Are the feints fair?

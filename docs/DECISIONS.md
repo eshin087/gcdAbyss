@@ -1045,14 +1045,17 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     guard: it lands and he staggers. The chain's slam (40) does not.
   - **Feints never glint:** a feint has no tell and no flash; only real impacts are cued.
   - A perfect dodge against him is the Ghostep behind him (no plunge), and his back is never guarded.
+    The attacker may set the Ghostep's distance (`ghostepBehind`; player.js): his is 1.5 m, since the
+    wyrm's 3.2 m left the hero out of sword reach of a man's back.
   - **Execution:** a broken duelist within `execRange` (3.2 m) is executed by a lunging full thrust
     whose first active frame calls `onExecute`; the break is spent. While broken, hits crit ×1.5 (the
     wyrm's 2.2: here the execution is the reward).
   - Openings: his recoveries, the recoil after his last hit is parried, the Ghostep, the break.
-- **Measured** (`npm test` → DUEL WIN; `node tests/integration/duel.mjs . probe`): a god-mode bot that
-  answers every tell wins in 53–59 s (three seeds); mortal bots reading 95 / 85 / 70 % of the tells all
-  win (56 / 68 / 69 s, 2 / 10 / 15 hits taken, 5 / 3 / 0 flasks left). Easier than the wyrm, as the
-  first boss should be. No human has played it.
+- **Tuned on bots** (`npm test` → DUEL WIN; `node tests/integration/duel.mjs . probe`): his blows ×
+  1.35 so that a bot reading 70 % of the tells is on the edge. Measured: a god-mode bot that answers
+  every tell wins in 50–54 s (three seeds); mortal bots reading 85 % win in 54 s (1 hit taken), 70 %
+  win in 70–75 s with 1 and 0 flasks left, 60 % die with him at 10 %. Easier than the wyrm (where 85 %
+  is on the edge), as the first boss should be. No human has played it.
 - **Alternatives:** no guard (the owner's other option); a guard that holds through whole windups (the
   fencer then never trades, and nothing teaches the commit point); hits during his windups
   interrupting them (makes mashing the answer).

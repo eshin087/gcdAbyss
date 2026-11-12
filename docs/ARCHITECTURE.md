@@ -389,8 +389,9 @@ hit.plunge !== false)`), by attacker:
   distance) → **the plunge** (state `plunge`, below);
 - it offers the plunge but is out of range or the hit says `plunge: false` → state `ghostep`
   without a teleport: the slow-mo and the crit window where the hero dodged;
-- it has no plunge API (future enemies) → the v0.2 **Ghostep**: a blink `DEFENSE.ghostep.distanceBehind`
-  behind it (only within `TUNE.ghostepMaxRange` 12 m), slow-mo, crit window.
+- it has no plunge API (a duelist) → the v0.2 **Ghostep**: a blink `attacker.ghostepBehind` (default
+  `DEFENSE.ghostep.distanceBehind` 3.2 m) behind it (only within `TUNE.ghostepMaxRange` 12 m), slow-mo,
+  crit window.
 The slow-mo is `game.hitstop(slowmoTime, slowmoScale)`; a harsher freeze already running defers it
 until it ends, and actors skip a short freeze while a longer, gentler slow-mo runs, so impact freezes
 never swallow it. `player:perfectDodge` + `player:ghostep` fire in every case (for the plunge, x / z =
@@ -1217,7 +1218,7 @@ A level: `{ id, aliases, name, sub, world, buildSet(U, colliders), createBoss(ga
 ### Ash Disciple — `src/entities/enemies/ashDisciple/disciple.js` exports `class AshDisciple`
 The boss slot's surface above (no plunge), plus:
 ```
-kind = 'duelist';  name = 'SHEN HUI, THE ASH DISCIPLE';  execRange = 3.2
+kind = 'duelist';  name = 'SHEN HUI, THE ASH DISCIPLE';  execRange = 3.2;  ghostepBehind = 1.5
 mode: 'sleep'|'intro'|'foot'|'act'|'react'|'broken'|'dying'|'dead'   // brain.js (state follows it)
 guarding: boolean        // his guard covers his front (±TUNING.guard.arc): footwork after the raise
                          // delay, a clash, and the first TUNING.guard.windupOpen of each windup
