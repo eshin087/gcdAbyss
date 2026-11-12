@@ -437,6 +437,24 @@ export class Lab {
     this._syncBadge();
   }
 
+  /** Techniques (player.techniques / player.debug.qiFull): 'learn' | 'forget' | 'qi'. */
+  _techs(what) {
+    const p = this.game.player, book = p?.techniques;
+    if (!book) {
+      this._status('n/a: player.techniques', 'warn');
+      return;
+    }
+    try {
+      if (what === 'learn') book.learnAll();
+      else if (what === 'forget') book.forget();
+      else if (what === 'qi') p.debug?.qiFull?.();
+      const slots = book.slots.map((s) => s ?? '-').join(' / ');
+      this._status(what === 'qi' ? `Qi ${Math.round(p.qi)} / ${p.qiMax}` : `techniques: ${book.list().join(', ') || 'none'} · slots ${slots}${book.saved ? '' : ' (not saved)'}`, 'ok');
+    } catch (err) {
+      this._status(`techniques ${what} failed: ${err?.message ?? err}`, 'warn');
+    }
+  }
+
   /**
    * Look-dev preset for reviewing the hero, the wyrm and the grass up close: starts the fight with
    * the AI off and god mode on, puts the hero 7 m in front of the wyrm and zooms the camera in.
@@ -770,6 +788,13 @@ export class Lab {
     this.ui.godBtn = button(grid, 'God mode', () => this._togglePlayerFlag('god', 'god mode'));
     this.ui.flaskBtn = button(grid, 'Inf. flasks', () => this._togglePlayerFlag('infiniteFlasks', 'infinite flasks'));
     button(grid, 'Full heal', () => this._call(this.game.player, 'player', 'heal'));
+    // techniques (ADR-054): learn / forget (the save follows), fill the Qi meter, free techniques
+    const tg = el('div', 'lab-grid', null, body);
+    button(tg, 'Learn techs', () => this._techs('learn')).title = 'learn every technique (each into a free slot; saved)';
+    button(tg, 'Qi full', () => this._techs('qi')).title = 'fill the Qi meter';
+    this.ui.qiBtn = button(tg, 'Inf. Qi', () => this._togglePlayerFlag('infiniteQi', 'infinite Qi'));
+    this.ui.qiBtn.title = 'techniques cost no Qi';
+    button(tg, 'Forget techs', () => this._techs('forget'), 'danger').title = 'forget every technique and empty the slots (saved)';
     const row = el('div', 'lab-row', null, body);
     el('span', 'lab-lbl', 'tp', row);
     const tp = el('div', 'lab-grid', null, row);
@@ -989,7 +1014,7 @@ export class Lab {
     setText(pv.crit, p && Number.isFinite(p.critTimer) ? (p.critTimer > 0 ? `OPEN ${p.critTimer.toFixed(2)}s` : '-') : 'n/a');
     setText(pv.blocking, typeof p?.blocking === 'boolean' ? (p.blocking ? 'YES' : 'no') : 'n/a');
     const pd = p?.debug;
-    setText(pv.cheats, pd ? [pd.god && 'god', pd.infiniteFlasks && 'inf flasks'].filter(Boolean).join(', ') || '-' : 'n/a');
+    setText(pv.cheats, pd ? [pd.god && 'god', pd.infiniteFlasks && 'inf flasks', pd.infiniteQi && 'inf Qi'].filter(Boolean).join(', ') || '-' : 'n/a');
 
     // game
     setText(u.gv.state, show(g.state));
@@ -1001,6 +1026,7 @@ export class Lab {
     setClass(u.flaskBtn, 'on', !!pd?.infiniteFlasks);
     setClass(u.godBtn, 'na', !pd);
     setClass(u.flaskBtn, 'na', !pd);
+    setClass(u.qiBtn, 'on', !!pd?.infiniteQi);
     setClass(u.aiBtn, 'on', ai === true);
     setClass(u.aiBtn, 'na', typeof ddbg?.setAI !== 'function');
     setText(u.aiBtn, ai === false ? 'AI off' : 'AI on');
@@ -1105,6 +1131,7 @@ export class Lab {
     const pd = g.player?.debug;
     if (pd?.god) flags.push('god');
     if (pd?.infiniteFlasks) flags.push('inf flasks');
+    if (pd?.infiniteQi) flags.push('inf Qi');
     const ts = finite(g.debugTimeScale, 1);
     if (ts !== 1) flags.push(ts === 0 ? 'FROZEN' : `x${ts}`);
     if (this.loop.on) flags.push(`loop ${this.selected}`);

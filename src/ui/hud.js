@@ -10,7 +10,9 @@ import { Minimap } from './minimap.js';
 import { NameTags } from './nameTags.js';
 import { ScreenProjector } from './project.js';
 import { HelpPanel, PauseMenu, StatsPanel, TitleScreen } from './screens.js';
+import { QiRow, RewardCard, injectTechStyle } from './techniques.js';
 import { TellEdges } from './tells.js';
+import { getTechnique } from '../entities/player/techniques/index.js';
 
 // HUD: Ansenjeo-style MMO overlay (player frame, minimap, tabbed log, name tags) plus the boss bar
 // (HP + posture), screen-edge cues (red flash on a dodge-only tell's timing cue, cyan Ghostep pulse;
@@ -26,6 +28,7 @@ export class Hud {
   constructor(game) {
     this.game = game;
     injectHudStyle();
+    injectTechStyle();
     const host = document.getElementById('ui') ?? document.body;
     this.root = el('div', 'ab-root', null, host);
     this.root.dataset.state = game.state || 'title';
@@ -43,6 +46,7 @@ export class Hud {
     this.calls = new Callouts(game, this.root, this.proj);
     this.bannerUi = new Banner(this.root);
     this.statsUi = new StatsPanel(this.root);
+    this.rewardUi = new RewardCard(game, this.root);
     this.help = new HelpPanel(this.root);
     const hint = el('div', 'ab-hint ab-play kb-only', null, this.root);
     fillKeyText(hint, '[H] help  [Esc] pause');
@@ -76,8 +80,15 @@ export class Hud {
       this.calls.banner('POSTURE BROKEN', `critical hits ×${POSTURE.breakCritMult}`);
     });
 
-    // call-outs + damage numbers
-    on('player:parry', (d) => this.calls.call(d.tell === 'blue' ? 'deflect' : 'parry'));
+    // call-outs + damage numbers (a blow turned by a technique's stance into its counter calls the
+    // technique's name instead of PARRY)
+    on('player:parry', (d) => {
+      if (!(d.technique && !d.light)) this.calls.call(d.tell === 'blue' ? 'deflect' : 'parry');
+    });
+    on('player:technique', (d) => {
+      const T = getTechnique(d.id);
+      if (T && d.phase === 'counter') this.calls.call('tech', T.short);
+    });
     on('player:block', () => this.calls.call('block'));
     on('player:guardBreak', () => this.calls.call('gbreak'));
     on('player:perfectDodge', () => this._ghostep());
@@ -92,6 +103,7 @@ export class Hud {
       (dt) => this.calls.update(dt),
       (dt) => this.map.update(dt),
       (dt) => this.bannerUi.update(dt),
+      (dt) => this.rewardUi.update(dt),
       (dt) => this.titleUi.update(dt),
       () => this.pauseUi.refresh(),
       (dt) => this.feed.flush(dt),
@@ -110,6 +122,8 @@ export class Hud {
     el('span', 'lbl', 'HP', hpRow);
     this.hpBar = new DelayedBar(hpRow, 'hp', { hold: 0.6, drain: 2.4, rise: 6 });
     this.hpVal = el('span', 'val', '', hpRow);
+    // the Qi meter + the technique slots (ui/techniques.js; hidden until a technique is equipped)
+    this.qiRow = new QiRow(this.game, pf);
 
     // crit window cue (after a Ghostep): glowing cyan label + a bar that shrinks to zero
     this.critRow = el('div', 'ab-row ab-crit', null, pf);
@@ -322,6 +336,7 @@ export class Hud {
       }
     }
     this.hpBar.update(dt);
+    this.qiRow.update(dt);
   }
 
   _updateBoss(dt) {

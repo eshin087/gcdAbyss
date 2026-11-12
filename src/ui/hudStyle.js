@@ -380,6 +380,7 @@ const CSS = `
 .ab-call.k-deflect > .t { color: #e8f4ff; font-size: clamp(16px, 1.3vw, 22px); text-shadow: 0 0 12px ${rgba(BLUE, 1)}, 0 0 24px ${rgba(BLUE, 0.6)}, 0 0 2px #000; }
 .ab-call.k-ghostep > .t { color: ${CYAN}; font-size: clamp(16px, 1.3vw, 22px); font-style: italic; text-shadow: 0 0 12px ${rgba(CYAN, 1)}, -8px 0 10px ${rgba(CYAN, 0.45)}, 0 0 2px #000; }
 .ab-call.k-gbreak > .t { color: #ff6a55; text-shadow: 0 0 10px ${rgba(RED, 0.95)}, 0 0 2px #000, 0 1px 2px #000; }
+.ab-call.k-tech > .t { color: #ffe9d2; font-size: clamp(16px, 1.3vw, 22px); text-shadow: 0 0 12px rgba(255, 138, 61, 1), 0 0 24px rgba(255, 138, 61, 0.55), 0 0 2px #000; }
 .ab-call.k-block > .t { color: #b9c3d8; font-size: 11px; font-weight: 700; letter-spacing: 0.3em; }
 .ab-num > .t { font-size: 12px; color: #f2e9d8; font-variant-numeric: tabular-nums; }
 .ab-num.k-heavy > .t { font-size: 14px; color: #ffd08a; }

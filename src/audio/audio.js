@@ -637,6 +637,14 @@ export class AudioEngine {
       this.play('roll');
     });
     on('player:heal', () => this.play('heal'));
+    // techniques: the stance's breath and held note, the counter's bell (the turn's clang is
+    // player:parry, its thrust player:attack), the meter filling, a press it cannot pay for
+    on('player:technique', (d) => {
+      if (d.phase === 'stance') this.play('techStance');
+      else if (d.phase === 'counter') this.play('techCounter');
+    });
+    on('player:qiFull', () => this.play('qiFull'));
+    on('player:techniqueDenied', () => this.play('techDenied'));
     on('player:noFlask', () => this.play('noFlask'));
     on('player:lockOn', (d) => this.play('lockOn', d));
     on('player:footstep', (d) => this.play('footstep', d));

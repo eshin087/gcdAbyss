@@ -20,6 +20,8 @@ const KINDS = {
   exec: { text: 'EXECUTION', life: 1.4, rise: 30, pop: 1.6, cls: 'deflect' },
   // a duelist's guard turned the hero's strike (dragon:guard; the Ash Disciple)
   guard: { text: 'GUARDED', life: 0.7, rise: 16, pop: 1.15 },
+  // a technique's counter (player:technique {phase: 'counter'}): the text is the technique's name
+  tech: { text: 'RIPOSTE', life: 1.3, rise: 30, pop: 1.6 },
 };
 const NUM = { life: 0.95, rise: 34 };
 const CALL_POOL = 6;
@@ -84,8 +86,8 @@ export class Callouts {
     game.events?.on?.('dragon:guard', () => this.call('guard'));
   }
 
-  /** Pop a call-out over the player's head. kind ∈ KINDS. */
-  call(kind) {
+  /** Pop a call-out over the player's head. kind ∈ KINDS; `text` replaces the kind's own. */
+  call(kind, text = null) {
     const k = KINDS[kind];
     if (!k) return;
     // blocks come in bursts (multi-hit attacks): refresh the live one instead of stacking
@@ -106,7 +108,7 @@ export class Callouts {
     it.lift = Math.min(lift, STACK_PX * 3);
     it.jx = 0;
     it.head = true;
-    it.span.textContent = k.text;
+    it.span.textContent = text ? String(text) : k.text;
     it.node.className = `ab-call on k-${k.cls ?? kind}`;
     it.streak.style.display = k.streak ? '' : 'none';
     this._start(it);
