@@ -51,17 +51,26 @@ export const FIRE_ATTACKS = {
     minDist: 0,
     weight: [0, 1.4, 1.2], cooldown: 13,
   },
-  // roars skyward and spits a shell up; 8-14 meteors then fall over ~5 s in red rings (a background
-  // hazard: the wyrm keeps fighting). Every `ledEvery`-th one is led onto the player
+  // ARMAGEDDON (key meteorRain, ADR-053; replaced the Meteor rain): rears onto its hind legs and
+  // fires a salvo of `missiles` fire bolts into the sky (visual; the punish window: it is committed
+  // and rearing for windup + cast), the sky answers (`hush`: an orange glow, a rumble) while it drops
+  // to all fours and fights on, then `waves` x `perWave` meteors hammer the whole clearing (each heats
+  // its ground for `warn` s, every `ledEvery`-th led onto the hero, never two led impacts within
+  // `ledGap` s; within `safeR` m of the hero a wave covers at most `safeCover` of the ground and no
+  // two of its footprints overlap by more than a third), and `finale.delay` s after the last wave a
+  // single great meteor falls on the hero. P3 craters burn `craterBurn` s (contact ticks, blockable)
   meteorRain: {
-    label: 'Meteor rain', tell: TELL.RED, phase: 2,
-    windup: 1.0, cast: 0.7, recovery: 0.8,
-    count: [[8, 11], [8, 11], [11, 14]], // per phase [min, max]
-    first: 1.3, span: 5.0, // s after the cast: the first impact, the spread of impacts
-    warn: 1.5, warnLed: 1.1, ledEvery: 3, spread: [4, 14], // ring warning (s); random meteors land 4-14 m from the player
-    fall: 0.75, // s of the visible fall before impact
-    radius: 3.4, damage: 18, burn: 1.5, knockback: 3, maxHits: 3,
-    weight: [0, 1.3, 1.4], cooldown: 24,
+    label: 'Armageddon (meteor salvo)', tell: TELL.RED, phase: 2,
+    windup: 1.4, cast: 1.6, recovery: 0.9, hush: 0.8,
+    missiles: [12, 12, 16], missileEvery: 0.11, missileCone: 0.15, missileSpeed: 45, // rad half-cone, m/s
+    waves: [3, 3, 4], perWave: [8, 8, 10], waveGap: 1.6, stagger: 0.12, // (P1: Lab only)
+    warn: 1.5, warnLed: 1.2, ledEvery: 3, ledGap: 0.5, lead: 0.5, // s of heat warning; led: s of velocity lead
+    fall: 0.9, fallHeight: 34, size: 1.3, // visible fall (s) from above the wyrm; drawn size x the old meteor
+    radius: 3.4, damage: 20, burn: 1.5, knockback: 3, maxHits: 4,
+    craterBurn: [0, 0, 2.0], tickDamage: 4, tickBurn: 0.5,
+    safeR: 12, safeCover: 0.45,
+    finale: { delay: 1.2, radius: 7, warn: 2.0, damage: 34, burn: 2, knockback: 7, fall: 1.1, size: 2.4 },
+    weight: [0, 1.2, 1.5], cooldown: 28,
   },
   // slams the forefeet: lava pillars erupt in a line toward the player one after another (each
   // rings >= `first` s); in phase 3 a chasing variant spawns pillars under the player for ~3 s

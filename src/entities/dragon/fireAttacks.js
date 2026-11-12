@@ -11,7 +11,8 @@ import { beat, roarFx, roarPose } from './attacks.js';
 //     diveBomb     'Sky dive'      climbs ~14 m, hovers + tracks (red ring), dives: the crash is the hit
 //     hoverBarrage 'Hover barrage' hovers ~8 m, spits 3-5 shells, each landing in a red ring
 //   spells:
-//     meteorRain   a background rain of meteors (the wyrm keeps fighting while it falls)
+//     meteorRain   Armageddon: a salvo into the sky, then waves of meteors over the whole clearing
+//                  and one great meteor (a background hazard: the wyrm keeps fighting), ADR-053
 //     eruptions    lava pillars in a line toward the hero; phase 3 may chase him instead
 //     flameRing    a ring of fire expanding from the wyrm
 //     flameWall    a wall of fire sweeping across the arena
@@ -114,7 +115,7 @@ function retime(d, a, b, ref) {
   if (Number.isFinite(tau)) b.impactIn = Math.max(0.05, a.T - b.at + tau);
 }
 
-/** On the beat's timing flash, a red flare where the hazard will meet the hero too (x, z). */
+/** On the beat's timing flash, a heat flare where the hazard will meet the hero too (x, z). */
 function flareOnFlash(d, a, b, x, z, r = 2.2) {
   if (!b || !b.flashed || a.flared) return;
   a.flared = true;
@@ -656,56 +657,98 @@ const hoverBarrage = {
   },
 };
 
-// ------------------------------------------------------------------ meteor rain
+// ------------------------------------------------------------------ armageddon (key meteorRain)
+// ADR-053. Rears onto its hind legs, wings flared, the neck straight up, the throat white-hot, embers
+// streaming up off the jaws (the body glows red: TELL_STYLE.red.warn, d.bodyWarn); fires a salvo of
+// bolts into the sky from the jaws (visual: fx.launchBolt; dragon:hazard stage 'launch' per bolt); the
+// barrage emitter (hazards.barrage) is armed with the salvo, the sky answers and the meteors come
+// down in waves while the wyrm, back on all fours, fights on. Windup + salvo (~3 s) is the punish
+// window. No beat of its own: the salvo deals nothing, every meteor heats its ground and announces
+// itself; the transition roar's clear ends the barrage.
 const MR = T.meteorRain;
+const perPh = (v, d) => (Array.isArray(v) ? v[clamp((d.phase | 0) - 1, 0, v.length - 1)] : v);
+
+function fireBolt(d, a) {
+  const m = d.rig.pt.mouth;
+  const ang = Math.random() * Math.PI * 2, tilt = Math.random() * MR.missileCone, sp = MR.missileSpeed;
+  d.fx.launchBolt(m.x, m.y, m.z, Math.sin(tilt) * Math.cos(ang) * sp, Math.cos(tilt) * sp, Math.sin(tilt) * Math.sin(ang) * sp);
+  a.fired++;
+  a.kick = 1;
+  d.game.shake?.(0.06);
+  d.emit('dragon:hazard', { kind: 'meteor', stage: 'launch', x: m.x, z: m.z, radius: 0 });
+}
+
 const meteorRain = {
   name: 'meteorRain',
   cooldown: MR.cooldown,
   phases: (d) => [['windup', wind(d, MR.windup)], ['cast', MR.cast], ['recovery', wind(d, MR.recovery)]],
-  // no beat of its own: the cast deals nothing; every meteor rings red and announces itself
-  weight: (d, s) => (d.hazards?.count('rain') || d.hazards?.count('meteor') ? 0 : wPhase(MR, d)),
+  // not while a barrage or its meteors are still coming down
+  weight: (d, s) => (d.hazards?.count('barrage') || d.hazards?.count('meteor') ? 0 : wPhase(MR, d)),
+  start(d, a) {
+    a.n = Math.max(1, perPh(MR.missiles, d) | 0);
+    a.every = Math.min(MR.missileEvery, (MR.cast - 0.15) / a.n); // (all of them inside the salvo)
+    a.fired = 0;
+    a.kick = 0;
+  },
   enter(d, a, phase) {
     if (phase !== 'cast') return;
-    roarFx(d, 0.9);
-    d.fx.castBolt(d.rig.pt.mouth);
+    roarFx(d, 0.6);
     d.emit('dragon:spell', { name: 'meteorRain', x: d.position.x, z: d.position.z });
-    const c = MR.count[clamp((d.phase | 0) - 1, 0, MR.count.length - 1)];
-    const n = c[0] + Math.floor(Math.random() * (c[1] - c[0] + 1));
-    d.hazards.rain({
-      attack: 'meteorRain', count: n, first: MR.first, span: MR.span, warn: MR.warn, warnLed: MR.warnLed, ledEvery: MR.ledEvery,
-      lo: MR.spread[0], hi: MR.spread[1], r: MR.radius, fall: MR.fall,
+    d.hazards.barrage({
+      attack: 'meteorRain', waves: perPh(MR.waves, d), perWave: perPh(MR.perWave, d), waveGap: MR.waveGap, stagger: MR.stagger,
+      first: MR.cast + MR.hush + MR.warn, glowAt: MR.cast, warn: MR.warn, warnLed: MR.warnLed, ledEvery: MR.ledEvery,
+      ledGap: MR.ledGap, lead: MR.lead, r: MR.radius, fall: MR.fall, fallY: MR.fallHeight, size: MR.size,
       damage: MR.damage, burn: MR.burn, knockback: MR.knockback, group: d.hazards.group(MR.maxHits),
+      crater: perPh(MR.craterBurn, d), tickDamage: MR.tickDamage, tickBurn: MR.tickBurn,
+      safeR: MR.safeR, cover: MR.safeCover, finale: MR.finale,
     });
   },
   update(d, a, dt) {
-    const pose = d.pose, pt = d.rig.pt;
-    if (a.phase === 'windup') {
-      // rises tall, the throat charging, the head drawn back to the sky, the wings opening
-      d.turnToward(d.sense.yawTo, d.turnRate * 0.6, dt);
-      pose.head = d.rootPt(pose.headTarget, 0, 6.0, 2.0);
+    const pose = d.pose, pt = d.rig.pt, k = a.k;
+    a.kick = Math.max(0, a.kick - dt * 9);
+    if (a.phase === 'windup' || a.phase === 'cast') {
+      // reared up, wings flared, the neck straight up, looking at the sky
+      const up = a.phase === 'windup' ? smoothstep(0, 0.7, k) : 1;
+      if (a.phase === 'windup') d.turnToward(d.sense.yawTo, d.turnRate * 0.5, dt);
+      pose.rear = 0.9 * up;
+      pose.pitch = -0.16 * up;
+      pose.lower = -0.15 * up;
+      pose.stanceH = 0.25;
+      pose.restep = 1;
+      pose.head = d.rootPt(pose.headTarget, 0, 6.0 + 1.6 * up, 2.2 - 0.8 * up);
       pose.headRate = 4;
-      d.rootPt(pose.look, 0, 14, 8);
-      pose.jaw = 0.3 + 0.3 * a.k;
-      pose.pitch = -0.1;
-      pose.lower = -0.1;
-      pose.swell = a.k;
-      pose.spread[0] = pose.spread[1] = a.k > 0.4 ? 1 : REST_SPREAD;
-      pose.spreadRate = 3;
-      d.throat = a.k;
-      d.fx.mouthEmbers(dt, pt.mouth, 26, pt.headFwd);
-    } else if (a.phase === 'cast') {
-      // the roar to the sky (the shell flies up with it)
-      roarPose(d, a, 1);
-      d.rootPt(pose.look, 0, 20, 6);
-      d.throat = 1;
+      d.rootPt(pose.look, 0, 40, 5);
+      pose.lookRate = 6;
+      pose.spread[0] = pose.spread[1] = 1;
+      pose.spreadRate = 4;
+      pose.flap = 0.12 * up;
+      pose.flapHz = 4;
+      pose.swell = a.phase === 'windup' ? k : 1;
+      pose.jaw = a.phase === 'windup' ? 0.3 + 0.5 * k : a.kick > 0.3 ? 1 : 0.85;
+      pose.jawRate = 18;
+      // each bolt kicks the head back down a little
+      pose.headOffset.y -= a.kick * 0.3 * S;
+      d.throat = a.phase === 'windup' ? k : 1;
+      d.bodyWarn = a.phase === 'windup' ? k : 1; // the red tell on the body (TELL_STYLE.red.warn)
+      d.fx.mouthEmbers(dt, pt.mouth, a.phase === 'windup' ? 20 + 50 * k : 30, pt.headFwd, 7);
     } else {
+      // drops back onto all fours and fights on (the barrage is a background hazard)
+      pose.rear = 0.9 * (1 - smoothstep(0, 0.6, k));
       pose.jaw = 0.25;
       pose.spreadRate = 3;
-      d.throat = 0;
+      pose.restep = 1;
+      d.throat = Math.max(0, 1 - 2 * k);
+      if (k < 0.6) d.game.shake?.(0.25 * dt);
     }
+  },
+  // (after the rig: the bolts leave the jaws where they are drawn)
+  hit(d, a) {
+    if (a.phase !== 'cast') return;
+    while (a.fired < a.n && a.t >= a.fired * a.every) fireBolt(d, a);
   },
   end(d) {
     d.throat = 0;
+    d.bodyWarn = 0;
   },
 };
 
@@ -1113,8 +1156,8 @@ const nova = {
       d.flash = Math.max(d.flash ?? 0, 0.15 + 0.7 * k * k); // white-hot (the hit-flash white)
       const c = pt.chest;
       d.fx.novaCharge(dt, c.x, c.y, c.z, k);
-      // the blast radius in red, its inner ring closing in on the wyrm: a countdown to the blast
-      d.fx.hzRing(d.fx.holdLife(a, dt), a.cx, a.cz, NV.radius, k, k > 1 - TUNING.flashLead / Math.max(0.5, a.dur));
+      // the blast radius: the whole clearing round it heats up toward the blast (ADR-052)
+      d.fx.heatDisc(d.fx.holdLife(a, dt), a, dt, a.cx, a.cz, NV.radius, k, k > 1 - TUNING.flashLead / Math.max(0.5, a.dur), 41.7);
       if (a.light) {
         a.light.set(c.x, c.y, c.z);
         a.light.intensity = 1 + 7 * k * k;

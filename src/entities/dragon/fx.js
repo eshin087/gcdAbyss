@@ -5,8 +5,8 @@ import { TELL_STYLE } from '../../combat/rules.js';
 // Dragon FX: fire breath stream (glyph particles + pooled lights + scorch), fireball projectiles,
 // roar shock rings, dust, nostril embers, eye glints, phase-2 / death embers, and the combat
 // read-outs: timing flashes (red alarm burst for dodge-only tells, a white glint for parryable
-// ones — no colour coding or text for parry), red ground warning rings, white/gold parry sparks,
-// posture break. Every light this module creates is tracked so reset() can kill them.
+// ones — no colour coding or text for parry), ground warnings as the ground heating up (ADR-052:
+// no red rings, no '!' marks), white/gold parry sparks, posture break. Every light this module creates is tracked so reset() can kill them.
 // Body-linked sizes / distances scale with the wyrm (SCALE); projectile blasts do not.
 
 const S = SCALE;
@@ -25,20 +25,12 @@ const PARRY_WHITE = [3.4, 3.2, 2.8];
 const PARRY_GOLD = [3.4, 2.3, 0.75];
 const PARRY_END = [0.8, 0.5, 0.2];
 const PARRY_LIGHT = [1, 0.88, 0.62];
-// red warning ring: '!' marks between dots (bullets: a middle dot is ~1 px at the 36 m game camera)
-const RING_MARK = '!';
-const RING_DOT = '•';
 const rand = (a, b) => a + Math.random() * (b - a);
 // scorch + ground flames along the breath: [distance from the mouth, radius] (v0.1 metres)
 const SCORCH_STEPS = [[4, 1.4], [6.5, 1.7], [9, 2.0], [11.5, 2.2]];
 const tellStyle = (tell) => TELL_STYLE[tell] ?? TELL_STYLE.normal;
 // fire hazards / spells / flight (dragon-fire): atlas glyphs and linear HDR colours
-// (the warning dots are bullets: a middle dot is ~1 px at the 36 m game camera)
-const HZ_DOT = '•';
-const HZ_MARK = '!';
-const HZ_CROSS = '+';
 const HZ_RISE = '^';
-const CHEVRON = '>';
 const STREAK = '|';
 const SHOCK = ')';
 const METEOR_CORE = '@';
@@ -54,7 +46,6 @@ const LAVA_DROPS = '.o•';
 const LAVA_SPLASH = '~';
 const EMBER_STAR = ".'*•";
 const SMOKE_GLYPHS = '%&#@';
-const WARN_SPARK = ".'•";
 const RED = TELL_STYLE.red.color;
 const HOT = [4.6, 3.5, 1.5]; // white-yellow fire core
 const HOT_END = [2.2, 0.45, 0.06];
@@ -73,6 +64,27 @@ const SMOKE = [0.045, 0.04, 0.036];
 const ROCK_COL = [0.17, 0.14, 0.12];
 const NO_HIT = Object.freeze({ hitDone: true }); // a volley that never deals damage (visual shells)
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+// ground heat (every ground warning, ADR-052, docs/STYLE.md "Ground warnings"): a sparse, stable
+// fill of small ground glyphs over the footprint, coloured by heat (dark ember -> orange ->
+// white-orange as k runs 0 -> 1), denser and brighter toward impact, sparks from k 0.6, and the
+// true edge drawn only in the last flashLead s ('hot'). The scorch map's heat channel is stamped
+// too, so the soil and grass glyphs themselves glow. Nothing rotates or marches; no red, no '!'.
+const HEAT_GLYPHS = ".,:'"; // one char per point (a multi-char string would re-roll every frame)
+const HEAT_SPARK = ".'`";
+const HEAT_RIM = '·';
+const HEAT_DARK = [0.35, 0.08, 0.02];
+const HEAT_MID = [1.7, 0.55, 0.09];
+const HEAT_HOT = [3.1, 1.75, 0.6];
+const HEAT_EDGE = [3.8, 2.5, 1.0];
+const HEAT_LIGHT = [1, 0.55, 0.2];
+const HEAT_CELL = 0.7; // m^2 of footprint per fill glyph at full density
+const HEAT_MAX = 180; // fill glyphs per footprint (huge discs draw bigger, sparser glyphs)
+const HEAT_STAMP = 0.12; // s between scorch-heat stamps of one warning
+const GOLDEN = 2.399963229728653;
+const hash01 = (a, b) => {
+  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+};
 /** Pooled-light colour (0..1) from an HDR tell colour. */
 function lightColor(c) {
   const m = Math.max(c[0], c[1], c[2], 1e-3);
@@ -96,7 +108,21 @@ export class DragonFx {
     this._tongueAcc = 0;
     this._sparkAcc = 0;
     this._claw = [{ t: -9, x: 0, y: 0, z: 0 }, { t: -9, x: 0, y: 0, z: 0 }]; // clawTrail: the last toe position per foreleg
-    this._warnAcc = 0;
+    this._zoneHeat = { hold: 0, acc4: 0, heatT: 0, seed: 1, lastT: -9 }; // warnRing's heat state
+    // heat-spark samplers (bound once: no per-frame closures) and their footprint scratch
+    this._heatPt = { x: 0, z: 0 };
+    this._discX = this._discZ = this._discR = 0;
+    this._bandAx = this._bandAz = this._bandDx = this._bandDz = this._bandS0 = this._bandL = this._bandHw = 0;
+    this._discAt = (q) => {
+      const a = Math.random() * Math.PI * 2, rr = this._discR * Math.sqrt(Math.random());
+      q.x = this._discX + Math.cos(a) * rr;
+      q.z = this._discZ + Math.sin(a) * rr;
+    };
+    this._bandAt = (q) => {
+      const s = this._bandS0 + Math.random() * this._bandL, l = (Math.random() * 2 - 1) * this._bandHw;
+      q.x = this._bandAx + this._bandDx * s - this._bandDz * l;
+      q.z = this._bandAz + this._bandDz * s + this._bandDx * l;
+    };
     this.projectiles = Array.from({ length: 6 }, () => ({
       alive: false,
       p: new THREE.Vector3(),
@@ -107,14 +133,13 @@ export class DragonFx {
       trail: 0,
       hold: 0,
     }));
-    // reused spawn record for the per-frame warning ring (see warnRing)
-    this._ringSpawn = { x: 0, y: 0.4, z: 0, life: 0.02, size: 0.4, sizeEnd: 0.4, glyph: RING_DOT, color: [0, 0, 0], alpha: 1, alphaEnd: 1 };
     // fire hazards / spells (see the "fire" section): one reused spawn record + colour scratch
     this._r = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0.1, size: 0.4, sizeEnd: 0.4, glyph: '*', color: null, colorEnd: null, alpha: 1, alphaEnd: 0, drag: 0, gravity: 0, spin: 0, rot: 0, flicker: 0, stretch: 0 };
     this._c0 = [0, 0, 0];
     this._c1 = [0, 0, 0];
     this.skyLights = [];
     this.skyAcc = 0;
+    this.bolts = Array.from({ length: 20 }, () => ({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, age: 0, hold: 0, acc: 0 }));
     this._novaAcc = 0;
     this._novaRing = 0;
     this._gatherAcc = 0;
@@ -175,8 +200,10 @@ export class DragonFx {
     this._held.glint = this._held.warn = this._held.stars = this._held.flare = 0;
     this._coreAcc = this._tongueAcc = this._sparkAcc = 0;
     this._claw[0].t = this._claw[1].t = -9;
-    this._warnAcc = 0;
+    this._zoneHeat.hold = this._zoneHeat.acc4 = this._zoneHeat.heatT = 0;
+    this._zoneHeat.lastT = -9;
     this.skyLights.length = 0;
+    for (const b of this.bolts) b.alive = false;
     this.skyAcc = this._novaAcc = this._novaRing = this._gatherAcc = 0;
     this.d.hazards?.clear(); // (their lights were just killed with the rest)
     this.d.bullets?.clear();
@@ -329,13 +356,13 @@ export class DragonFx {
   }
 
   /** Embers leaking from the mouth / nostrils while the throat charges. */
-  mouthEmbers(dt, mouth, rate, fwd) {
+  mouthEmbers(dt, mouth, rate, fwd, up = 0) {
     this.emberAcc += dt * rate;
     while (this.emberAcc >= 1) {
       this.emberAcc -= 1;
       this._spawn(this.add, {
         x: mouth.x + rand(-0.15, 0.15) * S, y: mouth.y + rand(-0.1, 0.1) * S, z: mouth.z + rand(-0.15, 0.15) * S,
-        vx: (fwd?.x ?? 0) * 1.5 * S + rand(-0.6, 0.6), vy: rand(0.4, 1.6), vz: (fwd?.z ?? 0) * 1.5 * S + rand(-0.6, 0.6),
+        vx: (fwd?.x ?? 0) * 1.5 * S + rand(-0.6, 0.6), vy: rand(0.4, 1.6) + up * rand(0.6, 1.2), vz: (fwd?.z ?? 0) * 1.5 * S + rand(-0.6, 0.6),
         life: rand(0.4, 0.8), size: rand(0.18, 0.3) * S, sizeEnd: 0.06 * S, glyph: EMBER,
         color: [3.2, 1.2, 0.2], colorEnd: [0.6, 0.06, 0.01], alpha: 1, alphaEnd: 0, drag: 1.2, gravity: 1.2, flicker: 0.5,
       });
@@ -678,48 +705,20 @@ export class DragonFx {
 
   // ---------------------------------------------------------------- combat read-outs
   /**
-   * Red AoE warning: a ring of red glyphs over the danger area + sparse ground sparks inside it.
-   * Call every frame while it shows; `k` 0..1 ramps toward impact, `hot` = past the timing flash.
+   * A red AoE melee zone (a slam, a pounce, the sky dive's target): the ground heats up under it
+   * (heatDisc). Call every frame while it shows; `k` 0..1 ramps toward impact, `hot` = past the
+   * timing flash. One zone at a time (the AI's current hit); a zone not drawn for 0.25 s starts over
+   * with a new fill pattern.
    */
   warnRing(dt, x, z, r, k, hot = false) {
     if (!(r > 0) || !Number.isFinite(x + z)) return;
-    const c = TELL_STYLE.red.color;
-    const life = this._hold(this._held, 'warn', dt);
-    const pool = this.add;
-    if (life && pool) {
-      const n = Math.max(24, Math.min(72, Math.round((Math.PI * 2 * r) / 0.75)));
-      const t = this.game.time ?? 0;
-      const b = (0.55 + 0.45 * k) * (hot ? 1.35 : 1) * (0.85 + 0.15 * Math.sin(t * (hot ? 30 : 12)));
-      // up to 72 sprites every frame: one reused spawn record (the pool copies its fields)
-      const o = this._ringSpawn;
-      o.life = life;
-      o.color[0] = c[0] * b;
-      o.color[1] = c[1] * b;
-      o.color[2] = c[2] * b;
-      for (let i = 0; i < n; i++) {
-        const a = (i / n) * Math.PI * 2 + t * 0.5;
-        const mark = i % 6 === 0;
-        o.x = x + Math.cos(a) * r;
-        o.z = z + Math.sin(a) * r;
-        o.size = o.sizeEnd = mark ? 0.62 : 0.46;
-        o.glyph = mark ? RING_MARK : RING_DOT;
-        pool.spawn(o);
-      }
+    const st = this._zoneHeat, t = this.game.time ?? 0;
+    if (t - st.lastT > 0.25) {
+      st.seed = 1 + Math.random() * 97;
+      st.heatT = 0;
     }
-    // interior: faint sparks rising off the ground so the whole area reads as dangerous
-    this._warnAcc += dt * r * r * (0.9 + 1.6 * k);
-    let m = Math.min(24, Math.floor(this._warnAcc));
-    this._warnAcc -= m;
-    while (m-- > 0) {
-      const a = Math.random() * Math.PI * 2, rr = r * Math.sqrt(Math.random());
-      const b = 0.35 + 0.5 * k;
-      this._spawn(this.add, {
-        x: x + Math.cos(a) * rr, y: 0.25, z: z + Math.sin(a) * rr,
-        vx: 0, vy: rand(0.4, 1.2), vz: 0,
-        life: rand(0.25, 0.45), size: 0.3, sizeEnd: 0.12, glyph: ".'·",
-        color: [c[0] * b, c[1] * b, c[2] * b], alpha: 0.9, alphaEnd: 0, flicker: 0.4,
-      });
-    }
+    st.lastT = t;
+    this.heatDisc(this._hold(st, 'hold', dt), st, dt, x, z, r, k, hot, st.seed);
   }
 
   /**
@@ -810,26 +809,14 @@ export class DragonFx {
     this._light({ x, y: Math.max(0.8, y), z, color: lightColor(c), intensity: 2.2 * k, radius: 4 * S * k, life: 0.22, fade: 0.2 });
   }
 
-  /** Impact cue for AoE tells: the ring flares and throws its glyphs up. */
-  ringPulse(x, z, r, tell = 'red') {
-    if (!(r > 0) || !Number.isFinite(x + z)) return;
-    const c = tellStyle(tell).color;
-    const n = Math.max(24, Math.min(64, Math.round((Math.PI * 2 * r) / 0.9)));
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      this._spawn(this.add, {
-        x: x + Math.cos(a) * r, y: 0.4, z: z + Math.sin(a) * r,
-        vx: 0, vy: rand(2.5, 5), vz: 0,
-        life: rand(0.3, 0.45), size: 0.6, sizeEnd: 0.25, glyph: '!#',
-        color: [c[0] * 1.3, c[1] * 1.3, c[2] * 1.3], colorEnd: c, alpha: 1, alphaEnd: 0, drag: 3,
-      });
-    }
+  /** Impact cue for AoE tells (the zone's combat:flash): the heated ground flares (heatFlare). */
+  ringPulse(x, z, r) {
+    this.heatFlare(x, z, r);
   }
 
-  /** The roar's damaging shock ring: red glyphs racing out to the ring's edge. */
+  /** The roar's damaging shock ring: fire-orange ')' strokes racing out to the ring's edge (an effect, not a tell). */
   shockRing(x, z, r) {
     if (!(r > 0) || !Number.isFinite(x + z)) return;
-    const c = TELL_STYLE.red.color;
     const n = 48;
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
@@ -839,7 +826,7 @@ export class DragonFx {
         vx: ca * (r / 0.32), vy: 0, vz: sa * (r / 0.32),
         life: 0.34, size: 0.8, sizeEnd: 1.4, glyph: ')',
         rot: Math.atan2(-sa, ca), // ')' bulges outward on screen
-        color: [c[0] * 1.2, c[1] * 1.2, c[2] * 1.2], colorEnd: [c[0] * 0.3, c[1] * 0.2, c[2] * 0.2], alpha: 1, alphaEnd: 0, drag: 0.5,
+        color: [FLAME[0] * 1.1, FLAME[1] * 1.1, FLAME[2] * 1.1], colorEnd: [DARK[0], DARK[1], DARK[2]], alpha: 1, alphaEnd: 0, drag: 0.5,
       });
     }
   }
@@ -983,69 +970,214 @@ export class DragonFx {
     return this._light({ x, y: 1.2, z, color, intensity, radius, fadeIn: 0.12, fade: 0.35, flicker: 0.45 });
   }
 
-  /**
-   * A hazard's red ground warning: red dots with '!' marks on the ring of radius r, an inner ring
-   * closing in on the centre as the impact nears (k 0 -> 1: a countdown), a centre '+'. `hot` = past
-   * its timing flash (brighter, faster pulse). style 1 = a lava pillar (the inner ring rises as '^').
-   */
-  hzRing(life, x, z, r, k, hot, style = 0) {
-    const pool = this.add;
-    if (!life || !pool || !Number.isFinite(x + z + r)) return;
-    const t = this.game.time ?? 0;
-    const b = (0.55 + 0.55 * k) * (hot ? 1.45 : 1) * (0.85 + 0.15 * Math.sin(t * (hot ? 32 : 10 + 10 * k)));
-    const n = Math.max(14, Math.min(96, Math.round((Math.PI * 2 * r) / 0.9)));
-    const o = this._rec(x, 0.35, z, life, 0.5, 0.5, HZ_DOT);
-    o.alphaEnd = 1;
-    this._col(RED, b, RED, b);
-    const a0 = t * 0.45;
-    for (let i = 0; i < n; i++) {
-      const a = a0 + (i / n) * Math.PI * 2;
-      const mark = i % 4 === 0;
-      o.x = x + Math.cos(a) * r;
-      o.z = z + Math.sin(a) * r;
-      o.size = o.sizeEnd = mark ? 0.72 : 0.5;
-      o.glyph = mark ? HZ_MARK : HZ_DOT;
-      pool.spawn(o);
+  // ---------------------------------------------------------------- ground heat (ADR-052)
+  /** Fill colour of heat k (0 dark ember .. 0.6 orange .. 1 white-orange) x mul into _c0 / _c1; lava 0..1 tints it molten. */
+  _heatCol(k, mul, lava = 0) {
+    const c = this._c0, e = this._c1;
+    const lo = k < 0.6, u = lo ? k / 0.6 : (k - 0.6) / 0.4;
+    const A = lo ? HEAT_DARK : HEAT_MID, B = lo ? HEAT_MID : HEAT_HOT;
+    for (let i = 0; i < 3; i++) {
+      let v = A[i] + (B[i] - A[i]) * u;
+      if (lava > 0) v += (LAVA[i] * (0.4 + 0.6 * k) - v) * lava;
+      c[i] = e[i] = v * mul;
     }
-    const ri = r * (1 - k);
-    if (ri > 0.35) {
-      const m = Math.max(8, Math.round(n * (ri / r) * 0.7));
-      const kb = b * (style ? 0.45 : 0.6);
-      this._col(style ? LAVA : RED, kb, style ? LAVA : RED, kb);
-      o.glyph = style ? HZ_RISE : HZ_DOT;
-      o.size = o.sizeEnd = 0.42;
-      for (let i = 0; i < m; i++) {
-        const a = -a0 * 1.6 + (i / m) * Math.PI * 2;
-        o.x = x + Math.cos(a) * ri;
-        o.z = z + Math.sin(a) * ri;
-        pool.spawn(o);
-      }
-    }
-    this._col(RED, b * 0.9, RED, b * 0.9);
-    o.x = x;
-    o.z = z;
-    o.glyph = HZ_CROSS;
-    o.size = o.sizeEnd = 0.65 + 0.35 * k;
-    pool.spawn(o);
   }
 
-  /** A hazard's timing flash (combat:flash): its ring flares and throws red glyphs up, a red core, a red light. */
-  hazardFlash(x, z, r) {
-    if (!Number.isFinite(x + z + r)) return;
+  /** The scorch map's heat channel under a warning (no char): stamped every HEAT_STAMP s per state `st`. */
+  _heatStamp(st, dt, x, z, r, k) {
+    st.heatT = (st.heatT || 0) - dt;
+    if (st.heatT > 0) return;
+    st.heatT = HEAT_STAMP;
+    this.game.world?.scorch?.burnCircle?.(x, z, r, 0, 0.2 + 0.45 * k);
+  }
+
+  /** Rising sparks / heat shimmer once k passes 0.6: `rate` per s at k 1, at points the sampler `at` picks. */
+  _heatSparks(st, dt, k, rate, at) {
+    if (k <= 0.6) return;
+    st.acc4 = (st.acc4 || 0) + dt * rate * ((k - 0.6) / 0.4);
+    let m = Math.min(6, Math.floor(st.acc4));
+    st.acc4 -= m;
+    while (m-- > 0) {
+      at(this._heatPt);
+      const o = this._rec(this._heatPt.x, 0.15, this._heatPt.z, rand(0.35, 0.65), rand(0.22, 0.34), 0.06, HEAT_SPARK);
+      o.vx = rand(-0.25, 0.25);
+      o.vy = rand(0.8, 2.2);
+      o.vz = rand(-0.25, 0.25);
+      o.drag = 0.8;
+      o.flicker = 0.5;
+      this._col(HEAT_HOT, 0.55 + 0.4 * k, HEAT_DARK, 1);
+      this._spawn(this.add, o);
+    }
+  }
+
+  /**
+   * The ground heating up over a disc: a meteor, a lava pillar, a barrage shell, the nova, a melee
+   * slam zone. `life` from holdLife / _hold (0: last frame's copy still shows), `st` the warning's
+   * state ({ acc4, heatT }: a hazard record or _zoneHeat), k 0..1 toward impact, `hot` = the last
+   * flashLead s (the true edge is drawn), `seed` keeps the fill pattern stable for this warning.
+   * style 1 = a lava pillar (a molten tint, a few '^' when hot).
+   */
+  heatDisc(life, st, dt, x, z, r, k, hot, seed = 0, style = 0) {
+    if (!(r > 0) || !Number.isFinite(x + z + r)) return;
+    k = clamp01(k);
+    const pool = this.add;
+    const area = Math.PI * r * r;
+    const n = Math.max(8, Math.min(HEAT_MAX, Math.round(area / HEAT_CELL)));
+    const sp = Math.sqrt(area / n); // spacing between fill glyphs
+    if (life && pool) {
+      const t = this.game.time ?? 0;
+      const sz = 0.42 * Math.min(1.7, sp / Math.sqrt(HEAT_CELL));
+      const dens = 0.35 + 0.65 * k, alpha = 0.22 + 0.48 * k;
+      const lava = style === 1 ? 0.35 : 0;
+      const o = this._rec(x, 0.12, z, life, sz, sz, '.');
+      for (let i = 0; i < n; i++) {
+        const h1 = hash01(seed, i);
+        if (h1 > dens) continue; // the low-hash points show first: the fill thickens, it never reshuffles
+        const h2 = hash01(seed + 1.37, i), h3 = hash01(seed + 2.71, i);
+        const u = Math.sqrt((i + 0.5) / n);
+        const a = seed + i * GOLDEN; // sunflower spiral: even cover, no rings
+        const rr = Math.min(r * 0.97, r * u + (h2 - 0.5) * sp * 0.45);
+        o.x = x + Math.cos(a) * rr + (h3 - 0.5) * sp * 0.35;
+        o.z = z + Math.sin(a) * rr + (h2 - 0.5) * sp * 0.35;
+        const fl = 0.72 + 0.28 * Math.sin(t * (1.6 + 2.6 * h2) + 6.283 * h3);
+        this._heatCol(k * (0.82 + 0.18 * (1 - u)), 1, lava); // the middle runs a little hotter
+        o.alpha = o.alphaEnd = alpha * fl;
+        o.glyph = HEAT_GLYPHS[(h3 * 4) | 0];
+        pool.spawn(o);
+      }
+      if (hot) {
+        // the true edge, only now: a thin bright rim, steady (no march), a fast shimmer
+        const m = Math.max(16, Math.min(150, Math.round((Math.PI * 2 * r) / 0.6)));
+        const b = 0.85 + 0.15 * Math.sin(t * 30);
+        o.glyph = HEAT_RIM;
+        o.size = o.sizeEnd = 0.5;
+        o.alpha = o.alphaEnd = 0.9;
+        this._col(HEAT_EDGE, b, HEAT_EDGE, b);
+        for (let i = 0; i < m; i++) {
+          const a = seed + (i / m) * Math.PI * 2;
+          o.x = x + Math.cos(a) * r;
+          o.z = z + Math.sin(a) * r;
+          pool.spawn(o);
+        }
+        if (style === 1) {
+          // a pillar about to erupt: a few rising '^' where the crust is splitting
+          o.glyph = HZ_RISE;
+          o.size = o.sizeEnd = 0.55;
+          this._col(LAVA_HOT, 0.9 * b, LAVA_HOT, 0.9 * b);
+          for (let i = 0; i < 3; i++) {
+            const a = seed * 3 + i * 2.1, rr = r * (0.25 + 0.2 * i);
+            o.x = x + Math.cos(a) * rr;
+            o.z = z + Math.sin(a) * rr;
+            pool.spawn(o);
+          }
+        }
+      }
+    }
+    this._discX = x;
+    this._discZ = z;
+    this._discR = r;
+    this._heatSparks(st, dt, k, Math.min(40, area * 0.35), this._discAt);
+    this._heatStamp(st, dt, x, z, r, k);
+  }
+
+  /**
+   * The ground heating up along a band: from A along unit (dx, dz), the stretch [s0, s1] of half
+   * width hw (a burning pass's strip ahead of its front, a flame wall's line, a fire wheel's spokes).
+   * Points sit at fixed s steps, so a band that shrinks (a front eating it) never reshuffles.
+   * `front` >= 0: the stretch just past it runs hotter and denser (the fire is coming from there);
+   * the edges are drawn from s0 to `rimTo` while `hot`.
+   */
+  heatBand(life, st, dt, ax, az, dx, dz, s0, s1, hw, k, hot, seed = 0, front = -1, rimTo = s1, stamp = true) {
+    if (!(s1 > s0) || !Number.isFinite(ax + az + dx + dz + s0 + s1 + hw)) return;
+    k = clamp01(k);
+    const pool = this.add;
+    const qx = -dz, qz = dx;
+    const step = 0.9;
+    const lanes = Math.max(1, Math.round((2 * hw) / 1.15));
+    const lw = (2 * hw) / lanes;
+    if (life && pool) {
+      const t = this.game.time ?? 0;
+      const o = this._rec(0, 0.12, 0, life, 0.42, 0.42, '.');
+      let budget = 320;
+      for (let i = Math.ceil(s0 / step); i * step <= s1 && budget > 0; i++) {
+        const s = i * step;
+        const near = front >= 0 ? clamp01(1 - (s - front) / 7) : 0;
+        const kk = Math.min(1, k * (front >= 0 ? 0.8 : 1) + 0.45 * near);
+        const dens = 0.35 + 0.65 * kk, alpha = 0.22 + 0.48 * kk;
+        for (let j = 0; j < lanes; j++) {
+          const id = i * 7 + j;
+          if (hash01(seed, id) > dens) continue;
+          const h2 = hash01(seed + 1.37, id), h3 = hash01(seed + 2.71, id);
+          const ss = s + (h2 - 0.5) * step * 0.6, l = -hw + (j + 0.5) * lw + (h3 - 0.5) * lw * 0.6;
+          o.x = ax + dx * ss + qx * l;
+          o.z = az + dz * ss + qz * l;
+          const fl = 0.72 + 0.28 * Math.sin(t * (1.6 + 2.6 * h2) + 6.283 * h3);
+          this._heatCol(kk, 1);
+          o.alpha = o.alphaEnd = alpha * fl;
+          o.glyph = HEAT_GLYPHS[(h3 * 4) | 0];
+          pool.spawn(o);
+          budget--;
+        }
+      }
+      if (hot && rimTo > s0) {
+        const b = 0.85 + 0.15 * Math.sin(t * 30);
+        o.glyph = HEAT_RIM;
+        o.size = o.sizeEnd = 0.5;
+        o.alpha = o.alphaEnd = 0.9;
+        this._col(HEAT_EDGE, b, HEAT_EDGE, b);
+        for (let s = s0; s <= Math.min(s1, rimTo); s += 0.6) {
+          o.x = ax + dx * s + qx * hw;
+          o.z = az + dz * s + qz * hw;
+          pool.spawn(o);
+          o.x = ax + dx * s - qx * hw;
+          o.z = az + dz * s - qz * hw;
+          pool.spawn(o);
+        }
+      }
+    }
+    const L = s1 - s0;
+    this._bandAx = ax;
+    this._bandAz = az;
+    this._bandDx = dx;
+    this._bandDz = dz;
+    this._bandS0 = s0;
+    this._bandL = L;
+    this._bandHw = hw;
+    this._heatSparks(st, dt, k, Math.min(40, L * hw * 0.7), this._bandAt);
+    if (stamp) {
+      st.heatT = (st.heatT || 0) - dt;
+      if (st.heatT <= 0) {
+        st.heatT = HEAT_STAMP;
+        const sc = this.game.world?.scorch;
+        const m = Math.min(6, 1 + Math.floor(L / 6));
+        for (let i = 0; i < m; i++) {
+          const s = s0 + Math.random() * L;
+          sc?.burnCircle?.(ax + dx * s, az + dz * s, Math.max(1, hw * 1.1), 0, 0.2 + 0.45 * k);
+        }
+      }
+    }
+  }
+
+  /** A warning's timing flash (combat:flash): its heated ground flares, hot glyphs thrown up off the edge, a warm light. */
+  heatFlare(x, z, r) {
+    if (!(r > 0) || !Number.isFinite(x + z + r)) return;
     const add = this.add;
     const n = Math.max(14, Math.min(40, Math.round((Math.PI * 2 * r) / 0.9)));
     for (let i = 0; i < n; i++) {
       const a = (i / n) * Math.PI * 2;
-      const o = this._rec(x + Math.cos(a) * r, 0.4, z + Math.sin(a) * r, rand(0.25, 0.4), 0.6, 0.22, RED_GLYPHS);
-      o.vy = rand(2.5, 5);
+      const o = this._rec(x + Math.cos(a) * r, 0.25, z + Math.sin(a) * r, rand(0.25, 0.42), 0.5, 0.15, HEAT_SPARK);
+      o.vy = rand(2, 4.5);
       o.drag = 3;
-      this._col(RED, 1.35, RED, 1);
+      o.flicker = 0.3;
+      this._col(HEAT_EDGE, 1.1, HEAT_MID, 0.6);
       this._spawn(add, o);
     }
-    const o = this._rec(x, 0.9, z, 0.28, 1.5, 0.4, HZ_MARK);
-    this._col(RED, 1.6, RED, 1);
-    this._spawn(add, o);
-    this._light({ x, y: 1, z, color: lightColor(RED), intensity: 3, radius: 5 + r, life: 0.28, fade: 0.22 });
+    this._light({ x, y: 1, z, color: HEAT_LIGHT, intensity: 2.6, radius: 5 + r, life: 0.28, fade: 0.22 });
+  }
+
+  /** A hazard's timing flash (combat:flash): the heat flare at its edge. */
+  hazardFlash(x, z, r) {
+    this.heatFlare(x, z, r);
   }
 
   /** Before a lava pillar: the ground cracks glow and spit sparks, faster as the eruption nears. */
@@ -1065,12 +1197,13 @@ export class DragonFx {
 
   /**
    * A falling meteor at (x, y, z) moving along (vx, vy, vz): a white-hot core in an orange halo, a
-   * streak of '|' strokes laid along its screen-space motion, a fire trail, smoke, its own light.
+   * streak of '|' strokes laid along its screen-space motion, a fire trail, smoke, its own light
+   * (none when h.dark). `big`: true (a meteor), false (a barrage shell, 0.7) or a drawn scale.
    */
   meteor(life, h, dt, x, y, z, vx, vy, vz, big = true) {
     if (!Number.isFinite(x + y + z + vx + vy + vz)) return;
     const add = this.add;
-    const s = big ? 1 : 0.7;
+    const s = typeof big === 'number' ? big : big ? 1 : 0.7;
     const vl = Math.hypot(vx, vy, vz) || 1;
     if (life && add) {
       const o = this._rec(x, y, z, life, 1.5 * s, 1.5 * s, METEOR_CORE);
@@ -1096,7 +1229,7 @@ export class DragonFx {
         add.spawn(o);
       }
     }
-    h.acc += dt * 110 * s;
+    h.acc += dt * 110 * Math.min(1.5, s);
     let m = Math.min(10, Math.floor(h.acc));
     h.acc -= m;
     while (m-- > 0) {
@@ -1124,20 +1257,41 @@ export class DragonFx {
       this._col(SMOKE, 1, SMOKE, 1);
       this._spawn(this.alpha, o);
     }
-    if (!h.l0) h.l0 = this._light({ x, y, z, color: [1, 0.6, 0.25], intensity: 4.5, radius: 11, fade: 0.15, flicker: 0.3 });
+    if (!h.l0 && !h.dark) h.l0 = this._light({ x, y, z, color: [1, 0.6, 0.25], intensity: 4.5 * Math.min(1.6, s), radius: 11 * Math.min(1.6, s), fade: 0.15, flicker: 0.3 });
     h.l0?.set(x, Math.max(1, y), z);
   }
 
-  /** A meteor strikes: a white flash, a fire burst, flung rocks, a shock of ')' strokes, dust, scorch, a crater glow. */
+  /**
+   * A meteor strikes: a white flash, a fire burst, flung rocks, a shock of ')' strokes, dust, scorch,
+   * a crater glow. h.great (Armageddon's last one): the biggest impact in the fight.
+   */
   meteorImpact(h, x, z, r) {
     if (!Number.isFinite(x + z + r)) return;
     const add = this.add, g = this.game;
+    const gr = !!h.great;
     h.l0?.kill();
     h.l0 = null;
-    let o = this._rec(x, 0.8, z, 0.2, 3.4, 1.2, METEOR_CORE);
-    this._col(WHITE_HOT, 1.2, HOT, 0.6);
+    let o = this._rec(x, 0.8, z, gr ? 0.35 : 0.2, gr ? 7.5 : 3.4, 1.2, METEOR_CORE);
+    this._col(WHITE_HOT, gr ? 1.5 : 1.2, HOT, 0.6);
     this._spawn(add, o);
-    for (let i = 0; i < 44; i++) {
+    if (gr) {
+      // a second, slower shock and a column of fire thrown up out of the crater
+      this._shock(x, z, r * 0.5, r * 2.2, 0.6, 40, 0.8, FLAME, 1);
+      for (let i = 0; i < 40; i++) {
+        const a = Math.random() * Math.PI * 2, rr = r * 0.4 * Math.sqrt(Math.random());
+        o = this._rec(x + Math.cos(a) * rr, rand(0.3, 1.5), z + Math.sin(a) * rr, rand(0.6, 1.1), rand(1.2, 1.9), 0.3, FIRE_TALL);
+        o.vy = rand(10, 24);
+        o.vx = Math.cos(a) * rand(0.5, 3);
+        o.vz = Math.sin(a) * rand(0.5, 3);
+        o.gravity = -9;
+        o.drag = 0.8;
+        o.flicker = 0.3;
+        this._col(Math.random() < 0.4 ? HOT : FLAME, 1, DARK, 1);
+        this._spawn(add, o);
+      }
+      this._light({ x, y: 3, z, color: [1, 0.75, 0.45], intensity: 14, radius: 26, life: 0.7, fade: 0.6, flicker: 0.2 });
+    }
+    for (let i = 0; i < (gr ? 80 : 44); i++) {
       const a = Math.random() * Math.PI * 2, sp = rand(3, 12);
       o = this._rec(x, rand(0.2, 0.8), z, rand(0.35, 0.8), rand(0.5, 1.0), 0.12, FIRE);
       o.vx = Math.cos(a) * sp;
@@ -1172,7 +1326,7 @@ export class DragonFx {
     h.l1 = this._light({ x, y: 0.8, z, color: [1, 0.38, 0.08], intensity: 2.2, radius: 6, life: 1.3, fade: 1.0, flicker: 0.5 });
     const p = g.player?.position;
     const dist = p ? Math.hypot(p.x - x, p.z - z) : 99;
-    g.shake?.(dist < 8 ? 0.32 : dist < 16 ? 0.16 : 0.07);
+    g.shake?.(gr ? (dist < 16 ? 0.9 : 0.6) : dist < 8 ? 0.32 : dist < 16 ? 0.16 : 0.07);
   }
 
   /** A ring of ')' strokes racing out from r0 to r1 in T s (each stroke bulging outward on screen). */
@@ -1188,15 +1342,15 @@ export class DragonFx {
     }
   }
 
-  /** The meteor's crater smoulders: embers and small flames rising (k 1 -> 0). */
-  crater(h, dt, x, z, r, k) {
+  /** The meteor's crater smoulders: embers and small flames rising (k 1 -> 0); `burning`: it is on fire (contact ticks). */
+  crater(h, dt, x, z, r, k, burning = false) {
     if (k <= 0) return;
-    h.acc3 += dt * 45 * k;
-    let m = Math.min(5, Math.floor(h.acc3));
+    h.acc3 += dt * (burning ? 120 : 45) * k;
+    let m = Math.min(burning ? 8 : 5, Math.floor(h.acc3));
     h.acc3 -= m;
     while (m-- > 0) {
-      const a = Math.random() * Math.PI * 2, rr = r * 0.6 * Math.sqrt(Math.random());
-      const flame = Math.random() < 0.35;
+      const a = Math.random() * Math.PI * 2, rr = r * (burning ? 0.8 : 0.6) * Math.sqrt(Math.random());
+      const flame = Math.random() < (burning ? 0.65 : 0.35);
       const o = this._rec(x + Math.cos(a) * rr, 0.2, z + Math.sin(a) * rr, rand(0.4, 0.9), flame ? rand(0.4, 0.7) : rand(0.18, 0.3), 0.06, flame ? FIRE_LOW : EMBER);
       o.vx = rand(-0.4, 0.4);
       o.vy = flame ? rand(1, 2.4) : rand(1, 3.2);
@@ -1276,57 +1430,14 @@ export class DragonFx {
     this.explode(x, z, r, NO_HIT);
   }
 
-  /** Red warning ahead of a strip's fire front: dotted edges and '>' chevrons from f to its end. */
-  stripWarn(life, h, dt, f, k) {
-    const pool = this.add;
-    if (!life || !pool) return;
-    const t = this.game.time ?? 0;
-    const hw = h.w / 2, dx = h.dx, dz = h.dz, qx = -dz, qz = dx;
-    const o = this._rec(0, 0.35, 0, life, 0.5, 0.5, HZ_DOT);
-    o.alphaEnd = 1;
-    const rot = this._screenRot(dx, 0, dz);
-    const step = 0.9;
-    for (let i = Math.ceil(f / step); i * step <= h.len; i++) {
-      const s = i * step;
-      const near = clamp01(1 - (s - f) / 7);
-      const b = (0.55 + 0.45 * k + 0.6 * near) * (0.85 + 0.15 * Math.sin(t * 12 - s * 0.6));
-      this._col(RED, b, RED, b);
-      const cx = h.ax + dx * s, cz = h.az + dz * s;
-      o.glyph = i % 4 === 0 ? HZ_MARK : HZ_DOT;
-      o.rot = 0;
-      o.size = o.sizeEnd = i % 4 === 0 ? 0.7 : 0.5;
-      o.x = cx + qx * hw;
-      o.z = cz + qz * hw;
-      pool.spawn(o);
-      o.x = cx - qx * hw;
-      o.z = cz - qz * hw;
-      pool.spawn(o);
-      if (i % 2 === 0) {
-        // the stream's path: chevrons down the middle, pointing where the fire will run
-        o.glyph = CHEVRON;
-        o.rot = rot;
-        o.size = o.sizeEnd = 0.85;
-        o.x = cx;
-        o.z = cz;
-        pool.spawn(o);
-      }
-    }
-    // faint red sparks over the strip ahead of the front: the whole lane reads as dangerous
-    const L = h.len - f;
-    if (L > 0.5) {
-      h.acc4 += dt * Math.min(60, L * h.w * 0.5) * (0.6 + 0.8 * k);
-      let m = Math.min(10, Math.floor(h.acc4));
-      h.acc4 -= m;
-      while (m-- > 0) {
-        const s = f + Math.random() * L, l = (Math.random() * 2 - 1) * hw;
-        const p = this._rec(h.ax + dx * s + qx * l, 0.25, h.az + dz * s + qz * l, rand(0.25, 0.45), 0.32, 0.12, WARN_SPARK);
-        p.vy = rand(0.4, 1.2);
-        p.flicker = 0.4;
-        const bb = 0.35 + 0.5 * k;
-        this._col(RED, bb, RED, bb);
-        this._spawn(pool, p);
-      }
-    }
+  /**
+   * A strip's warning: the ground heats up from the fire front `f` to the strip's end, hottest just
+   * ahead of the front (no chevrons: the front shows the way). `hot` (ignition or the front within
+   * flashLead s): the band's edges for the stretch the front reaches in flashLead s.
+   */
+  stripWarn(life, h, dt, f, k, hot = false) {
+    const rimTo = f + h.speed * TUNING.flashLead;
+    this.heatBand(life, h, dt, h.ax, h.az, h.dx, h.dz, f, h.len, h.w / 2, k, hot, h.seed, f, rimTo);
   }
 
   /** Flames over a strip's burning stretch [b0, f]; the fresh front burns tallest and scorches as it runs. */
@@ -1384,40 +1495,67 @@ export class DragonFx {
     }
   }
 
-  /** Before a flame ring ignites: a hot red ring at r0 round the wyrm and a dim dotted limit at r1. */
-  ringWarn(life, h, k) {
+  /**
+   * Before a flame ring ignites: the ground heats up in a band round the wyrm's footprint where it
+   * will catch (r0 itself lies under the belly); `hot`: the band's outer edge. Its reach is not
+   * drawn: the ring itself shows it once lit.
+   */
+  ringWarn(life, h, dt, k, hot = false) {
+    k = clamp01(k);
+    const rw = Math.max(h.r0, 6.5), hw = 1.4;
     const pool = this.add;
-    if (!life || !pool) return;
-    const t = this.game.time ?? 0;
-    const o = this._rec(0, 0.35, 0, life, 0.5, 0.5, HZ_DOT);
-    o.alphaEnd = 1;
-    const b = (0.6 + 0.6 * k) * (0.85 + 0.15 * Math.sin(t * (10 + 14 * k)));
-    this._col(RED, b, RED, b);
-    // where it ignites: drawn round the body's footprint (r0 itself lies under the belly)
-    const rw = Math.max(h.r0, 6.5);
-    let n = Math.max(16, Math.min(64, Math.round((Math.PI * 2 * rw) / 0.8)));
-    for (let i = 0; i < n; i++) {
-      const a = t * 0.8 + (i / n) * Math.PI * 2;
-      o.x = h.x + Math.cos(a) * rw;
-      o.z = h.z + Math.sin(a) * rw;
-      o.glyph = i % 4 === 0 ? HZ_MARK : HZ_DOT;
-      o.size = o.sizeEnd = i % 4 === 0 ? 0.72 : 0.5;
-      pool.spawn(o);
+    if (life && pool) {
+      const t = this.game.time ?? 0;
+      const o = this._rec(0, 0.12, 0, life, 0.42, 0.42, '.');
+      const n = Math.max(16, Math.min(90, Math.round((Math.PI * 2 * rw) / 0.9)));
+      const dens = 0.35 + 0.65 * k, alpha = 0.22 + 0.48 * k;
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < 3; j++) {
+          const id = i * 7 + j;
+          if (hash01(h.seed, id) > dens) continue;
+          const h2 = hash01(h.seed + 1.37, id), h3 = hash01(h.seed + 2.71, id);
+          const a = ((i + (h2 - 0.5) * 0.6) / n) * Math.PI * 2;
+          const rr = rw - hw + ((j + 0.5) / 3) * 2 * hw + (h3 - 0.5) * 0.5;
+          o.x = h.x + Math.cos(a) * rr;
+          o.z = h.z + Math.sin(a) * rr;
+          const fl = 0.72 + 0.28 * Math.sin(t * (1.6 + 2.6 * h2) + 6.283 * h3);
+          this._heatCol(k, 1);
+          o.alpha = o.alphaEnd = alpha * fl;
+          o.glyph = HEAT_GLYPHS[(h3 * 4) | 0];
+          pool.spawn(o);
+        }
+      }
+      if (hot) {
+        const re = rw + hw, m = Math.max(24, Math.min(150, Math.round((Math.PI * 2 * re) / 0.6)));
+        const b = 0.85 + 0.15 * Math.sin(t * 30);
+        o.glyph = HEAT_RIM;
+        o.size = o.sizeEnd = 0.5;
+        o.alpha = o.alphaEnd = 0.9;
+        this._col(HEAT_EDGE, b, HEAT_EDGE, b);
+        for (let i = 0; i < m; i++) {
+          const a = (i / m) * Math.PI * 2;
+          o.x = h.x + Math.cos(a) * re;
+          o.z = h.z + Math.sin(a) * re;
+          pool.spawn(o);
+        }
+      }
     }
-    const kb = 0.4 + 0.4 * k;
-    this._col(RED, kb, RED, kb);
-    n = Math.max(24, Math.min(110, Math.round((Math.PI * 2 * h.r1) / 1.2)));
-    o.glyph = HZ_DOT;
-    o.size = o.sizeEnd = 0.45;
-    for (let i = 0; i < n; i++) {
-      const a = -t * 0.15 + (i / n) * Math.PI * 2;
-      o.x = h.x + Math.cos(a) * h.r1;
-      o.z = h.z + Math.sin(a) * h.r1;
-      pool.spawn(o);
+    this._discX = h.x;
+    this._discZ = h.z;
+    this._discR = rw + hw;
+    this._heatSparks(h, dt, k, 30, this._discAt);
+    h.heatT = (h.heatT || 0) - dt;
+    if (h.heatT <= 0) {
+      h.heatT = HEAT_STAMP;
+      const sc = this.game.world?.scorch;
+      for (let i = 0; i < 4; i++) {
+        const a = Math.random() * Math.PI * 2;
+        sc?.burnCircle?.(h.x + Math.cos(a) * rw, h.z + Math.sin(a) * rw, 1.8, 0, 0.2 + 0.45 * k);
+      }
     }
   }
 
-  /** The expanding ring of fire: a dense band of flames at r with a red leading edge; k fades it out. */
+  /** The expanding ring of fire: a dense band of flames at r with a hot leading edge; k fades it out. */
   ringFire(life, h, dt, r, k) {
     const add = this.add;
     if (!add || !(k > 0)) return;
@@ -1441,9 +1579,9 @@ export class DragonFx {
     if (life && k > 0.5) {
       const re = r + hw + 0.7;
       const n = Math.max(24, Math.min(110, Math.round((Math.PI * 2 * re) / 1.1)));
-      const o = this._rec(0, 0.3, 0, life, 0.45, 0.45, HZ_DOT);
+      const o = this._rec(0, 0.3, 0, life, 0.45, 0.45, HEAT_RIM);
       o.alphaEnd = 1;
-      this._col(RED, 1.1, RED, 1.1);
+      this._col(HEAT_EDGE, 0.8, HEAT_EDGE, 0.8);
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
         o.x = h.x + Math.cos(a) * re;
@@ -1462,40 +1600,16 @@ export class DragonFx {
     }
   }
 
-  /** Before a flame wall: a red line where it springs up, '>' chevrons down its corridor (the sweep). */
-  wallWarn(life, h, k) {
-    const pool = this.add;
-    if (!life || !pool) return;
-    const t = this.game.time ?? 0;
+  /**
+   * Before a flame wall: the ground heats up along the line where it springs up (no chevron field:
+   * the lit wall shows which way it goes); `hot`: the line's edges.
+   */
+  wallWarn(life, h, dt, k, hot = false) {
     const qx = -h.dz, qz = h.dx, half = h.len / 2;
-    const o = this._rec(0, 0.35, 0, life, 0.5, 0.5, HZ_DOT);
-    o.alphaEnd = 1;
-    const b = (0.6 + 0.6 * k) * (0.85 + 0.15 * Math.sin(t * (10 + 14 * k)));
-    this._col(RED, b, RED, b);
-    let i = 0;
-    for (let l = -half; l <= half; l += 0.9, i++) {
-      o.x = h.x + qx * l;
-      o.z = h.z + qz * l;
-      o.glyph = i % 4 === 0 ? HZ_MARK : HZ_DOT;
-      o.size = o.sizeEnd = i % 4 === 0 ? 0.75 : 0.5;
-      pool.spawn(o);
-    }
-    o.rot = this._screenRot(h.dx, 0, h.dz);
-    o.glyph = CHEVRON;
-    o.size = o.sizeEnd = 0.8;
-    const bb = 0.35 + 0.45 * k;
-    for (let s = 3; s <= h.dist; s += 4) {
-      const w = bb * (0.6 + 0.4 * Math.sin(t * 6 - s * 0.35));
-      this._col(RED, w, RED, w);
-      for (let l = -half + 3; l <= half - 3; l += 6) {
-        o.x = h.x + h.dx * s + qx * l;
-        o.z = h.z + h.dz * s + qz * l;
-        pool.spawn(o);
-      }
-    }
+    this.heatBand(life, h, dt, h.x - qx * half, h.z - qz * half, qx, qz, 0, h.len, h.w / 2, k, hot, h.seed);
   }
 
-  /** The sweeping wall at centre (cx, cz): tall flames along it (k fades it out), a red leading edge, scorch. */
+  /** The sweeping wall at centre (cx, cz): tall flames along it (k fades it out), a hot leading edge, scorch. */
   wallFire(life, h, dt, cx, cz, k) {
     const add = this.add;
     if (!add || !(k > 0)) return;
@@ -1517,9 +1631,9 @@ export class DragonFx {
       this._spawn(add, o);
     }
     if (life && k > 0.5) {
-      const o = this._rec(0, 0.3, 0, life, 0.45, 0.45, HZ_DOT);
+      const o = this._rec(0, 0.3, 0, life, 0.45, 0.45, HEAT_RIM);
       o.alphaEnd = 1;
-      this._col(RED, 1.1, RED, 1.1);
+      this._col(HEAT_EDGE, 0.8, HEAT_EDGE, 0.8);
       const ex = cx + h.dx * (hw + 0.8), ez = cz + h.dz * (hw + 0.8);
       for (let l = -half; l <= half; l += 1.1) {
         o.x = ex + qx * l;
@@ -1759,8 +1873,83 @@ export class DragonFx {
     this._light({ x, y: 2, z, color: [1, 0.6, 0.25], intensity: 9, radius: 16, life: 0.6, fade: 0.45 });
   }
 
+  /**
+   * One of Armageddon's salvo (visual only, ADR-053): a white-hot '@' bolt with a long orange trail
+   * shot up out of the jaws; it flies on until it leaves the top of the view.
+   */
+  launchBolt(x, y, z, vx, vy, vz) {
+    if (!Number.isFinite(x + y + z + vx + vy + vz)) return;
+    let b = null;
+    for (const c of this.bolts) if (!c.alive) {
+      b = c;
+      break;
+    }
+    if (!b) return;
+    b.alive = true;
+    b.x = x;
+    b.y = y;
+    b.z = z;
+    b.vx = vx;
+    b.vy = vy;
+    b.vz = vz;
+    b.age = 0;
+    b.hold = 0;
+    b.acc = 0;
+    const o = this._rec(x, y, z, 0.25, 2.2, 0.5, METEOR_HALO);
+    this._col(WHITE_HOT, 1, FLAME, 0.6);
+    this._spawn(this.add, o);
+  }
+
+  _updateBolts(dt) {
+    const add = this.add;
+    for (const b of this.bolts) {
+      if (!b.alive) continue;
+      b.age += dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.z += b.vz * dt;
+      if (b.age > 1.6 || b.y > 80 || !Number.isFinite(b.x + b.y + b.z)) {
+        b.alive = false;
+        continue;
+      }
+      const life = this._hold(b, 'hold', dt);
+      if (life && add) {
+        const o = this._rec(b.x, b.y, b.z, life, 1.3, 1.3, METEOR_CORE);
+        o.alphaEnd = 1;
+        this._col(WHITE_HOT, 1.2, WHITE_HOT, 1.2);
+        add.spawn(o);
+        o.glyph = STREAK;
+        o.rot = this._screenRot(b.vx, b.vy, b.vz, true);
+        o.stretch = 2.6;
+        const vl = Math.hypot(b.vx, b.vy, b.vz) || 1;
+        for (let i = 1; i <= 4; i++) {
+          const back = i * 1.5;
+          o.x = b.x - (b.vx / vl) * back;
+          o.y = b.y - (b.vy / vl) * back;
+          o.z = b.z - (b.vz / vl) * back;
+          o.size = o.sizeEnd = 1.2 - i * 0.18;
+          this._col(i === 1 ? HOT : FLAME, 1.25 - i * 0.2, FLAME, 1);
+          add.spawn(o);
+        }
+      }
+      b.acc += dt * 50;
+      while (b.acc >= 1) {
+        b.acc -= 1;
+        const o = this._rec(b.x + rand(-0.2, 0.2), b.y - rand(0, 1.5), b.z + rand(-0.2, 0.2), rand(0.35, 0.6), rand(0.7, 1.1), 0.15, FIRE);
+        o.vx = rand(-0.8, 0.8);
+        o.vy = rand(-2, 1);
+        o.vz = rand(-0.8, 0.8);
+        o.drag = 2;
+        o.flicker = 0.3;
+        this._col(Math.random() < 0.4 ? HOT : FLAME, 1, DARK, 1);
+        this._spawn(add, o);
+      }
+    }
+  }
+
   update(dt) {
     this._updateProjectiles(dt);
+    this._updateBolts(dt);
     this._pruneLights();
   }
 }

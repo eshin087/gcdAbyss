@@ -13,7 +13,7 @@ const REST_SPREAD = TUNING.rest.spread;
 //   beats(d, a)        -> tell beats (see beat()): one per hit; the runner emits combat:tell at the
 //                         hit's windup start, combat:flash + an in-world flash flashLead s before
 //                         impact, and arms `a.cur` so strikes carry the hit's tell data
-//   zone(d, a, out)    -> optional AoE centre (written to out) + radius: red tells draw a ground ring
+//   zone(d, a, out)    -> optional AoE centre (written to out) + radius: red tells heat the ground there
 //   weight(d, s)       -> selection weight given the sensed player (0 = unusable)
 //   start(d, a)        -> once, before the first phase
 //   enter(d, a, phase) -> on every phase change
@@ -1304,7 +1304,7 @@ export const PHASE3_ROAR = makeRoar('phase3', 3);
 //   endActive(d, a, h)       the active just ended (slams that land at the end: stomp, hop)
 //   recover(d, a, h, k, dt)  blended into the next hit's windup (first half), or the string's recovery
 //   hit(d, a, h, stage, k, dt)   after the rig, every frame of the hit (stage windup / active / recovery)
-//   zone(d, a, h, out)       red AoE ring (centre in out, returns the radius)
+//   zone(d, a, h, out)       red AoE zone, heated ground (centre in out, returns the radius)
 //   noBreakActive   a posture break / stagger waits until this hit's active is over (mid-air hop)
 // A parried hit that is not the last one does not cancel the string (Dragon.onParried: the deflect
 // chain); the last one recoils the wyrm.

@@ -1,7 +1,8 @@
 import { el, num } from './dom.js';
 
 // Short combat call-outs: world-anchored pop-ups over the player's head (PARRY / DEFLECT /
-// GHOSTEP / GUARD BROKEN / BLOCK, "DEFLECT ×N" for a deflect chain, EXECUTION), floating damage
+// GHOSTEP / GUARD BROKEN / BLOCK, "DEFLECT ×N" for a deflect chain, EXECUTION, RETURN for a
+// perfectly parried bullet sent back at the wyrm), floating damage
 // numbers at the hit point (crits read "CRIT 123"), and a small mid-screen "POSTURE BROKEN"
 // banner. Pooled DOM nodes, animated from update(realDt) on real time so they stay readable during
 // Ghostep slow-mo; only transform and opacity are written per frame, and only for live items.
@@ -18,6 +19,7 @@ const KINDS = {
   // a deflect chain: the parry call-out of that blow turns into "DEFLECT ×N" (styled as deflect)
   chain: { text: 'DEFLECT', life: 1.15, rise: 34, pop: 1.5, cls: 'deflect' },
   exec: { text: 'EXECUTION', life: 1.4, rise: 30, pop: 1.6, cls: 'deflect' },
+  ret: { text: 'RETURN', life: 1.0, rise: 34, pop: 1.5, cls: 'return' },
   // a duelist's guard turned the hero's strike (dragon:guard; the Ash Disciple)
   guard: { text: 'GUARDED', life: 0.7, rise: 16, pop: 1.15 },
 };

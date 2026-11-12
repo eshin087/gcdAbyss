@@ -18,8 +18,11 @@
 // has ended (holdFlash).
 //
 // A deflected bullet flies back to the wyrm's head and adds posture; it never interrupts the wyrm
-// (dragon.onParried is for its own blows). The field is cleared on phase changes, death, reset, and
-// fizzles when the wyrm's posture breaks.
+// (dragon.onParried is for its own blows). A PERFECT parry (player.deflect.perfect: pressed within
+// DEFENSE.perfectParryWindow, ADR-051) returns it instead: a bigger, faster shot that lands on the
+// head for the kind's returnDamage (dragon.takeHit: phase gates and death as for a sword hit) and
+// returnPosture, flinches the head and emits dragon:returned; it never interrupts either. The field
+// is cleared on phase changes, death, reset, and fizzles when the wyrm's posture breaks.
 //
 // No per-frame allocations (pooled records, reused hit record; event payloads only when a cue
 // fires); never throws out of update(): a failure logs once and clears the field.
@@ -48,7 +51,7 @@ function record(slot) {
     cruise: 0, turn: 0, homeAt: 0, homing: false,
     wait: 0, launch: 0, launched: true, born: 0,
     r: 0.3, t: 0, life: 4, arm: 0, group: -1,
-    cued: false, lead: false, dud: false, deflected: false, defT: 0,
+    cued: false, lead: false, dud: false, deflected: false, returned: false, defT: 0,
     cueAt: Infinity, // bullet time (b.t) of the impact its cue announced; Infinity: none announced
     hold: 0, acc: 0, seed: 0,
   };
@@ -60,7 +63,8 @@ export class Bullets {
     this.pool = [];
     for (let i = 0; i < MAX; i++) this.pool.push(record(i));
     this.groups = [];
-    for (let i = 0; i < MAX_GROUPS; i++) this.groups.push({ hits: 0, max: 99 });
+    // hits / max: the pattern's hit cap; ret / retMax: the HP its perfect-parry returns may deal
+    for (let i = 0; i < MAX_GROUPS; i++) this.groups.push({ hits: 0, max: 99, ret: 0, retMax: Infinity });
     this.time = 0;
     this.live = 0;
     this._cursor = 0;
@@ -79,13 +83,21 @@ export class Bullets {
       damage: 0, burn: 0, knockback: 0, kind: 'fire', tell: TELL.NORMAL, parryable: true, blockable: true,
       plunge: false, perfect: false, bullet: true, attack: '', from: { x: 0, z: 0 }, point: { x: 0, y: 0, z: 0 },
     };
+    // a returned shot's blow on the wyrm (dragon.takeHit copies what it keeps)
+    this._ret = { damage: 0, part: 'head', point: { x: 0, y: 0, z: 0 }, dir: { x: 0, z: 1 }, heavy: false, exact: true, posture: 0 };
     this.wheel = {
       on: false, lit: false, attack: 'fireWheel', x: 0, z: 0, n: 4, ang: 0, dir: 1, u: 0, t: 0, fade: 1,
       warn: 0, warn0: 1, dur: 4, speed: 1, r0: 3, r1: 26, width: 1, damage: 0, burn: 0, knockback: 0,
-      hits: 0, max: 2, cd: 0, cueT: NEVER, acc: 0, scorchT: 0, lightT: 0, hold: 0,
+      hits: 0, max: 2, cd: 0, cueT: NEVER, acc: 0, acc4: 0, heatT: 0, scorchT: 0, lightT: 0, hold: 0,
       tt: Infinity, // s until the next spoke reaches the hero (Infinity: none coming)
       headline: false, // the first crossing is announced by the attack's headline beat
+      // spoke i lies at ang + offs[i]. follow: the spokes are tongues of a breath (the Scouring
+      // breath, ADR-050): the attack sets origin, ang and the turn rate every frame (aimWheel);
+      // otherwise the wheel turns itself (speed, one reversal) with spokes evenly round
+      offs: new Float64Array(8), follow: false, om: 0, px: 0, pz: 0, // px / pz: the pivot it turns about
     };
+    this._ttA = 0; // the spoke angle / radius of the last _wheelTti() touch (the cue's glint)
+    this._ttR = 0;
   }
 
   get K() {
@@ -133,7 +145,7 @@ export class Bullets {
     b.life = life > 0 ? life : spec.life ?? 4;
     b.arm = K.arm;
     b.group = group;
-    b.cued = b.lead = b.dud = b.deflected = false;
+    b.cued = b.lead = b.dud = b.deflected = b.returned = false;
     b.cueAt = Infinity;
     b.defT = 0;
     b.hold = 0;
@@ -143,8 +155,12 @@ export class Bullets {
     return b;
   }
 
-  /** n embers burst out of a point, hang in the air and fly at the hero one after another. */
+  /**
+   * n embers burst out of a point (a slam's fire on the ground: they rise out of a puff of flame),
+   * hang in the air and fly at the hero one after another.
+   */
   burst(attack, x, y, z, n, wait, stagger, speed, group = -1) {
+    BFX.muzzle(this.d.fx, x, y, z, 0, 0, 12, false);
     for (let i = 0; i < n; i++) {
       const b = this.spawn(BULLET.EMBER, attack, x, y, z, Math.random() * TAU, 2.2 + Math.random() * 1.2, group, 0);
       if (!b) return;
@@ -158,10 +174,14 @@ export class Bullets {
   }
 
   /** A hit budget for one pattern: its bullets stop hurting after `max` hits. Returns the group id. */
-  group(max) {
+  /** A hit budget for one pattern; `retMax`: the HP its returned shots may deal (TUNING.bullets.returnBudget). */
+  group(max, retMax = this.K?.returnBudget ?? Infinity) {
     const i = this._gi++ % MAX_GROUPS;
-    this.groups[i].hits = 0;
-    this.groups[i].max = max > 0 ? max : 99;
+    const g = this.groups[i];
+    g.hits = 0;
+    g.max = max > 0 ? max : 99;
+    g.ret = 0;
+    g.retMax = retMax >= 0 ? retMax : Infinity;
     return i;
   }
 
@@ -350,7 +370,11 @@ export class Bullets {
   }
 
   // ---------------------------------------------------------------- the wheel
-  /** o: { attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn, knockback, max } */
+  /**
+   * o: { attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn, knockback, max,
+   * offs? } — `offs` (n angles off `ang`, n <= 8): the spokes are a breath's tongues and follow the
+   * attack's aimWheel(); without it n spokes evenly round turn by themselves.
+   */
   startWheel(o) {
     const w = this.wheel;
     if (!Number.isFinite(o.x + o.z + o.ang + o.warn + o.dur)) return;
@@ -359,7 +383,10 @@ export class Bullets {
     w.attack = o.attack ?? 'fireWheel';
     w.x = o.x;
     w.z = o.z;
-    w.n = Math.max(2, o.n | 0);
+    w.follow = Array.isArray(o.offs) && o.offs.length > 0;
+    w.n = w.follow ? Math.min(8, o.offs.length) : clamp(o.n | 0, 2, 8);
+    for (let i = 0; i < w.n; i++) w.offs[i] = w.follow ? Number(o.offs[i]) || 0 : (i * TAU) / w.n;
+    w.om = 0;
     w.ang = o.ang;
     w.dir = o.dir < 0 ? -1 : 1;
     w.u = 0;
@@ -389,6 +416,54 @@ export class Bullets {
     this.wheel.on = false;
   }
 
+  /**
+   * A following wheel (offs): its root (x, z), the aim its tongues hang off, that aim's turn rate
+   * (rad/s) and the pivot (px, pz) the root swings round with it (the wyrm's body: the mouth orbits).
+   */
+  aimWheel(x, z, ang, om = 0, px = x, pz = z) {
+    const w = this.wheel;
+    if (!w.on || !w.follow || !Number.isFinite(x + z + ang)) return;
+    w.x = x;
+    w.z = z;
+    w.ang = ang;
+    w.om = Number.isFinite(om) ? om : 0;
+    w.px = Number.isFinite(px) ? px : x;
+    w.pz = Number.isFinite(pz) ? pz : z;
+  }
+
+  /**
+   * Seconds until a spoke first touches the hero (Infinity: not within 2.5 s): the wheel stepped
+   * forward with its spokes turning at `om` and its root swinging round the pivot with them, the hero
+   * on his sensed velocity. A breath's root orbits with the mouth, so the bearing of a close hero
+   * from it changes faster than any fixed-origin estimate (that cue came 0.07 s before the touch).
+   */
+  _wheelTti(w, om, hx, hz, hr) {
+    const v = this.d.sense?.vel;
+    const vx = Number.isFinite(v?.x) ? v.x : 0, vz = Number.isFinite(v?.z) ? v.z : 0;
+    const px = w.follow ? w.px : w.x, pz = w.follow ? w.pz : w.z;
+    const ox0 = w.x - px, oz0 = w.z - pz;
+    let tau = 0;
+    for (let s = 0; s < 80; s++) {
+      tau += s < 36 ? 1 / 60 : 1 / 20;
+      if (tau > 2.5) break;
+      const da = om * tau, c = Math.cos(da), sn = Math.sin(da);
+      const ox = px + ox0 * c + oz0 * sn, oz = pz - ox0 * sn + oz0 * c;
+      const dx = hx + vx * tau - ox, dz = hz + vz * tau - oz;
+      const r = Math.hypot(dx, dz);
+      if (r < w.r0 - hr || r > w.r1 || r < 0.5) continue;
+      const th = Math.atan2(dx, dz), half = Math.asin(Math.min(1, (w.width / 2 + hr / 2) / r));
+      for (let i = 0; i < w.n; i++) {
+        const a = w.ang + da + w.offs[i];
+        if (Math.abs(angleDiff(a, th)) <= half) {
+          this._ttA = a;
+          this._ttR = r;
+          return tau;
+        }
+      }
+    }
+    return Infinity;
+  }
+
   _wheel(dt, p, hr) {
     const w = this.wheel, d = this.d, fx = d.fx;
     w.tt = Infinity;
@@ -411,10 +486,14 @@ export class Bullets {
       w.on = false;
       return;
     }
-    const rev = 0.55 * w.dur;
     w.fade = 1 - smoothstep(w.dur - 0.4, w.dur, w.u);
-    const om = w.dir * w.speed * smoothstep(0, 0.5, w.u) * (1 - 2 * smoothstep(rev - 0.6, rev + 0.6, w.u)) * w.fade;
-    w.ang += om * dt;
+    let om;
+    if (w.follow) om = w.om; // (the attack turns the tongues: aimWheel)
+    else {
+      const rev = 0.55 * w.dur;
+      om = w.dir * w.speed * smoothstep(0, 0.5, w.u) * (1 - 2 * smoothstep(rev - 0.6, rev + 0.6, w.u)) * w.fade;
+      w.ang += om * dt;
+    }
     BFX.wheelLive(fx, w, dt, om, hx, hz);
     w.cd -= dt;
     if (!p || !Number.isFinite(hx + hz)) return;
@@ -422,9 +501,12 @@ export class Bullets {
     const r = Math.hypot(dx, dz);
     if (r < w.r0 - hr || r > w.r1 || r < 0.5) return;
     const th = Math.atan2(dx, dz);
-    const seg = TAU / w.n;
-    let dl = angleDiff(w.ang, th); // signed angle from the nearest spoke to the hero
-    dl -= Math.round(dl / seg) * seg;
+    // the spoke nearest the hero: dl = signed angle from it to him
+    let dl = Infinity;
+    for (let i = 0; i < w.n; i++) {
+      const di = angleDiff(w.ang + w.offs[i], th);
+      if (Math.abs(di) < Math.abs(dl)) dl = di;
+    }
     const half = Math.asin(Math.min(1, (w.width / 2 + hr / 2) / r));
     if (w.u > 0.15 && w.fade > 0.5 && w.hits < w.max && w.cd <= 0 && Math.abs(dl) <= half) {
       const h = this._hit;
@@ -449,20 +531,15 @@ export class Bullets {
       } else w.cd = res === RESULT.DODGED || res === RESULT.PERFECT ? 0.5 : 0.3;
       return;
     }
-    // the spoke's own cue: time until the nearest approaching spoke edge reaches the hero
-    const v = d.sense?.vel;
-    const wh = v && Number.isFinite(v.x + v.z) ? (dz * v.x - dx * v.z) / (r * r) : 0;
-    const rel = wh - om; // d(dl)/dt
-    if (Math.abs(rel) < 0.05) return;
-    const target = rel > 0 ? (dl < -half ? -half : seg - half) : dl > half ? half : -seg + half;
-    const tt = (target - dl) / rel;
+    // the spoke's own cue: time until a spoke next touches the hero (stepped forward, _wheelTti)
+    const tt = this._wheelTti(w, om, hx, hz, hr);
+    if (!Number.isFinite(tt)) return;
     w.tt = tt;
     if (w.headline || w.hits >= w.max || w.cd > TUNING.flashLead || this.time - w.cueT < 0.4) return;
     if (tt >= 0.27 && tt <= TUNING.flashLead + 0.04) {
       w.cueT = this.time;
-      const near = Math.abs(target) <= half + 1e-6; // the spoke beside him, else the next one round
-      const a = th - dl + (near ? 0 : rel > 0 ? seg : -seg);
-      const gx = w.x + Math.sin(a) * r, gz = w.z + Math.cos(a) * r;
+      const a = this._ttA, rr = this._ttR;
+      const gx = w.x + Math.sin(a) * rr, gz = w.z + Math.cos(a) * rr;
       d.emit('combat:tell', { source: 'dragon', attack: w.attack, tell: TELL.RED, impactIn: tt, x: hx, z: hz, hazard: true, bullet: true });
       d.emit('combat:flash', { source: 'dragon', attack: w.attack, tell: TELL.RED, x: gx, y: 1.2, z: gz, hazard: true, bullet: true });
       BFX.cueGlint(fx, gx, 1.4, gz, TELL.RED);
@@ -536,7 +613,10 @@ export class Bullets {
       b.pz = b.z;
       if (b.deflected) {
         this._ricochet(b, dt);
-        if (b.alive) BFX.drawBullet(fx, b, dt);
+        if (b.alive) {
+          if (b.returned) BFX.drawReturned(fx, b, dt, K.returnSize);
+          else BFX.drawBullet(fx, b, dt);
+        }
         continue;
       }
       if (!b.launched) {
@@ -663,18 +743,53 @@ export class Bullets {
     }
     const dx = head.x - b.x, dy = head.y - b.y, dz = head.z - b.z;
     const l = Math.hypot(dx, dy, dz);
-    const step = K.ricochet * dt;
+    const sp = b.returned ? K.returnSpeed : K.ricochet;
+    const step = sp * dt;
     if (l <= step + 1) {
-      BFX.burst(d.fx, head.x, head.y, head.z, b.kind);
-      d.flash = Math.max(d.flash || 0, 0.3);
+      if (b.returned) this._land(b, head);
+      else {
+        BFX.burst(d.fx, head.x, head.y, head.z, b.kind);
+        d.flash = Math.max(d.flash || 0, 0.3);
+      }
       this._kill(b);
       return;
     }
-    b.vx = (dx / l) * K.ricochet;
-    b.vz = (dz / l) * K.ricochet;
+    b.vx = (dx / l) * sp;
+    b.vz = (dz / l) * sp;
     b.x += (dx / l) * step;
     b.y += (dy / l) * step;
     b.z += (dz / l) * step;
+  }
+
+  /**
+   * A returned shot reaches the head: the kind's returnDamage through dragon.takeHit (final, part
+   * head: the phase gate holds, it may kill) with returnPosture instead of the weapon gain, a head
+   * flinch (visual), a burst, a small shake; 'dragon:returned' { kind, damage, x, y, z }. The wyrm's
+   * action goes on (takeHit never interrupts it).
+   */
+  _land(b, head) {
+    const d = this.d, K = this.K, spec = K[KEYS[b.kind]];
+    BFX.returnBurst(d.fx, head.x, head.y, head.z, b.kind);
+    const o = this._ret;
+    o.damage = spec?.returnDamage ?? 0;
+    o.posture = spec?.returnPosture ?? 0;
+    o.heavy = b.kind === BULLET.WISP;
+    o.point.x = head.x;
+    o.point.y = head.y;
+    o.point.z = head.z;
+    const sp = Math.hypot(b.vx, b.vz) || 1;
+    o.dir.x = b.vx / sp;
+    o.dir.z = b.vz / sp;
+    let dmg = 0;
+    try {
+      dmg = d.takeHit?.(o) ?? 0;
+    } catch (err) {
+      console.error('[dragon] returned shot takeHit failed', err);
+    }
+    d.flinchHead = true;
+    d.flash = Math.max(d.flash || 0, 0.7);
+    d.game.shake?.(b.kind === BULLET.WISP ? 0.18 : 0.12);
+    if (dmg > 0) d.emit('dragon:returned', { kind: b.kind, damage: dmg, x: head.x, y: head.y, z: head.z });
   }
 
   _touch(b, p) {
@@ -709,7 +824,7 @@ export class Bullets {
     h.point.y = b.y;
     h.point.z = b.z;
     const r = d.hitPlayer(h, null);
-    if (r === RESULT.PARRIED) this._deflect(b, spec, p);
+    if (r === RESULT.PARRIED) this._deflect(b, spec, p, !!d.game.player?.deflect?.perfect);
     else if (r === RESULT.HIT) {
       BFX.burst(fx, b.x, b.y, b.z, b.kind);
       if (grp) grp.hits++;
@@ -725,15 +840,27 @@ export class Bullets {
     } else b.arm = b.t + 0.3;
   }
 
-  _deflect(b, spec, p) {
+  /**
+   * A parried bullet flies back to the head. Normal: the kind's posture now, no damage. `perfect`
+   * (an ember / wisp parried within DEFENSE.perfectParryWindow): it is RETURNED, and its damage and
+   * returnPosture land with it (_land). Only the struck bullet comes back: the clump it opens the
+   * shield for is popped as usual.
+   */
+  _deflect(b, spec, p, perfect = false) {
     const d = this.d, fx = d.fx, K = this.K;
+    const grp = b.group >= 0 ? this.groups[b.group] : null;
     b.deflected = true;
+    // a pattern gives back at most its group's return budget (a well-played pattern returns <= ~8 %
+    // of a phase's HP): past it a perfect parry is a plain deflect
+    b.returned = !!perfect && spec.returnDamage > 0 && (!grp || grp.ret + spec.returnDamage <= grp.retMax + 1e-6);
+    if (b.returned && grp) grp.ret += spec.returnDamage;
     b.defT = 0;
     b.lead = false;
     b.y0 = b.yH = b.y;
-    d.addPosture?.(spec.posture ?? 0);
+    if (!b.returned) d.addPosture?.(spec.posture ?? 0);
     BFX.deflectSpark(fx, b.x, b.y, b.z, b.kind);
-    d.emit('dragon:parried', { attack: b.attack, tell: b.tell, hit: 0, last: false, bullet: true });
+    if (b.returned) BFX.returnLaunch(fx, b.x, b.y, b.z);
+    d.emit('dragon:parried', { attack: b.attack, tell: b.tell, hit: 0, last: false, bullet: true, perfect: !!perfect });
     this._shield = K.cueGap;
     // the clash bursts the small bullets round the hero and the ones about to land
     const pop2 = K.pop * K.pop;

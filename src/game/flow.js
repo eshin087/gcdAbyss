@@ -139,6 +139,11 @@ export class GameFlow {
       this.stats.damageDealt += finite(d?.damage);
       this.stats.hits++;
     });
+    // a perfectly parried bullet's return landing on the head (ADR-051) is the hero's damage too
+    ev?.on('dragon:returned', (d) => {
+      this.stats.damageDealt += finite(d?.damage);
+      this.stats.hits++;
+    });
     ev?.on('player:dodge', () => this.stats.dodges++);
     ev?.on('player:parry', () => this.stats.parries++);
     ev?.on('player:block', () => this.stats.blocks++);
