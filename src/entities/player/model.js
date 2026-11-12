@@ -123,25 +123,35 @@ export const LEAN = { frac: 0.5, max: (32 * Math.PI) / 180 };
  * (DIM.bladeTip 1.5 + REACH.tipExt 0.4) is covered by the swing crescent.
  */
 export const HERO_SCALE = 1.2;
+/**
+ * The PLAYER's drawn size: 90 % of HERO_SCALE (Session 21, ADR-064, owner: "make the size the same as
+ * the new boss"). The Ash Disciple is built on the same skeleton and drawn at HERO_SCALE, so standing
+ * side by side the two were the same height; in a fight the hero is the nearer of the two to the
+ * camera, and with his hood and cloak he read a size bigger. At 90 % they read alike at the fight
+ * camera (side by side he is a little shorter). Visual only, like HERO_SCALE: the gameplay body, the
+ * hits and the reach are unchanged (Player.unlean divides it out).
+ */
+export const PLAYER_SCALE = HERO_SCALE * 0.9;
 /** The blade core's unlit colour up close (player.js lifts it with distance). */
 export const BLADE_BASE = [0.05, 0.1, 0.2];
 
 /**
- * Make `root` compose its matrix as T · lean · R · HERO_SCALE while `lean.on` (drawing, FX, the
- * sword sweep), or the plain T · R while it is off: the animator runs with it off, so its IK, ground
- * clamps and coat springs work on the upright 1.85 m body in metres. Returns the live lean
- * { k, dx, dz, on }: the drawn body shifts by k · height along the horizontal unit vector (dx, dz).
+ * Make `root` compose its matrix as T · lean · R · `scale` (the drawn size: HERO_SCALE, the player's
+ * PLAYER_SCALE) while `lean.on` (drawing, FX, the sword sweep), or the plain T · R while it is off: the
+ * animator runs with it off, so its IK, ground clamps and coat springs work on the upright 1.85 m
+ * body in metres. Returns the live lean { k, dx, dz, on, scale }: the drawn body shifts by k · height
+ * along the horizontal unit vector (dx, dz).
  */
-export function installLean(root) {
-  const lean = { k: 0, dx: 0, dz: -1, on: true };
+export function installLean(root, scale = HERO_SCALE) {
+  const lean = { k: 0, dx: 0, dz: -1, on: true, scale };
   root.updateMatrix = function updateLeanMatrix() {
     this.matrix.compose(this.position, this.quaternion, this.scale);
     if (lean.on) {
       const e = this.matrix.elements;
       for (let c = 0; c < 12; c += 4) {
-        e[c] *= HERO_SCALE;
-        e[c + 1] *= HERO_SCALE;
-        e[c + 2] *= HERO_SCALE;
+        e[c] *= scale;
+        e[c + 1] *= scale;
+        e[c + 2] *= scale;
         const y = e[c + 1];
         e[c] += lean.k * lean.dx * y;
         e[c + 2] += lean.k * lean.dz * y;

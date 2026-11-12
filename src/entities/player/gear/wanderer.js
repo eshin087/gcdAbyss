@@ -30,13 +30,16 @@ import {
 // legs show in the vent and the open front in every view; the hem slopes down to the outer point
 // (`slant`, m); the lower part lightens into the dusty lavender torn zone and ends in claw points,
 // longest outside.
+// (Session 21, ADR-065, owner: with the trimmed cloak, shorten the tails "a little": 15 % shorter
+// segments and torn points, the join and the hem 15 % narrower, the slant with them; the top width,
+// the flare and the panels themselves unchanged. Before: len [0.33-0.36] × 2, hems 0.28 / 0.34 / 0.42.)
 export const COAT_PANELS = [
-  { az: 0.95, w: [0.134, 0.21, 0.28], len: [0.33, 0.33], strips: [0.08, 0.16], fork: [0, 0], out: 0.004, flare: 0.13, edge: -1, skew: 1, slant: 0.07 }, // front-left
-  { az: -0.95, w: [0.134, 0.21, 0.28], len: [0.33, 0.33], strips: [0.16, 0.08], fork: [0, 0], out: 0.004, flare: 0.13, edge: 1, skew: -1, slant: 0.07 }, // front-right
-  { az: 1.7, w: [0.146, 0.223, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // left
-  { az: -1.7, w: [0.146, 0.223, 0.34], len: [0.35, 0.35], strips: [0.14], fork: [1], out: 0, flare: 0.55 }, // right
-  { az: 2.5, w: [0.157, 0.27, 0.42], len: [0.36, 0.36], strips: [0.18, 0.13, 0.08], fork: [0, 1, 0], out: 0.008, flare: 0.3, edge: 1, skew: -1.35, slant: 0.08 }, // back-left tail
-  { az: -2.5, w: [0.157, 0.27, 0.42], len: [0.36, 0.36], strips: [0.08, 0.13, 0.18], fork: [0, 1, 0], out: 0.008, flare: 0.3, edge: -1, skew: 1.35, slant: 0.08 }, // back-right tail
+  { az: 0.95, w: [0.134, 0.179, 0.238], len: [0.281, 0.281], strips: [0.068, 0.136], fork: [0, 0], out: 0.004, flare: 0.13, edge: -1, skew: 1, slant: 0.06 }, // front-left
+  { az: -0.95, w: [0.134, 0.179, 0.238], len: [0.281, 0.281], strips: [0.136, 0.068], fork: [0, 0], out: 0.004, flare: 0.13, edge: 1, skew: -1, slant: 0.06 }, // front-right
+  { az: 1.7, w: [0.146, 0.19, 0.289], len: [0.298, 0.298], strips: [0.119], fork: [1], out: 0, flare: 0.55 }, // left
+  { az: -1.7, w: [0.146, 0.19, 0.289], len: [0.298, 0.298], strips: [0.119], fork: [1], out: 0, flare: 0.55 }, // right
+  { az: 2.5, w: [0.157, 0.23, 0.357], len: [0.306, 0.306], strips: [0.153, 0.111, 0.068], fork: [0, 1, 0], out: 0.008, flare: 0.3, edge: 1, skew: -1.35, slant: 0.068 }, // back-left tail
+  { az: -2.5, w: [0.157, 0.23, 0.357], len: [0.306, 0.306], strips: [0.068, 0.111, 0.153], fork: [0, 1, 0], out: 0.008, flare: 0.3, edge: -1, skew: 1.35, slant: 0.068 }, // back-right tail
 ];
 
 /** The torn half-cape: wide ragged sheets on the streamer springs (anim.js), fanned behind his

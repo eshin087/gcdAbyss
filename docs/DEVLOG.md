@@ -5,6 +5,35 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 21: the hero at Shen Hui's size, a trimmed cloak
+
+**Owner:** "i dont like the new look and animations. lets start over. lets first focus on making the
+size the same as the new boss and reduce the back cloak from covering too much" (about PR #19, which
+changed the outfit, the face, the hood and the swings). Started over from `main` (now with #16) on
+`player/hero-size-cloak`. Previews first: the hero at 100 / 90 / 80 % beside Shen Hui (side by side
+and facing him at the fight camera); three cloaks from `main`'s (trimmed, back only, short). Picks:
+90 %, "A trimmed", and the coat tails a little shorter.
+
+**Done:**
+- **Size (ADR-064):** `PLAYER_SCALE` 1.08 (0.9 × `HERO_SCALE`); `installLean(root, scale)`,
+  `player.drawScale`, `anim.drawScale` (gait, foot planner), `unlean` / `leanPoint`. Shen Hui stays
+  at 1.2. Visual only.
+- **Cloak and tails (ADR-065):** `SHROUD_SHEETS` ~30 % narrower, 15 % shorter, standing off less;
+  `COAT_PANELS` 15 % shorter and narrower at the join and the hem.
+- **Tests:** HEROLIFE's off-hand gap divides by the player's own scale.
+
+**Verification:** `npm test` ALL PASSED (777 checks; the DUEL suite too), glyph check clean, `npm run build`
+ok. In the dev server: the hero beside Shen Hui side by side, at
+the fight camera and from behind; a straight run and sprint: planted feet slide < 2 mm a frame.
+
+**Not checked / open:** not played by a human, not tried on the phone. PR #19 (the first attempt)
+is superseded. The face, the hair and the swings are untouched here: the owner's next asks.
+
+**Next:** the owner's look at the preview; then the next item they pick (the face, the hood, the
+swings), one at a time with previews.
+
+---
+
 ## 2026-11-12 — Session 20: Shen Hui at PBZ speed — the blade-driven arm, pressure, impact
 
 **Owner:** "his animation, motions, and weapon stance and attacks look bad. speed up his attacks as it

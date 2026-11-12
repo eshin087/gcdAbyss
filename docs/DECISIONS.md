@@ -1289,3 +1289,36 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   they follow); a homing hit test instead of the step-in (blows that land without his body getting
   there read as unfair); particles on real time during a hitstop (every slow motion would lose its
   frozen sparks).
+
+## ADR-064 — The player drawn at 90 %: Shen Hui's size in a fight (2026-11-12)
+- **Context:** the owner, after the Shen Hui duel: "make the main character similar size and scale to
+  shen hui as i think the main character is too big"; after rejecting the first attempt (PR #19, which
+  kept his size and changed his outfit, face and swings): "lets start over. lets first focus on making
+  the size the same as the new boss and reduce the back cloak from covering too much". The Ash
+  Disciple is built on the hero's skeleton and drawn at the same `HERO_SCALE` (1.2): standing side
+  by side the two are the same height. In a fight the hero is the nearer of the two to the camera
+  (it follows him), and with his hood and cloak he read a size bigger. Rendered at 100 / 90 / 80 %
+  beside Shen Hui, side by side and facing him at the fight camera, the owner picked 90 %.
+- **Decision:** `PLAYER_SCALE` = 0.9 × `HERO_SCALE` (1.08) in `model.js`; the player's `drawScale`.
+  `installLean(root, scale)` takes the drawn scale (default `HERO_SCALE`: Shen Hui is unchanged);
+  `Player.unlean` / `leanPoint` and the animator's gait and foot planner (`anim.drawScale`) use the
+  figure's own scale.
+- **Consequences:** visual only: the gameplay body, the hurt cylinder, the hits, the reach and the
+  step-in are unchanged (the drawn sword is 10 % shorter; the swing crescent still shows the reach).
+  At the fight camera he reads about Shen Hui's size; side by side he stands a little shorter. Planted
+  feet hold still at the new scale (slide < 2 mm a frame at a run and a sprint).
+
+## ADR-065 — A trimmed cloak and shorter coat tails (2026-11-12)
+- **Context:** the owner: "reduce the back cloak from covering too much". From behind (the usual
+  view) the cloak fanned 1.44 m across at rest and, with the long coat tails under it, hid his back,
+  arms and legs. Three rendered options from `main`'s cloak (trimmed; the back sheets only; cut at
+  the hips); the owner picked "A trimmed" and asked to shorten the coat tails a little too.
+- **Decision:**
+  - `SHROUD_SHEETS`: the same seven sheets, ~30 % narrower (widths × 0.68), 15 % shorter (segment
+    lengths and torn points × 0.85), standing off his back less (`out` 0.3 on the back sheets and
+    the sword-shoulder piece, × 0.8 on the others). The mantle and the hood are unchanged.
+  - `COAT_PANELS`: segments and torn points 15 % shorter, the join and hem widths 15 % narrower (the
+    slant with them); the top widths, the flare and the panels themselves unchanged.
+- **Consequences:** from behind his back, arms and legs show between the sheets; the cloak keeps its
+  look (the same pieces, the left wing, the drape over the left arm). The Wanderer's set shares the
+  shorter coat tails.
