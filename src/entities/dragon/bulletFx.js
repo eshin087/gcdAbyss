@@ -268,21 +268,59 @@ export function muzzle(fx, x, y, z, dx, dz, n = 8, blue = false) {
 }
 
 // ---------------------------------------------------------------- fire wheel
-/** The warning: the ground heats up along the lines where the spokes will ignite (k 0..1, ADR-048). */
+/**
+ * The warning: the ground heats up along the lines where the spokes / tongues will catch (k 0..1,
+ * ADR-048); a breath's tongues grow out from their root as the throat charges.
+ */
 export function wheelWarn(fx, w, dt, k) {
   const life = fx._hold(w, 'hold', dt);
   const hot = w.warn <= TUNING.flashLead;
+  const r1 = w.follow ? w.r0 + (w.r1 - w.r0) * Math.min(1, 0.25 + 0.95 * k) : w.r1;
   for (let i = 0; i < w.n; i++) {
-    const a = w.ang + (i * TAU) / w.n;
+    const a = w.ang + w.offs[i];
     // (one scorch stamp budget per spoke would be n x the rate: only spoke 0 stamps, the rest glow)
-    fx.heatBand(life, w, dt, w.x, w.z, Math.sin(a), Math.cos(a), w.r0, w.r1, w.width / 2 + 0.2, k, hot, 7.3 + i * 3.1, -1, w.r1, i === 0);
+    fx.heatBand(life, w, dt, w.x, w.z, Math.sin(a), Math.cos(a), w.r0, r1, w.width / 2 + 0.2, k, hot, 7.3 + i * 3.1, -1, r1, i === 0);
+  }
+}
+
+let beamAcc = 0;
+/**
+ * The Scouring breath's stream from the jaws down to its strike point (sx, sz): flame glyphs pouring
+ * along the line, a splash where it hits the ground. Short-lived (they never sink under the ground).
+ */
+export function breathBeam(fx, m, sx, sz, dt) {
+  if (!Number.isFinite(m.x + m.y + m.z + sx + sz)) return;
+  const dx = sx - m.x, dy = 0.3 - m.y, dz = sz - m.z;
+  beamAcc += dt * 70;
+  let n = Math.min(8, Math.floor(beamAcc));
+  beamAcc -= n;
+  while (n-- > 0) {
+    const u = Math.random();
+    const hot = Math.random() < 0.4;
+    fx._col(hot ? HOT : ORANGE, hot ? 0.55 : 0.6, DARK, 1);
+    const o = fx._rec(m.x + dx * u + rand(-0.15, 0.15), m.y + dy * u + rand(-0.1, 0.1), m.z + dz * u + rand(-0.15, 0.15), rand(0.12, 0.2), rand(0.55, 0.9), 0.3, FLAME_TALL);
+    o.vx = dx * 2.5;
+    o.vy = dy * 2.5;
+    o.vz = dz * 2.5;
+    o.drag = 2;
+    o.flicker = 0.3;
+    o.spin = rand(-3, 3);
+    fx._spawn(fx.add, o);
+  }
+  if (Math.random() < dt * 30) {
+    fx._col(GOLD, 0.8, DARK, 1);
+    const o = fx._rec(sx + rand(-0.4, 0.4), 0.3, sz + rand(-0.4, 0.4), rand(0.3, 0.5), rand(0.8, 1.2), 0.2, FLAME_TALL);
+    o.vy = rand(3, 6);
+    o.drag = 1.5;
+    o.flicker = 0.3;
+    fx._spawn(fx.add, o);
   }
 }
 
 /** Ignition: every spoke flares up at once, a shock ring runs out from the body. */
 export function wheelIgnite(fx, w) {
   for (let i = 0; i < w.n; i++) {
-    const a = w.ang + (i * TAU) / w.n;
+    const a = w.ang + w.offs[i];
     const sx = Math.sin(a), sz = Math.cos(a);
     for (let r = w.r0; r <= w.r1; r += 0.9) {
       fx._col(GOLD, 0.9, ORANGE, 0.5);
@@ -293,7 +331,7 @@ export function wheelIgnite(fx, w) {
       fx._spawn(fx.add, o);
     }
   }
-  fx.shockRing(w.x, w.z, w.r0 + 5);
+  if (!w.follow) fx.shockRing(w.x, w.z, w.r0 + 5);
   fx._light({ x: w.x, y: 2, z: w.z, color: FIRE_LIGHT, intensity: 7, radius: 22, life: 0.5, fade: 0.4 });
 }
 
@@ -307,7 +345,7 @@ export function wheelLive(fx, w, dt, omega, hx, hz) {
   if (life > 0) {
     const step = 0.9, n = Math.floor(span / step);
     for (let i = 0; i < w.n; i++) {
-      const a = w.ang + (i * TAU) / w.n;
+      const a = w.ang + w.offs[i];
       const sx = Math.sin(a), sz = Math.cos(a);
       for (let j = 0; j <= n; j++) {
         const r = w.r0 + j * step + ((w.t * 6) % step);
@@ -322,7 +360,7 @@ export function wheelLive(fx, w, dt, omega, hx, hz) {
   w.acc += dt * 240 * w.n * fade;
   while (w.acc >= 1) {
     w.acc -= 1;
-    const a = w.ang + (((Math.random() * w.n) | 0) * TAU) / w.n;
+    const a = w.ang + w.offs[(Math.random() * w.n) | 0];
     const sx = Math.sin(a), sz = Math.cos(a);
     const r = w.r0 + Math.random() * span;
     const hot = Math.random() < 0.3;
@@ -343,7 +381,7 @@ export function wheelLive(fx, w, dt, omega, hx, hz) {
     w.scorchT = 0.09;
     const sc = fx.game.world?.scorch;
     for (let i = 0; i < w.n; i++) {
-      const a = w.ang + (i * TAU) / w.n;
+      const a = w.ang + w.offs[i];
       const r = w.r0 + Math.random() * span;
       sc?.burnCircle?.(w.x + Math.sin(a) * r, w.z + Math.cos(a) * r, w.width * 0.9, 0.2, 0.9);
     }
@@ -354,8 +392,14 @@ export function wheelLive(fx, w, dt, omega, hx, hz) {
     const dx = hx - w.x, dz = hz - w.z;
     const r = Math.min(w.r1, Math.max(w.r0, Math.hypot(dx, dz)));
     const th = Math.atan2(dx, dz);
-    const seg = TAU / w.n;
-    const a = w.ang + Math.round((th - w.ang) / seg) * seg;
+    let a = w.ang + w.offs[0], best = Infinity;
+    for (let i = 0; i < w.n; i++) {
+      const di = Math.abs(Math.atan2(Math.sin(th - w.ang - w.offs[i]), Math.cos(th - w.ang - w.offs[i])));
+      if (di < best) {
+        best = di;
+        a = w.ang + w.offs[i];
+      }
+    }
     fx._light({ x: w.x + Math.sin(a) * r, y: 1.2, z: w.z + Math.cos(a) * r, color: FIRE_LIGHT, intensity: 3.2 * fade, radius: 8, life: 0.2, fade: 0.14 });
   }
 }

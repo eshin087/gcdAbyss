@@ -983,7 +983,14 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
   still flying `TUNING.bullets.recue` s after that moment is cued again on its next approach, or
   is a dud when that cue could only come too late.
 - The wheel: `startWheel({ attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn,
-  knockback, max, headline })`, `stopWheel()`, `wheel` (the record: `on`, `lit`, `ang`, `hits`, ...).
+  knockback, max, headline, offs })`, `stopWheel()`, `wheel` (the record: `on`, `lit`, `ang`, `offs`,
+  `hits`, ...). Spoke i lies at `ang + offs[i]`. With `offs` (≤ 8 angles) the spokes are the tongues
+  of a breath (the Scouring breath, ADR-046): the attack calls `aimWheel(x, z, ang, om, px, pz)` every
+  frame after the rig (root = the mouth's ground projection, `ang` = the head's yaw, `om` its turn
+  rate, `px / pz` the pivot the root swings round: the wyrm's root). Without it, `n` spokes evenly
+  round turn by themselves (`speed`, one reversal). A spoke's cue (`tt`) steps the wheel forward
+  (tongues turning at `om`, the root orbiting the pivot, the hero on his sensed velocity) to the
+  first touch: a breath's root moves, so a fixed-origin estimate came far too late.
 - Hits go through `dragon.hitPlayer({ ..., bullet: true, perfect, plunge: false })`: the damage is
   final (no `TUNING.damageScale`), `player.takeHit` receives `light: true` and `perfect` (false for
   embers and wisps: a roll is a plain dodge), and a parry does not call `dragon.onParried`.
@@ -1005,9 +1012,19 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
 - Look: `bulletFx.js` (glyph particles through `DragonFx`'s pools; STYLE.md "Bullets").
 
 **Bullet patterns** (`bulletAttacks.js` `BULLET_HELL`, numbers `tuningBullets.js` `BULLET_ATTACKS`,
-spread into `ATTACKS` like `FIRE`; the same action shape): `emberStorm`, `fanVolley`, `wispSwarm`,
-`fireWheel`. Each emits `dragon:spell {name, x, z}` at its cast. A string hit may carry `burst: { n,
-wait, stagger, speed }` (`cinderFlurry`'s overhead): embers scattered by its slam.
+spread into `ATTACKS` like `FIRE`; the same action shape): `emberStorm` (the Ember torrent),
+`fanVolley` (the Cinder burst), `wispSwarm`, `fireWheel` (the Scouring breath); the keys are the
+contract (audio, Lab, tests), the labels are display names. Each emits `dragon:spell {name, x, z}` at
+its cast; the torrent and the Scouring breath also emit `dragon:breathStart` / `dragon:breathEnd`
+(the breath loop). **Every bullet is breathed (ADR-046):** `spit(d, kind, attack, dyaw, speed, grp,
+life)` spawns it at `rig.pt.mouth` along the head's actual aim (`pt.headFwd`) + `dyaw`, with a
+`drop` scaled to the mouth-to-hero distance (`TUNING.bullets.dropK / dropMin / dropMax`: a close hero
+is not flown over); patterns emit from their `hit()` hook (after the rig, so from the jaws as drawn)
+and aim the head first (`aimHead`: reach out of the neck base, `headExact`, a look down the line).
+No pattern spawns from the body or the wings. The wisps are roared from the mouth in a spray (their
+initial headings fan out round the head). A P3 Cinder burst may queue an Ember torrent
+(`brain.queued`, `fanVolley.chain`). A string hit may carry `burst: { n, wait, stagger, speed }`
+(`cinderFlurry`'s overhead): embers scattered by its slam, rising out of a puff of flame.
 
 **Melee FX hooks** (`DragonFx`, called by `attacks.js` through optional calls): `clawTrail(wi, toe,
 heavy)` (a claw's burning wake, every active frame of a claw / overhead hit) and `slamBurst(x, z, r)`

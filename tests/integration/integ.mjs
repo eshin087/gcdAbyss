@@ -1594,6 +1594,9 @@ async function scenarioBullets() {
     const def = answer ? makeDefender(G) : null;
     const h0 = G.hits.length, c0 = { ...G.counts };
     let tells = 0, flashes = 0, peak = 0, bad = 0;
+    // ADR-046: every bullet is breathed: born at pt.mouth, along the head's aim (a cone / fork round it)
+    const born = { n: 0, far: 0, worst: 0, aimWorst: 0, offWorst: 0 };
+    const SPREAD = { emberStorm: TUNING.attacks.emberStorm.laneGap + TUNING.attacks.emberStorm.orbSpread * 1.5, fanVolley: TUNING.attacks.fanVolley.spread + 0.06 };
     G.watch = (n, e) => { def?.onEvent(n, e); if (n === 'combat:tell') tells++; if (n === 'combat:flash') flashes++; };
     const ok = game.lab.trigger(name);
     let ended = -1;
@@ -1605,6 +1608,25 @@ async function scenarioBullets() {
       G.tick(DT);
       peak = Math.max(peak, B.live);
       for (let j = 0; j < B.pool.length; j++) { const b = B.pool[j]; if (b.alive && !Number.isFinite(b.x + b.y + b.z + b.vx + b.vz)) bad++; }
+      if (name !== 'fireWheel') {
+        const m = d.rig.pt.mouth, f = d.rig.pt.headFwd, hy = Math.atan2(f.x, f.z);
+        let sx = 0, sz = 0, cn = 0;
+        for (let j = 0; j < B.pool.length; j++) {
+          const b = B.pool[j];
+          if (!b.alive || b.attack !== name || b.t > DT * 1.01 || b.deflected) continue;
+          // back to where it was spawned this frame (it already flew one step)
+          const ox = b.x - b.vx * b.t, oz = b.z - b.vz * b.t;
+          const dm = Math.hypot(ox - m.x, b.y0 - m.y, oz - m.z);
+          born.n++;
+          born.worst = Math.max(born.worst, dm);
+          if (dm > 0.6) born.far++;
+          if (b.kind === KIND.wisp) continue; // (a swarm is roared out in a spray round the head)
+          const yb = Math.atan2(b.vx, b.vz);
+          born.offWorst = Math.max(born.offWorst, Math.abs(angleDiffT(hy, yb)));
+          sx += Math.sin(yb); sz += Math.cos(yb); cn++;
+        }
+        if (cn > 0) born.aimWorst = Math.max(born.aimWorst, Math.abs(angleDiffT(hy, Math.atan2(sx, sz))));
+      }
       if (ended < 0 && !d.brain.action) ended = i;
       if (ended >= 0 && B.live === 0 && !B.wheel.on && i - ended > 30) break;
     }
@@ -1612,7 +1634,7 @@ async function scenarioBullets() {
     input.up(2);
     const hs = G.hits.slice(h0).filter((h) => h.attack === name);
     const by = (r) => hs.filter((h) => h.r === r).length;
-    return { ok, ended, tells, flashes, peak, bad, hit: by(RESULT.HIT), parried: by(RESULT.PARRIED), blocked: by(RESULT.BLOCKED), dodged: by(RESULT.DODGED) + by(RESULT.PERFECT), live: B.live, wheel: B.wheel.on, hurt: (G.counts['player:hurt'] || 0) - (c0['player:hurt'] || 0) };
+    return { born, spread: SPREAD[name] ?? 0, ok, ended, tells, flashes, peak, bad, hit: by(RESULT.HIT), parried: by(RESULT.PARRIED), blocked: by(RESULT.BLOCKED), dodged: by(RESULT.DODGED) + by(RESULT.PERFECT), live: B.live, wheel: B.wheel.on, hurt: (G.counts['player:hurt'] || 0) - (c0['player:hurt'] || 0) };
   };
   const DIST = { emberStorm: 9, fanVolley: 11, wispSwarm: 10, fireWheel: 9 };
 
@@ -1650,12 +1672,14 @@ async function scenarioBullets() {
       return r;
     };
 
-    // an even count (phase 2: 8 embers): the first volley still has an ember dead on the hero (the
-    // lead the headline flash follows) and the second still puts him in a gap
-    assert(d.phase === 2 && (perPhaseOf(FV.count, 2) & 1) === 0, `phase 2 fans have an even count (${perPhaseOf(FV.count, 2)})`);
+    // the first cough has an ember dead on the hero (the lead the headline flash follows) and the
+    // second puts him in a gap, whatever the count (the Hard cones are odd: an even count is forced
+    // here). From the mouth a gap is wider than the hero only at range (spacing x distance > 2 R).
+    const count0 = FV.count;
+    FV.count = [9, 10, 13];
     const miss = [];
     let leadSeen = false, embers = 0;
-    const fv = watchPattern('fanVolley', 11, () => {
+    const fv = watchPattern('fanVolley', 26, () => {
       if (B.leadAlive()) leadSeen = true;
       const n = B.count(KIND.ember);
       if (n > embers && miss.length < 2) {
@@ -1670,8 +1694,9 @@ async function scenarioBullets() {
       }
       embers = n;
     });
+    FV.count = count0;
     const fvLag = fv.hits[0] && fv.headFlash !== null ? fv.hits[0].t - fv.headFlash : NaN;
-    out(`   P2 fan of ${perPhaseOf(FV.count, 2)} at ${fv.dist.toFixed(1)} m: lead bullet ${leadSeen} · nearest ember passes ${miss.map((m) => m.toFixed(2)).join(' / ')} m off (volley 1 / 2, touch radius ${R.toFixed(2)}) · headline flash ${fvLag.toFixed(3)} s before the first hit · tells ${fv.tells}/${fv.flashes}`);
+    out(`   P2 burst of 10 (even, forced) at ${fv.dist.toFixed(1)} m: lead bullet ${leadSeen} · nearest ember passes ${miss.map((m) => m.toFixed(2)).join(' / ')} m off (volley 1 / 2, touch radius ${R.toFixed(2)}) · headline flash ${fvLag.toFixed(3)} s before the first hit · tells ${fv.tells}/${fv.flashes}`);
     assert(fv.ok && leadSeen, 'even-count fan: the first volley has a lead ember (setLead)');
     assert(miss.length === 2 && miss[0] < 0.1 && miss[1] > R, `even-count fan: volley 1 is centred on the hero, volley 2 has him in a gap (${miss.map((m) => m.toFixed(2)).join(' / ')})`);
     assert(fvLag >= K.cueMin - DT && fvLag <= lead + 3 * DT, `even-count fan: the headline flash leads the first impact by ~flashLead (${fvLag.toFixed(3)} s)`);
@@ -1721,6 +1746,7 @@ async function scenarioBullets() {
     assert(wsLag >= K.cueMin - DT && wsLag <= lead + 3 * DT, `far wisp swarm: the headline flash leads the first impact by ~flashLead (${wsLag.toFixed(3)} s)`);
     assert(ws.tells === ws.flashes && ws.hits.length >= 1 && ws.hits.length <= WS.maxHits, `far wisp swarm: one flash per tell, hits within the budget (${ws.tells}/${ws.flashes}, ${ws.hits.length})`);
   };
+  const angleDiffT = (a, b) => { let x = (b - a) % (2 * Math.PI); if (x > Math.PI) x -= 2 * Math.PI; if (x < -Math.PI) x += 2 * Math.PI; return x; };
   const perPhaseOf = (v, ph) => (Array.isArray(v) ? v[Math.min(v.length - 1, ph - 1)] : v);
 
   for (const phase of [1, 2, 3]) {
@@ -1736,11 +1762,44 @@ async function scenarioBullets() {
       assert(idle.tells === idle.flashes && ans.tells === ans.flashes && idle.tells >= 1, `P${phase} ${name}: one combat:flash per combat:tell (${idle.tells}/${idle.flashes}, ${ans.tells}/${ans.flashes})`);
       // (the scripted defender answers one cue at a time: the phase-3 storm's crossing arms cost it a second hit)
       assert(ans.hit < idle.hit && ans.hit <= (name === 'emberStorm' ? 2 : 1), `P${phase} ${name}: answering the cues takes fewer hits than standing still (${ans.hit} < ${idle.hit})`);
+      if (name !== 'fireWheel') {
+        const bo = idle.born;
+        out(`      breathed: ${bo.n} bullets born ≤ ${bo.worst.toFixed(2)} m from pt.mouth · emission centre ≤ ${bo.aimWorst.toFixed(3)} rad off headFwd · widest ${bo.offWorst.toFixed(3)} rad`);
+        assert(bo.n > 0 && bo.far === 0, `P${phase} ${name}: every bullet is born within 0.6 m of pt.mouth (worst ${bo.worst.toFixed(2)} m)`);
+        if (name !== 'wispSwarm') assert(bo.aimWorst <= 0.2 && bo.offWorst <= idle.spread + 0.2, `P${phase} ${name}: every emission leaves along the head's aim (centre ${bo.aimWorst.toFixed(3)} ≤ 0.2 rad, widest ${bo.offWorst.toFixed(3)} ≤ ${(idle.spread + 0.2).toFixed(2)})`);
+      }
       if (name === 'emberStorm') assert(ans.parried + ans.dodged >= 1, `P${phase} emberStorm: embers deflected / orbs rolled (${ans.parried} + ${ans.dodged})`);
       else if (name !== 'fireWheel') assert(ans.parried >= 1, `P${phase} ${name}: bullets were deflected (${ans.parried})`);
       else assert(ans.dodged >= 1, `P${phase} fireWheel: a spoke was rolled through (${ans.dodged})`);
     }
     if (phase === 2) lateCues();
+  }
+  // P3: a Cinder burst may run straight into an Ember torrent (the brain's queue, no idle between)
+  {
+    settle(G, 12);
+    B.clear();
+    place(G, 12);
+    const FV = TUNING.attacks.fanVolley, chain0 = FV.chain;
+    FV.chain = [0, 0, 1];
+    d.debug.setAI(true);
+    d.brain.cooldowns.emberStorm = 0;
+    game.lab.trigger('fanVolley');
+    let after = null, gap = Infinity, endT = null, seen = false;
+    for (let i = 0; i < Math.round(8 / DT); i++) {
+      aimAt(G);
+      d.posture = 0;
+      G.tick(DT);
+      const a = d.brain.action;
+      if (a?.name === 'fanVolley') seen = true;
+      if (seen && endT === null && a?.name !== 'fanVolley') endT = game.time;
+      if (endT !== null && a && a.name !== 'fanVolley') { after = a.name; gap = game.time - endT; break; }
+    }
+    d.debug.setAI(false);
+    FV.chain = chain0;
+    if (d.brain.action) d.brain.stopAction(true);
+    B.clear();
+    out(`   P3 burst with chain 1: next action ${after} ${Number.isFinite(gap) ? (gap * 1000).toFixed(0) + ' ms' : ''} after it`);
+    assert(after === 'emberStorm' && gap <= DT + 1e-6, 'P3: a Cinder burst can run straight into an Ember torrent (brain.queued, no idle)');
   }
   out(`   console errors so far: ${errors.length}`);
   return G;

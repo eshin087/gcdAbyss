@@ -90,7 +90,13 @@ export class Bullets {
       hits: 0, max: 2, cd: 0, cueT: NEVER, acc: 0, acc4: 0, heatT: 0, scorchT: 0, lightT: 0, hold: 0,
       tt: Infinity, // s until the next spoke reaches the hero (Infinity: none coming)
       headline: false, // the first crossing is announced by the attack's headline beat
+      // spoke i lies at ang + offs[i]. follow: the spokes are tongues of a breath (the Scouring
+      // breath, ADR-046): the attack sets origin, ang and the turn rate every frame (aimWheel);
+      // otherwise the wheel turns itself (speed, one reversal) with spokes evenly round
+      offs: new Float64Array(8), follow: false, om: 0, px: 0, pz: 0, // px / pz: the pivot it turns about
     };
+    this._ttA = 0; // the spoke angle / radius of the last _wheelTti() touch (the cue's glint)
+    this._ttR = 0;
   }
 
   get K() {
@@ -148,8 +154,12 @@ export class Bullets {
     return b;
   }
 
-  /** n embers burst out of a point, hang in the air and fly at the hero one after another. */
+  /**
+   * n embers burst out of a point (a slam's fire on the ground: they rise out of a puff of flame),
+   * hang in the air and fly at the hero one after another.
+   */
   burst(attack, x, y, z, n, wait, stagger, speed, group = -1) {
+    BFX.muzzle(this.d.fx, x, y, z, 0, 0, 12, false);
     for (let i = 0; i < n; i++) {
       const b = this.spawn(BULLET.EMBER, attack, x, y, z, Math.random() * TAU, 2.2 + Math.random() * 1.2, group, 0);
       if (!b) return;
@@ -355,7 +365,11 @@ export class Bullets {
   }
 
   // ---------------------------------------------------------------- the wheel
-  /** o: { attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn, knockback, max } */
+  /**
+   * o: { attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn, knockback, max,
+   * offs? } — `offs` (n angles off `ang`, n <= 8): the spokes are a breath's tongues and follow the
+   * attack's aimWheel(); without it n spokes evenly round turn by themselves.
+   */
   startWheel(o) {
     const w = this.wheel;
     if (!Number.isFinite(o.x + o.z + o.ang + o.warn + o.dur)) return;
@@ -364,7 +378,10 @@ export class Bullets {
     w.attack = o.attack ?? 'fireWheel';
     w.x = o.x;
     w.z = o.z;
-    w.n = Math.max(2, o.n | 0);
+    w.follow = Array.isArray(o.offs) && o.offs.length > 0;
+    w.n = w.follow ? Math.min(8, o.offs.length) : clamp(o.n | 0, 2, 8);
+    for (let i = 0; i < w.n; i++) w.offs[i] = w.follow ? Number(o.offs[i]) || 0 : (i * TAU) / w.n;
+    w.om = 0;
     w.ang = o.ang;
     w.dir = o.dir < 0 ? -1 : 1;
     w.u = 0;
@@ -394,6 +411,54 @@ export class Bullets {
     this.wheel.on = false;
   }
 
+  /**
+   * A following wheel (offs): its root (x, z), the aim its tongues hang off, that aim's turn rate
+   * (rad/s) and the pivot (px, pz) the root swings round with it (the wyrm's body: the mouth orbits).
+   */
+  aimWheel(x, z, ang, om = 0, px = x, pz = z) {
+    const w = this.wheel;
+    if (!w.on || !w.follow || !Number.isFinite(x + z + ang)) return;
+    w.x = x;
+    w.z = z;
+    w.ang = ang;
+    w.om = Number.isFinite(om) ? om : 0;
+    w.px = Number.isFinite(px) ? px : x;
+    w.pz = Number.isFinite(pz) ? pz : z;
+  }
+
+  /**
+   * Seconds until a spoke first touches the hero (Infinity: not within 2.5 s): the wheel stepped
+   * forward with its spokes turning at `om` and its root swinging round the pivot with them, the hero
+   * on his sensed velocity. A breath's root orbits with the mouth, so the bearing of a close hero
+   * from it changes faster than any fixed-origin estimate (that cue came 0.07 s before the touch).
+   */
+  _wheelTti(w, om, hx, hz, hr) {
+    const v = this.d.sense?.vel;
+    const vx = Number.isFinite(v?.x) ? v.x : 0, vz = Number.isFinite(v?.z) ? v.z : 0;
+    const px = w.follow ? w.px : w.x, pz = w.follow ? w.pz : w.z;
+    const ox0 = w.x - px, oz0 = w.z - pz;
+    let tau = 0;
+    for (let s = 0; s < 80; s++) {
+      tau += s < 36 ? 1 / 60 : 1 / 20;
+      if (tau > 2.5) break;
+      const da = om * tau, c = Math.cos(da), sn = Math.sin(da);
+      const ox = px + ox0 * c + oz0 * sn, oz = pz - ox0 * sn + oz0 * c;
+      const dx = hx + vx * tau - ox, dz = hz + vz * tau - oz;
+      const r = Math.hypot(dx, dz);
+      if (r < w.r0 - hr || r > w.r1 || r < 0.5) continue;
+      const th = Math.atan2(dx, dz), half = Math.asin(Math.min(1, (w.width / 2 + hr / 2) / r));
+      for (let i = 0; i < w.n; i++) {
+        const a = w.ang + da + w.offs[i];
+        if (Math.abs(angleDiff(a, th)) <= half) {
+          this._ttA = a;
+          this._ttR = r;
+          return tau;
+        }
+      }
+    }
+    return Infinity;
+  }
+
   _wheel(dt, p, hr) {
     const w = this.wheel, d = this.d, fx = d.fx;
     w.tt = Infinity;
@@ -416,10 +481,14 @@ export class Bullets {
       w.on = false;
       return;
     }
-    const rev = 0.55 * w.dur;
     w.fade = 1 - smoothstep(w.dur - 0.4, w.dur, w.u);
-    const om = w.dir * w.speed * smoothstep(0, 0.5, w.u) * (1 - 2 * smoothstep(rev - 0.6, rev + 0.6, w.u)) * w.fade;
-    w.ang += om * dt;
+    let om;
+    if (w.follow) om = w.om; // (the attack turns the tongues: aimWheel)
+    else {
+      const rev = 0.55 * w.dur;
+      om = w.dir * w.speed * smoothstep(0, 0.5, w.u) * (1 - 2 * smoothstep(rev - 0.6, rev + 0.6, w.u)) * w.fade;
+      w.ang += om * dt;
+    }
     BFX.wheelLive(fx, w, dt, om, hx, hz);
     w.cd -= dt;
     if (!p || !Number.isFinite(hx + hz)) return;
@@ -427,9 +496,12 @@ export class Bullets {
     const r = Math.hypot(dx, dz);
     if (r < w.r0 - hr || r > w.r1 || r < 0.5) return;
     const th = Math.atan2(dx, dz);
-    const seg = TAU / w.n;
-    let dl = angleDiff(w.ang, th); // signed angle from the nearest spoke to the hero
-    dl -= Math.round(dl / seg) * seg;
+    // the spoke nearest the hero: dl = signed angle from it to him
+    let dl = Infinity;
+    for (let i = 0; i < w.n; i++) {
+      const di = angleDiff(w.ang + w.offs[i], th);
+      if (Math.abs(di) < Math.abs(dl)) dl = di;
+    }
     const half = Math.asin(Math.min(1, (w.width / 2 + hr / 2) / r));
     if (w.u > 0.15 && w.fade > 0.5 && w.hits < w.max && w.cd <= 0 && Math.abs(dl) <= half) {
       const h = this._hit;
@@ -454,20 +526,15 @@ export class Bullets {
       } else w.cd = res === RESULT.DODGED || res === RESULT.PERFECT ? 0.5 : 0.3;
       return;
     }
-    // the spoke's own cue: time until the nearest approaching spoke edge reaches the hero
-    const v = d.sense?.vel;
-    const wh = v && Number.isFinite(v.x + v.z) ? (dz * v.x - dx * v.z) / (r * r) : 0;
-    const rel = wh - om; // d(dl)/dt
-    if (Math.abs(rel) < 0.05) return;
-    const target = rel > 0 ? (dl < -half ? -half : seg - half) : dl > half ? half : -seg + half;
-    const tt = (target - dl) / rel;
+    // the spoke's own cue: time until a spoke next touches the hero (stepped forward, _wheelTti)
+    const tt = this._wheelTti(w, om, hx, hz, hr);
+    if (!Number.isFinite(tt)) return;
     w.tt = tt;
     if (w.headline || w.hits >= w.max || w.cd > TUNING.flashLead || this.time - w.cueT < 0.4) return;
     if (tt >= 0.27 && tt <= TUNING.flashLead + 0.04) {
       w.cueT = this.time;
-      const near = Math.abs(target) <= half + 1e-6; // the spoke beside him, else the next one round
-      const a = th - dl + (near ? 0 : rel > 0 ? seg : -seg);
-      const gx = w.x + Math.sin(a) * r, gz = w.z + Math.cos(a) * r;
+      const a = this._ttA, rr = this._ttR;
+      const gx = w.x + Math.sin(a) * rr, gz = w.z + Math.cos(a) * rr;
       d.emit('combat:tell', { source: 'dragon', attack: w.attack, tell: TELL.RED, impactIn: tt, x: hx, z: hz, hazard: true, bullet: true });
       d.emit('combat:flash', { source: 'dragon', attack: w.attack, tell: TELL.RED, x: gx, y: 1.2, z: gz, hazard: true, bullet: true });
       BFX.cueGlint(fx, gx, 1.4, gz, TELL.RED);
