@@ -1331,8 +1331,8 @@ Player → hud/audio/fx/flow:
   two bounding steps), `player:lockOn {on}`,
   `player:technique {id, slot, phase}` (phase 'stance' | 'counter' | 'lunge'; see Techniques),
   `player:techniqueDenied {slot, id, qi, cost}` (a slot key without the Qi), `player:qiFull {qi}` (the meter
-  fills while a technique is equipped). `player:parry` carries `technique` (id) when a stance turned the blow;
-  `player:hitDragon` carries `technique` (id or null)
+  fills while a technique is equipped). player:parry carries the technique's id (field technique) when a stance turned the blow;
+  player:hitDragon carries technique (the id, or null)
 Techniques (player.techniques, the book) → hud/touch/lab:
 - `technique:learned {id, slot, first}` (a victory's reward or the Lab; first = newly learned, slot = where it
   sits, −1 none), `technique:equip {slot, id, slots}` (slots = both after the change; slot −1 = all forgotten)
