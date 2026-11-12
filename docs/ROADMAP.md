@@ -150,6 +150,13 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.21 — The hero at Shen Hui's size, a trimmed cloak (2026-11-12, `player/hero-size-cloak`)
+- [x] The player drawn at 90 % (three sizes previewed beside Shen Hui; the owner picked one) (ADR-064)
+- [x] The same cloak trimmed, the coat tails a little shorter (three cloaks previewed) (ADR-065)
+- [ ] Follow-ups:
+  - [ ] The owner's phone check of the preview
+  - [ ] The owner's next asks, one at a time with previews: the face, a hood toggle, the swings
+
 ## M1.19 — The Ash Disciple: a second level, a human duelist (2026-11-11, `level/ash-disciple`)
 Spec: `docs/specs/ash-disciple.md`.
 - [x] Levels: `?level=ash`, a stage picker on the title, a LEVEL row in the Lab; the boss slot (ADR-058)

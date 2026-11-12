@@ -360,7 +360,8 @@ takeHit({ damage, from:{x,z}, knockback=0, knockdown=false, kind='hit', burn=0,
                                        // plunge: false = a perfect dodge of this hit never becomes the plunge
                                        // (fire hazards); while the plunge runs every hit returns 'ignored'
 getChestPos(out: Vector3, visual = false): Vector3   // upright gameplay body; visual = the drawn one (FX)
-unlean(v: Vector3): Vector3            // drawn (leaned, HERO_SCALE) world point → upright gameplay body
+unlean(v: Vector3): Vector3            // drawn (leaned, drawScale) world point → upright gameplay body
+drawScale: number                      // his drawn size, PLAYER_SCALE (1.08; ADR-064)
 leanPoint(v: Vector3): Vector3         // upright gameplay point → where it is drawn (name tag)
 respawn(x, z)                          // full restore, idle, facing north, clears burn/lock/crit/plunge/deflect chain
 restAtBonfire()                        // refill hp/flasks (no teleport)
@@ -383,8 +384,12 @@ instead of the sweep test and emits `player:plunge` / `player:plungeHit {executi
 `player:hitDragon {kind: 'execute'}`) ·
 RMB hold = block, RMB tap before impact = parry · Space = dodge roll · Shift = sprint · F = flask ·
 Tab / MMB = lock-on. (E is flow's.)
-Drawn body vs gameplay body (ADR-017): the root draws the hero `HERO_SCALE` (1.2) tall and leaned
-away from the camera (`model.js` `LEAN`, `installLean`). The animator runs with `lean.on = false`
+Drawn body vs gameplay body (ADR-017): the root draws the hero `player.drawScale` tall (model.js
+`PLAYER_SCALE` = 0.9 × `HERO_SCALE` = 1.08 since ADR-064; the Ash Disciple, on the same skeleton,
+is drawn at `HERO_SCALE` 1.2) and leaned away from the camera (`model.js` `LEAN`,
+`installLean(root, scale = HERO_SCALE)`; the returned lean carries its `scale`). The animator reads
+the figure's scale as `anim.drawScale` (its owner's `drawScale`, else `HERO_SCALE`) for the drawn
+ground speed of the gait and the foot planner's world spots. The animator runs with `lean.on = false`
 (plain upright 1.85 m body, so IK and ground clamps work in metres); the drawn transform is applied
 after it. FX read the drawn joints; the sword sweep's hit test, `getChestPos()` (the dragon's aim)
 and the hurt cylinder use the upright body (`SwordSweep(sword, unlean)`).

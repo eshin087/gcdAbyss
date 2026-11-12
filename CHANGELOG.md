@@ -4,7 +4,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Thirteen pieces of work since 0.4.0:
+Fourteen pieces of work since 0.4.0:
+- **The hero at Shen Hui's size, a trimmed cloak** (2026-11-12, ADR-064, ADR-065): the hero is drawn
+  10 % smaller, so in a fight he reads about the same size as Shen Hui (he was the nearer of the two
+  to the camera and looked a size bigger); his reach and hitboxes are unchanged. His cloak is the
+  same cloak trimmed about 30 % narrower and 15 % shorter, and the coat tails under it are a little
+  shorter, so his back, arms and legs show from behind.
 - **The Ash Disciple, a second level** (2026-11-12, ADR-058 – ADR-063): a new boss and a new place,
   loaded on their own with `?level=ash` or from the stage picker on the title screen (and the Lab's
   LEVEL row). The Ashfall Courtyard: a ruined sword sect under falling ash, a bonfire at the foot of a
