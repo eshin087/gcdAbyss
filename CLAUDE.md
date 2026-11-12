@@ -1,7 +1,7 @@
 # gcdAbyss — instructions for Claude agents
 
 ABYSS is a long-term browser game: a **wuxia skill boss rush** in the vein of Phantom Blade Zero,
-with some exploring and RPG elements and fixed rewards (techniques, weapons, abilities; ADR-051),
+with some exploring and RPG elements and fixed rewards (techniques, weapons, abilities; ADR-059),
 rendered in an ASCII look inspired by @Ansenjeo's ASCII MMORPG. Today: two levels, each its own page
 load (`?level=`): Cinderwood Hollow (the Cinder Wyrm) and the Ashfall Courtyard (the Ash Disciple,
 a human duelist). Read this file first, every session.

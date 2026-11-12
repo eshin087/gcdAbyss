@@ -468,15 +468,17 @@ export const SFX = {
    * player:parry — steel clang + an ascending sparkle ring. opts.tell 'blue': bigger, held shimmer.
    * opts.chain (the deflect chain count, 1 = a single parry): each deflect in rhythm rings two
    * semitones higher (up to an octave and a bit) with a bright bell 'ting' over it, Sekiro style.
+   * opts.perfect (a perfectly parried bullet sent back): a fifth higher and brighter, a gold bell on top.
    */
   parry: {
     prio: 6, rev: 0.4, gap: 0.06,
     play(v, t, o) {
       const big = o.tell === 'blue';
-      const k = big ? 1.25 : 1;
+      const pf = !!o.perfect;
+      const k = (big ? 1.25 : 1) * (pf ? 1.15 : 1);
       const len = big ? 1.5 : 1;
       const ch = clamp(Math.round(num(o.chain, 1)), 1, 8);
-      const up = Math.pow(2, ((ch - 1) * 2) / 12); // +2 semitones per deflect in the chain
+      const up = Math.pow(2, ((ch - 1) * 2) / 12) * (pf ? 1.5 : 1); // +2 semitones per deflect; perfect: +a fifth
       // struck steel: inharmonic partials, instant attack, ringing decay (+ a detuned twin = beating)
       const f0 = (big ? 740 : 880) * up * rnd(0.98, 1.02);
       for (const [r, a, d] of [[1, 0.2, 0.7], [1.006, 0.1, 0.8], [2.32, 0.15, 0.55], [3.7, 0.11, 0.4], [5.1, 0.08, 0.3], [6.9, 0.05, 0.22]]) {
@@ -490,6 +492,13 @@ export const SFX = {
         const a = 0.05 + 0.012 * Math.min(6, ch);
         ping(v, t + 0.005, 'sine', f0 * 2, a, 0.9 + 0.1 * ch, 0.001);
         ping(v, t + 0.005, 'triangle', f0 * 3.01, a * 0.5, 0.6, 0.001);
+      }
+      if (pf) {
+        // the return: a bright gold bell over the clang and a quick rising whoosh after the shot
+        ping(v, t + 0.004, 'sine', f0 * 2.5, 0.09, 1.1, 0.001);
+        ping(v, t + 0.004, 'triangle', f0 * 4.02, 0.04, 0.7, 0.001);
+        const bp = swish(v, t + 0.03, 'white', 'bandpass', 2500, 2.5, [[0, 0], [0.04, 0.1], [0.3, 0]]);
+        glide(bp.frequency, t + 0.03, 2500, 7000, 0.3);
       }
       // sparkle ring: quick ascending glints
       const notes = big ? [88, 91, 95, 100, 103] : [91, 95, 100];
@@ -505,6 +514,18 @@ export const SFX = {
         const bp = swish(v, t, 'white', 'bandpass', 3000, 2, [[0, 0], [0.05, 0.12], [0.6, 0]]);
         glide(bp.frequency, t, 3000, 9000, 0.6);
       }
+    },
+  },
+
+  /** dragon:returned — a returned bullet bursts on the wyrm's head: a fiery crack and a low hit. opts.kind 1 (wisp): heavier. */
+  returnHit: {
+    prio: 5, rev: 0.3, gap: 0.05,
+    play(v, t, o) {
+      const k = o.kind === 1 ? 1.3 : 1;
+      burst(v, t, 'white', 'bandpass', 1800, 1.1, 0.45 * k, 0.12, 0.0008);
+      burst(v, t, 'pink', 'lowpass', 900, 0.8, 0.5 * k, 0.2);
+      thump(v, t, 110, 45, 0.12, 0.6 * k, 0.22);
+      ping(v, t, 'sine', 1320, 0.05 * k, 0.25, 0.001);
     },
   },
 

@@ -492,10 +492,15 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
   const headItem = worn.find(({ slot }) => slot === 'head')?.item;
   const hairKeep = headItem?.hidesHair ? new Set() : Array.isArray(headItem?.hair) ? new Set(headItem.hair) : null;
   const hairOn = (name) => !hairKeep || hairKeep.has(name);
+  // a deep hood can put the face in shadow (`shadowsFace`): the face takes the near-black of the
+  // shirt and the eyes are left out (at the game camera the ASCII never resolves a face; a pale one
+  // under gold hair read as a gold mask)
+  const shade = !!headItem?.shadowsFace;
+  const faceMat = shade ? M.shirt : M.skin;
   {
     const [sx, sy, sz] = DIM.skull;
-    mesh(head, limb({ length: 0.12, r0: BODY.neck[0], r1: BODY.neck[1], radial: 8, rings: 2, capSegs: 1 }), M.skin, 0, 0.1, 0.0);
-    mesh(head, orient.up(ellipsoidGeometry(0.078, 0.09, 0.1)), M.skin, sx, sy, sz);
+    mesh(head, limb({ length: 0.12, r0: BODY.neck[0], r1: BODY.neck[1], radial: 8, rings: 2, capSegs: 1 }), faceMat, 0, 0.1, 0.0);
+    mesh(head, orient.up(ellipsoidGeometry(0.078, 0.09, 0.1)), faceMat, sx, sy, sz);
     // slim V-jaw with a pointed chin (chin at ~1.57 m)
     const jaw = ellipsoidGeometry(0.05, 0.04, 0.056, { widthSegs: 10, heightSegs: 6 });
     const jp = jaw.attributes.position;
@@ -505,12 +510,12 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
       jp.setX(i, jp.getX(i) * k);
     }
     jaw.computeVertexNormals();
-    mesh(head, jaw, M.skin, sx, sy - 0.066, sz + 0.016);
+    mesh(head, jaw, faceMat, sx, sy - 0.066, sz + 0.016);
     // the right ear shows below the swept-back locks
-    mesh(head, ellipsoidGeometry(0.012, 0.024, 0.018, { widthSegs: 6, heightSegs: 4 }), M.skin, sx - 0.08, sy - 0.014, sz - 0.008);
+    mesh(head, ellipsoidGeometry(0.012, 0.024, 0.018, { widthSegs: 6, heightSegs: 4 }), faceMat, sx - 0.08, sy - 0.014, sz - 0.008);
     // the eyes: half-lidded almonds (smaller since Session 14: two large dark holes in a pale face
     // under the hood read as a skull's sockets)
-    for (const ex of [0.032, -0.032]) mesh(head, ellipsoidGeometry(0.014, 0.0065, 0.005, { widthSegs: 8, heightSegs: 4 }), M.eye, sx + ex, sy - 0.012, sz + 0.09);
+    if (!shade) for (const ex of [0.032, -0.032]) mesh(head, ellipsoidGeometry(0.014, 0.0065, 0.005, { widthSegs: 8, heightSegs: 4 }), M.eye, sx + ex, sy - 0.012, sz + 0.09);
     if (hairOn('cap')) mesh(head, partGeometry('hair.cap'), M.hair);
   }
   for (const c of HAIR_CLUSTERS) {

@@ -68,7 +68,7 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `viewOverride` | `null` or `{ pos, target, focus? }` — camera override applied by main.js after the rig (see Frame order). Only the Lab model viewer writes it. |
 | `lights` | `add({x,y,z,color:[r,g,b],intensity,radius,life,fade,fadeIn,flicker})` → light (mutable `x,y,z`, `.set()`, `.kill()`) |
 | `fx.add` / `fx.alpha` | glyph particles, additive-HDR / alpha-blended. `spawn({x,y,z,vx,vy,vz,life,size,sizeEnd,glyph,color,colorEnd,alpha,alphaEnd,gravity,drag,spin,rot,flicker,stretch})`. `glyph`: char, string of chars (random pick) or atlas index. |
-| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
+| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; `atmosphere.skyGlow(k 0..1)` (the sky over the clearing glows orange: warms the shared ambient and fog colours; call every frame while it should show, it eases in and out and lets go 0.2 s after the last call; Armageddon, ADR-053); Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below. `dragon` is **the boss slot** (the wyrm in Cinderwood, the Ash Disciple in Ashfall; see Levels and the boss slot); `boss` is the same object |
 | `level`, `levels`, `pickLevel(id)` | the level this page load built (`levels/index.js` definition), every level as `{ id, name }` (the title's stage picker, the Lab's LEVEL row), and a reload into another one (`?level=<id>`, other parameters kept). Tests may leave them out: flow falls back to Cinderwood's lines |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
@@ -360,7 +360,8 @@ debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill(), 
 ```
 Module-private state the animator reads (anim.js): `plungeAnim { phase, u, t, exec, h }` (the plunge
 phase from the exported `PL` enum `{ VANISH, HANG, DIVE, RIDE, FLIP, LAND }`, progress through it,
-the lift), `deflect { n, t, side }` (the parry chain), `guardHold` 0..1 (the guard lingering between
+the lift), `deflect { n, t, side, perfect }` (the parry chain; `perfect` = the last parry was pressed
+within `DEFENSE.perfectParryWindow`, read by an attacker that answers a perfect parry: bullets.js), `guardHold` 0..1 (the guard lingering between
 parries), `rmb { held, upT, parryT, edge, chain }`.
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
 light chain of five (falling cut → rising backhand → whirl → stab → two-handed slam finisher; ADR-041),
@@ -425,6 +426,11 @@ the clang); each parry slides him `TUNE.deflectPush` 0.16 m back (×1.6 for blue
 the guard lingers (`guardHold` eases 1 → 0 over `TUNE.guardLinger` [0.32, 0.6] s after the last one).
 `player:parry.chain` is the hero's own rhythm count and can run across two strings; the HUD's
 "DEFLECT ×N" uses the attacker's `combat:deflectChain` (one string).
+**Perfect parry** (ADR-051): a parry whose RMB press came ≤ `DEFENSE.perfectParryWindow` (0.08 s)
+before the impact is perfect: `_parry(tell, attack, sx, sz, light, perfect)` stores it on
+`deflect.perfect` and adds `perfect` to `player:parry`. It is computed for every parry; only bullets
+consume it today (a light perfect parry: hit-stop `TUNE.returnStop` 0.05 s, a gold burst
+`fx.perfectParry`, the RETURN call-out, a brighter clang). Melee perfect parries change nothing yet.
 RMB cancels a charge (the LMB press is consumed); an RMB press during one's own swing is queued and
 raises the guard when recovery starts. Streams (breath) only count as a perfect dodge when the roll
 starts into them.
@@ -511,8 +517,10 @@ weapon. `DEFAULT_LOADOUT` is the Shrouded set (ADR-043: `shroud.hood`, `shroud.t
 `shroud.arms`, `shroud.cloak` over `wanderer.legs`, `wanderer.skirt`, `wanderer.sword`; no shoulder
 item); `WANDERER_LOADOUT` is the outfit before it. A head item may keep only part of the hair:
 `hair: [...]` lists the pieces built under it (`'cap'` and `HAIR_CLUSTERS` names; the hood keeps
-the cap and the fringe, and builds its own gold locks by the cheeks), `hidesHair: true` builds none;
-the five hair joints stay either way. The hair is gold (ADR-049). `buildHero(U, loadout = DEFAULT_LOADOUT)`
+only the cap and builds its own gold strands, `HOOD_HAIR` in `gear/shroud.js`: a spiky fringe, cheek
+locks and a strand a side onto the collarbone), `hidesHair: true` builds none; the five hair joints
+stay either way. `shadowsFace: true` on a head item (the hood, ADR-056) builds the face, ears and neck
+in the shirt's near-black and leaves the eyes out. The hair is gold (ADR-049). `buildHero(U, loadout = DEFAULT_LOADOUT)`
 builds each slot's item (an empty chest / arms /
 legs slot gets the `base.*` undersuit), merges static meshes per joint + material + slot, and
 returns the usual rig plus `rig.loadout` (slot → id or null) and `rig.slots` (slot → the objects it
@@ -532,7 +540,18 @@ forearm (palm, four curled fingers, thumb). An `arms` item may return `offHand: 
 (`rig.offHand`, else null): the free hand open on the forearm, and the same hand closed round the grip
 `DIM.offGrip` (0.08 m) below the sword hand on the `sword` joint; `apply()` shows `grip` while the
 pose's `twoHand` > 0.6 and `open` otherwise (the Shrouded set's bare hands do; the Wanderer's arms
-do not). **Two hands** (ADR-046): every light swing (the chain, the sprint slash, the roll cut) and
+do not). **Attack variants** (ADR-055): a `LIGHT` def may carry `variants` (more `anim` blocks for
+the same hit: same timing, damage, reach and lunge). `HeroAnimator.play('attack')` calls
+`_pickVariant()`: `anim` or one of `variants` at random with the animator's own noise, never the
+same one twice in a row for one def (`varLast`); the result is `anim.atkDef` / `anim.atkAnim` /
+`anim.atkVar` (0 = `anim`), and `attackPose` reads `atkAnim` for its def. `anim.forceVariant` (an
+index, or null) pins the pick (tests). New swing options: `turn` (rad, a partial pivot from
+mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`), `hop` (m, a
+skip off the ground from the windup into the strike); `stab` takes `rise` and `low`; `slam` takes
+`hop`. Every light sweep without a spin also gets `FLOW`: the hips lead the blade (and the chest
+trails), the weight crosses from the coil's side to the finish's, the body dips and leans into the
+strike. The blade is still the hit test, so each variant is swung at the wyrm in REACH.
+**Two hands** (ADR-046): every light swing (the chain, the sprint slash, the roll cut) and
 the stab hold the grip with both hands (`twoHand` 1, the off hand IK'd to the grip point): `slashH`
 moves the grip off the sword shoulder onto a circle round the chest's centre line in front of it
 (`TWO_R`, `TWO_Z`) and turns the chest less to the left; the slam, the charge and the thrust already
@@ -901,7 +920,9 @@ Damages the player only via `game.player.takeHit(...)` with tell data; announces
   (stagger, posture break, parry recoil, plunge reaction, death, Lab interrupt) drops it at once;
   `reset()` and death zero it. Plus a red glyph burst + red light at the striking part on the flash
   (`fx.tellFlash`). Each hit of a string is its own beat, so a red hit inside a string glows on its
-  own windup only.
+  own windup only. An action with a red glow but no blow of its own (Armageddon's rear-up and
+  salvo) sets `dragon.bodyWarn` 0..1 every frame: the same 0.1 → 0.38 ramp, read and zeroed by
+  `_updateWarn`.
 - parryable (normal / blue) hits: nothing during the windup; on the flash a white glint (star core,
   four-point sparkle, short rays, small white light) at the striking part, ×1.5 for blue.
 - parries throw white/gold sparks (bigger for blue).
@@ -927,12 +948,26 @@ event scratch).
   (ignites at r0, expands to r1); `wall({ x, z, dx, dz, len, w, speed, dist })` (sweeps along its
   normal); `line({ ax, az, dx, dz, n, step, r, stagger, active })` (lava pillars erupting one after
   another); emitters `rain({ count, first, span, warn, warnLed, ledEvery, lo, hi, r, fall })`
-  (meteors round the hero, every `ledEvery`-th on his led position) and `chase({ every, until, warn,
-  lead, r, active, linkFirst })` (pillars under the led hero).
+  (meteors round the hero, every `ledEvery`-th on his led position), `chase({ every, until, warn,
+  lead, r, active, linkFirst })` (pillars under the led hero) and `barrage({ waves, perWave,
+  waveGap, stagger, first, glowAt, warn, warnLed, ledEvery, ledGap, lead, r, fall, fallY, size,
+  damage, burn, knockback, group, crater, tickDamage, tickBurn, safeR, cover, finale })`
+  (Armageddon, ADR-053: waves of meteors over the whole clearing falling from the sky above the
+  wyrm, then `finale` { delay, radius, warn, damage, burn, knockback, fall, size }: one great
+  meteor on the hero, outside the hit cap; from `glowAt` it drives `world.atmosphere.skyGlow`).
+  The wave placement is pure and exported for the tests: `placeWave(n, r, rng, hx, hz, pts, safeR,
+  cover)` (jittered-stratified over `ARENA_R`, no two footprints overlapping by more than `OVERLAP`
+  = 1/3 of one, at most `cover` of the hero's `safeR` disc covered), `leadInto(pts, k, n, r, cx,
+  cz, hx, hz, safeR, cover)` (a led meteor takes the hero's led position only if both rules
+  still hold), `coverage()`, `overlapShare()`, `ARENA_R`.
+- `circle()` also takes `size` (drawn scale), `great` (the biggest impact), `dark` (no light of
+  its own) and, for meteors, `craterBurn` s + `tickDamage` / `tickBurn`: the crater burns on with
+  contact ticks like a burning strip (blockable, never while rolling). The pool holds 64 hazards.
 - Also: `cutStrip(ref)` (a knocked-out pass stops its front; the burnt part lingers), `timeTo(ref,
   px, pz, vx, vz, pr)` (s until the hazard reaches a moving point: the spawning attack re-times its
   own flash with it), `count(kind?)`, `clear()`.
-- Every hazard draws a red ground warning until it goes off, then deals its one blow through
+- Every hazard heats the ground under it until it goes off (ADR-052: `fx.heatDisc` / `heatBand`,
+  no red rings; the edge shows in the last `flashLead` s), then deals its one blow through
   `dragon.hitPlayer({ ..., tell: 'red', parryable: false, blockable: false, plunge })`: i-frames or
   leaving the area avoid it. `plunge` is the spawn option `plunge` (default false: a perfect dodge
   gives the slow-mo in place). Fire the wyrm breathes or spits from the air spawns with `plunge: true`
@@ -946,7 +981,8 @@ event scratch).
   hazards (`announce: false`) are covered by the spawning attack's own beat, re-timed with `timeTo`.
 - Events: `dragon:hazard {kind, stage, x, z, radius}` (stage 'fall' when a meteor starts its visible
   fall; 'hit' when a meteor or pillar goes off; the dive's crash and the nova emit it too from
-  fireAttacks.js).
+  fireAttacks.js; Armageddon: 'launch' for each bolt of the salvo, from fireAttacks.js, radius 0,
+  and 'sky' once when the sky answers, from the barrage, radius = ARENA_R).
 `dragon.hitPlayer(o, action)` forwards `plunge` (`o.plunge ?? the current beat's plunge`) to
 `player.takeHit`; without it `plunge: false` never reaches the hero.
 
@@ -971,7 +1007,9 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
 - Kinds `BULLET { EMBER, WISP, ORB }` (specs `TUNING.bullets.ember | wisp | orb`).
   `spawn(kind, attack, x, y, z, yaw, speed, group = -1, life = 0)` → the record or null (pool full,
   NaN or an unknown kind); `burst(attack, x, y, z, n, wait, stagger, speed, group)` (embers that hang
-  and drop on the hero one by one: the Cinder flurry's slam); `group(max)` → a hit-cap group id;
+  and drop on the hero one by one: the Cinder flurry's slam); `group(max, retMax =
+  TUNING.bullets.returnBudget)` → a group id: the pattern's hit cap and the HP its returned shots
+  may deal in all (past it a perfect parry is a plain deflect);
   `count(kind?)`, `live`, `clear()`.
 - A pattern's headline beat follows its lead bullet: `setLead(b)`, `leadAlive()`, `leadPos(out)`,
   `leadTti()`; the beat part `'bullet'` in `dragon.partPos` resolves to it (the mouth when none).
@@ -985,22 +1023,48 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
   still flying `TUNING.bullets.recue` s after that moment is cued again on its next approach, or
   is a dud when that cue could only come too late.
 - The wheel: `startWheel({ attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn,
-  knockback, max, headline })`, `stopWheel()`, `wheel` (the record: `on`, `lit`, `ang`, `hits`, ...).
+  knockback, max, headline, offs })`, `stopWheel()`, `wheel` (the record: `on`, `lit`, `ang`, `offs`,
+  `hits`, ...). Spoke i lies at `ang + offs[i]`. With `offs` (≤ 8 angles) the spokes are the tongues
+  of a breath (the Scouring breath, ADR-050): the attack calls `aimWheel(x, z, ang, om, px, pz)` every
+  frame after the rig (root = the mouth's ground projection, `ang` = the head's yaw, `om` its turn
+  rate, `px / pz` the pivot the root swings round: the wyrm's root). Without it, `n` spokes evenly
+  round turn by themselves (`speed`, one reversal). A spoke's cue (`tt`) steps the wheel forward
+  (tongues turning at `om`, the root orbiting the pivot, the hero on his sensed velocity) to the
+  first touch: a breath's root moves, so a fixed-origin estimate came far too late.
 - Hits go through `dragon.hitPlayer({ ..., bullet: true, perfect, plunge: false })`: the damage is
   final (no `TUNING.damageScale`), `player.takeHit` receives `light: true` and `perfect` (false for
   embers and wisps: a roll is a plain dodge), and a parry does not call `dragon.onParried`.
+- Perfect parry → the return (ADR-051): on `RESULT.PARRIED` the field reads
+  `game.player.deflect.perfect`. Normal: the bullet ricochets to `rig.pt.head` (`ricochet` m/s) and
+  the kind's `posture` applies at once. Perfect (embers and wisps; orbs are never parried): the bullet
+  is `returned`, flies at `returnSpeed` m/s drawn ×`returnSize` (`BFX.drawReturned`) and, on reaching
+  the head, deals the kind's `returnDamage` through `dragon.takeHit({ part: 'head', exact: true,
+  posture: returnPosture })` (the phase gate holds, it may kill; the action is never interrupted;
+  posture breaks are allowed), flinches the head and emits `dragon:returned {kind, damage, x, y,
+  z}`. Only the struck bullet returns (the clump it pops does not); returned shots in flight die
+  silently on a clear and fizzle on a posture break like any bullet.
 - Tells: a bullet (or an approaching wheel spoke) emits a paired `combat:tell` + `combat:flash` with
   `hazard: true, bullet: true` `flashLead` before impact (`cue()`; `cover()` lets impacts within
   `cueGap` ride on it). A deflect emits `dragon:parried {attack, tell, hit: 0, last: false, bullet:
-  true}` and adds the kind's `posture`.
+  true, perfect}` and adds the kind's `posture` (a perfect one: its `returnPosture` when it lands).
 - Reads the hero through `game.player`: `isSwinging()` + `sweep` (cutting), `radius`, the sensed
   velocity (`dragon.sense.vel`).
 - Look: `bulletFx.js` (glyph particles through `DragonFx`'s pools; STYLE.md "Bullets").
 
 **Bullet patterns** (`bulletAttacks.js` `BULLET_HELL`, numbers `tuningBullets.js` `BULLET_ATTACKS`,
-spread into `ATTACKS` like `FIRE`; the same action shape): `emberStorm`, `fanVolley`, `wispSwarm`,
-`fireWheel`. Each emits `dragon:spell {name, x, z}` at its cast. A string hit may carry `burst: { n,
-wait, stagger, speed }` (`cinderFlurry`'s overhead): embers scattered by its slam.
+spread into `ATTACKS` like `FIRE`; the same action shape): `emberStorm` (the Ember torrent),
+`fanVolley` (the Cinder burst), `wispSwarm`, `fireWheel` (the Scouring breath); the keys are the
+contract (audio, Lab, tests), the labels are display names. Each emits `dragon:spell {name, x, z}` at
+its cast; the torrent and the Scouring breath also emit `dragon:breathStart` / `dragon:breathEnd`
+(the breath loop). **Every bullet is breathed (ADR-050):** `spit(d, kind, attack, dyaw, speed, grp,
+life)` spawns it at `rig.pt.mouth` along the head's actual aim (`pt.headFwd`) + `dyaw`, with a
+`drop` scaled to the mouth-to-hero distance (`TUNING.bullets.dropK / dropMin / dropMax`: a close hero
+is not flown over); patterns emit from their `hit()` hook (after the rig, so from the jaws as drawn)
+and aim the head first (`aimHead`: reach out of the neck base, `headExact`, a look down the line).
+No pattern spawns from the body or the wings. The wisps are roared from the mouth in a spray (their
+initial headings fan out round the head). A P3 Cinder burst may queue an Ember torrent
+(`brain.queued`, `fanVolley.chain`). A string hit may carry `burst: { n, wait, stagger, speed }`
+(`cinderFlurry`'s overhead): embers scattered by its slam, rising out of a puff of flame.
 
 **Melee FX hooks** (`DragonFx`, called by `attacks.js` through optional calls): `clawTrail(wi, toe,
 heavy)` (a claw's burning wake, every active frame of a claw / overhead hit) and `slamBurst(x, z, r)`
@@ -1195,7 +1259,7 @@ quality is still the default. Pointer Events with multi-touch (each control capt
 pointer); long-press menus, iOS gesture zoom and page panning are blocked while active (the Lab
 panel and the pause panel still scroll). Tuning: `CONFIG.touch`, sizes / look in `ui/touchStyle.js`.
 
-## Levels and the boss slot (2026-11-12, ADR-050, ADR-052)
+## Levels and the boss slot (2026-11-12, ADR-058, ADR-060)
 `src/levels/index.js`: `LEVELS` (Cinderwood `cinderwood`, Ashfall `ash`), `DEFAULT_LEVEL`,
 `getLevel(id)` (id or alias, case-insensitive), `levelFromSearch(search)` (`?level=`; unknown → the
 default), `applyLevel(level)` (merges `level.world` into `CONFIG.world`: main.js calls it once,
@@ -1319,8 +1383,9 @@ Player → hud/audio/fx/flow:
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
   `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust / plunge; kind 'plunge' = the
   head-stab, crit on an execution), `player:hurt {damage, kind, hp}`,
-  `player:block {damage, tell}`, `player:parry {tell, attack, chain, light}` (chain = the hero's parries in rhythm, ≤ 1.1 s
-  apart, 1 = single; it can run across two strings; light = a deflected bullet: a lighter clash), `player:guardBreak {attack}`,
+  `player:block {damage, tell}`, `player:parry {tell, attack, chain, light, perfect}` (chain = the hero's parries in rhythm, ≤ 1.1 s
+  apart, 1 = single; it can run across two strings; light = a deflected bullet: a lighter clash; perfect = pressed within
+  `DEFENSE.perfectParryWindow`: with light, the bullet is returned), `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}` (every perfect dodge:
   plunge, in place or Ghostep; not on an execution),
   `player:ghostep {x, z}` (with every perfect dodge; for the plunge x/z = the hang point above the head),
@@ -1349,9 +1414,12 @@ Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash 
   every flight, and the crash of a plunged flier),
   `dragon:breathStart`, `dragon:breathEnd` (the breath and the sky strafe's pass), `dragon:fireball {x, y, z}`,
   `dragon:explosion {x, z, radius}`,
-  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last, bullet}` (hit = 0-based
+  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last, bullet, perfect}` (hit = 0-based
   index in its string, last = the string's last hit or a single attack: only then a recoil; bullet: true = a
-  deflected bullet, hit 0, last false: posture only, the wyrm is not interrupted and audio stays silent),
+  deflected bullet, hit 0, last false: posture only, the wyrm is not interrupted and audio stays silent; perfect:
+  true = the bullet is returned), `dragon:returned {kind, damage, x, y, z}` (a perfectly parried bullet's return
+  lands on the head: kind 0 ember / 1 wisp, damage dealt, x/y/z the head; audio plays its hit, the HUD its number,
+  flow counts it in the run stats like a sword hit),
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
   `dragon:phase3`, `dragon:phase {n}` (with each of the two above, on the transition roar), `dragon:plunged {execution}`
   (contract 2: every plunge that lands, even during a transition or the killing one),
@@ -1360,7 +1428,8 @@ Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash 
   HUD "GUARDED", audio a block clang),
   `dragon:spell {name, x, z}` (a fire attack's signature moment: the strafe's pass, the dive, the barrage's
   rise, a spell's cast / the nova's charge start), `dragon:hazard {kind, stage, x, z, radius}` (a fire hazard:
-  stage 'fall' = a meteor starts its visible fall, 'hit' = a meteor / pillar / the dive's crash / the nova goes off)
+  stage 'fall' = a meteor starts its visible fall, 'hit' = a meteor / pillar / the dive's crash / the nova goes off,
+  'launch' = a bolt of Armageddon's salvo leaves the jaws, 'sky' = the sky answers it: the barrage begins)
 - Hazard tells: a self-announcing hazard (meteors, chase pillars) emits combat:tell / combat:flash with
   source 'dragon', its spell as the attack, tell 'red' and hazard: true (audio plays a lighter cue)
 - Bullet tells: a bullet about to hit, or an approaching spoke of the fire wheel, emits combat:tell /

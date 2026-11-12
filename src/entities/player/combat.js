@@ -29,6 +29,17 @@ import { DIM } from './model.js';
 //   kind 'thrust' — the charged lunge: blade level along the facing line, hand driven forward.
 // The arc travels a0 → a1 during the active frames, so the blade crosses the front of the hero
 // exactly while it can hit.
+//   Swing extras (any kind 'h'): `turn` (rad, + = to his left) a partial body pivot through the cut
+//   that turns back in the recovery; `hop` (m) a skip off the ground through the windup into the cut.
+//   kind 'stab' takes `rise` (rad: the point drives upward) and `low` (m: from a crouch); kind 'slam'
+//   takes `hop` (a leap through the raise, landing on the impact).
+//
+// `variants` (Session 16, owner: "I don't want him to show the same pattern over and over"): other
+// looks for the same hit. The animator picks `anim` or one of them at random when the hit starts
+// (its own noise, never the game's RNG; never the same one twice in a row). Every variant keeps the
+// hit's timing, damage, reach and lunge, starts where the previous hit's finish leaves the blade and
+// sweeps it across his front inside the active frames, so the chain still flows and still connects
+// (the REACH test swings each one).
 //
 // `lunge` = m stepped forward through the strike; `reach` = how far ahead of the hero the swing
 // connects without stepping (used by the step-in assist to size the lunge, see REACH.assist).
@@ -42,6 +53,13 @@ export const LIGHT = [
     windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
     hitstop: 0.055, shake: 0.12,
     anim: { kind: 'h', loop: true, a0: -2.0, a1: 1.9, a2: 2.3, elev0: 0.75, elev: -0.3, elev2: -0.45 }, // high right → low left
+    variants: [
+      // a low flat draw cut from the right hip, the body pivoting into it, rising at the finish
+      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.35, elev0: -0.3, elev: -0.05, elev2: 0.35, sink: 0.1, turn: 0.4 },
+      // a leaping cut: a skip in from high over the right shoulder, turning into it, down to the left
+      // foot
+      { kind: 'h', a0: -1.75, a1: 1.75, a2: 2.25, elev0: 1.15, elev: -0.45, elev2: -0.6, hop: 0.12, turn: 0.35 },
+    ],
   },
   {
     // 2, the rising backhand: from low at the left hip up across the front to high right
@@ -49,6 +67,12 @@ export const LIGHT = [
     windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
     hitstop: 0.055, shake: 0.12,
     anim: { kind: 'h', a0: 2.2, a1: -1.85, a2: -2.25, elev0: -0.5, elev: 0.45, elev2: 0.85 }, // low left → high right
+    variants: [
+      // a level backhand at chest height, the hips pivoting back round with it
+      { kind: 'h', a0: 2.3, a1: -1.8, a2: -2.3, elev0: 0.0, elev: 0.1, elev2: 0.4, turn: -0.4 },
+      // a falling backhand from high left to low right, dropping into it
+      { kind: 'h', a0: 1.9, a1: -1.7, a2: -2.2, elev0: 0.95, elev: -0.35, elev2: -0.5, sink: 0.1 },
+    ],
   },
   {
     // 3, the whirl: he follows the backhand round to his right, a full turn with the blade held out
@@ -57,6 +81,12 @@ export const LIGHT = [
     windup: 0.16, active: 0.17, recovery: 0.24, lunge: 0.7, reach: 2.2,
     hitstop: 0.065, shake: 0.16,
     anim: { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: 0.3, elev: 0.0, elev2: -0.2 },
+    variants: [
+      // the same turn with the blade rising through it, out of a crouch
+      { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: -0.35, elev: 0.15, elev2: 0.55, sink: 0.08 },
+      // no turn: a skipping cross-cut from high right to low left
+      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.4, elev0: 0.55, elev: -0.15, elev2: -0.35, hop: 0.12, turn: 0.3 },
+    ],
   },
   {
     // 4, the stab: the hand draws back to the right ribs, then drives the point straight out
@@ -64,6 +94,10 @@ export const LIGHT = [
     windup: 0.12, active: 0.09, recovery: 0.22, lunge: 0.8, reach: 2.3,
     hitstop: 0.06, shake: 0.14,
     anim: { kind: 'stab' },
+    variants: [
+      // out of a crouch, the point driving up into the target
+      { kind: 'stab', rise: 0.3, low: 0.12 },
+    ],
   },
   {
     // 5, the combo finisher: raise two-handed overhead, slam down, crystal shards burst from the ground
@@ -75,6 +109,10 @@ export const LIGHT = [
     // windup: blade low ahead (ready) → up-back 33° past the head (raise, mid-windup) → hanging
     // down the back at the apex (a0, the wrists coil); active: over the top into the ground ahead
     anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8 },
+    variants: [
+      // a leap through the raise, landing on the blow
+      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, hop: 0.16 },
+    ],
   },
 ];
 

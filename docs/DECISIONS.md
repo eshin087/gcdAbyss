@@ -979,89 +979,117 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     bloom threshold. The face is warmer and less pale (skin fill gain 3.0 → 2.2), the eyes smaller and
     brown instead of large dark violet-rimmed almonds.
 - **Consequences:** the Wanderer's set is gold-haired too. The face is still the same mesh.
-## ADR-050 — Levels: one per page load, the boss slot keeps its name (2026-11-11)
-- **Context:** the owner wants the Ash Disciple as "a separate level" that can be loaded on its own to
-  test it. Everything was built for one zone and one boss: `World` built the forest, main.js built the
-  `Dragon`, and fourteen modules read `game.dragon` and listen for `dragon:*` events. Another session
-  is changing the wyrm (breath bullets, Armageddon) in parallel.
+## ADR-050 — Every bullet is breathed from the jaws along the head's aim (2026-11-11)
+- **Context:** the owner: the bullet hell should look natural, "no fire spawning out of nowhere".
+  ADR-039's patterns spawned embers on a ring round the body (the storm), off the wing beats (the
+  fan) and as walls under the belly (the wheel). Spec `docs/specs/wyrm-breath-armageddon.md`
+  (approved: "redesign as breath", no bullets from the body ring or the wings).
 - **Decision:**
-  - `src/levels/index.js` registers level definitions (`id`, `name`, `world` overrides, `buildSet`,
-    `createBoss`, the flow's `text`). `?level=<id>` picks one at boot; `applyLevel` merges its world
-    layout into `CONFIG.world` before any module is built. Switching level reloads the page: nothing
-    has to be torn down. The title screen has a stage picker and the Lab a LEVEL row.
-  - **The boss slot:** `game.dragon` stays the name of the current boss and `game.boss` is the same
-    object; a level's boss emits the same `dragon:*` events. A boss offers the Dragon contract's
-    surface; a duelist (`kind: 'duelist'`) has no plunge and offers `onExecute` instead.
-  - Wyrm-specific text moved into the level (flow banners and lore lines, the minimap's zone, the
-    combat log's names, the name tag); audio gates creature vocals on the boss's `kind`.
-- **Alternatives:** renaming `game.dragon` / `dragon:*` to `game.boss` / `boss:*` now (cleaner, but ~14
-  files and a guaranteed collision with the parallel wyrm work; it stays a refactor of its own);
-  switching levels at runtime (needs disposal of the world, the boss and the batches); a second HTML
-  page per level (two builds, two deployments).
+  - One helper, `spit()` in `bulletAttacks.js`: a bullet spawns at `rig.pt.mouth` and flies along
+    the head's ACTUAL yaw (`pt.headFwd`) plus an offset. Patterns emit from their `hit()` hook,
+    which runs after the rig, so the bullet leaves the jaws as they are drawn this frame. The pose
+    aims the head first (`aimHead`: reach out of the neck base, `headExact`, a look down the line);
+    the emission follows where the head really points, never an ideal angle it has not reached.
+  - A bullet leaves at mouth height and reaches hit height over a drop scaled to the
+    mouth-to-hero distance; the head draws in over a close hero (`reachFor`), so he is not flown
+    over. The emission-schedule pre-cues are measured from the mouth.
+  - Pattern shapes follow from what a head can do: the Ember torrent (a swept stream, a forked
+    tongue, orbs coughed at the extremes, a P3 pirouette), the Cinder burst (coughed cones, P3
+    double taps), the Wisp swarm (unchanged origin, denser) and the Scouring breath (tongues of
+    fire at fixed offsets off the head's aim, rooted at the mouth's ground projection, swept by
+    the body turn). The wheel takes head-relative tongues (`offs`, `aimWheel`) and its cue steps
+    the turning wheel forward (its root orbits with the mouth).
+  - "Hard" intensity numbers (tuningBullets.js); bullet damage unchanged.
+- **Alternatives:** keep the old shapes and only move the spawn points to the mouth (a spiral
+  round the body cannot come out of a head that faces one way); emit along the ideal angle and
+  snap the head to it (the head lags its target, so bullets would leave sideways out of the jaw).
+- **Consequences:**
+  - `npm test` → BULLETS checks every bullet is born within 0.6 m of `pt.mouth` and every emission
+    leaves within 0.2 rad of `headFwd` (measured: 0.00 m, centre ≤ 0.10 rad: the half-spacing
+    offset of a gap cough). Wisps are roared out in a spray and only checked for the origin.
+  - Gaps in the denser cones are wider than the hero only at range (spacing x distance > 2 R:
+    ~14 m from the mouth in P2): close in, every cough must be parried.
+  - Nothing is behind the wyrm except in the P3 pirouette and the Scouring breath's sweep.
+  - The mouth reaches ~8 m ahead of the root: tests and AI distances measured from the root are
+    ~8 m shorter from the jaws.
 
-## ADR-051 — Direction: a skill boss rush with fixed rewards (2026-11-11)
-- **Context:** the owner: "kinda like phantom blade zero wuxia combat, boss rush, with some exploring
-  and rpg elements"; both the wuxia combat and the fiction; "fixed rewards as i want this to be more
-  of a skill boss rush game. i do want loot to add cool elements, skills, or abilities to the player
-  to give the player the ability to customize and change their combat style."
-- **Decision:** the game becomes a series of boss duels, each testing one skill, reached from a
-  bonfire through short approaches. Progression is fixed: each boss gives a set reward (a technique,
-  a weapon, an ability or an element) that changes how the hero fights; no XP levels, no random loot
-  tables. Bosses are wuxia figures (sect disciples, wandering swordsmen) with the Cinder Wyrm as the
-  spectacle fight. Each boss gets moves of its own, not the hero's mirrored (owner, about the Ash
-  Disciple). The first reward and the technique system come in the PR after the Ash Disciple.
-- **Consequences:** ROADMAP M2 (character stats, levels, XP, random rarity) is replaced by techniques
-  and fixed rewards; the online milestone is unchanged but not next.
-
-## ADR-052 — The Ash Disciple: a duelist on the hero's skeleton, his moves as keyframe data (2026-11-11)
-- **Context:** the first human boss. A swordsman needs the hero's quality of animation (cloth, gait,
-  two-bone IK, the ink-line look), but the owner asked that his moves not mirror the hero's.
+## ADR-051 — A perfect parry returns a bullet as a damaging shot (2026-11-11)
+- **Context:** the owner wants a perfect parry to send the fire back. Today a parry only deflects
+  a bullet for posture (ADR-039).
 - **Decision:**
-  - He is `buildHero(U, ASH_LOADOUT)` with his own gear items (a douli hat, a robe and skirt on the
-    coat springs, a bracer and a bell sleeve, wrapped trousers, a jian with a tassel on a streamer
-    spring), recoloured on his own material instances.
-  - `HeroAnimator(rig, pilot, poses)`: the animator takes an optional per-instance pose table (merged
-    over the hero's; the hero passes none and is unchanged). He brings `loco` (his jian guard on the
-    hero's gait and foot planner) and `duel` (a keyframe clip).
-  - Every move and reaction is data (moves.js): beats with a tell, a windup (with an optional bait
-    hold), active frames, a hit zone, root motion and pose keys in beat-relative marks; `realise()`
-    turns a move into absolute times and a compiled clip. The blade is keyed as [azimuth, elevation]
-    so swings are arcs and over-the-top chops pass through vertical.
-  - Hits are zones (sector, line, ring) tested from his root through the active frames, so contact
-    lands on the cue: every move within 17 ms of its flash + lead in the TIMING test.
-- **Alternatives:** a new rig and animator for him (months of work to reach the hero's quality);
-  mirroring the hero's attacks (rejected by the owner); hit-testing his blade's swept segment like the
-  hero's (exact to the pose, but contact times then drift with every pose edit).
+  - `DEFENSE.perfectParryWindow` 0.08 s (inside the 0.22 s parry window). The player computes the
+    flag for every parry, stores it on `deflect.perfect` and adds it to `player:parry`; only bullets
+    consume it (melee perfect parries are out of scope).
+  - On `RESULT.PARRIED` the bullet field reads the flag: a perfectly parried ember or wisp is
+    returned (34 m/s, drawn 1.8x, white-gold with an orange trail) and on reaching the head deals
+    the kind's `returnDamage` (ember 30 = a light hit, wisp 70 = a heavy hit) through
+    `dragon.takeHit` (exact damage, part head: the phase gate and death behave as for a sword hit)
+    with `returnPosture` (14 / 30) instead of the deflect posture. It never interrupts the action
+    and never counts in a string's DEFLECT xN. `dragon:parried.perfect`, `dragon:returned`.
+  - Feedback: RETURN call-out, a gold burst on the blade, a 0.05 s hit-stop, a brighter clang.
+  - A return budget per pattern (`TUNING.bullets.returnBudget` 120 HP, ~8 % of a phase's 1500 HP,
+    the spec's target): past it a perfect parry is a plain deflect. The spec's per-shot numbers on
+    their own let a perfect parrier return all 13 P3 wisps at 70 (~910 HP a swarm, ~3x the sword's
+    damage rate).
+- **Alternatives:** a bigger posture hit only (no HP damage: not what was asked); returning the
+  whole popped clump (would turn one parry into a screen-clearing nuke).
+- **Consequences:**
+  - The scripted defenders press 0.12 s before impact, outside the window: the bot runs and their
+    numbers are unaffected by returns. A human who hits the window can chip HP off with every
+    torrent crossing: one return per parry (the clump it pops does not return).
+  - A posture break from accumulated returns is allowed and fizzles the field (returns in flight
+    included).
 
-## ADR-053 — The duelist's rules: a guard that counters, feints that never glint, the execution thrust (2026-11-11)
-- **Context:** the owner chose "Guards and counters": he deflects strikes into his front, they build
-  his posture, and after a few he counterattacks. A fencing bot then showed where a guard leaks.
-- **Decision:**
-  - His guard covers ±75° of his facing in footwork (after a 0.18 s raise delay at the end of a move,
-    a stagger or a recoil; at once after a clash or a flinch) and through the first 55 % of each
-    windup. A guarded strike deals nothing, adds guard posture (8 light / 20 heavy) and clashes
-    (`dragon:guard`, "GUARDED"); in footwork each one makes a counter likelier (0, 35, 70, 100 %): the
-    Riposte. A heavy strike with posture 48 or more (a charged thrust from ~90 % charge) crushes the
-    guard: it lands and he staggers. The chain's slam (40) does not.
-  - **Feints never glint:** a feint has no tell and no flash; only real impacts are cued.
-  - A perfect dodge against him is the Ghostep behind him (no plunge), and his back is never guarded.
-    The attacker may set the Ghostep's distance (`ghostepBehind`; player.js): his is 1.5 m, since the
-    wyrm's 3.2 m left the hero out of sword reach of a man's back.
-  - **Execution:** a broken duelist within `execRange` (3.2 m) is executed by a lunging full thrust
-    whose first active frame calls `onExecute`; the break is spent. While broken, hits crit ×1.5 (the
-    wyrm's 2.2: here the execution is the reward).
-  - Openings: his recoveries, the recoil after his last hit is parried, the Ghostep, the break.
-- **Tuned on bots** (`npm test` → DUEL WIN; `node tests/integration/duel.mjs . probe`): his blows ×
-  1.35 so that a bot reading 70 % of the tells is on the edge. Measured: a god-mode bot that answers
-  every tell wins in 50–54 s (three seeds); mortal bots reading 85 % win in 54 s (1 hit taken), 70 %
-  win in 70–75 s with 1 and 0 flasks left, 60 % die with him at 10 %. Easier than the wyrm (where 85 %
-  is on the edge), as the first boss should be. No human has played it.
-- **Alternatives:** no guard (the owner's other option); a guard that holds through whole windups (the
-  fencer then never trades, and nothing teaches the commit point); hits during his windups
-  interrupting them (makes mashing the answer).
+## ADR-052 — Ground warnings are the ground heating up (2026-11-11)
+- **Context:** the owner: the red ground indicators break immersion ("the pound circle"). Every
+  ground warning drew rotating rings of red `•` and `!`, `>` chevrons and a closing inner ring:
+  UI painted on the world.
+- **Decision:** one diegetic look for every footprint (meteors, pillars, shells, the nova, melee
+  slam zones, the burning pass, the flame ring and wall, the Scouring breath's windup):
+  `fx.heatDisc` / `fx.heatBand` draw a sparse, stable fill of small ground glyphs (`. , : '`,
+  positions hashed per warning, a slow flicker, nothing rotating or marching), coloured by heat
+  (dark ember → orange → white-orange as the impact nears), denser and brighter with k, sparks from
+  k 0.6; the scorch map's heat channel is stamped under it (no char), so the soil and grass glyphs
+  glow. The true edge (a thin bright `·` rim) shows only in the last `flashLead` s. The timing
+  flash on the ground is a heat flare (`heatFlare`). No tell red on the ground; the attacker's own
+  red glow and flash, the audio and `combat:tell` / `combat:flash` are unchanged.
+- **Alternatives:** dimming the red rings (still UI); scorch heat alone (too soft to read at k 0.3).
+- **Consequences:**
+  - Readability rests on warm-on-dark contrast instead of a red outline: at k 0.2 the footprint is a
+    faint warm patch, by k 0.6 an orange field, and the edge is exact when it matters. A human
+    readability check is still owed (bots read events, not pixels).
+  - Heat stamps decay over ~1.5 s, so a dodged or interrupted warning cools visibly instead of
+    vanishing; a little char (burn) builds where heat passes 0.4.
+  - The flame ring's outer reach ring and the strip / wall chevrons are gone: the lit fire shows
+    the way.
+
+## ADR-053 — Armageddon replaces the Meteor rain (2026-11-11)
+- **Context:** the owner asked for a headline set-piece: the dragon fires meteors into the sky that
+  crash down across the arena. The Meteor rain dropped 8–14 meteors round the hero without a cast
+  anyone could see.
+- **Decision:** the attack keeps its key `meteorRain` (audio, Lab, tests, hazard kinds) and becomes
+  Armageddon (P2+): a 1.4 s rear-up (the body glows red through `dragon.bodyWarn`, the throat
+  white-hot), a 1.6 s salvo of 12 / 16 bolts out of the jaws into the sky (visual, `fx.launchBolt`;
+  `dragon:hazard` stage `launch`), the sky answering (`world.atmosphere.skyGlow`, stage `sky`, a
+  rumble) while the wyrm drops to all fours and fights on, then a new hazard emitter
+  `hazards.barrage`: 3 x 8 (P2) / 4 x 10 (P3) meteors in waves 1.6 s apart, falling on a slant
+  from above the wyrm onto the whole clearing (`placeWave`: jittered-stratified; within 12 m of the
+  hero a wave covers ≤ 45 % of the ground and no two footprints overlap by more than a third; every
+  3rd led onto the hero via `leadInto`, never two led impacts within 0.5 s), P3 craters burning
+  2 s (contact ticks), and 1.2 s after the last wave one great meteor (r 7, 34 damage) on the hero.
+- **Alternatives:** keep the rain and add a cast animation (not a set-piece); real missile hazards
+  for the salvo (they deal nothing: visual only keeps the fairness rules simple).
+- **Consequences:**
+  - The salvo deals nothing: the windup + salvo (~3 s) is a punish window.
+  - The hazard pool is 64 (was 48); the barrage keeps ~10 meteors in the air plus up to two waves of
+    craters. Most meteors get no light of their own.
+  - A hero who stands in a P3 crater takes 4-damage ticks every 0.25 s (blockable, never while
+    rolling): the scripted defender, which never steps out, took 31 ticks over one P3 Armageddon.
+    A human who walks out takes a couple. Watch this in the playtest.
+  - The timing check pairs each blow with the flash at its own centre (impacts 0.12 s apart).
 
 ## ADR-054 — Techniques: a Qi meter, two slots, the Ash Riposte as the first reward (2026-11-12)
-- **Context:** ADR-051 made rewards fixed: each boss teaches something that changes how the hero
+- **Context:** ADR-059 made rewards fixed: each boss teaches something that changes how the hero
   fights. The Ash Disciple shipped without his (the owner chose "fight first, reward next PR"). Four
   owner answers (2026-11-12): a technique fires on a **button paid from a meter** that parries and
   perfect dodges fill (not an automatic trigger after a deflect chain); his technique is a **counter
@@ -1100,3 +1128,137 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   `takeHit` may receive `posture`, `pierce` and `technique`; five new events. Balance is unmeasured
   against a human: the bots in `npm test` check the mechanics, not how often a player fills the
   meter. If parries alone fill it too slowly or too fast, the numbers are in `QI`.
+
+## ADR-055 — Attack variants: each light hit has 2–3 looks, picked at random (2026-11-12)
+- **Context:** the owner: "something about his left clicks is meh to me so lets try to make his
+  attack animations and motions cooler and natural looking. i also dont want him to show the same
+  pattern over and over so make it have a few variations." Asked, the owner chose "fast and
+  flowing" and "random variants per hit", with damage and timing per hit unchanged.
+- **Decision:**
+  - `LIGHT[i].variants` in `combat.js`: more `anim` blocks for the same hit. 1: low draw cut, leaping
+    cut; 2: level backhand, falling backhand; 3: rising whirl, skipping cross-cut; 4: low rising stab;
+    5: leaping slam. Each starts where the previous hit's finish leaves the blade (right / left
+    alternation kept) so the chain flows whichever variants come up.
+  - The animator picks at `play('attack')` with its own noise (never the game's RNG, which the sims
+    seed), never the same variant twice in a row for one hit. `forceVariant` pins it for tests.
+  - New swing options: `turn` (a partial pivot), `hop` (a skip); `stab` `rise` / `low`; `slam`
+    `hop`. Every light sweep without a spin also gets `FLOW` (hips lead, chest trails, weight
+    crosses, a dip and a lean into the strike).
+  - The pivot starts at mid-strike: turning the body while the blade is hit-tested moved where it
+    crossed his front, and three variants fell short at 3.5 m.
+- **Consequences:**
+  - The REACH test now swings every variant at contact, 2 m and 3.5 m (24 trials, no miss); its
+    original table pins `anim` (variant 0).
+  - Timing, damage, posture, reach and lunge are the hit's whatever the look; the blade is still the
+    hit test, so a variant's arc is gameplay too.
+  - The sprint slash, the roll cut and the thrust have one look each.
+  - At mid-strike the variants look alike (each blade crosses his front then); they differ in the
+    coil, the finish and the footwork.
+
+## ADR-056 — The face in the hood's shadow; gold strands out of the hood (2026-11-12)
+- **Context:** the owner: "i can't tell the yellow color in front of his face is his hair. since the
+  ascii art and zoom distance will never show the character's actual eyes, nose, and face, we can
+  not worry about that." Chose "locks out of the hood", not too long, and asked for three previews
+  before any of it was finished; picked "A" of three (spiky fringe + cheek locks; parted framing
+  locks; short wild spikes).
+- **Decision:**
+  - A head item may set `shadowsFace`: the face, ears and neck take the shirt's near-black and the
+    eyes are not built. The hood sets it.
+  - The hood keeps only the scalp cap of the body's hair and builds `HOOD_HAIR`: four spiky fringe
+    strands over the brow, chin-length locks at each cheek, one short strand a side onto the
+    collarbone; neighbouring strands alternate the ink sub-id so a line separates them; roots in
+    the darker gold, tips in the bright gold.
+- **Consequences:** the gold reads as hair against a dark face up close; at the phone's game camera
+  every style was only a few gold letters. The Wanderer's set (no hood) keeps its face and hair.
+
+## ADR-057 — A fuller cloak: depth in profile (2026-11-12)
+- **Context:** the owner: "the side angle/view also seems like the character is way too skinny and
+  doesnt seem to have much depth. add a little bit more." Chose "fuller cloak" (not a deeper body,
+  gear on the back or a front drape). The previous round had made the cape too floaty and wide from
+  behind, so the width had to stay.
+- **Decision:** the three back sheets of `SHROUD_SHEETS` hang from further back (z −0.16 / −0.14,
+  were −0.128 / −0.108) and stand off his back more (`out` 0.42 / 0.45, were 0.16 / 0.3); their pull
+  points straight back. The mantle is deeper front to back (rz up to 0.2, the extra behind).
+- **Consequences:** measured at the hems over 60 idle / 90 run frames: depth behind 0.55 m at rest
+  (0.44 on `main`), 0.89 m running (0.81); width 1.28 m at rest, 1.17 m running (1.23 / 1.15 on
+  `main`).
+## ADR-058 — Levels: one per page load, the boss slot keeps its name (2026-11-11)
+- **Context:** the owner wants the Ash Disciple as "a separate level" that can be loaded on its own to
+  test it. Everything was built for one zone and one boss: `World` built the forest, main.js built the
+  `Dragon`, and fourteen modules read `game.dragon` and listen for `dragon:*` events. Another session
+  is changing the wyrm (breath bullets, Armageddon) in parallel.
+- **Decision:**
+  - `src/levels/index.js` registers level definitions (`id`, `name`, `world` overrides, `buildSet`,
+    `createBoss`, the flow's `text`). `?level=<id>` picks one at boot; `applyLevel` merges its world
+    layout into `CONFIG.world` before any module is built. Switching level reloads the page: nothing
+    has to be torn down. The title screen has a stage picker and the Lab a LEVEL row.
+  - **The boss slot:** `game.dragon` stays the name of the current boss and `game.boss` is the same
+    object; a level's boss emits the same `dragon:*` events. A boss offers the Dragon contract's
+    surface; a duelist (`kind: 'duelist'`) has no plunge and offers `onExecute` instead.
+  - Wyrm-specific text moved into the level (flow banners and lore lines, the minimap's zone, the
+    combat log's names, the name tag); audio gates creature vocals on the boss's `kind`.
+- **Alternatives:** renaming `game.dragon` / `dragon:*` to `game.boss` / `boss:*` now (cleaner, but ~14
+  files and a guaranteed collision with the parallel wyrm work; it stays a refactor of its own);
+  switching levels at runtime (needs disposal of the world, the boss and the batches); a second HTML
+  page per level (two builds, two deployments).
+
+## ADR-059 — Direction: a skill boss rush with fixed rewards (2026-11-11)
+- **Context:** the owner: "kinda like phantom blade zero wuxia combat, boss rush, with some exploring
+  and rpg elements"; both the wuxia combat and the fiction; "fixed rewards as i want this to be more
+  of a skill boss rush game. i do want loot to add cool elements, skills, or abilities to the player
+  to give the player the ability to customize and change their combat style."
+- **Decision:** the game becomes a series of boss duels, each testing one skill, reached from a
+  bonfire through short approaches. Progression is fixed: each boss gives a set reward (a technique,
+  a weapon, an ability or an element) that changes how the hero fights; no XP levels, no random loot
+  tables. Bosses are wuxia figures (sect disciples, wandering swordsmen) with the Cinder Wyrm as the
+  spectacle fight. Each boss gets moves of its own, not the hero's mirrored (owner, about the Ash
+  Disciple). The first reward and the technique system come in the PR after the Ash Disciple.
+- **Consequences:** ROADMAP M2 (character stats, levels, XP, random rarity) is replaced by techniques
+  and fixed rewards; the online milestone is unchanged but not next.
+
+## ADR-060 — The Ash Disciple: a duelist on the hero's skeleton, his moves as keyframe data (2026-11-11)
+- **Context:** the first human boss. A swordsman needs the hero's quality of animation (cloth, gait,
+  two-bone IK, the ink-line look), but the owner asked that his moves not mirror the hero's.
+- **Decision:**
+  - He is `buildHero(U, ASH_LOADOUT)` with his own gear items (a douli hat, a robe and skirt on the
+    coat springs, a bracer and a bell sleeve, wrapped trousers, a jian with a tassel on a streamer
+    spring), recoloured on his own material instances.
+  - `HeroAnimator(rig, pilot, poses)`: the animator takes an optional per-instance pose table (merged
+    over the hero's; the hero passes none and is unchanged). He brings `loco` (his jian guard on the
+    hero's gait and foot planner) and `duel` (a keyframe clip).
+  - Every move and reaction is data (moves.js): beats with a tell, a windup (with an optional bait
+    hold), active frames, a hit zone, root motion and pose keys in beat-relative marks; `realise()`
+    turns a move into absolute times and a compiled clip. The blade is keyed as [azimuth, elevation]
+    so swings are arcs and over-the-top chops pass through vertical.
+  - Hits are zones (sector, line, ring) tested from his root through the active frames, so contact
+    lands on the cue: every move within 17 ms of its flash + lead in the TIMING test.
+- **Alternatives:** a new rig and animator for him (months of work to reach the hero's quality);
+  mirroring the hero's attacks (rejected by the owner); hit-testing his blade's swept segment like the
+  hero's (exact to the pose, but contact times then drift with every pose edit).
+
+## ADR-061 — The duelist's rules: a guard that counters, feints that never glint, the execution thrust (2026-11-11)
+- **Context:** the owner chose "Guards and counters": he deflects strikes into his front, they build
+  his posture, and after a few he counterattacks. A fencing bot then showed where a guard leaks.
+- **Decision:**
+  - His guard covers ±75° of his facing in footwork (after a 0.18 s raise delay at the end of a move,
+    a stagger or a recoil; at once after a clash or a flinch) and through the first 55 % of each
+    windup. A guarded strike deals nothing, adds guard posture (8 light / 20 heavy) and clashes
+    (`dragon:guard`, "GUARDED"); in footwork each one makes a counter likelier (0, 35, 70, 100 %): the
+    Riposte. A heavy strike with posture 48 or more (a charged thrust from ~90 % charge) crushes the
+    guard: it lands and he staggers. The chain's slam (40) does not.
+  - **Feints never glint:** a feint has no tell and no flash; only real impacts are cued.
+  - A perfect dodge against him is the Ghostep behind him (no plunge), and his back is never guarded.
+    The attacker may set the Ghostep's distance (`ghostepBehind`; player.js): his is 1.5 m, since the
+    wyrm's 3.2 m left the hero out of sword reach of a man's back.
+  - **Execution:** a broken duelist within `execRange` (3.2 m) is executed by a lunging full thrust
+    whose first active frame calls `onExecute`; the break is spent. While broken, hits crit ×1.5 (the
+    wyrm's 2.2: here the execution is the reward).
+  - Openings: his recoveries, the recoil after his last hit is parried, the Ghostep, the break.
+- **Tuned on bots** (`npm test` → DUEL WIN; `node tests/integration/duel.mjs . probe`): his blows ×
+  1.35 so that a bot reading 70 % of the tells is on the edge. Measured: a god-mode bot that answers
+  every tell wins in 50–54 s (three seeds); mortal bots reading 85 % win in 54 s (1 hit taken), 70 %
+  win in 70–75 s with 1 and 0 flasks left, 60 % die with him at 10 %. Easier than the wyrm (where 85 %
+  is on the edge), as the first boss should be. No human has played it.
+- **Alternatives:** no guard (the owner's other option); a guard that holds through whole windups (the
+  fencer then never trades, and nothing teaches the commit point); hits during his windups
+  interrupting them (makes mashing the answer).

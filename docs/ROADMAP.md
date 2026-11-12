@@ -1,6 +1,6 @@
 # Roadmap
 
-Vision (owner, 2026-11-11, ADR-051): a **wuxia skill boss rush** in the vein of Phantom Blade Zero,
+Vision (owner, 2026-11-11, ADR-059): a **wuxia skill boss rush** in the vein of Phantom Blade Zero,
 with some exploring and RPG elements, presented entirely in a crafted ASCII look. Boss duels, each
 testing one skill, reached from a bonfire through short approaches; wuxia combat and fiction (sects,
 robes, wandering swordsmen), the Cinder Wyrm as the spectacle fight. **Fixed rewards**: each boss gives
@@ -100,7 +100,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] A real tail thrust for the tail lash (a tail-raise control in the rig)
   - [ ] Widen the wing buffet's band; later string hits whiff a hero who stands still
   - [ ] A readable overhead claw at the game camera; a stronger deflect knock-back
-  - [ ] A red windup glow for the meteor cast
+  - [x] A red windup glow for the meteor cast (Armageddon's rear-up glows red, ADR-053)
   - [ ] Teach the probe bot to heal (its death rates are pessimistic)
   - [ ] Capture the phase-3 eruption chase
 
@@ -169,22 +169,22 @@ ADR-054; numbers in COMBAT.md "Techniques"; contract in ARCHITECTURE.md "Techniq
         the hood; the glow and the ash carry the cue (look at it on the phone)
   - [ ] More kinds for the next bosses' rewards (an attack, a movement, an element)
 
-## M1.16 — The Ash Disciple: a second level, a human duelist (2026-11-11, `level/ash-disciple`)
+## M1.19 — The Ash Disciple: a second level, a human duelist (2026-11-11, `level/ash-disciple`)
 Spec: `docs/specs/ash-disciple.md`.
-- [x] Levels: `?level=ash`, a stage picker on the title, a LEVEL row in the Lab; the boss slot (ADR-050)
+- [x] Levels: `?level=ash`, a stage picker on the title, a LEVEL row in the Lab; the boss slot (ADR-058)
 - [x] The Ashfall Courtyard: bonfire, a path and broken steps, a gate, a paved courtyard in a ring of
       pillars and lanterns, a fallen bell, burned trees, falling ash, thin grey grass
 - [x] The Ash Disciple on the hero's skeleton: douli hat, grey robe, bracer and bell sleeve, a jian
-      with a tassel; his own stance and keyframe moves (ADR-052)
+      with a tassel; his own stance and keyframe moves (ADR-060)
 - [x] Nine moves and a counter in P1, three more in P2, the Kindling transition; feints that never
       glint; Ash Crescent projectiles
-- [x] His guard and counters, the Ghostep behind him, the execution thrust (ADR-053)
+- [x] His guard and counters, the Ghostep behind him, the execution thrust (ADR-061)
 - [x] Duel tests (`tests/integration/duel.mjs`: levels, data rules, timing, guard, deflect, Ghostep,
       execution, phases, flow, a bot win; `probe` opt-in); `npm test` + build green
 - [ ] Owner review of the PR preview (`?level=ash`, and on the phone); merge
 - [ ] A human playtest: is the guard readable, are the feints fair, is he too easy (bots: ~1 min)?
 - Follow-ups:
-  - [x] **The reward** (ADR-051): the technique system and his Ash Riposte (M1.17, ADR-054)
+  - [x] **The reward** (ADR-059): the technique system and his Ash Riposte (M1.17, ADR-054)
   - [ ] Look at every move and reaction frame by frame (only Plum Thrust, Swallow Flicks and Crane
         Spins were filmed; the rest were checked by the tests, not by eye)
   - [ ] Sounds of his own: a jian whoosh per swing, a step / glide, the Kindling (today: the cues,
@@ -193,6 +193,32 @@ Spec: `docs/specs/ash-disciple.md`.
   - [ ] The courtyard: a walled edge so the duel cannot drift out through the gaps between pillars
         (he is bounded; the hero is not), and the approach's own encounters (mobs: M2)
   - [ ] Rename `game.dragon` / `dragon:*` to `game.boss` / `boss:*` once the wyrm work has landed
+
+## M1.18 — Attack variants, hair that reads, a fuller cloak (2026-11-12, `player/hair-depth-attack-variety`)
+- [x] 2–3 looks per chain hit, picked at random; hips lead, weight shifts through every sweep (ADR-055)
+- [x] Gold strands out of the hood, the face in its shadow (three previews; the owner picked one) (ADR-056)
+- [x] The cloak stands off his back: depth in profile, the same width from behind (ADR-057)
+- [ ] Follow-ups:
+  - [ ] The owner's phone check of the chain and the look
+  - [ ] Variants for the sprint slash, the roll cut and the thrust
+
+## M1.16 — Breath-born bullets, perfect-parry returns, Armageddon (2026-11-11, `dragon/breath-armageddon`)
+- [x] Ground warnings heat the ground (glyph glow + scorch heat, the edge late): no red rings,
+      `!` marks or chevrons anywhere (ADR-052)
+- [x] A perfect parry (0.08 s) returns embers / wisps as damaging shots; a 120 HP budget per
+      pattern (ADR-051)
+- [x] Every bullet is breathed from the jaws along the head's aim; Ember torrent, Cinder burst,
+      denser Wisp swarm, Scouring breath; "Hard" numbers (ADR-050)
+- [x] Armageddon replaces the Meteor rain: a salvo into the sky, waves over the whole clearing with
+      safe ground kept, burning P3 craters, a great meteor (ADR-053)
+- [ ] Follow-ups:
+  - [ ] The owner's phone test of the preview (frame rate, bullet and heat-glow readability)
+  - [ ] A human playtest of the Hard patterns, the 0.08 s return window and the return budget
+  - [ ] Watch the P3 crater ticks (a hero who never steps out takes many) and the Scouring breath's
+        single crossing of a standing hero
+  - [ ] Melee perfect parries (out of scope here: the flag is computed for every parry)
+  - [ ] Re-run the `win` / `probe` bots and the AI pick shares with the new patterns
+  - [ ] Bullet sounds of their own (a cough, the stream) beyond the breath loop
 
 ## M1.15 — Two hands, a raised guard, idle life, gold hair (2026-11-12, `player/two-hands-idle-life`)
 - [x] Both hands on every swing and the stab; the off hand closes round the grip (ADR-046)
@@ -258,7 +284,7 @@ Spec: `docs/specs/ash-disciple.md`.
   - [ ] Look at `slamBurst`, the Storm flurry and the frame cost of a phase-3 storm on a low-end device
   - [ ] The drawn steel is 0.44 m shorter than the hit segment: decide whether to shorten the reach
 
-## M2 — The boss rush's foundations (revised 2026-11-12, ADR-051)
+## M2 — The boss rush's foundations (revised 2026-11-12, ADR-059)
 - [x] Techniques: a slot system, a meter filled by parries and perfect dodges, an equip screen; the
       Ash Disciple's technique first (M1.17, ADR-054)
 - [ ] Fixed rewards per boss (techniques, weapons, abilities, elements); weapons of other lengths
@@ -268,7 +294,7 @@ Spec: `docs/specs/ash-disciple.md`.
 - [ ] Regular mobs (2–3 types) on the approaches, using the shared combat system and tell rules
 - [~] Save / load (localStorage: the techniques since ADR-054, `game/save.js`), settings menu
       (keybinds, volume, quality)
-- ~~Character stats, levels, XP; loot rarity~~ (dropped: fixed rewards, ADR-051)
+- ~~Character stats, levels, XP; loot rarity~~ (dropped: fixed rewards, ADR-059)
 
 ## M3 — World (v0.4)
 - [ ] Zone streaming: multiple connected areas, transitions, minimap per zone

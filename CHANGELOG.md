@@ -4,7 +4,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Twelve pieces of work since 0.4.0:
+Fourteen pieces of work since 0.4.0:
 - **Techniques: the Ash Disciple's reward** (2026-11-12, ADR-054): beating Shen Hui teaches the
   **Ash Riposte**, a counter stance. Press Q (or the new button above BLOCK on the phone) with a full
   Qi meter: a normal or blue blow that meets the raised blade is turned aside and answered with a
@@ -20,7 +20,7 @@ Twelve pieces of work since 0.4.0:
   - Changed: the hero's `takeHit` turns blows in the stance before the parry; a strike may carry
     `posture`, `pierce` and `technique` to the boss; the Ash Disciple's guard gives way to `pierce`;
     a level may name a `reward`.
-- **The Ash Disciple, a second level** (2026-11-12, ADR-050 – ADR-053): a new boss and a new place,
+- **The Ash Disciple, a second level** (2026-11-12, ADR-058 – ADR-061): a new boss and a new place,
   loaded on their own with `?level=ash` or from the stage picker on the title screen (and the Lab's
   LEVEL row). The Ashfall Courtyard: a ruined sword sect under falling ash, a bonfire at the foot of a
   path, broken steps and a gate, a paved courtyard ringed by broken pillars. In it kneels the Ash
@@ -37,6 +37,20 @@ Twelve pieces of work since 0.4.0:
     minimap zone, the combat log and the name tag come from the level and the boss's name; audio
     gives a duelist no creature voice; grass can be thinned and greyed by a level, the atmosphere can
     fall ash.
+- **Attack variants, hair that reads, a fuller cloak** (2026-11-12, ADR-055 to ADR-057): every hit
+  of the left-click chain has two or three different looks (a draw cut, a leaping cut, a level or
+  falling backhand, a rising whirl, a skipping cross-cut, a low rising stab, a leaping slam), picked
+  at random so the combo doesn't repeat, and every swing turns the hips first and shifts the weight
+  through the cut. Same damage and timing. The hood now hides his face in shadow with gold strands
+  falling out of it, and the cloak stands off his back so he has depth from the side.
+- **Breath-born bullets, perfect-parry returns, Armageddon, heat-glow warnings** (2026-11-11,
+  ADR-050, ADR-051, ADR-052, ADR-053): every bullet now leaves the wyrm's jaws along the way its
+  head points (a sweeping stream of embers, coughed cones, a breath that scours the ground in
+  tongues of fire), and the patterns are much harder. A perfectly timed parry sends an ember or a
+  wisp back as a shot that hurts the dragon. A new set-piece, Armageddon, replaces the Meteor rain:
+  the wyrm rears up and fires a salvo into the sky, which answers with waves of meteors over the
+  whole clearing and one great meteor at the end. Ground warnings are now the ground heating up
+  instead of red rings with `!` marks.
 - **Two hands, a raised guard, idle life, gold hair** (2026-11-12, ADR-046 to ADR-049): the hero
   swings with both hands, blocks with the sword raised across his body, and when you stop for a few
   seconds he looks around, stretches, inspects or twirls his sword, rests it on his shoulder or leans
@@ -85,6 +99,17 @@ Twelve pieces of work since 0.4.0:
   That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **Perfect parry → return** (ADR-051): RMB ≤ 0.08 s before a bullet lands returns an ember (30 HP,
+  14 posture) or a wisp (70 HP, 30 posture) to the wyrm's head; RETURN call-out, gold burst, a
+  brighter clang; `player:parry.perfect`, `dragon:parried.perfect`, `dragon:returned`. At most 120 HP
+  of returns per pattern.
+- **Armageddon** (ADR-053, key `meteorRain`): rear-up, a salvo of 12 / 16 bolts into the sky, the sky
+  glowing orange, 3 x 8 / 4 x 10 meteors in waves over the whole clearing (an even spread, safe
+  ground kept round you), burning craters in phase 3, a great meteor to finish.
+  `hazards.barrage`, `placeWave`, `leadInto`; `world.atmosphere.skyGlow`; `dragon:hazard` stages
+  `launch` and `sky`; `dragon.bodyWarn`.
+- **Scouring breath** (key `fireWheel`): tongues of fire run out of a breath on the ground and are
+  swept round by the wyrm's turn (pausing once, reversing).
 - **Light chain of five** (ADR-041): falling cut → rising backhand → whirl → stab → slam (was sweep,
   backhand, slam). **Sprint slash** (LMB while sprinting) and **roll cut** (LMB out of a forward
   roll); both count as hit 1.
@@ -142,6 +167,14 @@ Twelve pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **Bullets are breathed** (ADR-050): every bullet spawns at the wyrm's mouth along its head's aim
+  (`spit()`); Ember storm → Ember torrent (a swept stream, orbs at the extremes, a P3 pirouette),
+  Cinder fan → Cinder burst (coughed cones, P3 double taps, a P3 chain into a torrent), a denser
+  Wisp swarm. "Hard": ~1.6–2x the bullets, ~20 % faster, shorter cooldowns, higher hit caps; a
+  parry's clump pop 2.2 → 1.5 m; bullet damage unchanged.
+- **Ground warnings** (ADR-052): every hazard and red area attack heats the ground it will hit
+  (a glyph glow and scorch heat, its edge only in the last 0.35 s) instead of red dot rings, `!`
+  marks and chevrons; the roar's shock ring is fire orange.
 - **Idle sword hold** (ADR-041): the blade hangs ~52° below level at his right side with the edge
   down, the arm relaxed by the ribs (was ~43°, flat up).
 - **Side profile** (ADR-041): the cape's outer sheets spread to his right, not behind him; the
@@ -250,6 +283,8 @@ Twelve pieces of work since 0.4.0:
   feet, the blade's glow sitting short of its point.
 
 ### Removed
+- The Meteor rain (replaced by Armageddon under the same key); the old spiral storm, wing fans and
+  evenly spaced fire wheel; the red ground rings, `!` marks, closing inner rings and `>` chevrons.
 - The blink behind the wyrm on a perfect dodge (enemies without a head to stab keep it).
 - The blade's depth pull, which drew the sword in front of the hero's body.
 - The red crack "worms" over the wyrm's back and the dash outlines along its wings and tail.

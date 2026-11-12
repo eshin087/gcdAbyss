@@ -1,6 +1,6 @@
 import { TUNING } from './tuning.js';
 import { TELL, RESULT } from '../../combat/rules.js';
-import { clamp } from '../../core/math.js';
+import { clamp, smoothstep } from '../../core/math.js';
 
 // Fire hazards (contract 3): pooled world-space threats that run on their own, independent of the
 // wyrm's current action, so it can fight while meteors fall. Dragon.update calls update(dt) every
@@ -10,9 +10,11 @@ import { clamp } from '../../core/math.js';
 // (a fire front runs A -> B, the ground it passed keeps burning `linger` s: contact ticks), ring
 // (ignites at r0 and expands to r1), wall (a fire wall sweeping along its normal), line (lava
 // pillars along A + dir * k * step, erupting one after another) and two emitters that spawn
-// circles over time: rain (meteors round the player) and chase (pillars under the player).
+// circles over time: rain (meteors round the player), chase (pillars under the player) and barrage
+// (Armageddon, ADR-053: waves of meteors over the whole clearing, then one great meteor).
 //
-// Every hazard draws a red glyph ground warning from spawn until it goes off, then hits through
+// Every hazard heats the ground under it from spawn until it goes off (ADR-052: a glow of small
+// ground glyphs + scorch heat, its edge drawn in the last flashLead s), then hits through
 // dragon.hitPlayer({ ..., tell: TELL.RED, plunge: false }): i-frames dodge it, block / parry fail
 // (a hazard spawned with plunge: true, fire breathed or spat from the air, lets a perfect dodge plunge).
 // The main hit lands at most once per hazard (a strip's lingering fire ticks: blockable contact
@@ -22,11 +24,13 @@ import { clamp } from '../../core/math.js';
 // with timeTo()). Groups cap how many hits a whole rain / barrage / chase may deal.
 // No per-frame allocations: pooled hazard records, reused hit / event scratch.
 
-export const SHAPE = Object.freeze({ CIRCLE: 0, STRIP: 1, RING: 2, WALL: 3, LINE: 4, RAIN: 5, CHASE: 6 });
-const MAX = 48;
+export const SHAPE = Object.freeze({ CIRCLE: 0, STRIP: 1, RING: 2, WALL: 3, LINE: 4, RAIN: 5, CHASE: 6, BARRAGE: 7 });
+// (an Armageddon wave keeps ~10 meteors in the air plus up to two waves of burning craters, while
+// the wyrm fights on with its other hazards)
+const MAX = 64;
 const MAX_GROUPS = 8;
 const ANNOUNCE_PAD = 3.0; // m: a self-announcing circle tells once the hero is this close to its ring
-const ARENA_R = 27; // m: meteors / pillars land inside this radius (the clearing is 30)
+export const ARENA_R = 27; // m: meteors / pillars land inside this radius (the clearing is 30)
 const PILLAR_BURN = 0.75; // s a lava pillar's column keeps erupting (visual; it hits for `active`)
 const CRATER = 1.3; // s a meteor crater smoulders (visual)
 const FADE = 0.35; // s a ring / wall's flames die out after its travel
@@ -35,6 +39,165 @@ const hash = (a, b) => {
   const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return s - Math.floor(s);
 };
+
+// ------------------------------------------------------------------ Armageddon placement (pure)
+const TAU = Math.PI * 2;
+const GOLDEN = 2.399963229728653;
+export const OVERLAP = 1 / 3; // two footprints of one wave may share at most this much of one
+/** Lens area of two equal footprints (radius r, centres s apart) as a share of one footprint. */
+export function overlapShare(s, r) {
+  if (!(s < 2 * r)) return 0;
+  const h = Math.max(0, s) / (2 * r);
+  return (2 * Math.acos(h) - 2 * h * Math.sqrt(1 - h * h)) / Math.PI;
+}
+// the closest two centres may sit (x r) for an overlap of OVERLAP, with a 2 % margin
+const SEP_K = (() => {
+  let lo = 0, hi = 2;
+  for (let i = 0; i < 40; i++) {
+    const m = (lo + hi) / 2;
+    if (overlapShare(m, 1) > OVERLAP) lo = m;
+    else hi = m;
+  }
+  return hi * 1.02;
+})();
+// sample points over a unit disc (a sunflower): coverage() counts how many fall in a footprint
+const SAMPLES = (() => {
+  const n = 256, out = new Float64Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const u = Math.sqrt((i + 0.5) / n), a = i * GOLDEN;
+    out[2 * i] = Math.sin(a) * u;
+    out[2 * i + 1] = Math.cos(a) * u;
+  }
+  return out;
+})();
+
+/** Share of the disc of radius R round (hx, hz) covered by the first n footprints (radius r) of pts [x0, z0, x1, z1, ...]. */
+export function coverage(pts, n, r, hx, hz, R) {
+  const m = SAMPLES.length / 2, r2 = r * r;
+  let c = 0;
+  for (let s = 0; s < m; s++) {
+    const x = hx + SAMPLES[2 * s] * R, z = hz + SAMPLES[2 * s + 1] * R;
+    for (let i = 0; i < n; i++) {
+      const dx = x - pts[2 * i], dz = z - pts[2 * i + 1];
+      if (dx * dx + dz * dz <= r2) {
+        c++;
+        break;
+      }
+    }
+  }
+  return c / m;
+}
+
+function inside(pts, i, R) {
+  const l = Math.hypot(pts[2 * i], pts[2 * i + 1]);
+  if (l > R) {
+    pts[2 * i] *= R / l;
+    pts[2 * i + 1] *= R / l;
+  }
+}
+
+/** Push footprint i (and j, unless `fixJ`) apart until they overlap by at most OVERLAP. */
+function separate(pts, i, j, r, R, fixJ) {
+  let dx = pts[2 * i] - pts[2 * j], dz = pts[2 * i + 1] - pts[2 * j + 1];
+  let l = Math.hypot(dx, dz);
+  const need = SEP_K * r;
+  if (l >= need) return;
+  if (l < 1e-3) {
+    dx = Math.sin(i * GOLDEN);
+    dz = Math.cos(i * GOLDEN);
+    l = 1;
+  }
+  const push = need - l, ux = dx / l, uz = dz / l;
+  const ki = fixJ ? 1 : 0.5;
+  pts[2 * i] += ux * push * ki;
+  pts[2 * i + 1] += uz * push * ki;
+  inside(pts, i, R);
+  if (!fixJ) {
+    pts[2 * j] -= ux * push * 0.5;
+    pts[2 * j + 1] -= uz * push * 0.5;
+    inside(pts, j, R);
+  }
+}
+
+/**
+ * The impact points of one Armageddon wave (ADR-053) into `pts` [x0, z0, ...]: n spots over the
+ * clearing, jittered-stratified (a sunflower turned and jittered by `rng`, so the cover is even), no
+ * two overlapping by more than OVERLAP, and kept off the hero: within `safeR` m of (hx, hz) they cover
+ * at most `cover` of the ground (the nearest spot moves out past the safe disc, or to the far side of
+ * the clearing). Pure and seeded: the tests run it directly.
+ */
+export function placeWave(n, r, rng, hx, hz, pts, safeR = 12, cover = 0.45) {
+  const R = ARENA_R - 0.35 * r;
+  const rot = rng() * TAU;
+  for (let i = 0; i < n; i++) {
+    const rr = R * Math.sqrt((i + 0.25 + 0.5 * rng()) / n);
+    const a = rot + i * GOLDEN + (rng() - 0.5) * 0.6;
+    pts[2 * i] = Math.sin(a) * rr;
+    pts[2 * i + 1] = Math.cos(a) * rr;
+  }
+  const apart = () => {
+    for (let pass = 0; pass < 4; pass++) for (let i = 1; i < n; i++) for (let j = 0; j < i; j++) separate(pts, i, j, r, R, false);
+  };
+  apart();
+  const hxa = Number.isFinite(hx) ? hx : 0, hza = Number.isFinite(hz) ? hz : 0;
+  for (let it = 0; it < n * 2 && coverage(pts, n, r, hxa, hza, safeR) > cover; it++) {
+    // the spot nearest the hero (that is not already out of his safe disc) moves out of it
+    let k = -1, best = Infinity;
+    for (let i = 0; i < n; i++) {
+      const dd = Math.hypot(pts[2 * i] - hxa, pts[2 * i + 1] - hza);
+      if (dd < best && dd < safeR + r) {
+        best = dd;
+        k = i;
+      }
+    }
+    if (k < 0) break;
+    let dx = pts[2 * k] - hxa, dz = pts[2 * k + 1] - hza;
+    const l = Math.hypot(dx, dz);
+    if (l < 1e-3) {
+      dx = Math.sin(rot + k);
+      dz = Math.cos(rot + k);
+    } else {
+      dx /= l;
+      dz /= l;
+    }
+    let x = hxa + dx * (safeR + r), z = hza + dz * (safeR + r);
+    if (Math.hypot(x, z) > R) {
+      // no room that way: the far side of the clearing from the hero, a little turned
+      const hl = Math.hypot(hxa, hza) || 1, tw = (rng() - 0.5) * 1.6;
+      const bx = -hxa / hl, bz = -hza / hl;
+      x = (bx * Math.cos(tw) + bz * Math.sin(tw)) * R * (0.6 + 0.4 * rng());
+      z = (bz * Math.cos(tw) - bx * Math.sin(tw)) * R * (0.6 + 0.4 * rng());
+    }
+    pts[2 * k] = x;
+    pts[2 * k + 1] = z;
+    inside(pts, k, R);
+    for (let j = 0; j < n; j++) if (j !== k) separate(pts, k, j, r, R, true);
+  }
+  return pts;
+}
+
+/**
+ * A led meteor (k of a wave of n placed by placeWave) wants the hero's led position (cx, cz): pushed
+ * clear of the wave's other footprints (overlap <= OVERLAP), it takes slot k if the wave still covers
+ * at most `cover` of the hero's safe disc with it; else the slot keeps its spot. Returns whether it led.
+ */
+export function leadInto(pts, k, n, r, cx, cz, hx, hz, safeR = 12, cover = 0.45) {
+  if (!Number.isFinite(cx + cz)) return false;
+  const R = ARENA_R - 0.35 * r;
+  const ox = pts[2 * k], oz = pts[2 * k + 1];
+  pts[2 * k] = cx;
+  pts[2 * k + 1] = cz;
+  inside(pts, k, R);
+  for (let pass = 0; pass < 3; pass++) for (let j = 0; j < n; j++) if (j !== k) separate(pts, k, j, r, R, true);
+  let ok = true;
+  for (let j = 0; j < n && ok; j++) if (j !== k && overlapShare(Math.hypot(pts[2 * k] - pts[2 * j], pts[2 * k + 1] - pts[2 * j + 1]), r) > OVERLAP) ok = false;
+  if (ok && Number.isFinite(hx + hz) && coverage(pts, n, r, hx, hz, safeR) > cover) ok = false;
+  if (!ok) {
+    pts[2 * k] = ox;
+    pts[2 * k + 1] = oz;
+  }
+  return ok;
+}
 
 function blank(i) {
   return {
@@ -50,13 +213,18 @@ function blank(i) {
     linger: 0, tick: 0, tickT: 0, tickDamage: 0, tickBurn: 0,
     // tells
     announce: false, told: false, flashed: false, group: -1,
-    // projectile (meteor / shell): origin + visible fall
-    fall: 0, ox: 0, oy: 0, oz: 0, fell: false, shell: false,
+    // projectile (meteor / shell): origin + visible fall; size: drawn scale; great: Armageddon's last
+    // meteor (the biggest impact); dark: no light of its own (a wave keeps ~10 in the air)
+    fall: 0, ox: 0, oy: 0, oz: 0, fell: false, shell: false, size: 1, great: false, dark: false,
+    // barrage (Armageddon): waves x perWave meteors, the wave in pts, which have spawned / were led
+    waves: 0, perWave: 0, waveGap: 0, glowAt: 0, crater: 0, wave: -1, ledLast: -9, skyDone: false,
+    fin: null, finDone: false, finAt: 0, pts: null, spawned: null, ledMask: 0, rng: null,
+    fallY: 0, lead2: 0, ledGap: 0, safeR: 12, cover: 0.45,
     // emitters
     count: 0, done: 0, first: 0, span: 0, warn: 0, warnLed: 0, ledEvery: 0, lo: 0, hi: 0, every: 0, until: 0,
     lead: 0, linkFirst: false,
-    // fx scratch (accumulators, held sprites, pillars burst bitmask, lights)
-    hold: 0, acc: 0, acc2: 0, acc3: 0, acc4: 0, seed: 0, mask: 0,
+    // fx scratch (accumulators, held sprites, scorch-heat stamp timer, pillars burst bitmask, lights)
+    hold: 0, acc: 0, acc2: 0, acc3: 0, acc4: 0, heatT: 0, seed: 0, mask: 0,
     l0: null, l1: null, l2: null,
   };
 }
@@ -168,7 +336,15 @@ export class Hazards {
     h.ox = num(f?.x, h.x);
     h.oy = num(f?.y, 0);
     h.oz = num(f?.z, h.z);
-    const linger = h.kind === 'pillar' ? PILLAR_BURN + 0.6 : h.kind === 'meteor' ? CRATER : 0.3;
+    h.size = Math.max(0.3, num(o.size, 1));
+    h.great = !!o.great;
+    h.dark = !!o.dark;
+    // a meteor's crater may burn on (`craterBurn` s): blockable contact ticks like a burning strip
+    h.linger = h.kind === 'meteor' ? Math.max(0, num(o.craterBurn, 0)) : 0;
+    h.tick = 0.25;
+    h.tickDamage = num(o.tickDamage, 0);
+    h.tickBurn = num(o.tickBurn, 0);
+    const linger = h.kind === 'pillar' ? PILLAR_BURN + 0.6 : h.kind === 'meteor' ? Math.max(CRATER, h.linger) : 0.3;
     h.end = h.impact + h.active + linger;
     return this._ref(h);
   }
@@ -265,6 +441,59 @@ export class Hazards {
     h.fall = Math.max(0.2, num(o.fall, 0.75));
     h.group = Number.isInteger(o.group) ? o.group : -1;
     h.end = h.first + h.span + 0.2; // (all spawned by then; the meteors live on their own)
+    return this._ref(h);
+  }
+
+  /**
+   * Armageddon (emitter, ADR-053): `waves` x `perWave` meteors, wave w's j-th landing `first + w x
+   * waveGap + j x stagger` s from now over the whole clearing (placeWave: even cover, no two
+   * overlapping by more than a third, the hero's safe ground kept), each heating its ground `warn` s
+   * (led ones `warnLed` s: every `ledEvery`-th onto the hero's led position, never two led impacts
+   * within `ledGap` s, see leadInto) and falling `fall` s on a slant from `fallY` m above the wyrm;
+   * `crater` s of burning craters (tickDamage). `finale` { delay, radius, warn, damage, burn, knockback,
+   * fall, size }: `delay` s after the last wave one great meteor on the hero (no hit cap). From
+   * `glowAt` s the sky glows orange over the clearing (world.atmosphere.skyGlow) until the finale
+   * lands. Meteors share `group` (hit cap) and announce themselves.
+   */
+  barrage(o) {
+    const h = this._take(SHAPE.BARRAGE, { ...o, delay: 0.05, announce: false });
+    if (!h) return null;
+    h.kind = 'barrage';
+    h.waves = clamp(Math.round(num(o.waves, 3)), 1, 6);
+    h.perWave = clamp(Math.round(num(o.perWave, 8)), 1, 12);
+    h.waveGap = Math.max(0.3, num(o.waveGap, 1.6));
+    h.delay = Math.max(0, num(o.stagger, 0.12)); // (the stagger inside a wave)
+    h.first = Math.max(0.6, num(o.first, 3.9));
+    h.glowAt = Math.max(0, num(o.glowAt, 1.6));
+    h.warn = Math.max(0.6, num(o.warn, 1.5));
+    h.warnLed = Math.max(0.6, num(o.warnLed, 1.2));
+    h.ledEvery = Math.max(1, Math.round(num(o.ledEvery, 3)));
+    h.ledGap = Math.max(0, num(o.ledGap, 0.5));
+    h.lead2 = Math.max(0, num(o.lead, 0.5));
+    h.r = Math.max(0.5, num(o.r, 3.4));
+    h.fall = Math.max(0.2, num(o.fall, 0.9));
+    h.fallY = Math.max(5, num(o.fallY, 34));
+    h.size = Math.max(0.3, num(o.size, 1.3));
+    h.crater = Math.max(0, num(o.crater, 0));
+    h.tickDamage = num(o.tickDamage, 0);
+    h.tickBurn = num(o.tickBurn, 0);
+    h.safeR = Math.max(1, num(o.safeR, 12));
+    h.cover = clamp(num(o.cover, 0.45), 0.05, 1);
+    h.group = Number.isInteger(o.group) ? o.group : -1;
+    h.pts = new Float64Array(h.perWave * 2);
+    h.spawned = new Uint8Array(h.waves * h.perWave);
+    let seed = (Math.random() * 4294967296) >>> 0;
+    h.rng = () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const last = h.first + (h.waves - 1) * h.waveGap + (h.perWave - 1) * h.delay;
+    const F = o.finale;
+    h.fin = F ? { r: Math.max(0.5, num(F.radius, 7)), warn: Math.max(0.6, num(F.warn, 2)), damage: num(F.damage, 34), burn: num(F.burn, 2), knockback: num(F.knockback, 7), fall: Math.max(0.2, num(F.fall, 1.1)), size: Math.max(0.3, num(F.size, 2.4)) } : null;
+    h.finAt = last + (F ? Math.max(0.3, num(F.delay, 1.2)) : 0);
+    h.end = h.finAt + 1.0; // (the sky fades as the last one lands; the meteors live on their own)
     return this._ref(h);
   }
 
@@ -394,6 +623,9 @@ export class Hazards {
         case SHAPE.CHASE:
           this._chase(h, dt, px, pz);
           break;
+        case SHAPE.BARRAGE:
+          this._barrage(h, px, pz);
+          break;
       }
       if (h.alive && h.t >= h.end) this._kill(h);
       if (h.alive) n++;
@@ -491,9 +723,9 @@ export class Hazards {
     if (h.announce) this._announce(h, h.x, h.z, dist <= h.r + pr + ANNOUNCE_PAD);
     const life = fx.holdLife(h, dt);
     if (left > 0) {
-      // the red ground warning until impact (an inner ring closes in as it nears), the projectile
+      // the ground heats up until impact (its edge shows in the last flashLead s), the projectile
       const k = clamp(1 - left / Math.max(0.3, h.impact), 0, 1);
-      fx.hzRing(life, h.x, h.z, h.r, k, h.flashed, h.kind === 'pillar' ? 1 : 0);
+      fx.heatDisc(life, h, dt, h.x, h.z, h.r, k, h.flashed || left <= TUNING.flashLead, h.seed, h.kind === 'pillar' ? 1 : 0);
       if (h.kind === 'pillar') fx.pillarRumble(h, dt, h.x, h.z, h.r, k);
       if (h.fall > 0 && left <= h.fall) {
         if (!h.fell) {
@@ -502,7 +734,7 @@ export class Hazards {
         }
         const u = 1 - left / h.fall;
         const e = u * (0.75 + 0.25 * u); // a little acceleration
-        if (h.kind === 'meteor' || h.shell) fx.meteor(life, h, dt, h.ox + (h.x - h.ox) * e, h.oy * (1 - e), h.oz + (h.z - h.oz) * e, h.x - h.ox, -h.oy, h.z - h.oz, h.kind === 'meteor');
+        if (h.kind === 'meteor' || h.shell) fx.meteor(life, h, dt, h.ox + (h.x - h.ox) * e, h.oy * (1 - e), h.oz + (h.z - h.oz) * e, h.x - h.ox, -h.oy, h.z - h.oz, h.kind === 'meteor' ? h.size : false);
       }
       return;
     }
@@ -516,7 +748,16 @@ export class Hazards {
     }
     const since = h.t - h.impact;
     if (!h.hit && since <= h.active + 1e-6 && dist <= h.r + pr) this._blow(h, h.x, h.z);
-    if (h.kind === 'meteor') fx.crater(h, dt, h.x, h.z, h.r, clamp(1 - since / CRATER, 0, 1));
+    // a burning crater (Armageddon, P3): contact ticks once the blow is over, never while rolling
+    const burning = h.linger > 0 && since < h.linger;
+    if (burning && since > h.active && h.tickDamage > 0) {
+      h.tickT -= dt;
+      if (h.tickT <= 0) {
+        h.tickT = h.tick;
+        if (dist <= h.r * 0.8 + pr) this._tick(h, h.x, h.z);
+      }
+    }
+    if (h.kind === 'meteor') fx.crater(h, dt, h.x, h.z, h.r, clamp(1 - since / Math.max(CRATER, h.linger), 0, 1), burning);
     else if (h.kind === 'pillar') fx.pillarBurn(h, dt, h.x, h.z, h.r, clamp(1 - since / PILLAR_BURN, 0, 1));
   }
 
@@ -527,8 +768,8 @@ export class Hazards {
     const f = clamp(run * h.speed, 0, h.len);
     const b0 = clamp((run - h.linger) * h.speed, 0, h.len); // start of the part still burning
     const life = fx.holdLife(h, dt);
-    // red warning ahead of the front; flames behind it
-    if (f < h.len) fx.stripWarn(life, h, dt, f, clamp(1 - Math.max(0, -run) / Math.max(0.3, h.impact), 0, 1));
+    // the ground heats up ahead of the front; flames behind it
+    if (f < h.len) fx.stripWarn(life, h, dt, f, clamp(1 - Math.max(0, -run) / Math.max(0.3, h.impact), 0, 1), run > -TUNING.flashLead);
     if (run > 0) fx.stripFire(h, dt, b0, f, run < h.len / h.speed);
     const ex = px - h.ax, ez = pz - h.az;
     const s = ex * h.dx + ez * h.dz;
@@ -570,7 +811,7 @@ export class Hazards {
     const run = h.t - h.impact;
     const life = fx.holdLife(h, dt);
     if (run < 0) {
-      fx.ringWarn(life, h, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1));
+      fx.ringWarn(life, h, dt, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1), -run <= TUNING.flashLead);
       return;
     }
     const r = Math.min(h.r1, h.r0 + run * h.speed);
@@ -605,7 +846,7 @@ export class Hazards {
     const run = h.t - h.impact;
     const life = fx.holdLife(h, dt);
     if (run < 0) {
-      fx.wallWarn(life, h, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1));
+      fx.wallWarn(life, h, dt, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1), -run <= TUNING.flashLead);
       return;
     }
     const s = Math.min(h.dist, run * h.speed);
@@ -642,7 +883,7 @@ export class Hazards {
       const left = ik - h.t;
       if (left > 0) {
         const kk = clamp(1 - left / Math.max(0.3, ik), 0, 1);
-        fx.hzRing(life, x, z, h.r, kk, left <= TUNING.flashLead, 1);
+        fx.heatDisc(life, h, dt, x, z, h.r, kk, left <= TUNING.flashLead, h.seed + k * 13.1, 1);
         fx.pillarRumble(h, dt, x, z, h.r, kk);
         continue;
       }
@@ -700,6 +941,73 @@ export class Hazards {
         from: { x: x + side * (5 + 3 * hash(h.seed + 5.5, i)), y: 30, z: z - 11 - 3 * hash(h.seed + 9.2, i) },
       });
     }
+  }
+
+  _barrage(h, px, pz) {
+    const d = this.d;
+    const hx = Number.isFinite(px) && px < 1e5 ? px : d.position.x, hz = Number.isFinite(pz) && pz < 1e5 ? pz : d.position.z;
+    // the sky answers: an orange glow over the clearing from the hush until the last one lands
+    const glow = smoothstep(h.glowAt, h.glowAt + 0.8, h.t) * (1 - smoothstep(h.end - 1.0, h.end, h.t));
+    this.game.world?.atmosphere?.skyGlow?.(glow);
+    if (!h.skyDone && h.t >= h.glowAt) {
+      h.skyDone = true;
+      d.emit('dragon:hazard', { kind: 'meteor', stage: 'sky', x: d.position.x, z: d.position.z, radius: ARENA_R });
+    }
+    const s = d.sense, n = h.perWave;
+    const lx = hx + (s?.vel?.x ?? 0) * h.lead2, lz = hz + (s?.vel?.z ?? 0) * h.lead2;
+    for (let w = 0; w < h.waves; w++) {
+      const base = h.first + w * h.waveGap;
+      if (h.t < base - h.warn - 0.01) break; // (waves in time order)
+      if (h.wave < w) {
+        // the wave's spots, placed when its first warning is due; which of them are led
+        h.wave = w;
+        placeWave(n, h.r, h.rng, hx, hz, h.pts, h.safeR, h.cover - (h.cover > 0.2 ? 0.08 : 0));
+        h.ledMask = 0;
+        for (let j = 0; j < n; j++) {
+          const at = base + j * h.delay;
+          if ((w * n + j) % h.ledEvery === 0 && at - h.ledLast >= h.ledGap - 1e-6) {
+            h.ledMask |= 1 << j;
+            h.ledLast = at;
+          }
+        }
+      }
+      if (h.wave !== w) continue;
+      for (let j = 0; j < n; j++) {
+        const i = w * n + j;
+        if (h.spawned[i]) continue;
+        const led = !!(h.ledMask & (1 << j));
+        const impact = base + j * h.delay;
+        if (h.t < impact - (led ? h.warnLed : h.warn)) continue;
+        h.spawned[i] = 1;
+        if (led) leadInto(h.pts, j, n, h.r, lx, lz, hx, hz, h.safeR, h.cover);
+        this._meteorAt(h, h.pts[2 * j], h.pts[2 * j + 1], impact, h.r, h.fall, h.size, h.group, (j & 1) === 1, h.damage, h.burn, h.knockback, h.crater);
+      }
+    }
+    if (h.fin && !h.finDone && h.t >= h.finAt - h.fin.warn) {
+      // the last one: a great meteor on the hero's led position
+      h.finDone = true;
+      let x = lx, z = lz;
+      const rl = Math.hypot(x, z), Rm = ARENA_R - 0.35 * h.fin.r;
+      if (rl > Rm) {
+        x *= Rm / rl;
+        z *= Rm / rl;
+      }
+      const F = h.fin;
+      this._meteorAt(h, x, z, h.finAt, F.r, F.fall, F.size, -1, false, F.damage, F.burn, F.knockback, h.crater, true);
+    }
+  }
+
+  /** One Armageddon meteor at (x, z) landing at the barrage's time `impact`, falling from above the wyrm. */
+  _meteorAt(h, x, z, impact, r, fall, size, group, dark, damage, burn, knockback, crater, great = false) {
+    const d = this.d;
+    const left = Math.max(0.6, impact - h.t);
+    const wx = d.position.x, wz = d.position.z;
+    this.circle({
+      kind: 'meteor', attack: h.attack, x, z, r, delay: left, damage, burn, knockback, group, active: 0.12,
+      fall: Math.min(fall, left - 0.05), size, dark, great, craterBurn: crater, tickDamage: h.tickDamage, tickBurn: h.tickBurn,
+      // they come down on a slant from the sky over the wyrm: the bolts it fired
+      from: { x: wx + (x - wx) * 0.25, y: h.fallY, z: wz + (z - wz) * 0.25 },
+    });
   }
 
   _chase(h, dt, px, pz) {

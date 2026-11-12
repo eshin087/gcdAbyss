@@ -83,12 +83,15 @@ export class Hud {
     // call-outs + damage numbers (a blow turned by a technique's stance into its counter calls the
     // technique's name instead of PARRY)
     on('player:parry', (d) => {
-      if (!(d.technique && !d.light)) this.calls.call(d.tell === 'blue' ? 'deflect' : 'parry');
+      if (d.technique && !d.light) return;
+      this.calls.call(d.light && d.perfect ? 'ret' : d.tell === 'blue' ? 'deflect' : 'parry');
     });
     on('player:technique', (d) => {
       const T = getTechnique(d.id);
       if (T && d.phase === 'counter') this.calls.call('tech', T.short);
     });
+    // a returned bullet landing on the wyrm: its damage at the head, like a heavy hit's number
+    on('dragon:returned', (d) => this.calls.number(d.damage, d, { heavy: true }));
     on('player:block', () => this.calls.call('block'));
     on('player:guardBreak', () => this.calls.call('gbreak'));
     on('player:perfectDodge', () => this._ghostep());

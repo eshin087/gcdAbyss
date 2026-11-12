@@ -2,8 +2,14 @@ import { range } from '../core/rng.js';
 import { TAU } from '../core/math.js';
 
 // Living night: bonfire flames + embers (and its light), fireflies drifting at the forest edge,
-// leaves falling from the canopy near the camera. A set with `ash: true` (the Ashfall courtyard)
-// has ash flakes falling everywhere and a few drifting embers instead of the fireflies, mist and leaves.
+// leaves falling from the canopy near the camera; skyGlow(k): the sky over the clearing burning
+// orange (Armageddon, ADR-053) by warming the shared ambient and fog colours. A set with `ash: true`
+// (the Ashfall courtyard) has ash flakes falling everywhere and a few drifting embers instead of the
+// fireflies, mist and leaves.
+// (subtle: at the phone's close LOW camera the fog fills most of the frame, and a stronger fog tint
+// washed the whole view brown)
+const GLOW_AMBIENT = [0.085, 0.027, 0.006]; // added to U.uAmbient at full glow
+const GLOW_FOG = [0.011, 0.0032, 0.0007]; // added to U.uFogColor
 export class Atmosphere {
   constructor(game, forest) {
     this.game = game;
@@ -11,6 +17,11 @@ export class Atmosphere {
     this.ash = !!forest.ash;
     this.bonfire = forest.bonfire;
     this.bonfireLit = true;
+    this.glow = 0; // the sky glow shown (eases toward the asked one)
+    this._glowWant = 0;
+    this._glowHold = 0; // s the last skyGlow() call still holds
+    this._amb0 = null; // the ambient / fog colours without the glow
+    this._fog0 = null;
     this.fireAcc = 0;
     this.emberAcc = 0;
     this.leafAcc = 0;
@@ -30,8 +41,39 @@ export class Atmosphere {
     });
   }
 
+  /**
+   * The sky over the clearing glows orange by k (0..1). Call every frame while it should show; it eases
+   * in and out (~0.4 s) and lets go 0.2 s after the last call.
+   */
+  skyGlow(k) {
+    const v = Number(k);
+    this._glowWant = Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0;
+    this._glowHold = 0.2;
+  }
+
+  _updateGlow(dt) {
+    const U = this.game.U;
+    if (!U?.uAmbient?.value || !U?.uFogColor?.value) return;
+    if (this._glowHold > 0) this._glowHold -= dt;
+    else this._glowWant = 0;
+    if (this.glow <= 0 && this._glowWant <= 0) return;
+    if (!this._amb0) {
+      this._amb0 = U.uAmbient.value.clone();
+      this._fog0 = U.uFogColor.value.clone();
+    }
+    this.glow += (this._glowWant - this.glow) * (1 - Math.exp(-dt * 2.5));
+    if (this.glow < 0.002 && this._glowWant <= 0) this.glow = 0;
+    const g = this.glow, a = this._amb0, f = this._fog0;
+    U.uAmbient.value.setRGB(a.r + GLOW_AMBIENT[0] * g, a.g + GLOW_AMBIENT[1] * g, a.b + GLOW_AMBIENT[2] * g);
+    U.uFogColor.value.setRGB(f.r + GLOW_FOG[0] * g, f.g + GLOW_FOG[1] * g, f.b + GLOW_FOG[2] * g);
+    if (g === 0) {
+      this._amb0 = this._fog0 = null; // (back to whatever the colours are now)
+    }
+  }
+
   update(dt) {
     this.t += dt;
+    this._updateGlow(dt);
     const fxA = this.game.fx.add;
     const fxB = this.game.fx.alpha;
     const bf = this.bonfire;

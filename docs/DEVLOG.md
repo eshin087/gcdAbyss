@@ -7,7 +7,7 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ## 2026-11-12 — Session 16: techniques, the Qi meter, the Ash Riposte
 
-**Task** (from the session that built the Ash Disciple): the "next PR" promised by ADR-051 and the
+**Task** (from the session that built the Ash Disciple): the "next PR" promised by ADR-059 and the
 spec: a technique system and the Ash Disciple's reward. **Owner answers** (one round, all four
 recommendations): a button paid from a **Qi meter** that parries and perfect dodges fill; his
 technique is the **Ash Riposte**, a counter stance; **two slots** on Q / R; the touch button
@@ -48,14 +48,15 @@ console errors (the local 404 is the Vercel analytics script).
 - Balance: how often a player fills the meter against him, and whether 140 + a stagger is too strong.
 - From the game camera facing north the stance's blade reads weakly behind the hood; the glow and
   the ash carry it.
-- ADR numbers: PR #15 (the wyrm's breath) also claims 050-053; whichever lands second renumbers.
+- ADR numbers: after #15 and #17 landed, #16's ADRs became 058-061; main left ADR-054, M1.17 and
+  Session 16 free for this work (merged `level/ash-disciple` back in after its catch-up with main).
 
 **Next:** the owner beats the Ash Disciple on the preview (desktop and phone), equips the Ash Riposte
 and fires it in both levels; then rebase onto `main` once #16 merges.
 
 ---
 
-## 2026-11-12 — Session 15: the Ash Disciple, a second level
+## 2026-11-12 — Session 18: the Ash Disciple, a second level
 
 **Owner:** "help me think of making content for this game. i want this to be kinda like phantom blade
 zero wuxia combat, boss rush, with some exploring and rpg elements." After a pitch (a bonfire hub,
@@ -69,7 +70,7 @@ reward in the next PR; a ruined sect courtyard. Branch `level/ash-disciple` (a w
 `docs/specs/ash-disciple.md`.
 
 **Done:**
-- **Levels (ADR-050):** `src/levels/` (Cinderwood, Ashfall), `?level=ash`, `applyLevel` into
+- **Levels (ADR-058):** `src/levels/` (Cinderwood, Ashfall), `?level=ash`, `applyLevel` into
   `CONFIG.world` at boot, a stage picker on the title, a LEVEL row in the Lab. The boss slot keeps
   `game.dragon` (+ `game.boss`) and the `dragon:*` events. Wyrm text moved into the level (flow banners
   and lore, the minimap zone, the log, the name tag); audio gives a duelist no creature voice.
@@ -78,18 +79,18 @@ reward in the next PR; a ruined sect courtyard. Branch `level/ash-disciple` (a w
   fallen, a bronze bell, a stele, steps and a flagstone path down to the bonfire, ~340 charred trees
   and stumps. Atmosphere `ash` mode (falling flakes, drifting embers); grass thinned, shortened and
   greyed through a set's `grass` hook (`uAsh` in grass.js).
-- **The Ash Disciple (ADR-052):** gear items on the hero's skeleton (a wide douli, a robe with a
+- **The Ash Disciple (ADR-060):** gear items on the hero's skeleton (a wide douli, a robe with a
   crossed collar and sash, a skirt on the coat springs, a bracer and a bell sleeve, wrapped shins, a
   jian with a red tassel on a streamer spring), recoloured on his own materials. `HeroAnimator` takes a
   per-instance pose table; his `loco` is a jian guard on the hero's gait, his `duel` clips are keyframe
   data (`moves.js`): twelve moves, the Riposte counter, the Kindling, eleven reaction clips.
-- **His rules (ADR-053):** the guard and the counter, the windup guard up to the commit point, feints
+- **His rules (ADR-061):** the guard and the counter, the windup guard up to the commit point, feints
   without a tell or a glint, Ash Crescents that cue themselves, the Ghostep behind him, the execution
   thrust (player.js `_startExecuteThrust`, `onExecute`). `dragon:guard` + a GUARDED call-out.
 - **Tests:** `tests/integration/duel.mjs` (own file: the main suite was being edited elsewhere),
   in `npm test`: LEVELS, DATA (every move, both phases, both ends of every roll), TIMING, GUARD,
   DEFLECT, GHOSTEP, EXECUTE, PHASE, FLOW, WIN; `probe` opt-in.
-- **Direction (ADR-051):** CLAUDE.md, ROADMAP vision and M2 rewritten for the skill boss rush.
+- **Direction (ADR-059):** CLAUDE.md, ROADMAP vision and M2 rewritten for the skill boss rush.
 
 **Found and fixed on the way:** `limb()` with `capSegs: 0` makes NaN vertices (the bell sleeve drew
 as a black slab through the art pass: now a lofted shell); the douli's veil drew as a solid black
@@ -126,6 +127,133 @@ triangles (Cinderwood ~690k: the thinner grass). WIN: 50–54 s on three seeds; 
 
 **Next:** the owner tries `?level=ash` on the Vercel preview (desktop and phone); then the technique
 system and his reward.
+
+---
+
+## 2026-11-12 — Session 17: attack variants, a flowing chain, hair that reads, a fuller cloak
+
+**Owner** (with a phone screenshot): "i can't tell the yellow color in front of his face is his
+hair ... the side angle/view also seems like the character is way too skinny ... something about
+his left clicks is meh to me so lets try to make his attack animations and motions cooler and
+natural looking. i also dont want him to show the same pattern over and over". Answers: locks out of
+the hood, not too long, with three previews to approve first (picked "A"); a fuller cloak; fast and
+flowing; random variants per hit. Branch `player/hair-depth-attack-variety` (session and ADR numbers
+skip 16 / 054: the parallel techniques branch holds them).
+
+**Done:**
+- **Attacks (ADR-055):** `variants` for hits 1–5 (12 looks in all), picked at random, never the same
+  twice in a row; `turn`, `hop`, stab `rise` / `low`, slam `hop`; `FLOW` on every light sweep.
+- **Hair (ADR-056):** three hair prototypes rendered and sent; "A" kept: `HOOD_HAIR` strands, the
+  face and neck in shadow (`shadowsFace`).
+- **Cloak (ADR-057):** back sheets further back and standing off; a deeper mantle.
+- **Tests:** REACH swings every variant at contact, 2 m and 3.5 m; HERO checks the hood's strands
+  and the shadowed face; HEROLIFE waits for a freshly started idle action before cutting it.
+
+**Verification:** `npm test` ALL PASSED, `npm run build` ok. In the Lab: every variant frame by
+frame (solid) and at mid-strike (ASCII); the cloak from both sides and behind, standing and running;
+three hair styles close up and at the phone camera.
+
+**Measured:** cloak depth behind at rest 0.55 m (0.44), running 0.89 m (0.81); width 1.28 m / 1.17 m
+(1.23 / 1.15). Variants: 24 reach trials, no miss. One bot `win` run 167 s (the wyrm changed in #15
+since the last measure).
+
+**Not checked / open:**
+- Not played by a human, not tried on a phone.
+- PR #16 (the Ash Disciple) and the techniques work in progress also edit `anim.js` / `player.js`;
+  whoever merges second rebases (the variant pick lives in the animator, `player.js` is untouched).
+- The sprint slash, the roll cut and the thrust have one look each.
+
+**Next:** the owner's look at the preview; more variants if the chain still repeats.
+
+---
+
+## 2026-11-11 — Session 15: breath-born bullets, perfect-parry returns, Armageddon, heat-glow warnings
+
+**Owner** (through a planning session, spec `docs/specs/wyrm-breath-armageddon.md`, owner decisions
+final): the bullet hell should look natural (all fire from the mouth, nothing out of nowhere) and be
+much harder; a perfect parry should send fire back and hurt the dragon; a new Armageddon attack fires
+meteors into the sky that crash down across the arena; the red ground indicators should be subtle,
+not break immersion. Branch `dragon/breath-armageddon`, four code commits in work-package order.
+The spec named its ADRs 046-049; PR #14 (Session 14) took those numbers first, so they are
+ADR-050 to ADR-053 here.
+
+**Done:**
+- **WP1 — ground warnings heat the ground (ADR-052):** `fx.heatDisc` / `heatBand` / `heatFlare` replace
+  `hzRing`, the strip / ring / wall warnings, the hazard flash, the melee slam zones (`warnRing`,
+  `ringPulse`) and the wheel's lines: a stable fill of `. , : '` glyphs coloured by heat (ember →
+  orange → white-orange with k), sparks from k 0.6, scorch-map heat stamped under it (no char), the
+  true edge as a `·` rim only in the last `flashLead` s. No red, no `!`, no chevrons, no r1 reach
+  ring. `shockRing` and the live fire's edges are fire orange.
+- **WP2 — perfect parry returns (ADR-051):** `DEFENSE.perfectParryWindow` 0.08 s; `deflect.perfect`,
+  `player:parry.perfect`, `dragon:parried.perfect`, the new `dragon:returned`. A returned ember / wisp
+  flies back at 34 m/s, 1.8x, white-gold, and hits the head for 30 / 70 HP + 14 / 30 posture through
+  `dragon.takeHit` (gate and death like a sword hit). RETURN call-out, gold burst, 0.05 s stop, a
+  brighter clang, a hit sound. Afterwards: a per-pattern return budget (120 HP, see below).
+- **WP3 — breathed bullets + Hard (ADR-050):** `spit()` spawns every bullet at `pt.mouth` along the
+  head's real aim from the `hit()` hook (after the rig); `aimHead` / `reachFor` aim and draw in the
+  head; a drop scaled to the hero's distance. Ember torrent, Cinder burst (P3 double taps, a 35 %
+  chain into a torrent through `brain.queued`, which existed), denser Wisp swarm (≤ 3 alive gate),
+  Scouring breath (tongues off the head's aim rooted at the mouth's ground projection; the wheel
+  gained `offs` / `aimWheel` and a stepped cue). `pop` 2.2 → 1.5. The flurry's embers rise out of a
+  puff of flame.
+- **WP4 — Armageddon (ADR-053):** rear-up with a red body glow (`dragon.bodyWarn`), a salvo of bolts
+  out of the jaws (`fx.launchBolt`, stage `launch`), the sky answering (`atmosphere.skyGlow`, stage
+  `sky`), `hazards.barrage` (waves over the whole clearing from `placeWave` / `leadInto`, P3 burning
+  craters, a great meteor to finish). Hazard pool 64.
+
+**Decisions / deviations from the spec's starting numbers (tuning, the owner table untouched):**
+- Return budget 120 HP per pattern: the spec's 70 per wisp with 13 P3 wisps let a perfect parrier
+  deal ~910 HP a swarm (~3x the sword), against its own target "≤ ~8 % of a phase's HP".
+- Scouring breath turns at 2.15 rad/s, not 1.5: at 1.5 the 4.6 s cast (with the ramps, the pause and
+  the reversal) sweeps ~0.9 turns, short of the spec's "≥ 1.25 turns"; measured 1.08 turns at 1.9.
+- Wisp swarm count [7, 10, 13], not [0, …]: P1 is never picked by the AI (weight 0); 7 keeps the
+  Lab's P1 trigger meaningful.
+- Armageddon fits all 16 P3 bolts inside the 1.6 s salvo (0.09 s apart instead of 0.11).
+- The P3 burst → torrent chain needs the torrent off cooldown and the hero within its 26 m.
+- The sky glow is subtle on purpose: at the phone's close LOW camera the fog fills most of the
+  frame; the first, stronger tint read as a brown wash (with the hurt vignette of a god-mode hero
+  standing in craters on top of it).
+
+**Verification:** `npm test` ALL PASSED (688 checks on the tree rebased onto #14, 635 before this session; BULLETS and FIRE grew),
+`npm run build` ok (1695 KB). Film strips in the dev server (`__tick` + an overlay canvas): a
+meteor's heat at k 0.2 / 0.6 / hot, a stomp zone, the burning pass, the flame ring and wall; a
+perfect parry's shot flying back and landing (−30 HP); the torrent, the burst and the Scouring breath
+emitting from the jaws; the whole Armageddon (rear-up, salvo, hush, three waves, the great meteor)
+on desktop and on the phone preset (852 x 393, LOW). Phone preset, P3 peaks: additive glyph
+particles torrent 634, burst 449, Scouring breath 1013, Armageddon 1805 (pool 7000); bullets 124
+(pool 360, so `MAX` stays); hazards 25 (pool 64); 56 draw calls throughout (particles are one draw).
+
+**Hits taken by the scripted heroes** (standing / answering every cue; before → after):
+
+| Pattern | P1 | P2 | P3 |
+|---|---|---|---|
+| Ember storm → torrent | 2 / 1 → 4 / 0 | 4 / 1 → 6 / 0 | 4 / 2 → 6 / 0 |
+| Cinder fan → burst | 2 / 1 → 4 / 1 | 3 / 1 → 5 / 1 | 3 / 1 → 5 / 1 |
+| Wisp swarm | – | 4 / 1 → 6 / 1 | 4 / 0 → 6 / 0 |
+| Fire wheel → Scouring breath | – | 2 / 0 → 1 / 0 | 2 / 0 → 1 / 0 |
+| Meteor rain → Armageddon | 3 (standing) | → 5 / 0 | → 5 / 0, + 31 crater ticks |
+
+Peak bullets in the air, before → after: storm / torrent 123 / 138 / 274 → 43 / 73 / 125 (the old
+storm sprayed all round the body; the torrent's bullets all go the hero's way), fan / burst 20 / 35
+/ 43 → 33 / 51 / 80, wisps 7 / 9 → 10 / 13. The answering bot parries 0.12 s before impact (outside
+the perfect window) and rolls 0.1 s before a red one, in a frame: it says the patterns stay fair to
+perfect reads, not that a person can read them.
+
+**Not checked / open:**
+- No human has played it; on-device frame rate on the iPhone is the owner's to confirm (the Vercel
+  preview). The heat-glow readability at k 0.3 rests on my screenshots, not a fresh pair of eyes.
+- A Scouring breath hits a standing hero once per cast (it sweeps past him and reverses before it
+  comes round again); the P3 craters ticked the never-moving defender 31 times (4 each, blockable):
+  a human walks out, but watch it.
+- Close to the jaws the burst's gaps are narrower than the hero (from ~14 m off the mouth they
+  clear him): close in every cough must be parried.
+- Returns were only checked with scripted presses; the 0.08 s window and the 120 HP budget want a
+  human feel test. AI pick shares, the `win` / `probe` bot times and the old ROADMAP items
+  (bullet sounds of their own) were not re-run / done.
+- `.claude/launch.json` gained a local config on port 5183 for this worktree; not committed.
+
+**Next:** the owner's phone test of the preview; then tune from play (heat-glow strength, torrent
+sweep speed, the budget, the crater ticks).
 
 ---
 
