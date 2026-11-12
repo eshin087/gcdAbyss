@@ -155,10 +155,10 @@ any item:
   sheet trails the motion: 1 is a light ribbon that streams out level at a run, the cloak uses 0.5;
   `max` (default 2.6 rad) is how far a segment may swing from hanging, the cloak uses 1.45.
   The root may hang on any joint (the cloak drapes one sheet over each upper arm). Give `w` (the
-  widths [root, seam, hem]) and `arm` (1 / 2 for a sheet on the right / left upper arm) so the
-  animator can keep the sheet out of the blade and the arms (ADR-048: spheres along the steel and
-  both arms; a sheet ignores the arm it hangs on). Do not root a sheet where an arm swings through
-  its root (on top of the shoulder): no swing of the sheet can clear that.
+  widths [root, seam, hem]) so the animator can keep the sheet off the blade (ADR-048: spheres along
+  the steel), and `arm` (1 / 2 for a sheet on the right / left upper arm). The arms do not push the
+  cloth: a cloak hangs over its wearer's arms (holding the sheets out round them made the figure
+  wide from behind).
 - **The arms.** `_arm` compresses the last fifth of each arm's reach (ADR-044), so a hand target at
   full stretch is reached with the elbow bent ~35°: model sleeves and hands for a bent arm, and do
   not rely on a pose locking the elbow. Every swing and the block are two-handed (ADR-046): the

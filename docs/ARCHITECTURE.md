@@ -471,13 +471,13 @@ record `{ segs, len, out, lag?, max?, w?, arm? }`, `out` = its own outward flare
 it trails the motion (default 1 = a light ribbon, the cloak 0.5), `max` = how far it may swing from
 hanging (rad; default 2.6, the cloak 1.45), `w` = its widths [root, seam, hem] (default 0.3 m
 across), `arm` = 1 / 2 when it hangs on the right / left upper arm (0: the chest)). **Cloth vs steel**
-(ADR-048): every frame `_colliders` places spheres along the blade (`COL_BLADE`) and both arms
-(`COL_FORE`, `COL_UPPER`), and `_sheetBound` keeps each streamer segment on the side of each sphere
-it came in from (`streamState[i].side`), by the sphere's radius: from the body side it holds the
-cloth out (the cloth drapes over a drawn-back sword or a raised arm), from outside it holds it in;
-the inside wins a conflict; a sheet ignores the arm it hangs on. The charge's updraft also lifts the
-sheets (`UPDRAFT_STREAM`, most on his right). Coat panels and strips have their own steel rules
-(below); hair has none;
+(ADR-048): every frame `_colliders` places spheres along the blade (`COL_BLADE`; the arm lists
+`COL_FORE` / `COL_UPPER` are empty: holding the sheets out round the arms widened his back), and
+`_sheetBound` keeps each streamer segment on the side of each sphere it came in from
+(`streamState[i].side`), by the sphere's radius: from the body side it holds the cloth out (the
+cloth drapes over a drawn-back sword), from outside it holds it in; the inside wins a conflict; a
+sheet ignores the arm it hangs on (`arm`, for arm spheres). `UPDRAFT_STREAM` (a charge's lift of the
+sheets) is 0. Coat panels and strips have their own steel rules (below); hair has none;
 `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root
 mesh (`hair`) and a sheened-tip mesh (`hairTip`); since ADR-034 the locks are layered pointed
 blades (crown spikes, top, two back layers, nape, sides, a jagged fringe, cowlicks). Static meshes

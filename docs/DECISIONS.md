@@ -942,22 +942,28 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   was inside a cloak sheet in 94 of 150 charge frames and the sword arm in nearly all of them; the
   streamer springs had no collision at all.
 - **Decision:**
-  - Spheres along the blade (4) and both arms (4 each) every frame (`_colliders`). Each streamer
-    segment records which side of it each sphere came in from (`streamState[i].side`) and is bounded
-    to stay on that side by the sphere's radius (`_sheetBound`): from the body side the sphere holds
-    the cloth out, from outside it holds it in; the inside wins a conflict. The bound limits both the
-    spring's target and its state.
-  - Streamer records gain `w` (widths) and `arm` (the arm a sheet hangs on, which it ignores).
+  - Four spheres along the blade every frame (`_colliders`). Each streamer segment records which
+    side of it each sphere came in from (`streamState[i].side`) and is bounded to stay on that side
+    by the sphere's radius (`_sheetBound`): from the body side the sphere holds the cloth out, from
+    outside it holds it in; the inside wins a conflict. The bound limits both the spring's target and
+    its state.
+  - Streamer records gain `w` (widths) and `arm` (the arm a sheet hangs on, which it ignores if arm
+    spheres are ever used).
   - The charge pose: hands before the right hip (were 0.28 m behind it), the blade out to his right
-    and low; the sheet behind the sword shoulder is rooted on the shoulder blade instead of on the
-    shoulder (the drawn-back arm went through its root); the charge's updraft lifts the sheets, most on
-    his right.
+    and low, past the cloak's edge; the off arm unchanged.
+  - The arms are NOT colliders, and the charge does not lift the cloak. A first version had spheres on
+    both arms, rooted the sheet behind the sword shoulder on the shoulder blade, and lifted the sheets
+    in the charge's updraft: the owner found the back cape "too floaty" and him "wider from the back
+    view" ("make it look similar to the original look"). Holding the sheets out round the arms at rest
+    and on the move did that; it was reverted.
 - **Consequences:**
   - Held charge: the blade within 2 cm of a cloak sheet in 0 of 96 frames (the HEROLIFE test).
-  - Arm contacts remain where an arm passes a sheet's root under the mantle (the probe still flags
-    them in about half the charge frames); not visible at the game camera.
-  - From straight behind, the cloak now drapes over the blade's first half in the charge; its outer
-    part shows past the cloak's right edge.
+  - Against the original cloak (main before this work, measured at the hems over 60 idle / 90 run
+    frames): idle 1.29 m across (1.23 m), run 1.15 m (1.15 m). The 5 cm at rest is the short sheet
+    behind the sword shoulder draped over the resting blade instead of passing through it.
+  - The arms pass through the cloak where they did before (at the sheets' roots in the charge).
+  - From straight behind, the cloak drapes over the blade's first half in the charge; its outer part
+    shows past the cloak's right edge.
   - The coat panels keep their own steel rules (`_coat`); hair has no collision.
 
 ## ADR-049 — Gold hair under a pushed-back hood (2026-11-12)

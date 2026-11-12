@@ -21,8 +21,14 @@ back a little; a two-handed guard raised across the body. Branch `player/two-han
   closes round the grip (`rig.offHand`). The block is two-handed, the blade ~50° up across the body.
 - **Idle life (ADR-047):** `FIDGETS` (look, stretch, inspect, twirl, shoulder, lean) after 2.5 s of
   standing still, cut by any input.
-- **Cloak vs steel (ADR-048):** streamer sheets collide with spheres on the blade and both arms,
-  keeping the side they came from; the charge pose's hands before the hip, the blade out to the side.
+- **Cloak vs steel (ADR-048):** streamer sheets collide with spheres on the blade, keeping the side
+  they came from; the charge pose's hands before the hip, the blade out to the side.
+- **Follow-up, the owner: "the back cape is too floaty now and makes the character look wider from
+  the back view. make it look similar to the original look."** The first version also held the
+  sheets out round both arms, moved the sheet behind the sword shoulder onto the shoulder blade and
+  lifted the cloak in the charge. All three are reverted; only the blade collides. Compared side by
+  side with `main` (a second dev server on the old commit): the same back view at rest, running and
+  stopping; hem width 1.29 m vs 1.23 m at rest, 1.15 m vs 1.15 m running.
 - **Hood and hair (ADR-049):** a rounder hood worn further back; gold fringe and cheek locks; a
   warmer face and smaller brown eyes.
 - **Tests:** a new HEROLIFE scenario (two hands in every swing's active frames, the guard's angle,
@@ -36,11 +42,12 @@ the block and the charge facing four ways, the first three hits. A probe of blad
 against the cloak sheets over idle, run, block, the chain and the charge.
 
 **Measured:** off hand to grip ≤ 2.5 cm in every swing (was up to 8 cm before the chest-turn fix);
-charged blade inside the cloak in 0 of 150 frames (was 94); bot `win` 139 s; REACH unchanged.
+charged blade inside the cloak in 0 of 96 test frames (was 94 of 150); bot `win` 139 s; REACH
+unchanged.
 
 **Not checked / open:**
 - No human has played it; not tried on the phone.
-- Arm-to-cloak contacts remain near the sheets' roots under the mantle (charge, block).
+- The arms still pass through the cloak near the sheets' roots (as before this session).
 - The left arm still locks straight at the end of the two-handed stab and the slam.
 - The twirl passes the blade through the cloak region behind him for ~0.3 s.
 - Gold hair applies to the Wanderer's set too; `docs/art/hero.md` is still out of date.
