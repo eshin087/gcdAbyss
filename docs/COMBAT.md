@@ -152,6 +152,12 @@ Numbers live in `src/entities/player/combat.js` (`LIGHT`, `SPRINT_ATK`, `ROLL_AT
 | Roll cut | LMB out of a forward roll | 0.10 / 0.11 / 0.26 s | 34 | 5 | a low cut rising out of the crouch, right → left; counts as hit 1. A backstep (Space with no direction) starts the plain chain |
 | Thrust — charged | hold LMB ≥ 0.3 s, release | 0.07 / 0.20 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | deep crouched charge, sword two-handed at the right hip pointing back-down (moves at ×0.4; lightning crawls on the blade past half charge); the release lunges 2.2–3.6 m along the facing with both arms driven out; a thin straight cyan beam |
 
+- **Variants** (ADR-055): hits 1–5 each have 2–3 looks, picked at random as the hit starts (never
+  the same one twice in a row): 1 falling cut / low draw cut / leaping cut; 2 rising backhand /
+  level backhand / falling backhand; 3 whirl / rising whirl / skipping cross-cut; 4 stab / low rising
+  stab; 5 slam / leaping slam. A variant changes only the look: the timing, damage, posture, reach
+  and lunge in the table are the hit's, and every variant connects from the front at contact, 2 m
+  and 3.5 m (the REACH test). The sprint slash, the roll cut and the thrust have one look each.
 - Poses follow the owner's key-pose sheets (`docs/art/hero.md` §4); the timings above are unchanged
   by them. The dodge roll stays 0.6 s (the sheet draws 0.55 s; shortening it is a tuning decision
   that would move the i-frames, so it was not taken). The light sweeps keep an eased arc whose
