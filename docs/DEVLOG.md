@@ -5,6 +5,56 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 16: techniques, the Qi meter, the Ash Riposte
+
+**Task** (from the session that built the Ash Disciple): the "next PR" promised by ADR-051 and the
+spec: a technique system and the Ash Disciple's reward. **Owner answers** (one round, all four
+recommendations): a button paid from a **Qi meter** that parries and perfect dodges fill; his
+technique is the **Ash Riposte**, a counter stance; **two slots** on Q / R; the touch button
+**above BLOCK**. Branch `player/techniques` off `level/ash-disciple` (PR #16, still open).
+
+**Done (ADR-054):**
+- `src/entities/player/techniques/`: the registry (`index.js`: `QI`, slots, keys), the Ash Riposte
+  as data (`ashRiposte.js`), the book (`book.js`: learned + slots, the level reward on
+  `game:victory`), the stance clip (`poses.js`: the disciple's own jian guard on the hero).
+- `src/game/save.js`: one localStorage record (`abyss.save.v1`), guarded (blocked storage → memory).
+- Player: `qi` / `gainQi` (parries, chains, perfect dodges, landed strikes), Q / R buffered like an
+  attack, state `technique` (the stance), takeHit step (d0): a parryable blow in the cone is turned
+  and answered (`_techStrike`: a thrust with `atk.tech`, i-frames, an assist), thrown / far blows
+  only turned, red falls through; `_applyHit` passes `posture` / `pierce` / `technique`. The
+  disciple's `takeHit` honours `pierce` (through the guard, a stagger).
+- UI: `ui/techniques.js` (Qi row + slot chips in the player frame, the reward card, the equip panel
+  in the pause menu), a `tech` call-out, touch buttons `tech0` / `tech1` with an ASCII meter, the
+  controls lists, Lab buttons, four sounds. Ashfall's `reward: { technique: 'ashRiposte' }`.
+- Tests: `tests/integration/technique.mjs` (own file, in `npm test`): DATA, QI, FIRE, WYRM, UNLOCK,
+  SAVE, EQUIP, TOUCH.
+
+**Found on the way:** the touch slot buttons never hid an empty slot (the change cache started
+equal to the "empty" signature; the TOUCH test caught it); the reward card sat over the minimap at
+800 x 600 and over the record below 1000 px wide (moved down, narrowed).
+
+**Verification:** `npm test` (main, duel, technique suites, glyph check) and `npm run build` green.
+Browser (worktree served on :5186): `?level=ash` victory → the card, the save written, a reload keeps
+it; a film strip of the stance → turn → counter → his stagger at the game camera; the stance from
+the side and front in the Lab model viewer; the phone preset (852 x 393, touch on): the button above
+BLOCK dim with `[###...]`, lit READY, a real pointer tap raises the stance and the counter lands; the
+equip panel fits and a tap on SLOT 2 moves it (the buttons follow); the victory card beside the
+record. Cinderwood: the saved technique turns a bite and the counter lands 210 on the wyrm. No
+console errors (the local 404 is the Vercel analytics script).
+
+**Not checked / open:**
+- No human has played it; nothing ran on a phone (on-device frame rate unverified; the technique adds
+  particles only, no meshes).
+- Balance: how often a player fills the meter against him, and whether 140 + a stagger is too strong.
+- From the game camera facing north the stance's blade reads weakly behind the hood; the glow and
+  the ash carry it.
+- ADR numbers: PR #15 (the wyrm's breath) also claims 050-053; whichever lands second renumbers.
+
+**Next:** the owner beats the Ash Disciple on the preview (desktop and phone), equips the Ash Riposte
+and fires it in both levels; then rebase onto `main` once #16 merges.
+
+---
+
 ## 2026-11-12 — Session 15: the Ash Disciple, a second level
 
 **Owner:** "help me think of making content for this game. i want this to be kinda like phantom blade

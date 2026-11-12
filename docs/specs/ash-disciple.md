@@ -1,6 +1,7 @@
 # Spec — The Ash Disciple: a second level, a human duelist boss
 
-Status: **built** (2026-11-11), branch `level/ash-disciple`; the reward is the next PR. The numbers
+Status: **built** (2026-11-11), branch `level/ash-disciple`; the reward, the Ash Riposte, is built
+on `player/techniques` (ADR-054; COMBAT.md "Techniques"). The numbers
 below were the **starting values**; what was built and measured is in `docs/COMBAT.md` → "The Ash
 Disciple" (HP 3000, break crit ×1.5, guard crush at posture 48, a windup guard, first windups 0.78 s).
 Tune them in the Lab and keep them in the disciple's `tuning.js`, never in logic.

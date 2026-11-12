@@ -150,6 +150,25 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.17 — Techniques: the Qi meter, two slots, the Ash Riposte (2026-11-12, `player/techniques`)
+ADR-054; numbers in COMBAT.md "Techniques"; contract in ARCHITECTURE.md "Techniques".
+- [x] A data-driven technique registry (`player/techniques/`), the book (learned + two slots), the
+      Qi meter filled by parries, deflect chains, perfect dodges and landed strikes
+- [x] The Ash Riposte: a counter stance; a turned blow is answered by a piercing counter-thrust;
+      thrown blows and far attackers only turned; red blows land; nothing comes: a lunge
+- [x] Learned on beating the Ash Disciple (the level's `reward`), a reward card, saved in
+      localStorage (`game/save.js`), works in both levels
+- [x] Q / R, touch buttons above BLOCK with an ASCII meter, a Qi row in the player frame, an equip
+      panel from the pause menu, Lab buttons (learn / forget / Qi full / infinite Qi), sounds
+- [x] Tests (`tests/integration/technique.mjs`: data, qi, fire, wyrm, unlock, save, equip, touch);
+      `npm test` + build green; browser check incl. the phone preset
+- [ ] Owner playtest on the preview (desktop and phone): beat him, equip, fire it in either level
+- [ ] Balance against a human: how often is the meter full against him? Too strong a counter?
+- Follow-ups:
+  - [ ] The stance from the game camera: facing north, the blade held forward reads weakly behind
+        the hood; the glow and the ash carry the cue (look at it on the phone)
+  - [ ] More kinds for the next bosses' rewards (an attack, a movement, an element)
+
 ## M1.16 — The Ash Disciple: a second level, a human duelist (2026-11-11, `level/ash-disciple`)
 Spec: `docs/specs/ash-disciple.md`.
 - [x] Levels: `?level=ash`, a stage picker on the title, a LEVEL row in the Lab; the boss slot (ADR-050)
@@ -165,8 +184,7 @@ Spec: `docs/specs/ash-disciple.md`.
 - [ ] Owner review of the PR preview (`?level=ash`, and on the phone); merge
 - [ ] A human playtest: is the guard readable, are the feints fair, is he too easy (bots: ~1 min)?
 - Follow-ups:
-  - [ ] **The reward** (the next PR, ADR-051): the technique system (slots, a meter filled by parries
-        and perfect dodges, an equip screen) and his technique as the first one
+  - [x] **The reward** (ADR-051): the technique system and his Ash Riposte (M1.17, ADR-054)
   - [ ] Look at every move and reaction frame by frame (only Plum Thrust, Swallow Flicks and Crane
         Spins were filmed; the rest were checked by the tests, not by eye)
   - [ ] Sounds of his own: a jian whoosh per swing, a step / glide, the Kindling (today: the cues,
@@ -241,14 +259,15 @@ Spec: `docs/specs/ash-disciple.md`.
   - [ ] The drawn steel is 0.44 m shorter than the hit segment: decide whether to shorten the reach
 
 ## M2 — The boss rush's foundations (revised 2026-11-12, ADR-051)
-- [ ] Techniques: a slot system, a meter filled by parries and perfect dodges, an equip screen; the
-      Ash Disciple's technique first (the next PR)
+- [x] Techniques: a slot system, a meter filled by parries and perfect dodges, an equip screen; the
+      Ash Disciple's technique first (M1.17, ADR-054)
 - [ ] Fixed rewards per boss (techniques, weapons, abilities, elements); weapons of other lengths
       (the animator, the hit segment and the blade FX read `DIM`)
 - [ ] A hub that links the levels (the bonfire), and a boss-rush mode (refights back to back, a timer)
 - [ ] More duelists from the roster (The Moth, The Bell-Warden, The Calligrapher, The Iron Abbot)
 - [ ] Regular mobs (2–3 types) on the approaches, using the shared combat system and tell rules
-- [ ] Save / load (localStorage), settings menu (keybinds, volume, quality)
+- [~] Save / load (localStorage: the techniques since ADR-054, `game/save.js`), settings menu
+      (keybinds, volume, quality)
 - ~~Character stats, levels, XP; loot rarity~~ (dropped: fixed rewards, ADR-051)
 
 ## M3 — World (v0.4)

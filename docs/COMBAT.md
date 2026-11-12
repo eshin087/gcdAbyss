@@ -312,6 +312,8 @@ ground), and the deflect chain (a move's non-final hit is deflected, its last re
 - **Feints never glint:** a feint has no tell and no flash. Only real impacts are cued.
 - **Posture break → execution:** broken for 3.2 s on one knee (hits crit ×1.5); an attack within
   3.2 m runs him through: the execution thrust, 260 final damage, the break spent, he gives ground.
+- **His reward:** beating him teaches the **Ash Riposte** (see Techniques below). Its counter
+  pierces his guard and staggers him.
 - **Two phases:** P1 100–50 %, P2 50–0 % (the gate holds damage at 50 % until the transition). The
   transition is **the Kindling**: he kneels, the blade kindles, a red shock ring (r 6 m, 10 damage,
   kb 6) at 1.75 s. In P2 windups × 0.92 and recoveries × 0.85; three moves join.
@@ -346,6 +348,41 @@ fencing bot that answers every tell wins in 50–54 s (three seeds; 3–4 breaks
 mortal bots reading 85 % of the tells win in 54 s taking 1 hit; 70 % wins in 70–75 s on two seeds
 with 1 and 0 flasks left (12–13 hits, worst 35); 60 % dies with him at 10 % HP. Target: 1.5–2.5 min
 for a player who knows him. No human has played him yet.
+
+## Techniques (2026-11-12, ADR-054)
+Fixed rewards that change how the hero fights: each boss teaches one. Two slots, **Q** and **R**
+(touch: a button per filled slot above BLOCK), both paid from one **Qi meter** (the player frame's
+QI bar). Data: `src/entities/player/techniques/` (`QI` in `index.js`, one file per technique).
+
+**The Qi meter** (max 100; defence fills it, so the reward pays out for the skill the bosses test):
+| Source | Qi |
+|---|---|
+| a parry, normal / blue | 20 / 30 |
+| … each further parry of a deflect chain (the hero's rhythm count) | +5, at most +15 |
+| a deflected bullet or sword qi | 3 |
+| a perfect dodge (the plunge, the Ghostep, the slow-mo in place) | 40 |
+| a strike that deals damage, light / heavy (not a technique's own) | 3 / 6 |
+A technique spends its cost as it starts. Dying and every retry empty the meter; resting at the
+bonfire keeps it. Five parries in a row fill it; a perfect dodge and three parries do too.
+
+**The Ash Riposte** (Shen Hui's counter; the Ash Disciple's reward; cost: a full meter, 100 Qi):
+| Phase | Timing | Effect |
+|---|---|---|
+| stance | 0.8 s, raised after 0.03 s; rooted, turning to the aim | turns a **normal or blue** blow from its 150° front cone: the attacker is parried (its own deflect / recoil rules apply) |
+| counter | windup 0.05 · active 0.18 · recovery 0.42 s; i-frames 0.45 s from the turn | a thrust aimed at the attacker's nearest hurt surface, lunging 0.4–3.6 m to stop 1.4 m short: **140 damage, 80 posture, pierces a guard** (a duelist staggers, guard up or not); a sweep miss on a target within reach + 0.4 m still lands |
+| lunge (nothing came) | windup 0.08 · active 0.2 · recovery 0.45 s | a plain thrust along the aim, 2.6 m: 70 damage, 24 posture, no pierce |
+- **Red blows are not turned**: they land as usual (a knockdown). The dodge stays the only answer
+  to red.
+- **Thrown blows** (bullets, the Ash Crescent's sword qi) and blows from an attacker whose nearest
+  hurt surface is farther than 6 m are turned (a light clash) and the stance **holds**: no counter.
+- A roll cancels the stance after 0.15 s; the Qi stays spent. A blow that lands breaks it.
+- Q / R start it from neutral, the held guard, a parry or a Ghostep after their cancel points, the
+  end of a roll, an attack's recovery after 35 %, or a charge (cancelled).
+- Measured (`npm test` → TECHNIQUE): against the Ash Disciple a turned Plum Thrust is answered for
+  126–140 damage (his part multipliers) and +80 posture on top of the parry's 26, and he staggers;
+  a turned first flick of Swallow Flicks ends the string; against the wyrm a turned bite is
+  answered for 210 on its head. No human has used it yet: how often a player fills the meter
+  against him is unmeasured.
 
 ## Current numbers (v0.6 "bullet hell", 2026-11-09)
 Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,

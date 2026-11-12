@@ -74,9 +74,10 @@ src/core       config, input, camera rig, math, rng, events
 src/render     glyph atlases, shared shader lib, materials, particles, lights, frame pipeline
 src/world      ground, grass, forest/stones/bones/bonfire, scorch map, atmosphere, colliders
 src/combat     shared combat rules: hit resolution, guard/parry/dodge, attack tells
-src/entities   player/ (gear/ = equipment slot items)  dragon/  enemies/ashDisciple/  (future: npcs/)
+src/entities   player/ (gear/ = equipment slot items, techniques/ = learned techniques)  dragon/
+               enemies/ashDisciple/  (future: npcs/)
 src/levels     level registry (?level=): the set, the boss, the flow's lines per level
-src/ui         HUD, menus           src/game   flow (title, boss intro, death, victory)
+src/ui         HUD, menus           src/game   flow (title, boss intro, death, victory), the save
 src/audio      procedural WebAudio  src/dev    Lab / debug tools
 tests/         headless integration sims + static checks
 docs/          ARCHITECTURE, STYLE, COMBAT, ROADMAP, DECISIONS, DEVLOG
