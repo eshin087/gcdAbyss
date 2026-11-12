@@ -5,6 +5,96 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-11 — Session 15: breath-born bullets, perfect-parry returns, Armageddon, heat-glow warnings
+
+**Owner** (through a planning session, spec `docs/specs/wyrm-breath-armageddon.md`, owner decisions
+final): the bullet hell should look natural (all fire from the mouth, nothing out of nowhere) and be
+much harder; a perfect parry should send fire back and hurt the dragon; a new Armageddon attack fires
+meteors into the sky that crash down across the arena; the red ground indicators should be subtle,
+not break immersion. Branch `dragon/breath-armageddon`, four code commits in work-package order.
+The spec named its ADRs 046-049; PR #14 (Session 14) took those numbers first, so they are
+ADR-050 to ADR-053 here.
+
+**Done:**
+- **WP1 — ground warnings heat the ground (ADR-052):** `fx.heatDisc` / `heatBand` / `heatFlare` replace
+  `hzRing`, the strip / ring / wall warnings, the hazard flash, the melee slam zones (`warnRing`,
+  `ringPulse`) and the wheel's lines: a stable fill of `. , : '` glyphs coloured by heat (ember →
+  orange → white-orange with k), sparks from k 0.6, scorch-map heat stamped under it (no char), the
+  true edge as a `·` rim only in the last `flashLead` s. No red, no `!`, no chevrons, no r1 reach
+  ring. `shockRing` and the live fire's edges are fire orange.
+- **WP2 — perfect parry returns (ADR-051):** `DEFENSE.perfectParryWindow` 0.08 s; `deflect.perfect`,
+  `player:parry.perfect`, `dragon:parried.perfect`, the new `dragon:returned`. A returned ember / wisp
+  flies back at 34 m/s, 1.8x, white-gold, and hits the head for 30 / 70 HP + 14 / 30 posture through
+  `dragon.takeHit` (gate and death like a sword hit). RETURN call-out, gold burst, 0.05 s stop, a
+  brighter clang, a hit sound. Afterwards: a per-pattern return budget (120 HP, see below).
+- **WP3 — breathed bullets + Hard (ADR-050):** `spit()` spawns every bullet at `pt.mouth` along the
+  head's real aim from the `hit()` hook (after the rig); `aimHead` / `reachFor` aim and draw in the
+  head; a drop scaled to the hero's distance. Ember torrent, Cinder burst (P3 double taps, a 35 %
+  chain into a torrent through `brain.queued`, which existed), denser Wisp swarm (≤ 3 alive gate),
+  Scouring breath (tongues off the head's aim rooted at the mouth's ground projection; the wheel
+  gained `offs` / `aimWheel` and a stepped cue). `pop` 2.2 → 1.5. The flurry's embers rise out of a
+  puff of flame.
+- **WP4 — Armageddon (ADR-053):** rear-up with a red body glow (`dragon.bodyWarn`), a salvo of bolts
+  out of the jaws (`fx.launchBolt`, stage `launch`), the sky answering (`atmosphere.skyGlow`, stage
+  `sky`), `hazards.barrage` (waves over the whole clearing from `placeWave` / `leadInto`, P3 burning
+  craters, a great meteor to finish). Hazard pool 64.
+
+**Decisions / deviations from the spec's starting numbers (tuning, the owner table untouched):**
+- Return budget 120 HP per pattern: the spec's 70 per wisp with 13 P3 wisps let a perfect parrier
+  deal ~910 HP a swarm (~3x the sword), against its own target "≤ ~8 % of a phase's HP".
+- Scouring breath turns at 2.15 rad/s, not 1.5: at 1.5 the 4.6 s cast (with the ramps, the pause and
+  the reversal) sweeps ~0.9 turns, short of the spec's "≥ 1.25 turns"; measured 1.08 turns at 1.9.
+- Wisp swarm count [7, 10, 13], not [0, …]: P1 is never picked by the AI (weight 0); 7 keeps the
+  Lab's P1 trigger meaningful.
+- Armageddon fits all 16 P3 bolts inside the 1.6 s salvo (0.09 s apart instead of 0.11).
+- The P3 burst → torrent chain needs the torrent off cooldown and the hero within its 26 m.
+- The sky glow is subtle on purpose: at the phone's close LOW camera the fog fills most of the
+  frame; the first, stronger tint read as a brown wash (with the hurt vignette of a god-mode hero
+  standing in craters on top of it).
+
+**Verification:** `npm test` ALL PASSED (678 checks, 635 before this session; BULLETS and FIRE grew),
+`npm run build` ok (1695 KB). Film strips in the dev server (`__tick` + an overlay canvas): a
+meteor's heat at k 0.2 / 0.6 / hot, a stomp zone, the burning pass, the flame ring and wall; a
+perfect parry's shot flying back and landing (−30 HP); the torrent, the burst and the Scouring breath
+emitting from the jaws; the whole Armageddon (rear-up, salvo, hush, three waves, the great meteor)
+on desktop and on the phone preset (852 x 393, LOW). Phone preset, P3 peaks: additive glyph
+particles torrent 634, burst 449, Scouring breath 1013, Armageddon 1805 (pool 7000); bullets 124
+(pool 360, so `MAX` stays); hazards 25 (pool 64); 56 draw calls throughout (particles are one draw).
+
+**Hits taken by the scripted heroes** (standing / answering every cue; before → after):
+
+| Pattern | P1 | P2 | P3 |
+|---|---|---|---|
+| Ember storm → torrent | 2 / 1 → 4 / 0 | 4 / 1 → 6 / 0 | 4 / 2 → 6 / 0 |
+| Cinder fan → burst | 2 / 1 → 4 / 1 | 3 / 1 → 5 / 1 | 3 / 1 → 5 / 1 |
+| Wisp swarm | – | 4 / 1 → 6 / 0 | 4 / 0 → 6 / 1 |
+| Fire wheel → Scouring breath | – | 2 / 0 → 1 / 0 | 2 / 0 → 1 / 0 |
+| Meteor rain → Armageddon | 3 (standing) | → 5 / 0 | → 5 / 0, + 31 crater ticks |
+
+Peak bullets in the air, before → after: storm / torrent 123 / 138 / 274 → 43 / 73 / 125 (the old
+storm sprayed all round the body; the torrent's bullets all go the hero's way), fan / burst 20 / 35
+/ 43 → 33 / 51 / 80, wisps 7 / 9 → 10 / 13. The answering bot parries 0.12 s before impact (outside
+the perfect window) and rolls 0.1 s before a red one, in a frame: it says the patterns stay fair to
+perfect reads, not that a person can read them.
+
+**Not checked / open:**
+- No human has played it; on-device frame rate on the iPhone is the owner's to confirm (the Vercel
+  preview). The heat-glow readability at k 0.3 rests on my screenshots, not a fresh pair of eyes.
+- A Scouring breath hits a standing hero once per cast (it sweeps past him and reverses before it
+  comes round again); the P3 craters ticked the never-moving defender 31 times (4 each, blockable):
+  a human walks out, but watch it.
+- Close to the jaws the burst's gaps are narrower than the hero (from ~14 m off the mouth they
+  clear him): close in every cough must be parried.
+- Returns were only checked with scripted presses; the 0.08 s window and the 120 HP budget want a
+  human feel test. AI pick shares, the `win` / `probe` bot times and the old ROADMAP items
+  (bullet sounds of their own) were not re-run / done.
+- `.claude/launch.json` gained a local config on port 5183 for this worktree; not committed.
+
+**Next:** the owner's phone test of the preview; then tune from play (heat-glow strength, torrent
+sweep speed, the budget, the crater ticks).
+
+---
+
 ## 2026-11-12 — Session 14: two hands, a raised guard, idle life, gold hair, a clear charge
 
 **Owner:** "make the character use both hands when he's swinging ... add some idle animations of the

@@ -294,22 +294,42 @@ Fire stays the only saturated warm light: white-yellow HDR cores `[4.6,3.5,1.5]`
 orange `[3.4,1.4,0.28]` to a dying red `[0.8,0.08,0.012]`; lava `[3.3,1.9,0.55]` → `[2.5,0.8,0.13]`;
 smoke `[0.045,0.04,0.036]` in alpha. Code: `dragon/fx.js` (the "fire hazards, spells and flight"
 section), `player/fx.js` (the plunge).
-- **Red ground warnings** (`hzRing`, `stripWarn`, `ringWarn`, `wallWarn`): a ring of red `•` dots
-  with a `!` every fourth, an inner ring closing in on the centre as a countdown (a lava pillar's
-  rises as `^`), a `+` at the centre; `>` chevrons down the path of a fire strip or wall; a hot ring
-  where a flame ring will ignite and a dim dotted limit at its outer radius. Past their timing flash
-  they brighten and pulse faster (`hazardFlash`: the ring flares, red glyphs fly up, a red light).
-  The dots are bullets: a middle dot `·` is ~1 px at the 36 m camera (the stomp, leap and roar
-  rings switched to `•` too).
+- **Ground warnings: the ground heats up** (2026-11-11, ADR-052; `heatDisc`, `heatBand`, `heatFlare`
+  in `dragon/fx.js`; replaced the red `•` / `!` rings, the closing inner ring and the `>` chevrons).
+  Every footprint (a meteor, a pillar, a shell, the nova, a slam / pounce / sky-dive zone, the
+  burning pass's strip, the flame ring's band, the flame wall's line, the Scouring breath's tongues)
+  is the same language:
+  - **Fill, not outline:** a sparse fill of small ground-hugging glyphs `. , : '` (one glyph per
+    point: a multi-char string would re-roll every frame), on a sunflower spiral (discs) or fixed
+    steps (bands), hashed per warning: nothing rotates or marches; a slow flicker.
+  - **Colour is heat:** dark ember `[0.35,0.08,0.02]` at spawn → orange `[1.7,0.55,0.09]` by k 0.6
+    → white-orange `[3.1,1.75,0.6]` at impact; alpha 0.22 → 0.7, density 35 % → 100 %; sparks
+    `. ' `` rising from k 0.6. Never `TELL_STYLE.red`.
+  - **The world glows too:** the scorch map's heat channel is stamped under it every 0.12 s (heat
+    0.2 → 0.65, no char), so the soil and grass glyphs themselves glow orange; it cools over ~1.5 s
+    when the warning is gone.
+  - **The edge comes late:** only in the last `flashLead` s a thin bright rim of `·`
+    `[3.8,2.5,1.0]` sits on the true radius / band edge; on the flash the heat flares (hot sparks
+    off the edge, a warm light). A lava pillar keeps a molten tint and shows a few `^` when hot.
+  - The live fire's leading edges (flame ring, wall) and the roar's `)` shock ring are fire orange,
+    not tell red.
 - **Meteors:** a white-hot `@` core in a `*` halo with `|` strokes laid along its screen motion, a
   fire trail, smoke and its own light over a 0.75 s visible fall; the impact is a white flash, a
   fire burst, flung rocks (`. , : ; o`), a ring of `)` shock strokes, dust, scorch and a smouldering
   crater.
+- **Armageddon** (2026-11-11, ADR-053): the rear-up glows red on the body and streams embers up off
+  the jaws; the salvo is white-hot `@` bolts with long orange `|` trails shot straight up out of the
+  mouth until they leave the view (`fx.launchBolt`); then the sky answers: the shared ambient and fog
+  colours warm a little (`world.atmosphere.skyGlow`), kept subtle because at the phone camera the
+  fog fills most of the frame. Its meteors are drawn 1.3× (the great one 2.4×) and fall on a slant
+  from the sky above the wyrm; only every other one carries a light. P3 craters burn hard (twice the
+  flames) while they hurt. The great meteor's impact adds a second slow shock ring, a column of fire
+  and a 26 m white light.
 - **Lava pillars:** before the eruption the ground cracks glow and spit sparks (`~ ^ ,`), faster as
   it nears; then a column of molten `# % @ & ! |`, droplets (`. o •`) and a `~` splash ring.
 - **Flames** on strips, rings and walls: tall `^ * # % &` and low `^ ~ *` fire behind a red leading
   edge; the fresh front burns tallest, and the ground scorches as it passes.
-- **Casts and flight:** the meteor cast spits a fireball straight up; fire swirls in round the wyrm
+- **Casts and flight:** (the old meteor cast spat one fireball straight up: Armageddon's salvo above); fire swirls in round the wyrm
   before a flame ring; the nova's 2.5 s charge sucks embers onto the chest with contracting `)`
   rings and glowing cracks round its feet, then shock rings race out with a white flash and a fire
   storm; the sky strafe streams fire from the mouth onto the ground ahead; low wingbeats blast dust
@@ -343,9 +363,19 @@ all glyph particles in the dragon's `add` / `alpha` pools.
 - **Deflect:** a small moon-blue star and a `+` at the blade, on top of the hero's own parry burst;
   the bullet flies back to the wyrm's head and bursts there. Bullets popped by the clash or cut by a
   swing leave a small `x` in their own colour.
-- **Fire wheel:** red ground lines warn where the spokes will ignite; lit, each spoke is a gold core
-  line under tall `^ * # %` flames (240 glyphs / s per spoke) that lean back against the turn, the
-  ground scorching as they pass.
+- **Breathed** (2026-11-11, ADR-050): every bullet appears at the jaws, never out of the air. Each
+  emission shows its cause: the jaw open, the throat lit, a small orange puff at the mouth (`muzzle`),
+  a head kick per cough. The torrent is a continuous stream that snakes as the neck sweeps; the burst
+  is a fan of embers spreading out of the jaws.
+- **The returned shot** (ADR-051): a perfectly parried bullet goes back as a white-gold `*` core 1.8×
+  a bullet's in a turning gold `O` halo with a long orange ember trail, launched by a gold flare over
+  the clash; on the head a white-gold star, a gold ring, fire sparks and a warm light. The hero's
+  blade throws a gold `* + '` spray (`player/fx.js` `perfectParry`); RETURN in gold.
+- **Scouring breath** (was the fire wheel): the windup heats the ground along where the tongues will
+  catch, growing out from the strike point as the throat charges; lit, a short stream of flame pours
+  from the jaws to the strike point (`breathBeam`) and each tongue is a gold core line under tall
+  `^ * # %` flames (240 glyphs / s per tongue) that lean back against the turn, the ground scorching
+  as they pass.
 - **Fire breath:** a dim orange stream with a yellow vein and a ragged tongue envelope, a small maw
   flare (the old stream summed to a white bar). **Fireball:** a toned-down flash and blast core, so
   the fire burst and flung rocks show.

@@ -96,7 +96,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] A real tail thrust for the tail lash (a tail-raise control in the rig)
   - [ ] Widen the wing buffet's band; later string hits whiff a hero who stands still
   - [ ] A readable overhead claw at the game camera; a stronger deflect knock-back
-  - [ ] A red windup glow for the meteor cast
+  - [x] A red windup glow for the meteor cast (Armageddon's rear-up glows red, ADR-049)
   - [ ] Teach the probe bot to heal (its death rates are pessimistic)
   - [ ] Capture the phase-3 eruption chase
 
@@ -145,6 +145,24 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Face: brow, nose and jaw lines under the fringe
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
+
+## M1.16 — Breath-born bullets, perfect-parry returns, Armageddon (2026-11-11, `dragon/breath-armageddon`)
+- [x] Ground warnings heat the ground (glyph glow + scorch heat, the edge late): no red rings,
+      `!` marks or chevrons anywhere (ADR-052)
+- [x] A perfect parry (0.08 s) returns embers / wisps as damaging shots; a 120 HP budget per
+      pattern (ADR-051)
+- [x] Every bullet is breathed from the jaws along the head's aim; Ember torrent, Cinder burst,
+      denser Wisp swarm, Scouring breath; "Hard" numbers (ADR-050)
+- [x] Armageddon replaces the Meteor rain: a salvo into the sky, waves over the whole clearing with
+      safe ground kept, burning P3 craters, a great meteor (ADR-053)
+- [ ] Follow-ups:
+  - [ ] The owner's phone test of the preview (frame rate, bullet and heat-glow readability)
+  - [ ] A human playtest of the Hard patterns, the 0.08 s return window and the return budget
+  - [ ] Watch the P3 crater ticks (a hero who never steps out takes many) and the Scouring breath's
+        single crossing of a standing hero
+  - [ ] Melee perfect parries (out of scope here: the flag is computed for every parry)
+  - [ ] Re-run the `win` / `probe` bots and the AI pick shares with the new patterns
+  - [ ] Bullet sounds of their own (a cough, the stream) beyond the breath loop
 
 ## M1.15 — Two hands, a raised guard, idle life, gold hair (2026-11-12, `player/two-hands-idle-life`)
 - [x] Both hands on every swing and the stab; the off hand closes round the grip (ADR-046)
