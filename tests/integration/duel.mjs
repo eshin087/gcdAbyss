@@ -1,0 +1,676 @@
+// The Ashfall level and the Ash Disciple, headless (docs/specs/ash-disciple.md): the REAL Player,
+// AshDisciple, Hud, GameFlow, AudioEngine and Lab (+ real LightPool, GlyphParticles, CameraRig,
+// Events) wired like src/main.js for `?level=ash`; the world is a light mock on the real Colliders
+// with the courtyard's ring of pillars. A bot drives the input.
+// usage: node duel.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI)
+//   scenario: levels | data | timing | guard | deflect | ghostep | execute | phase | flow | win | all
+import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import { ui, AUDIO, resetWindow } from './shim.mjs';
+
+const ROOT = process.argv[2];
+const SCEN = process.argv[3] || 'all';
+const imp = (p) => import(pathToFileURL(`${ROOT}/${p}`).href);
+const THREE = await import(pathToFileURL(`${ROOT}/node_modules/three/build/three.module.js`).href);
+const { CONFIG } = await imp('src/core/config.js');
+const { Events } = await imp('src/core/events.js');
+const { CameraRig } = await imp('src/core/cameraRig.js');
+const { createSharedUniforms } = await imp('src/render/shaderLib.js');
+const { LightPool } = await imp('src/render/lights.js');
+const { GlyphParticles } = await imp('src/render/particles.js');
+const { Colliders } = await imp('src/world/colliders.js');
+const { TELL, RESULT, DEFENSE, POSTURE } = await imp('src/combat/rules.js');
+const { LEVELS, DEFAULT_LEVEL, getLevel, levelFromSearch, applyLevel, levelUrl } = await imp('src/levels/index.js');
+const { COURTYARD } = await imp('src/world/courtyard.js');
+const { Player } = await imp('src/entities/player/player.js');
+const { AshDisciple } = await imp('src/entities/enemies/ashDisciple/disciple.js');
+const { MOVES, MOVE_NAMES, CLIP, realise } = await imp('src/entities/enemies/ashDisciple/moves.js');
+const { TUNING } = await imp('src/entities/enemies/ashDisciple/tuning.js');
+const { Hud } = await imp('src/ui/hud.js');
+const { TouchControls } = await imp('src/ui/touch.js');
+const { AudioEngine } = await imp('src/audio/audio.js');
+const { GameFlow } = await imp('src/game/flow.js');
+const { Lab } = await imp('src/dev/lab.js');
+
+const ASH = getLevel('ash');
+const errors = [];
+console.error = (...a) => { errors.push(a.map((x) => (x?.stack ? x.stack.split('\n').slice(0, 3).join(' | ') : String(x))).join(' ')); };
+console.warn = (...a) => { errors.push('WARN ' + a.map(String).join(' ')); };
+const out = (...a) => process.stdout.write(a.join(' ') + '\n');
+let fails = 0;
+const assert = (c, m) => { if (!c) { fails++; out('FAIL', m); } else out('ok  ', m); };
+const mulberry32 = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+const SEED = Number(process.env.ABYSS_SEED ?? 4242);
+const DT = 1 / 60;
+
+// the event catalogue (docs/ARCHITECTURE.md → "Event catalogue"): what this level emits must be in it
+const CATALOGUE = (() => {
+  const md = fs.readFileSync(`${ROOT}/docs/ARCHITECTURE.md`, 'utf8');
+  const sec = md.split(/^## /m).find((s) => s.startsWith('Event catalogue')) ?? '';
+  const names = new Set();
+  for (const m of sec.matchAll(/`([a-zA-Z]+(?::[a-zA-Z0-9]+)?)[ `]/g)) names.add(m[1]);
+  return names;
+})();
+
+applyLevel(ASH);
+
+function build() {
+  resetWindow();
+  Math.random = mulberry32(SEED);
+  ui.children.forEach((c) => (c.parentNode = null));
+  ui.children.length = 0;
+  const U = createSharedUniforms();
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(CONFIG.camera.fov, 16 / 9, CONFIG.camera.near, CONFIG.camera.far);
+  const keys = new Set(), pk = new Set(), rk = new Set(), tapKeys = new Set();
+  const btn = [false, false, false], pb = [false, false, false], rb = [false, false, false], tapBtn = [false, false, false];
+  const input = {
+    enabled: true, anyPressed: false, wheel: 0, mouse: { ndcX: 0, ndcY: 0 },
+    keys, pressedKeys: pk, releasedKeys: rk, buttons: btn, pressedButtons: pb, releasedButtons: rb, axis: { x: 0, y: 0 },
+    down(c) { return this.enabled && keys.has(c); }, pressed(c) { return this.enabled && pk.has(c); }, released(c) { return this.enabled && rk.has(c); },
+    mouseDown(b) { return this.enabled && btn[b]; }, mousePressed(b) { return this.enabled && pb[b]; }, mouseReleased(b) { return this.enabled && rb[b]; },
+    moveAxis() { return this.enabled ? this.axis : { x: 0, y: 0 }; },
+    tap(code) { if (keys.has(code)) return; keys.add(code); pk.add(code); tapKeys.add(code); this.anyPressed = true; },
+    hold(code) { if (keys.has(code)) return; keys.add(code); pk.add(code); this.anyPressed = true; },
+    release(code) { if (!keys.delete(code)) return; rk.add(code); },
+    click(b = 0) { if (btn[b]) return; btn[b] = true; pb[b] = true; tapBtn[b] = true; this.anyPressed = true; },
+    press(b) { if (btn[b]) return; btn[b] = true; pb[b] = true; this.anyPressed = true; },
+    up(b) { if (!btn[b]) return; btn[b] = false; rb[b] = true; },
+    endFrame() {
+      pk.clear(); rk.clear(); pb.fill(false); rb.fill(false);
+      for (const c of tapKeys) { keys.delete(c); rk.add(c); }
+      tapKeys.clear();
+      for (let b = 0; b < 3; b++) if (tapBtn[b]) { tapBtn[b] = false; btn[b] = false; rb[b] = true; }
+      this.anyPressed = false; this.wheel = 0;
+    },
+  };
+  // the courtyard's colliders: the ring of pillars, the gate, the lanterns (world/courtyard.js layout)
+  const colliders = new Colliders();
+  const P = COURTYARD.pillarAt;
+  for (let k = -3; k <= 3; k++) {
+    const t = k * 5.2;
+    colliders.add(t, -P, 0.62, 'stone');
+    colliders.add(-P, t, 0.62, 'stone');
+    colliders.add(P, t, 0.62, 'stone');
+    if (Math.abs(t) > 5) colliders.add(t, P, 0.62, 'stone');
+  }
+  for (const s of [-1, 1]) colliders.add(s * COURTYARD.gateX, COURTYARD.gateZ, 0.7, 'stone');
+  const counters = { spawns: 0 };
+  const world = {
+    colliders, bonfire: { ...CONFIG.world.bonfire }, nest: { x: 0, z: -3 },
+    forest: { treeSpots: [], bonfire: { ...CONFIG.world.bonfire }, ash: true },
+    setGrassQuality() {}, resolve: (pos, r, b) => colliders.resolve(pos, r, b),
+    setPusher(slot, x, y, z, r) { if (![x, y, z, r].every(Number.isFinite)) throw new Error(`NaN pusher ${slot}`); },
+    clearPushers() {}, gust(x, z, s, r) { if (![x, z, s, r].every(Number.isFinite)) throw new Error('NaN gust'); },
+    scorch: { burnCircle() {}, reset() {}, heatAt: () => 0, burnAt: () => 0 },
+    atmosphere: { bonfireLit: true, setBonfireLit(v) { this.bonfireLit = !!v; } }, update() {},
+  };
+  const mkParticles = (opts) => {
+    const p = new GlyphParticles(U, opts);
+    const spawn = p.spawn.bind(p);
+    p.spawn = (o) => {
+      for (const k of ['x', 'y', 'z', 'vx', 'vy', 'vz', 'life', 'size']) if (o[k] !== undefined && !Number.isFinite(o[k])) throw new Error(`NaN particle ${k}`);
+      counters.spawns++;
+      return spawn(o);
+    };
+    return p;
+  };
+  const game = {
+    THREE, CONFIG, level: ASH, levels: LEVELS.map((L) => ({ id: L.id, name: L.name })), pickLevel() {},
+    renderer: null, scene, fxScene: new THREE.Scene(), camera, pipeline: { finalMat: { uniforms: { uHurt: { value: 0 }, uFade: { value: 0 }, uDesat: { value: 0 }, uWarm: { value: 0 }, uExposure: { value: 1 }, uBloom: { value: 1 } } } }, U,
+    events: new Events(), input, cameraRig: new CameraRig(camera), lights: new LightPool(U),
+    fx: { alpha: mkParticles({ max: 3000, additive: false }), add: mkParticles({ max: 7000, additive: true }) },
+    time: 0, realTime: 0, timeScale: 1, debugTimeScale: 1, hitstopTimer: 0, hitstopScale: 1,
+    mouseGround: new THREE.Vector3(), state: 'title', settings: { quality: CONFIG.defaultQuality, showFps: false },
+    hitstop(seconds, scale = 0.04) { this.hitstopTimer = Math.max(this.hitstopTimer, seconds); this.hitstopScale = Math.min(this.hitstopScale, scale); },
+    shake(a) { if (!Number.isFinite(a)) throw new Error('NaN shake'); this.cameraRig.addTrauma(a); },
+  };
+  const G = { game, input, counts: {}, watch: null, hits: [], payload: new Set() };
+  const emit = game.events.emit.bind(game.events);
+  game.events.emit = (n, d) => {
+    G.counts[n] = (G.counts[n] || 0) + 1;
+    if (n.startsWith('combat:') || n.startsWith('dragon:')) for (const [k, v] of Object.entries(d ?? {})) if (typeof v === 'number' && !Number.isFinite(v)) G.payload.add(`${n}.${k}`);
+    G.watch?.(n, d);
+    G.defend?.onEvent(n, d);
+    emit(n, d);
+  };
+  game.world = world;
+  game.audio = new AudioEngine(game);
+  game.player = new Player(game);
+  game.dragon = ASH.createBoss(game);
+  game.boss = game.dragon;
+  game.hud = new Hud(game);
+  game.touch = new TouchControls(game);
+  game.flow = new GameFlow(game);
+  game.lab = new Lab(game);
+  game.applyQuality = () => {};
+  const takeHit = game.player.takeHit.bind(game.player);
+  game.player.takeHit = (h) => {
+    const r = takeHit(h);
+    G.hits.push({ t: game.time, r, attack: h?.attack, tell: h?.tell, damage: h?.damage });
+    return r;
+  };
+  game.cameraRig.snap(game.player.position);
+  G.tick = (realDt) => {
+    let scale = game.timeScale;
+    if (game.hitstopTimer > 0) { game.hitstopTimer -= realDt; scale *= game.hitstopScale; if (game.hitstopTimer <= 0) game.hitstopScale = 1; }
+    const dt = realDt * scale * (game.debugTimeScale ?? 1);
+    game.realTime += realDt;
+    game.time += dt;
+    game.dt = dt;
+    game.realDt = realDt;
+    if (AUDIO.ctx) AUDIO.ctx.currentTime += realDt;
+    game.touch.update(realDt);
+    game.lab.update(realDt);
+    game.flow.update(dt, realDt);
+    game.player.update(dt);
+    game.dragon.update(dt);
+    game.cameraRig.update(realDt, game.player.position);
+    game.lights.update(dt, game.player.position);
+    game.fx.alpha.update(dt, game.time);
+    game.fx.add.update(dt, game.time);
+    game.hud.update(realDt);
+    game.audio.update(realDt);
+    game.input.endFrame();
+    const p = game.player, d = game.dragon;
+    if (![p.position.x, p.position.z, p.hp, p.yaw].every(Number.isFinite)) throw new Error('player NaN');
+    if (![d.position.x, d.position.y, d.position.z, d.hp, d.yaw, d.posture, d.maxPosture].every(Number.isFinite)) throw new Error('disciple NaN');
+    for (const h of d.hurtSpheres) if (![h.x, h.y, h.z, h.r].every(Number.isFinite)) throw new Error('hurtSphere NaN');
+  };
+  return G;
+}
+
+const run = (G, seconds, step = null, until = null) => {
+  for (let i = 0, n = Math.round(seconds / DT); i < n; i++) {
+    step?.(G);
+    G.tick(DT);
+    if (until?.()) return true;
+  }
+  return false;
+};
+
+/** Title → the duel (the Lab's flow jump), the hero `dist` m in front of him, facing him. */
+function duel(G, { dist = 4, ang = 0, ai = false } = {}) {
+  const { game } = G;
+  run(G, 0.2);
+  game.flow.debug.toState('boss');
+  const d = game.dragon;
+  d.debug.setAI(ai);
+  run(G, 0.3);
+  place(G, dist, ang);
+  run(G, 0.3);
+}
+
+function place(G, dist, ang = 0) {
+  const { game } = G;
+  const d = game.dragon, p = game.player;
+  const a = d.yaw + ang;
+  p.debug.teleport(d.position.x + Math.sin(a) * dist, d.position.z + Math.cos(a) * dist);
+  p.yaw = Math.atan2(d.position.x - p.position.x, d.position.z - p.position.z);
+  p.debug.heal();
+  game.mouseGround.set(d.position.x, 0, d.position.z);
+}
+
+/** Wait until he is back in footwork and the hero is free. */
+function settle(G, max = 6) {
+  const { game } = G;
+  const d = game.dragon, p = game.player;
+  return run(G, max, null, () => d.mode === 'foot' && (p.state === 'idle' || p.state === 'run') && game.hitstopTimer <= 0);
+}
+
+// ---- the defender bot: answers his tells from the flash (parry normal / blue, roll through red)
+function makeDefender(G, { skill = 1 } = {}) {
+  const pend = [];
+  const stats = { flashes: 0, parryTry: 0, dodgeTry: 0 };
+  return {
+    stats,
+    onEvent(n, d) {
+      if (n === 'combat:flash' && d?.source === 'dragon') {
+        stats.flashes++;
+        if (skill < 1 && Math.random() > skill) return;
+        pend.push({ tell: d.tell, at: G.game.time + TUNING.flashLead, done: false });
+      }
+    },
+    act() {
+      const g = G.game, input = G.input, t = g.time;
+      for (let i = pend.length - 1; i >= 0; i--) if (pend[i].done || pend[i].at < t - 0.4) pend.splice(i, 1);
+      for (const e of pend) {
+        const left = e.at - t - DT;
+        if (e.tell === TELL.RED) {
+          if (left <= 0.1) {
+            e.done = true;
+            const d = g.dragon.position, p = g.player.position;
+            const dx = p.x - d.x, dz = p.z - d.z, l = Math.hypot(dx, dz) || 1;
+            input.axis = { x: dz / l, y: dx / l }; // roll across his blade
+            input.tap('Space');
+            stats.dodgeTry++;
+          }
+        } else if (left <= 0.12) {
+          e.done = true;
+          input.up(2);
+          input.click(2);
+          stats.parryTry++;
+        }
+      }
+      return pend.some((e) => !e.done && e.at - t < 0.7);
+    },
+  };
+}
+
+/** Fence: keep ~2.6 m off him, answer every tell, cut in his openings, execute a broken one.
+ *  mortal (the probe): no god mode; drinks a flask when low and free. */
+function fencer(G, mortal = false) {
+  const { game, input } = G;
+  const p = game.player, d = game.dragon;
+  input.axis = { x: 0, y: 0 };
+  if (!p.alive || game.state !== 'boss') return;
+  if (!mortal) p.hp = p.maxHp; // god mode for the win run
+  else if (p.hp < 70 && p.flasks > 0 && !G.defend.act() && ((game.realTime * 60) | 0) % 30 === 0) input.tap('KeyF');
+  const tgt = new THREE.Vector3();
+  d.lockPoint(tgt);
+  game.mouseGround.set(tgt.x, 0, tgt.z);
+  const dx = tgt.x - p.position.x, dz = tgt.z - p.position.z, dist = Math.hypot(dx, dz);
+  const busy = G.defend.act();
+  if (dist > 2.6) input.axis = { x: dx / dist, y: -dz / dist };
+  const a = d.brain.act;
+  const open = d.broken || (d.mode === 'react' && ['recoil', 'stagger', 'flinch', 'executed'].includes(d.brain.react?.kind)) || (a && a.t > a.recoveryStart) || p.critTimer > 0;
+  const tick = (game.realTime * 60) | 0;
+  if (!busy && dist < 3.2 && (open ? tick % 20 === 0 : tick % 70 === 0)) input.click(0);
+}
+
+// ================================================================== scenario: levels
+async function scenarioLevels() {
+  out('\n== scenario LEVELS (registry, URL, world overrides) ==');
+  assert(LEVELS.length >= 2 && DEFAULT_LEVEL.id === 'cinderwood', `levels: ${LEVELS.map((l) => l.id).join(', ')}; default cinderwood`);
+  assert(levelFromSearch('?level=ash') === ASH && levelFromSearch('?lab&level=ASHFALL') === ASH && levelFromSearch('?level=disciple') === ASH, '?level=ash / ashfall / disciple pick the Ashfall level (case-insensitive)');
+  assert(levelFromSearch('') === DEFAULT_LEVEL && levelFromSearch('?level=nope') === DEFAULT_LEVEL && levelFromSearch(null) === DEFAULT_LEVEL, 'no / unknown level → Cinderwood');
+  assert(levelUrl('ash', 'http://x/?lab') === 'http://x/?lab=&level=ash' || levelUrl('ash', 'http://x/?lab').includes('level=ash'), `levelUrl keeps ?lab and sets level (${levelUrl('ash', 'http://x/?lab')})`);
+  assert(!levelUrl('cinderwood', 'http://x/?level=ash&lab').includes('level='), 'levelUrl to the default level drops the parameter');
+  assert(CONFIG.world.bonfire.z === COURTYARD.bonfire.z && CONFIG.world.dragonSleep.z === -3 && CONFIG.world.bossTriggerZ < COURTYARD.gateZ, 'applyLevel merged the courtyard layout into CONFIG.world');
+  for (const L of LEVELS) assert(typeof L.buildSet === 'function' && typeof L.createBoss === 'function' && L.text && typeof L.text.victory === 'string', `level ${L.id} has a set, a boss and its flow lines`);
+  const G = build();
+  const d = G.game.dragon;
+  assert(d instanceof AshDisciple && G.game.boss === d && d.state === 'sleeping' && d.mode === 'sleep', 'the boss slot holds the Ash Disciple, kneeling');
+  assert(Math.hypot(d.position.x - CONFIG.world.dragonSleep.x, d.position.z - CONFIG.world.dragonSleep.z) < 1e-6, 'he kneels at the level\'s resting spot');
+  let bad = 0;
+  d.object3d.traverse((m) => { const pos = m.geometry?.attributes?.position; if (pos) for (const v of pos.array) if (!Number.isFinite(v)) bad++; });
+  assert(bad === 0, `his gear has no NaN vertices (${bad})`);
+  assert(d.batch.meshes.length > 0 && d.batch.meshes.length < 24, `he draws through rigid batches (${d.batch.meshes.length} meshes)`);
+  const labLevel = ui.find?.((e) => e.textContent === 'LEVEL') ?? null;
+  assert(G.game.lab && typeof G.game.pickLevel === 'function', 'the Lab and the title get the level list and pickLevel');
+  return G;
+}
+
+// ================================================================== scenario: data (the move rules)
+async function scenarioData() {
+  out('\n== scenario DATA (move data rules, every phase, both ends of every random roll) ==');
+  const G = build();
+  let checked = 0;
+  for (const name of MOVE_NAMES) {
+    const def = MOVES[name];
+    for (const phase of [1, 2]) {
+      if (def.phase > phase) continue;
+      for (const r of [0, 0.999]) {
+        const A = realise(name, phase, () => r);
+        const real = A.beats.filter((b) => !b.feint);
+        const tag = `${name} P${phase} r${r}`;
+        if (!real.every((b) => [TELL.NORMAL, TELL.BLUE, TELL.RED].includes(b.def.tell))) assert(false, `${tag}: a tell on every real hit`);
+        const first = real[0];
+        if (!(first && first.impact - first.tellAt >= TUNING.minFirstWindup - 1e-6)) assert(false, `${tag}: first real windup ${first ? (first.impact - first.tellAt).toFixed(2) : '-'} >= ${TUNING.minFirstWindup}`);
+        for (let i = 1; i < real.length; i++) if (!(real[i].impact - real[i - 1].impact >= TUNING.minHitGap - 1e-6)) assert(false, `${tag}: hits ${i - 1}→${i} ${(real[i].impact - real[i - 1].impact).toFixed(2)} s apart >= ${TUNING.minHitGap}`);
+        for (const b of real) if (!(b.flash > b.tellAt)) assert(false, `${tag}: hit ${b.hit} flashes after its tell`);
+        if (!A.beats.every((b) => b.feint ? !b.def.tell : true)) assert(false, `${tag}: feints carry no tell`);
+        if (!(A.end > A.recoveryStart && A.clip.dur === A.end)) assert(false, `${tag}: clip spans the move`);
+        for (const tr of A.clip.tracks) for (const v of tr.V) for (const x of [].concat(v)) if (!Number.isFinite(x)) assert(false, `${tag}: NaN key in ${tr.f}`);
+        for (const b of real) if (!b.def.release && !b.def.zone) assert(false, `${tag}: hit ${b.hit} has a zone`);
+        checked++;
+      }
+    }
+  }
+  assert(checked > 40, `every move realised in every phase it runs, both ends of its rolls (${checked}); the rules held where no FAIL is printed above`);
+  assert(MOVES.hesitate.beats[0].feint && MOVES.hesitate.beats[1].hold, 'the Hesitating Blade opens with a feint and baits with a hold');
+  for (const [k, c] of Object.entries(CLIP)) if (!(c.dur > 0 && c.tracks.length)) assert(false, `reaction clip ${k} compiles`);
+  // feints never flash: run the Hesitating Blade and count its flashes against its real hits
+  duel(G, { dist: 4 });
+  const flashes = [];
+  G.watch = (n, d) => { if (n === 'combat:flash' && d?.attack === 'hesitate') flashes.push(G.game.time); };
+  const d = G.game.dragon;
+  d.debug.trigger('hesitate');
+  const realHits = d.brain.act.hits;
+  run(G, 4, null, () => d.mode === 'foot');
+  G.watch = null;
+  assert(flashes.length === realHits, `Hesitating Blade: ${flashes.length} flashes for ${realHits} real hits (the feint never glints)`);
+  return G;
+}
+
+// ================================================================== scenario: timing
+async function scenarioTiming() {
+  out('\n== scenario TIMING (every move from the middle of its AI band: contact vs flash + lead) ==');
+  const G = build();
+  duel(G, { dist: 4 });
+  const { game } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.god = true;
+  let worst = 0, firstMiss = [];
+  for (const name of MOVE_NAMES) {
+    const def = MOVES[name];
+    if (def.transition || def.counter) continue;
+    if (def.phase > d.phase) {
+      d.debug.phase2();
+      run(G, 3.5, null, () => d.mode === 'foot');
+    }
+    settle(G);
+    d.yaw = 0;
+    const mid = (def.band[0] + Math.min(def.band[1], 9)) / 2;
+    d.position.set(0, 0, -2);
+    place(G, mid);
+    run(G, 0.1);
+    const flashes = [], contacts = [];
+    G.watch = (n, e) => { if (n === 'combat:flash' && e?.attack === name) flashes.push(game.time); };
+    const h0 = G.hits.length;
+    const ok = d.debug.trigger(name);
+    run(G, 5, (GG) => { GG.game.mouseGround.set(d.position.x, 0, d.position.z); }, () => d.mode === 'foot' && !d.fx.crescentsAlive);
+    G.watch = null;
+    for (const h of G.hits.slice(h0)) if (h.attack === name) contacts.push(h.t);
+    // each contact against the nearest flash before it
+    const errs = contacts.map((t) => {
+      const f = flashes.filter((x) => x <= t + 1e-6).pop();
+      return f === undefined ? Infinity : t - (f + TUNING.flashLead);
+    });
+    const w = errs.reduce((m, e) => Math.max(m, Math.abs(e)), 0);
+    worst = Math.max(worst, w);
+    if (!contacts.length) firstMiss.push(name);
+    out(`     ${name.padEnd(12)} from ${mid.toFixed(1)} m: ${flashes.length} flashes, ${contacts.length} contacts, worst ${Number.isFinite(w) ? (w * 1000).toFixed(0) : '∞'} ms`);
+    assert(ok && w <= 0.085, `${name}: every contact within ±85 ms of its flash + ${TUNING.flashLead} s (worst ${Number.isFinite(w) ? (w * 1000).toFixed(0) : '∞'} ms)`);
+  }
+  assert(!firstMiss.length, `every move lands from the middle of its band ${JSON.stringify(firstMiss)}`);
+  return G;
+}
+
+// ================================================================== scenario: guard
+async function scenarioGuard() {
+  out('\n== scenario GUARD (front strikes guarded, the back open, counters, the crush) ==');
+  const G = build();
+  duel(G, { dist: 1.8 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.god = true;
+  run(G, 0.5);
+  const hp0 = d.hp, post0 = d.posture;
+  const c0 = G.counts['dragon:guard'] ?? 0;
+  // a light swing into his front while he stands guard
+  input.click(0);
+  run(G, 0.7);
+  assert((G.counts['dragon:guard'] ?? 0) > c0 && d.hp === hp0 && d.posture > post0, `a light swing into his guard: dragon:guard, no damage (hp ${d.hp}), posture ${post0.toFixed(0)} → ${d.posture.toFixed(0)}`);
+  // the same from behind lands
+  settle(G);
+  place(G, 1.6, Math.PI);
+  run(G, 0.05);
+  d.yaw = Math.atan2(-(p.position.x - d.position.x), -(p.position.z - d.position.z)); // facing away
+  const hp1 = d.hp;
+  input.click(0);
+  run(G, 0.6);
+  assert(d.hp < hp1, `a swing at his back lands (hp ${hp1} → ${d.hp})`);
+  // counters: guarded strikes in a row raise the chance to 100 % by the 4th
+  settle(G);
+  place(G, 1.8);
+  d.debug.setAI(true); // counters are the AI's (it is held from starting a move of its own: gapT)
+  d.brain.gapT = 99;
+  d.brain.raiseT = 0;
+  let countered = false;
+  for (let i = 0; i < 4 && !countered; i++) {
+    d.takeHit({ damage: 30, part: 'body', heavy: false, poise: 5, point: { x: d.position.x, y: 1.2, z: d.position.z } });
+    countered = d.brain.counter.pending || d.brain.act?.name === 'riposte';
+    run(G, 0.05);
+  }
+  run(G, 0.6, null, () => d.brain.act?.name === 'riposte');
+  assert(countered && d.brain.act?.name === 'riposte', `strikes into his guard bring the Riposte (counter chance ${TUNING.guard.counterChance.join(' / ')})`);
+  d.debug.setAI(false);
+  run(G, 3, null, () => d.mode === 'foot');
+  // the crush: a heavy strike with a full thrust's posture
+  settle(G);
+  place(G, 1.8);
+  d.brain.raiseT = 0;
+  const hp2 = d.hp;
+  const slam = d.takeHit({ damage: 58, part: 'body', heavy: true, poise: 40, point: { x: d.position.x, y: 1.2, z: d.position.z } });
+  assert(slam === 0 && d.hp === hp2, 'the chain\'s slam (posture 40) is turned aside like any strike');
+  settle(G);
+  d.brain.raiseT = 0;
+  const r = d.takeHit({ damage: 110, part: 'body', heavy: true, poise: 50, point: { x: d.position.x, y: 1.2, z: d.position.z } });
+  assert(r > 0 && d.hp < hp2 && d.brain.react?.kind === 'stagger', `a full-charge thrust (posture 50) crushes his guard: it lands (${r}) and he staggers`);
+  // the real thrust: hold LMB to full charge and release into his guard
+  settle(G);
+  place(G, 2.6);
+  run(G, 0.3);
+  d.brain.raiseT = 0;
+  const hp3 = d.hp;
+  input.press(0);
+  run(G, 1.4);
+  input.up(0);
+  run(G, 0.6);
+  assert(d.hp < hp3, `the hero's own full thrust breaks through the guard (hp ${hp3} → ${d.hp})`);
+  return G;
+}
+
+// ================================================================== scenario: deflect
+async function scenarioDeflect() {
+  out('\n== scenario DEFLECT (a string parried hit by hit, the last recoils him) ==');
+  const G = build();
+  duel(G, { dist: 3 });
+  const { game } = G;
+  const d = game.dragon;
+  G.defend = makeDefender(G);
+  const parried = [], chain = [];
+  G.watch = (n, e) => {
+    if (n === 'dragon:parried' && e?.attack === 'swallow') parried.push([e.hit, e.last]);
+    if (n === 'combat:deflectChain') chain.push(e.count);
+  };
+  const post0 = d.posture;
+  d.debug.trigger('swallow');
+  let sawRecoil = false;
+  run(G, 4, (GG) => { GG.game.mouseGround.set(d.position.x, 0, d.position.z); GG.input.axis = { x: 0, y: 0 }; GG.defend.act(); if (d.brain.react?.kind === 'recoil') sawRecoil = true; }, () => sawRecoil && d.mode === 'foot');
+  G.watch = null;
+  G.defend = null;
+  assert(JSON.stringify(parried) === '[[0,false],[1,false],[2,true]]', `Swallow Flicks parried hit by hit: dragon:parried ${JSON.stringify(parried)}`);
+  assert(chain.join() === '2,3', `the deflect chain counts up (${chain.join(',')})`);
+  assert(sawRecoil, 'parrying the last hit recoils him (the punish window)');
+  assert(d.posture >= post0 + POSTURE.parry.normal * 2 + POSTURE.parry.blue - 1 || d.broken, `three parries fill his posture (${post0.toFixed(0)} → ${d.posture.toFixed(0)})`);
+  return G;
+}
+
+// ================================================================== scenario: ghostep
+async function scenarioGhostep() {
+  out('\n== scenario GHOSTEP (a perfect dodge blinks behind him: no plunge, his back open) ==');
+  const G = build();
+  duel(G, { dist: 5 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  let flashT = null;
+  G.watch = (n, e) => { if (n === 'combat:flash' && e?.attack === 'plumThrust') flashT = game.time; };
+  d.debug.trigger('plumThrust');
+  let rolled = false;
+  run(G, 2, () => {
+    input.axis = { x: 0, y: 0 };
+    if (flashT !== null && !rolled && game.time >= flashT + TUNING.flashLead - 0.1) {
+      rolled = true;
+      input.axis = { x: 1, y: 0 };
+      input.tap('Space');
+    }
+  }, () => (G.counts['player:ghostep'] ?? 0) > 0);
+  G.watch = null;
+  const behind = -((p.position.x - d.position.x) * Math.sin(d.yaw) + (p.position.z - d.position.z) * Math.cos(d.yaw));
+  assert((G.counts['player:ghostep'] ?? 0) === 1 && p.state !== 'plunge', 'a perfect dodge of his thrust is the Ghostep (he offers no plunge)');
+  assert(behind > DEFENSE.ghostep.distanceBehind - 0.6 && p.critTimer > 0, `the hero reappears behind him (${behind.toFixed(2)} m behind his facing) with the crit window`);
+  // the back is open: his guard never covers it
+  run(G, 0.2);
+  d.brain.raiseT = 0;
+  const hp0 = d.hp;
+  input.click(0);
+  run(G, 0.5);
+  assert(d.hp < hp0, `a cut at his back after the Ghostep lands (hp ${hp0} → ${d.hp})`);
+  return G;
+}
+
+// ================================================================== scenario: execute
+async function scenarioExecute() {
+  out('\n== scenario EXECUTE (posture break → the execution thrust → he rises) ==');
+  const G = build();
+  duel(G, { dist: 2.4 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  d.addPosture(d.maxPosture);
+  assert(d.broken && d.mode === 'broken' && d.state === 'staggered', 'a full posture meter breaks him (on one knee, state staggered)');
+  const hp0 = d.hp;
+  let exec = 0;
+  G.watch = (n, e) => { if (n === 'player:plungeHit' && e?.execution) exec++; };
+  run(G, 0.2);
+  input.click(0);
+  run(G, 0.8);
+  G.watch = null;
+  assert(exec === 1 && hp0 - d.hp === DEFENSE.plunge.execDamage, `an attack within ${TUNING.execRange} m executes him: ${hp0 - d.hp} damage (EXECUTION call-out)`);
+  assert(!d.broken && d.posture === 0 && d.brain.react?.kind === 'executed', 'the break is spent; he plays the executed reaction');
+  run(G, 2.5, null, () => d.mode === 'foot');
+  assert(d.mode === 'foot', 'he rises back into his guard');
+  // out of range: no execution
+  d.addPosture(d.maxPosture);
+  place(G, 6);
+  const hp1 = d.hp;
+  input.click(0);
+  run(G, 0.6);
+  assert(d.hp === hp1, 'no execution from 6 m away');
+  return G;
+}
+
+// ================================================================== scenario: phase
+async function scenarioPhase() {
+  out('\n== scenario PHASE (the 50 % gate, the kindling, phase-2 moves) ==');
+  const G = build();
+  duel(G, { dist: 4, ai: true });
+  const { game } = G;
+  const d = game.dragon;
+  const gate = d.maxHp * TUNING.phaseAt[1];
+  d.hp = gate + 20;
+  d.mode = 'foot';
+  d.brain.act = null;
+  d.takeHit({ damage: 400, part: 'body', heavy: true, poise: 5, exact: true });
+  assert(d.hp === gate && d.brain.pendingPhase === 2, `damage stops at the gate (${d.hp} = ${gate}) until the transition`);
+  let p2 = 0;
+  G.watch = (n) => { if (n === 'dragon:phase2') p2++; };
+  run(G, 1, null, () => d.brain.act?.name === 'kindle');
+  assert(d.brain.act?.name === 'kindle' && d.phase === 2 && p2 === 1, 'the kindling starts: phase 2, dragon:phase2 (banner, music)');
+  run(G, 4, null, () => d.mode === 'foot');
+  G.watch = null;
+  assert(d.kindle > 0.2, 'the blade is kindled');
+  const picks = new Set();
+  for (let i = 0; i < 200; i++) {
+    d.brain.cooldowns = {};
+    d.brain.last = [null, null];
+    const n = d.brain._choose(3);
+    if (n) picks.add(n);
+  }
+  assert(picks.has('needles') && picks.has('emberWhirl'), `phase-2 moves join the pool at 3 m (${[...picks].join(', ')})`);
+  assert(game.flow._text('phase2') === 'THE ASH KINDLES', 'the flow shows the level\'s phase-2 banner');
+  return G;
+}
+
+// ================================================================== scenario: flow
+async function scenarioFlow() {
+  out('\n== scenario FLOW (title → the gate → intro → duel → death → victory) ==');
+  const G = build();
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  run(G, 0.6);
+  input.tap('KeyW');
+  run(G, 0.2);
+  assert(game.state === 'explore', `the title dismissed into explore (${game.state})`);
+  let area = null;
+  // he kneels until the hero walks through the gate
+  p.debug.teleport(0, COURTYARD.gateZ + 2);
+  run(G, 0.5);
+  assert(d.mode === 'sleep' && game.state === 'explore', 'still kneeling while the hero stands outside the gate');
+  p.debug.teleport(0, COURTYARD.gateZ - 1.5);
+  run(G, 0.3);
+  assert(game.state === 'bossIntro' && d.mode === 'intro', `through the gate: the intro (${game.state}, ${d.mode})`);
+  run(G, 4, null, () => game.state === 'boss');
+  assert(game.state === 'boss' && d.mode === 'foot' && (G.counts['dragon:introDone'] ?? 0) === 1, 'the salute ends in the duel (dragon:introDone → boss)');
+  d.debug.kill();
+  run(G, 6, null, () => game.state === 'victory');
+  assert(d.state === 'dead' && game.state === 'victory', `defeated, he turns to ash: victory (${game.state})`);
+  assert(game.flow._text('victory') === 'DISCIPLE DEFEATED', 'the level\'s victory banner');
+  return G;
+}
+
+// ================================================================== scenario: win
+async function scenarioWin() {
+  out('\n== scenario WIN (a fencing bot in god mode: parries, rolls, cuts in his openings) ==');
+  const G = build();
+  const { game } = G;
+  duel(G, { dist: 4, ai: true });
+  G.defend = makeDefender(G);
+  const d = game.dragon;
+  const stats = { parries: 0, guards: 0, execs: 0, breaks: 0, hits: 0, ghosteps: 0 };
+  const dmgBy = {};
+  G.watch = (n, e) => {
+    if (n === 'dragon:hurt') {
+      const a = d.brain.act, b = a?.beats.find((x) => a.t < x.end + 1e-6);
+      const foot = d.mode === 'foot' ? (d.brain.raiseT > 0 ? 'foot:raising' : !d._fromFront() ? 'foot:flank' : 'foot:guardUp?') : null;
+      const k = d.mode === 'act' ? (a.t > a.recoveryStart ? 'act:recovery' : b && a.t < b.impact ? 'act:windup' : 'act:active') : d.mode === 'react' ? `react:${d.brain.react?.kind}` : foot ?? d.mode;
+      dmgBy[k] = (dmgBy[k] ?? 0) + e.damage;
+    }
+    if (n === 'player:parry') stats.parries++;
+    if (n === 'dragon:guard') stats.guards++;
+    if (n === 'player:plungeHit' && e?.execution) stats.execs++;
+    if (n === 'dragon:postureBreak') stats.breaks++;
+    if (n === 'player:ghostep') stats.ghosteps++;
+  };
+  const t0 = game.time;
+  const won = run(G, 360, fencer, () => d.state === 'dead' || game.state === 'victory');
+  G.watch = null;
+  const secs = game.time - t0;
+  const taken = G.hits.filter((h) => h.r === RESULT.HIT).length;
+  out(`     ${won ? 'won' : 'not won'} in ${secs.toFixed(0)} s: ${stats.parries} parries, ${stats.guards} guarded swings, ${stats.ghosteps} Ghosteps, ${stats.breaks} breaks, ${stats.execs} executions, ${taken} hits taken, ${G.defend.stats.flashes} flashes; phase ${d.phase}`);
+  out(`     damage by his state: ${JSON.stringify(dmgBy)}`);
+  assert(won, 'the fencing bot defeats the Ash Disciple within 6 minutes');
+  assert(d.phase === 2, 'the fight went through phase 2');
+  G.defend = null;
+  return G;
+}
+
+// ================================================================== scenario: probe (opt-in)
+/** A mortal fencer that reads only a share of the tells (ABYSS_SKILL, default 0.85). Not a pass /
+ *  fail check: it measures how dangerous he is. node duel.mjs . probe */
+async function scenarioProbe() {
+  const skill = Number(process.env.ABYSS_SKILL ?? 0.85);
+  out(`\n== scenario PROBE (a mortal fencer reading ${Math.round(skill * 100)} % of the tells) ==`);
+  const G = build();
+  const { game } = G;
+  duel(G, { dist: 4, ai: true });
+  G.defend = makeDefender(G, { skill });
+  const d = game.dragon, p = game.player;
+  const t0 = game.time;
+  run(G, 360, (GG) => fencer(GG, true), () => d.state === 'dead' || !p.alive);
+  const taken = G.hits.filter((h) => h.r === RESULT.HIT);
+  out(`     ${d.state === 'dead' ? 'WON' : p.alive ? 'timed out' : 'DIED'} after ${(game.time - t0).toFixed(0)} s: his HP ${Math.round(d.hp)} / ${d.maxHp} (phase ${d.phase}), ${taken.length} hits taken (worst ${Math.max(0, ...taken.map((h) => h.damage)).toFixed(0)}), flasks left ${p.flasks}`);
+  G.defend = null;
+  return G;
+}
+
+const SCENARIOS = { probe: scenarioProbe, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
+const runs = [];
+const OPT_IN = new Set(['probe']); // run only when named
+for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());
+if (!runs.length) { out(`unknown scenario '${SCEN}' (${Object.keys(SCENARIOS).join(' | ')} | all)`); process.exit(2); }
+
+out('');
+{
+  const emitted = new Set();
+  for (const G of runs) Object.keys(G.counts).forEach((k) => emitted.add(k));
+  const notCat = [...emitted].filter((k) => !CATALOGUE.has(k));
+  assert(!notCat.length, `every event the duel emits is in the catalogue ${JSON.stringify(notCat)}`);
+  const pay = new Set();
+  for (const G of runs) G.payload.forEach((k) => pay.add(k));
+  assert(!pay.size, `no non-finite numbers in combat / boss event payloads ${JSON.stringify([...pay])}`);
+}
+assert(errors.length === 0, `no console errors or warnings (${errors.length})${errors.length ? ': ' + errors.slice(0, 5).join(' || ') : ''}`);
+out(fails ? `\nDUEL: ${fails} FAILED` : '\nDUEL: ALL PASSED');
+process.exit(fails ? 1 : 0);
