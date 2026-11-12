@@ -954,14 +954,37 @@ async function scenarioReach() {
   };
   // (CHARGE_HOLD hoisted above)
   const rows = [];
+  p.anim.forceVariant = 0; // each hit's own `anim`; the variants are swung below
   for (const gap of [0, 2, 2.5, 3, 3.5]) {
     const r = ['L1', 'L2', 'L3', 'L4', 'slam', 'thrust'].map((nm) => trial(nm, gap));
     rows.push(r);
     out(`   ${gap ? `${gap.toFixed(1)} m` : 'contact'}`.padEnd(12) + r.map((t) => `${t.name} ${t.hit ? `${t.hit.kind}/${t.hit.part} ${Math.round(t.hit.damage)}` : 'MISS'} @${t.at.toFixed(2)}`.padEnd(30)).join(''));
   }
+  p.anim.forceVariant = null;
   for (const r of rows) for (const t of r) {
     const where = t.gap ? `${t.gap} m` : 'contact';
     assert(!!t.hit && t.hit.kind === KINDS[t.name] && t.kinds[0] === KINDS[t.name], `${t.name} connects from the front at ${where} (${t.hit ? `${t.hit.kind} on ${t.hit.part}` : 'miss'}, hero ${t.at.toFixed(2)} m from the chest surface)`);
+  }
+  // every look of every hit (combat.js `variants`, Session 16) connects too: forced one by one
+  {
+    const { LIGHT } = await imp('src/entities/player/combat.js');
+    const names = ['L1', 'L2', 'L3', 'L4', 'slam'];
+    const misses = [];
+    let n = 0;
+    names.forEach((nm, si) => {
+      const count = 1 + (LIGHT[si].variants?.length ?? 0);
+      for (let v = 1; v < count; v++) {
+        for (const gap of [0, 2, 3.5]) {
+          p.anim.forceVariant = v;
+          const t = trial(nm, gap);
+          p.anim.forceVariant = null;
+          n++;
+          if (!(t.hit && t.hit.kind === KINDS[nm])) misses.push(`${nm}#${v}@${gap}`);
+        }
+      }
+    });
+    out(`   variants: ${n} trials (each variant at contact, 2 and 3.5 m), misses: ${misses.join(', ') || 'none'}`);
+    assert(n >= 24 && !misses.length, `every attack variant connects from the front at contact, 2 m and 3.5 m (${n} trials${misses.length ? '; missed ' + misses.join(', ') : ''})`);
   }
   assert(rows.every((r) => r[4].slamEv === 1), 'the slam meets the ground once per swing (player:slam)');
   assert(rows.every((r) => r[4].hit?.heavy === true && r[5].hit?.heavy === true && r.slice(0, 4).every((t) => t.hit?.heavy === false)), 'slam and thrust hit heavy, the four light hits do not');
@@ -2370,12 +2393,19 @@ async function scenarioHero() {
   assert(r.coat.length === 6 && tails.length === 2 && strips === 12 && r.coat.every((C) => !C.def.flap),
     `coat: 6 panels (2 back tails split by a vent, 2 side, 2 front), ${strips} torn strips`);
   // the Shrouded set (ADR-043): the cloak's sheets ride the streamer springs (heavier than a ribbon:
-  // lag < 1); under the hood only the gold fringe is built (Session 14: the other clusters poke
-  // through the cloth); the five spring joints stay for the animator
+  // lag < 1); under the hood none of the body's hair clusters is built (they poked through the cloth
+  // or massed over the face); the hood builds its own gold strands, and the face is in its shadow
+  // (Session 16); the five spring joints stay for the animator
   {
     const built = Object.entries(r.hair).filter(([, j]) => j.children.some((o) => o.isMesh)).map(([n]) => n);
-    assert(r.streamers?.length === 7 && r.streamers.every((S) => S.lag > 0 && S.lag < 1) && Object.keys(r.hair).length === 5 && built.join() === 'fringe' && r.slots.head.length > 0,
-      `the cloak: ${r.streamers?.length} sheets on springs; under the hood the hair clusters built are [${built.join(', ')}] of 5 joints`);
+    let strands = 0, skin = 0;
+    r.head.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.userData.slot === 'head' && (o.material === r.materials.hair || o.material === r.materials.hairTip)) strands++;
+      if (o.material === r.materials.skin) skin++;
+    });
+    assert(r.streamers?.length === 7 && r.streamers.every((S) => S.lag > 0 && S.lag < 1) && Object.keys(r.hair).length === 5 && built.length === 0 && strands >= 2 && skin === 0 && r.slots.head.length > 0,
+      `the cloak: ${r.streamers?.length} sheets on springs; under the hood ${built.length} body hair clusters, ${strands} gold strand meshes of the hood's own, ${skin} skin meshes on the head (the face in shadow)`);
   }
   // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
@@ -2648,8 +2678,9 @@ async function scenarioHeroLife() {
     assert(played >= 4 && names.size >= 3 && bad === 0 && tipLow > -0.03,
       `standing still he does ${played} things in 25 s, ${names.size} different, every frame finite, the point above the grass`);
     // start one and cut it
+    // a freshly started one (the 25 s above can end in an action's last half second)
     let waited = 0;
-    while (A.fidget.k < 0 && waited < 10) { go(0.1); waited += 0.1; }
+    while (!(A.fidget.k >= 0 && A.fidget.t < 0.2) && waited < 15) { go(DT); waited += DT; }
     go(0.6);
     const before = A.fidget.w;
     input.axis = { x: 0, y: 1 };

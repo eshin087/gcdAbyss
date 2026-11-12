@@ -820,12 +820,12 @@ function attackPose(p, A) {
     guard(p, A);
     return;
   }
-  const k = d.anim, t = A.t;
+  const k = A.atkDef === d && A.atkAnim ? A.atkAnim : d.anim, t = A.t;
   const W = d.windup, Ac = d.active, R = d.recovery;
   if (k.kind === 'thrust') {
     thrustPose(p, A, t, W, Ac);
   } else if (k.kind === 'stab') {
-    stabPose(p, A, t, W, Ac, R);
+    stabPose(p, A, t, W, Ac, R, k);
   } else {
     const dir = Math.sign(k.a1 - k.a0) || 1;
     const slam = k.kind === 'slam';
@@ -896,6 +896,18 @@ function attackPose(p, A) {
       p[P.spX] += 0.06 * s;
       p[P.hdX] += 0.18 * s;
     }
+    if (!slam && !k.spin) {
+      // the body drives the cut (Session 16, "fast and flowing"): the hips lead the blade round and
+      // the chest trails a little, the weight crosses from the coil's side to the finish's, and the
+      // body dips and leans into the strike
+      const act = t >= W && t < W + Ac ? Math.sin((Math.PI * (t - W)) / Ac) : 0;
+      const prog = t < W ? 0 : t < W + Ac ? (t - W) / Ac : 1;
+      p[P.pelvY] += dir * FLOW.hips * act;
+      p[P.spY] -= dir * FLOW.chest * act;
+      p[P.bodyX] += FLOW.weight * dir * (2 * prog - 1) * (1 - smoothstep(W + Ac + R * 0.4, W + Ac + R, t));
+      p[P.bodyY] -= FLOW.dip * act;
+      p[P.spX] += FLOW.lean * act;
+    }
   }
   // footwork: the lunge is a real step (feet never skate with the root)
   if (k.kind === 'thrust') dashFeet(p, A, W);
@@ -903,6 +915,20 @@ function attackPose(p, A) {
   else if (k.kind === 'slam') lungeFeet(p, A, W - 0.16, W + Ac * 0.5, 0.25, true);
   else lungeFeet(p, A, 0.03, W + Ac * 0.45, 0.22, true);
   if (k.spin) spinTurn(p, k.spin, t, W, Ac);
+  if (k.turn) {
+    // a partial pivot carried through the follow-through (the feet turn with it), turning back late
+    // in the recovery. It starts at mid-strike: turning the body while the blade is hit-tested moved
+    // where the blade crossed his front, and the cut fell short at the edge of its reach
+    pivotYaw(p, k.turn * (smoothstep(W + Ac * 0.5, W + Ac + R * 0.3, t) - smoothstep(W + Ac + R * 0.55, W + Ac + R, t)));
+  }
+  if (k.hop) {
+    // a skip: off the ground through the windup's end and the strike's start, landing in the cut
+    const h = k.hop * Math.sin(Math.PI * clamp((t - W * 0.35) / (W * 0.65 + Ac * 0.55), 0, 1));
+    p[P.bodyY] += h;
+    p[P.rF + 1] += h * 0.7;
+    p[P.lF + 1] += h * 0.7;
+    p[P.footFlat] = lerp(p[P.footFlat], 0.4, clamp(h / k.hop, 0, 1));
+  }
   const rec = (t - W - Ac) / R;
   const home = k.kind === 'h' ? FINISH.home : 0.45; // the sweeps hold their finish a beat longer
   if (rec > home) {
@@ -926,6 +952,22 @@ function attackPose(p, A) {
     p[P.lF + 1] = lerp(p[P.lF + 1], ANK, u) + 0.07 * Math.sin(Math.PI * u);
     p[P.lFy] = lerp(p[P.lFy], SCRATCH[P.lFy], u);
   }
+}
+// the body through a light sweep (Session 16): hip lead / chest trail (rad), weight shift (m across),
+// the dip (m) and lean (rad) into the strike, each at the active window's middle
+const FLOW = { hips: 0.14, chest: 0.05, weight: 0.035, dip: 0.03, lean: 0.05 };
+/** Turn the whole pose `yaw` rad about the root (+ = to his left), the foot spots with it. */
+function pivotYaw(p, yaw) {
+  if (Math.abs(yaw) < 1e-5) return;
+  p[P.yaw] += yaw;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  for (let k = 0; k < 2; k++) {
+    const i = k ? P.lF : P.rF, x = p[i], z = p[i + 2];
+    p[i] = x * c + z * s;
+    p[i + 2] = z * c - x * s;
+  }
+  p[P.rFy] += yaw;
+  p[P.lFy] += yaw;
 }
 /** The whirl (combo hit 3, `anim.spin` ±1: − = he turns to his right): the whole body turns once
  *  about its axis from just before the active frames to their end, the feet carried round with it
@@ -957,12 +999,14 @@ function spinTurn(p, dir, t, W, Ac) {
  *  ribs, the point on the target and the free hand reaching out along the line (windup); then the
  *  hips and chest turn into it and the arm drives the level blade straight out, the free arm thrown
  *  back for balance (active); it holds the extension a beat before coming home. */
-function stabPose(p, A, t, W, Ac, R) {
+function stabPose(p, A, t, W, Ac, R, k = null) {
   const draw = smoothstep(0, W * 0.85, t);
   const drive = t < W ? 0 : easeOutCubic(clamp((t - W) / Ac, 0, 1));
   const settle = smoothstep(W + Ac + R * 0.2, W + Ac + R * 0.7, t); // the arm eases off the lock
   stance(p, A, drive);
   p[P.bodyY] -= 0.03 * draw * (1 - drive);
+  // a variant (combat.js): from a crouch (`low` m) and / or driving the point upward (`rise` rad)
+  const low = (k?.low ?? 0) * (1 - smoothstep(W + Ac, W + Ac + R * 0.6, t)), rise = (k?.rise ?? 0) * drive;
   p[P.pelvY] = lerp(-0.22 * draw, 0.24, drive);
   p[P.spY] = lerp(-0.42 * draw, 0.2, drive); // (two hands: a smaller turn into the drive)
   p[P.spX] = lerp(0.1 + 0.08 * draw, 0.4, drive) - 0.08 * settle;
@@ -972,9 +1016,15 @@ function stabPose(p, A, t, W, Ac, R) {
   // both hands (Session 14): drawn back to the right hip, then driven out along the centre line
   v3(p, P.rH, lerp(0.02, 0.15, drive), lerp(-0.28, -0.13, drive), lerp(0.04, 0.46 - 0.06 * settle, drive));
   v3(p, P.rP, -0.7, -0.6, -0.3);
-  v3(p, P.swD, lerp(0.1, 0.0, drive), lerp(0.04, -0.03, drive), 1);
+  v3(p, P.swD, lerp(0.1, 0.0, drive), lerp(0.04, -0.03, drive) + Math.tan(rise), 1);
   v3(p, P.swF, 0.25, 1, 0);
   v3(p, P.lH, 0.0, -0.3, 0.2);
+  if (low > 0) {
+    p[P.bodyY] -= low;
+    p[P.spX] += 0.6 * low;
+    p[P.hdX] -= 0.5 * low;
+    p[P.rH + 1] -= 0.4 * low;
+  }
   v3(p, P.lP, 0.75, -0.6, -0.3);
   p[P.twoHand] = 1;
   p[P.rFf] = lerp(p[P.rFf], 0.3, drive); // the rear heel peels as the hips drive in
@@ -2071,6 +2121,12 @@ export class HeroAnimator {
     // idle life: the action playing (k = FIDGETS index, -1 none), its time, weight, whether it was
     // cut, calm time since the last one ended, the wait before the next, and how many have played
     this.fidget = { k: -1, t: 0, w: 0, cut: false, still: 0, wait: IDLE_LIFE.after, last: -1, count: 0, name: '' };
+    // the attack's look (combat.js `variants`): which def it was picked for, the anim block, its index
+    this.atkDef = null;
+    this.atkAnim = null;
+    this.atkVar = 0;
+    this.varLast = {}; // def name → the variant it played last
+    this.forceVariant = null;
     // the animator's own noise (0..1) for cosmetic kicks that must not draw on the game's RNG stream
     // (the integration sims seed Math.random; the wyrm's AI rolls on it)
     this._ns = 0x2545f491;
@@ -2174,6 +2230,7 @@ export class HeroAnimator {
       F[P.lFy] = W[7];
     }
     this.key = key;
+    if (key === 'attack') this._pickVariant();
     this.fadeMem.ok = false; // the new fade picks its own way round
     this.blendT = 0;
     this.blendDur = Math.max(1e-3, blend);
@@ -2407,6 +2464,27 @@ export class HeroAnimator {
     this._hair(dt);
     this._streamers(dt);
     this.rig.root.updateMatrixWorld(true);
+  }
+
+  /** The look of the attack starting now: its `anim` or one of its `variants` (combat.js), at
+   *  random with the animator's own noise, never the same one twice in a row for one hit.
+   *  `forceVariant` (an index, 0 = `anim`) pins it (tests, the Lab). */
+  _pickVariant() {
+    const def = this.player.atk?.def ?? null;
+    this.atkDef = def;
+    const list = def?.variants;
+    let k = 0;
+    if (def && Array.isArray(list) && list.length) {
+      const n = list.length + 1;
+      if (Number.isInteger(this.forceVariant)) k = clamp(this.forceVariant, 0, n - 1);
+      else {
+        k = Math.min(n - 1, Math.floor(this.noise() * n));
+        if (k === this.varLast[def.name]) k = (k + 1 + Math.floor(this.noise() * (n - 1))) % n;
+      }
+      this.varLast[def.name] = k;
+    }
+    this.atkVar = k;
+    this.atkAnim = def ? (k ? list[k - 1] : def.anim) : null;
   }
 
   /** Idle life (IDLE_LIFE): time the current action, start the next after a calm spell, cut it
