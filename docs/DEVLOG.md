@@ -5,6 +5,43 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 17: attack variants, a flowing chain, hair that reads, a fuller cloak
+
+**Owner** (with a phone screenshot): "i can't tell the yellow color in front of his face is his
+hair ... the side angle/view also seems like the character is way too skinny ... something about
+his left clicks is meh to me so lets try to make his attack animations and motions cooler and
+natural looking. i also dont want him to show the same pattern over and over". Answers: locks out of
+the hood, not too long, with three previews to approve first (picked "A"); a fuller cloak; fast and
+flowing; random variants per hit. Branch `player/hair-depth-attack-variety` (session and ADR numbers
+skip 16 / 054: the parallel techniques branch holds them).
+
+**Done:**
+- **Attacks (ADR-055):** `variants` for hits 1–5 (12 looks in all), picked at random, never the same
+  twice in a row; `turn`, `hop`, stab `rise` / `low`, slam `hop`; `FLOW` on every light sweep.
+- **Hair (ADR-056):** three hair prototypes rendered and sent; "A" kept: `HOOD_HAIR` strands, the
+  face and neck in shadow (`shadowsFace`).
+- **Cloak (ADR-057):** back sheets further back and standing off; a deeper mantle.
+- **Tests:** REACH swings every variant at contact, 2 m and 3.5 m; HERO checks the hood's strands
+  and the shadowed face; HEROLIFE waits for a freshly started idle action before cutting it.
+
+**Verification:** `npm test` ALL PASSED, `npm run build` ok. In the Lab: every variant frame by
+frame (solid) and at mid-strike (ASCII); the cloak from both sides and behind, standing and running;
+three hair styles close up and at the phone camera.
+
+**Measured:** cloak depth behind at rest 0.55 m (0.44), running 0.89 m (0.81); width 1.28 m / 1.17 m
+(1.23 / 1.15). Variants: 24 reach trials, no miss. One bot `win` run 167 s (the wyrm changed in #15
+since the last measure).
+
+**Not checked / open:**
+- Not played by a human, not tried on a phone.
+- PR #16 (the Ash Disciple) and the techniques work in progress also edit `anim.js` / `player.js`;
+  whoever merges second rebases (the variant pick lives in the animator, `player.js` is untouched).
+- The sprint slash, the roll cut and the thrust have one look each.
+
+**Next:** the owner's look at the preview; more variants if the chain still repeats.
+
+---
+
 ## 2026-11-11 — Session 15: breath-born bullets, perfect-parry returns, Armageddon, heat-glow warnings
 
 **Owner** (through a planning session, spec `docs/specs/wyrm-breath-armageddon.md`, owner decisions

@@ -146,6 +146,14 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.18 — Attack variants, hair that reads, a fuller cloak (2026-11-12, `player/hair-depth-attack-variety`)
+- [x] 2–3 looks per chain hit, picked at random; hips lead, weight shifts through every sweep (ADR-055)
+- [x] Gold strands out of the hood, the face in its shadow (three previews; the owner picked one) (ADR-056)
+- [x] The cloak stands off his back: depth in profile, the same width from behind (ADR-057)
+- [ ] Follow-ups:
+  - [ ] The owner's phone check of the chain and the look
+  - [ ] Variants for the sprint slash, the roll cut and the thrust
+
 ## M1.16 — Breath-born bullets, perfect-parry returns, Armageddon (2026-11-11, `dragon/breath-armageddon`)
 - [x] Ground warnings heat the ground (glyph glow + scorch heat, the edge late): no red rings,
       `!` marks or chevrons anywhere (ADR-052)

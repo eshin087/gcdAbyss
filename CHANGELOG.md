@@ -4,7 +4,13 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Eleven pieces of work since 0.4.0:
+Twelve pieces of work since 0.4.0:
+- **Attack variants, hair that reads, a fuller cloak** (2026-11-12, ADR-055 to ADR-057): every hit
+  of the left-click chain has two or three different looks (a draw cut, a leaping cut, a level or
+  falling backhand, a rising whirl, a skipping cross-cut, a low rising stab, a leaping slam), picked
+  at random so the combo doesn't repeat, and every swing turns the hips first and shifts the weight
+  through the cut. Same damage and timing. The hood now hides his face in shadow with gold strands
+  falling out of it, and the cloak stands off his back so he has depth from the side.
 - **Breath-born bullets, perfect-parry returns, Armageddon, heat-glow warnings** (2026-11-11,
   ADR-050, ADR-051, ADR-052, ADR-053): every bullet now leaves the wyrm's jaws along the way its
   head points (a sweeping stream of embers, coughed cones, a breath that scours the ground in

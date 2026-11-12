@@ -1087,3 +1087,57 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     rolling): the scripted defender, which never steps out, took 31 ticks over one P3 Armageddon.
     A human who walks out takes a couple. Watch this in the playtest.
   - The timing check pairs each blow with the flash at its own centre (impacts 0.12 s apart).
+
+## ADR-055 — Attack variants: each light hit has 2–3 looks, picked at random (2026-11-12)
+- **Context:** the owner: "something about his left clicks is meh to me so lets try to make his
+  attack animations and motions cooler and natural looking. i also dont want him to show the same
+  pattern over and over so make it have a few variations." Asked, the owner chose "fast and
+  flowing" and "random variants per hit", with damage and timing per hit unchanged.
+- **Decision:**
+  - `LIGHT[i].variants` in `combat.js`: more `anim` blocks for the same hit. 1: low draw cut, leaping
+    cut; 2: level backhand, falling backhand; 3: rising whirl, skipping cross-cut; 4: low rising stab;
+    5: leaping slam. Each starts where the previous hit's finish leaves the blade (right / left
+    alternation kept) so the chain flows whichever variants come up.
+  - The animator picks at `play('attack')` with its own noise (never the game's RNG, which the sims
+    seed), never the same variant twice in a row for one hit. `forceVariant` pins it for tests.
+  - New swing options: `turn` (a partial pivot), `hop` (a skip); `stab` `rise` / `low`; `slam`
+    `hop`. Every light sweep without a spin also gets `FLOW` (hips lead, chest trails, weight
+    crosses, a dip and a lean into the strike).
+  - The pivot starts at mid-strike: turning the body while the blade is hit-tested moved where it
+    crossed his front, and three variants fell short at 3.5 m.
+- **Consequences:**
+  - The REACH test now swings every variant at contact, 2 m and 3.5 m (24 trials, no miss); its
+    original table pins `anim` (variant 0).
+  - Timing, damage, posture, reach and lunge are the hit's whatever the look; the blade is still the
+    hit test, so a variant's arc is gameplay too.
+  - The sprint slash, the roll cut and the thrust have one look each.
+  - At mid-strike the variants look alike (each blade crosses his front then); they differ in the
+    coil, the finish and the footwork.
+
+## ADR-056 — The face in the hood's shadow; gold strands out of the hood (2026-11-12)
+- **Context:** the owner: "i can't tell the yellow color in front of his face is his hair. since the
+  ascii art and zoom distance will never show the character's actual eyes, nose, and face, we can
+  not worry about that." Chose "locks out of the hood", not too long, and asked for three previews
+  before any of it was finished; picked "A" of three (spiky fringe + cheek locks; parted framing
+  locks; short wild spikes).
+- **Decision:**
+  - A head item may set `shadowsFace`: the face, ears and neck take the shirt's near-black and the
+    eyes are not built. The hood sets it.
+  - The hood keeps only the scalp cap of the body's hair and builds `HOOD_HAIR`: four spiky fringe
+    strands over the brow, chin-length locks at each cheek, one short strand a side onto the
+    collarbone; neighbouring strands alternate the ink sub-id so a line separates them; roots in
+    the darker gold, tips in the bright gold.
+- **Consequences:** the gold reads as hair against a dark face up close; at the phone's game camera
+  every style was only a few gold letters. The Wanderer's set (no hood) keeps its face and hair.
+
+## ADR-057 — A fuller cloak: depth in profile (2026-11-12)
+- **Context:** the owner: "the side angle/view also seems like the character is way too skinny and
+  doesnt seem to have much depth. add a little bit more." Chose "fuller cloak" (not a deeper body,
+  gear on the back or a front drape). The previous round had made the cape too floaty and wide from
+  behind, so the width had to stay.
+- **Decision:** the three back sheets of `SHROUD_SHEETS` hang from further back (z −0.16 / −0.14,
+  were −0.128 / −0.108) and stand off his back more (`out` 0.42 / 0.45, were 0.16 / 0.3); their pull
+  points straight back. The mantle is deeper front to back (rz up to 0.2, the extra behind).
+- **Consequences:** measured at the hems over 60 idle / 90 run frames: depth behind 0.55 m at rest
+  (0.44 on `main`), 0.89 m running (0.81); width 1.28 m at rest, 1.17 m running (1.23 / 1.15 on
+  `main`).

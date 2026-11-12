@@ -509,8 +509,10 @@ weapon. `DEFAULT_LOADOUT` is the Shrouded set (ADR-043: `shroud.hood`, `shroud.t
 `shroud.arms`, `shroud.cloak` over `wanderer.legs`, `wanderer.skirt`, `wanderer.sword`; no shoulder
 item); `WANDERER_LOADOUT` is the outfit before it. A head item may keep only part of the hair:
 `hair: [...]` lists the pieces built under it (`'cap'` and `HAIR_CLUSTERS` names; the hood keeps
-the cap and the fringe, and builds its own gold locks by the cheeks), `hidesHair: true` builds none;
-the five hair joints stay either way. The hair is gold (ADR-049). `buildHero(U, loadout = DEFAULT_LOADOUT)`
+only the cap and builds its own gold strands, `HOOD_HAIR` in `gear/shroud.js`: a spiky fringe, cheek
+locks and a strand a side onto the collarbone), `hidesHair: true` builds none; the five hair joints
+stay either way. `shadowsFace: true` on a head item (the hood, ADR-056) builds the face, ears and neck
+in the shirt's near-black and leaves the eyes out. The hair is gold (ADR-049). `buildHero(U, loadout = DEFAULT_LOADOUT)`
 builds each slot's item (an empty chest / arms /
 legs slot gets the `base.*` undersuit), merges static meshes per joint + material + slot, and
 returns the usual rig plus `rig.loadout` (slot → id or null) and `rig.slots` (slot → the objects it
@@ -530,7 +532,18 @@ forearm (palm, four curled fingers, thumb). An `arms` item may return `offHand: 
 (`rig.offHand`, else null): the free hand open on the forearm, and the same hand closed round the grip
 `DIM.offGrip` (0.08 m) below the sword hand on the `sword` joint; `apply()` shows `grip` while the
 pose's `twoHand` > 0.6 and `open` otherwise (the Shrouded set's bare hands do; the Wanderer's arms
-do not). **Two hands** (ADR-046): every light swing (the chain, the sprint slash, the roll cut) and
+do not). **Attack variants** (ADR-055): a `LIGHT` def may carry `variants` (more `anim` blocks for
+the same hit: same timing, damage, reach and lunge). `HeroAnimator.play('attack')` calls
+`_pickVariant()`: `anim` or one of `variants` at random with the animator's own noise, never the
+same one twice in a row for one def (`varLast`); the result is `anim.atkDef` / `anim.atkAnim` /
+`anim.atkVar` (0 = `anim`), and `attackPose` reads `atkAnim` for its def. `anim.forceVariant` (an
+index, or null) pins the pick (tests). New swing options: `turn` (rad, a partial pivot from
+mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`), `hop` (m, a
+skip off the ground from the windup into the strike); `stab` takes `rise` and `low`; `slam` takes
+`hop`. Every light sweep without a spin also gets `FLOW`: the hips lead the blade (and the chest
+trails), the weight crosses from the coil's side to the finish's, the body dips and leans into the
+strike. The blade is still the hit test, so each variant is swung at the wyrm in REACH.
+**Two hands** (ADR-046): every light swing (the chain, the sprint slash, the roll cut) and
 the stab hold the grip with both hands (`twoHand` 1, the off hand IK'd to the grip point): `slashH`
 moves the grip off the sword shoulder onto a circle round the chest's centre line in front of it
 (`TWO_R`, `TWO_Z`) and turns the chest less to the left; the slam, the charge and the thrust already
