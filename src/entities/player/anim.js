@@ -41,13 +41,13 @@ const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const IDLE_LOOP = 2.4; // s (concept sheet: idle 2.4 s loop)
 
 // ---------------------------------------------------------------- pose helpers
-const v3 = (p, i, x, y, z) => {
+export const v3 = (p, i, x, y, z) => {
   p[i] = x;
   p[i + 1] = y;
   p[i + 2] = z;
 };
 /** Move p[i..i+2] toward (x,y,z) by t. */
-const to3 = (p, i, x, y, z, t) => {
+export const to3 = (p, i, x, y, z, t) => {
   if (t <= 0) return;
   p[i] += (x - p[i]) * t;
   p[i + 1] += (y - p[i + 1]) * t;
@@ -89,7 +89,7 @@ function azEl(x, y, z, o) {
 /** mem (optional, a cross-fade's): { d, ok } — the sweep keeps the way round it took last frame
  *  (the nearest 2π branch to it): the target moves during a fade, and re-deciding the way every
  *  frame flipped the blade to the other side of the body mid-fade. */
-function dirLerp(out, i, ax, ay, az, bx, by, bz, t, mem = null) {
+export function dirLerp(out, i, ax, ay, az, bx, by, bz, t, mem = null) {
   if (!(t > 0)) {
     v3(out, i, ax, ay, az);
     return;
@@ -153,7 +153,7 @@ function dirTo(p, i, x, y, z, t) {
   dirLerp(p, i, p[i], p[i + 1], p[i + 2], x, y, z, Math.min(1, t));
 }
 /** Piecewise curve through flat [t0, v0, t1, v1, ...] keys, smoothstepped between neighbours. */
-function kf(t, k) {
+export function kf(t, k) {
   if (t <= k[0]) return k[1];
   for (let i = 2; i < k.length; i += 2) {
     if (t <= k[i]) {
@@ -235,7 +235,7 @@ function kv3(p, i, t, k) {
 // the ribs, the forearm runs into the blade's line, and the steel stands out to his side, past
 // his silhouette and the cape, from every camera.)
 const IDLE_SW = [-0.6, -0.79, 0.12];
-function guard(p, A) {
+export function guard(p, A) {
   const ph = A.time * (TAU / IDLE_LOOP);
   const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 1.1); // breath, and a slower weight sway
   p[P.bodyX] = 0.025 + 0.008 * sw; // the hips over the left (weight) leg
@@ -306,7 +306,7 @@ function footCycle(p, i, side, u, A, w, fi) {
 /** A fast turn (the gameplay yaw snaps to the aim) reads as a body turn: the head and eyes lead,
  *  the chest follows, the hips trail behind (A.turnLag = how far the visual heading lags the
  *  root, ≤ 0 when turning left) while the planted feet catch up with steps. */
-function turnTwist(p, A) {
+export function turnTwist(p, A) {
   const L = A.turnLag;
   if (Math.abs(L) < 1e-4) return;
   // standing, the whole figure follows the visual heading (the gameplay yaw flips 180° in ~0.15 s,
@@ -351,7 +351,7 @@ function gaitParams(G, sp, sprintW) {
  *  level. The sword arm trails the blade back and down beside the right leg (run) → nearly level
  *  behind (sprint); the free fist swings / pumps against the legs. Planted feet are held in the
  *  world by the foot planner (HeroAnimator._feet). */
-function loco(p, A) {
+export function loco(p, A) {
   guard(p, A);
   const w = A.moveW;
   // (the sword lag outlasts moveW: dropping it at once snapped the last few % of the blade's
@@ -2091,10 +2091,13 @@ const IDLE_FLARE = [0.01, 0.02, 0.07, 0.1, 0.09, 0.12];
 
 export class HeroAnimator {
   /** player must expose: yaw, state, stateT, animT, atk ({def}), groundVel {x, z}, chargeK,
-   *  releaseK, recoil. */
-  constructor(rig, player) {
+   *  releaseK, recoil (+ position, kb, lockOn, guardHold). `poses` (optional): extra clips for this
+   *  instance, key → fn(pose, animator), merged over the hero's (a key it shares replaces the hero's
+   *  clip for this instance only: the Ash Disciple brings his own 'loco' and 'duel'). */
+  constructor(rig, player, poses = null) {
     this.rig = rig;
     this.player = player;
+    this.poses = poses ? { ...POSES, ...poses } : POSES;
     this.cur = new Float32Array(N);
     this.from = new Float32Array(N);
     this.target = new Float32Array(N);
@@ -2196,7 +2199,7 @@ export class HeroAnimator {
 
   /** Start a clip, cross-fading from the current pose over `blend` seconds. */
   play(key, blend = 0.12, easeOut = false) {
-    if (!POSES[key]) key = 'loco';
+    if (!this.poses[key]) key = 'loco';
     const pp = this.player.position;
     this.clipX = fin(pp?.x);
     this.clipZ = fin(pp?.z);
@@ -2434,7 +2437,7 @@ export class HeroAnimator {
     }
     this.pathCh = null;
     this._idleLife(dt, sp);
-    POSES[this.key](this.target, this);
+    this.poses[this.key](this.target, this);
     if (this.blendT < this.blendDur) {
       this.blendT += dt;
       const u = clamp(this.blendT / this.blendDur, 0, 1);

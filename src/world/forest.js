@@ -28,14 +28,14 @@ function noise3(x, y, z) {
   );
 }
 
-function prep(geo) {
+export function prep(geo) {
   const g = geo.index ? geo.toNonIndexed() : geo.clone();
   for (const name of Object.keys(g.attributes)) if (name !== 'position') g.deleteAttribute(name);
   return g;
 }
 
 /** Displace vertices along their direction from `center` by 3D noise (watertight: position-keyed). */
-function lumpy(geo, amp, freq, seed = 0, center = new THREE.Vector3()) {
+export function lumpy(geo, amp, freq, seed = 0, center = new THREE.Vector3()) {
   const p = geo.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
@@ -50,7 +50,7 @@ function lumpy(geo, amp, freq, seed = 0, center = new THREE.Vector3()) {
 }
 
 /** Bake per-vertex aCol/aFlag/aSway/aAO. col/sway/ao may be constants or fn(x,y,z,nx,ny,nz). */
-function paint(geo, { col, flag, sway = 0, ao = 1 }) {
+export function paint(geo, { col, flag, sway = 0, ao = 1 }) {
   geo.computeVertexNormals();
   const p = geo.attributes.position;
   const nrm = geo.attributes.normal;
@@ -81,7 +81,7 @@ function paint(geo, { col, flag, sway = 0, ao = 1 }) {
  * brightness/density) and aEdge (moonlit chamfer band). Each may be a constant or
  * fn(x, y, z, nx, ny, nz). Normals stay flat per facet: every facet reads as a carved plane.
  */
-function carve(geo, { col, ao = 1, moss = 0, ink = 1, edge = 0 }) {
+export function carve(geo, { col, ao = 1, moss = 0, ink = 1, edge = 0 }) {
   geo.computeVertexNormals();
   const p = geo.attributes.position;
   const nrm = geo.attributes.normal;
@@ -113,7 +113,7 @@ function carve(geo, { col, ao = 1, moss = 0, ink = 1, edge = 0 }) {
  * moon (the slab's crisp edge), short walls running down into the soil. pts: [[x, z], ...] around
  * the centre (star-shaped). Non-indexed, so normals come out flat per facet.
  */
-function slabGeometry(pts, { top = 0.04, inset = 0.07, drop = 0.045, bottom = -0.2 } = {}) {
+export function slabGeometry(pts, { top = 0.04, inset = 0.07, drop = 0.045, bottom = -0.2 } = {}) {
   const n = pts.length;
   let cx = 0, cz = 0;
   for (const [x, z] of pts) {
@@ -153,7 +153,7 @@ function slabGeometry(pts, { top = 0.04, inset = 0.07, drop = 0.045, bottom = -0
   return g;
 }
 
-const mul = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+export const mul = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
 
 // ---------- palette (linear) ----------
 // leaf albedos carry little blue: the moonlight already tints everything teal
@@ -169,12 +169,12 @@ const PINE = [
   [0.1, 0.2, 0.09],
   [0.08, 0.16, 0.1],
 ];
-const BARK = [0.12, 0.09, 0.075];
-const STONE = [0.15, 0.165, 0.205];
+export const BARK = [0.12, 0.09, 0.075];
+export const STONE = [0.15, 0.165, 0.205];
 const BONE = [0.27, 0.255, 0.22];
 
 // carved-glyph looks (createCarvedGlyphMaterial options; see STYLE.md "stones")
-const STONE_LOOK = {
+export const STONE_LOOK = {
   // standing stones, boulders: lit faces climb to dense blocks, the shadow side drops to dots
   gain: 2.9,
   lumScale: 4.0,
@@ -182,7 +182,7 @@ const STONE_LOOK = {
   // caps and fallen faces: blocky symbols, few dashes (rows of '=' read as text)
   topGlyphs: ['.  .', '. ,:', ':;.:', ';%:=', '%#;&', '#%8&'],
 };
-const SLAB_LOOK = {
+export const SLAB_LOOK = {
   // flagstones: the ground must stay calm, so dimmer ink, a lower ramp and a chipped moonlit rim
   gain: 2.1,
   lumScale: 2.3,
@@ -280,7 +280,7 @@ function buildPine(rng, x, z, s) {
   return parts;
 }
 
-function buildDeadTree(rng, x, z, s) {
+export function buildDeadTree(rng, x, z, s) {
   const parts = [];
   const h = range(rng, 4.5, 6.5) * s;
   const trunk = prep(new THREE.CylinderGeometry(0.14 * s, 0.38 * s, h, 6, 4));
@@ -304,7 +304,7 @@ function buildDeadTree(rng, x, z, s) {
   return parts;
 }
 
-function buildStandingStone(rng, x, z, { h, w, d, yaw, fallen = false, broken = false }) {
+export function buildStandingStone(rng, x, z, { h, w, d, yaw, fallen = false, broken = false }) {
   const g = prep(new THREE.BoxGeometry(w, h, d, 2, 5, 2));
   g.translate(0, h / 2, 0);
   const p = g.attributes.position;
@@ -331,7 +331,7 @@ function buildStandingStone(rng, x, z, { h, w, d, yaw, fallen = false, broken = 
   return g;
 }
 
-function buildBoulder(rng, x, z, r) {
+export function buildBoulder(rng, x, z, r) {
   // low-poly on purpose: few big facets, each one a carved plane with its own glyph family
   const g = prep(new THREE.IcosahedronGeometry(r, 0));
   lumpy(g, r * 0.45, 1.4 / r, rng() * 99);
@@ -352,7 +352,7 @@ function buildBoulder(rng, x, z, r) {
  * tilted so one side dips into the soil. Returns the geometry and its world-space outline (the
  * grass grows up to and through it, see meadowDensity).
  */
-function buildFlagstone(rng, x, z, w, d, yaw) {
+export function buildFlagstone(rng, x, z, w, d, yaw) {
   const r2 = mulberry32(Math.floor(rng() * 4294967296)); // one draw keeps the main layout sequence
   const sides = 5 + Math.floor(r2() * 3);
   const a0 = r2() * TAU;
@@ -455,7 +455,7 @@ function buildBones(rng, cx, cz) {
   return parts;
 }
 
-function buildBonfire(rng, x, z) {
+export function buildBonfire(rng, x, z) {
   const parts = [];
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * TAU + rng() * 0.3;

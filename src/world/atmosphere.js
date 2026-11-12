@@ -3,7 +3,9 @@ import { TAU } from '../core/math.js';
 
 // Living night: bonfire flames + embers (and its light), fireflies drifting at the forest edge,
 // leaves falling from the canopy near the camera; skyGlow(k): the sky over the clearing burning
-// orange (Armageddon, ADR-053) by warming the shared ambient and fog colours.
+// orange (Armageddon, ADR-053) by warming the shared ambient and fog colours. A set with `ash: true`
+// (the Ashfall courtyard) has ash flakes falling everywhere and a few drifting embers instead of the
+// fireflies, mist and leaves.
 // (subtle: at the phone's close LOW camera the fog fills most of the frame, and a stronger fog tint
 // washed the whole view brown)
 const GLOW_AMBIENT = [0.085, 0.027, 0.006]; // added to U.uAmbient at full glow
@@ -12,6 +14,7 @@ export class Atmosphere {
   constructor(game, forest) {
     this.game = game;
     this.forest = forest;
+    this.ash = !!forest.ash;
     this.bonfire = forest.bonfire;
     this.bonfireLit = true;
     this.glow = 0; // the sky glow shown (eases toward the asked one)
@@ -22,6 +25,7 @@ export class Atmosphere {
     this.fireAcc = 0;
     this.emberAcc = 0;
     this.leafAcc = 0;
+    this.ashAcc = 0;
     this.t = 0;
     this.light = game.lights.add({
       x: this.bonfire.x, y: 1.1, z: this.bonfire.z,
@@ -103,6 +107,11 @@ export class Atmosphere {
       }
     }
 
+    if (this.ash) {
+      this._ashFall(dt, fxA, fxB);
+      return;
+    }
+
     // fireflies: re-emitted each frame at their wandering positions (life = 1 frame-ish)
     for (const f of this.fireflies) {
       const t = this.t * f.s + f.p;
@@ -148,6 +157,36 @@ export class Atmosphere {
         life: 7, size: 0.28, glyph: ",`'~",
         color: [0.16, 0.26, 0.14], colorEnd: [0.1, 0.14, 0.08],
         alpha: 0.9, alphaEnd: 0.0, spin: (Math.random() - 0.5) * 4, drag: 0.2,
+      });
+    }
+  }
+
+  /** Ash falling round the camera focus: slow grey flakes that sway as they sink, and now and then a
+   *  dim ember drifting with them (the sect still smoulders). */
+  _ashFall(dt, fxA, fxB) {
+    const focus = this.game.U.uFocus.value;
+    this.ashAcc += dt * 26;
+    while (this.ashAcc >= 1) {
+      this.ashAcc -= 1;
+      const x = focus.x + (Math.random() - 0.5) * 46, z = focus.z + (Math.random() - 0.5) * 34 - 4;
+      const pale = Math.random();
+      fxB.spawn({
+        x, y: range(Math.random, 4, 9), z,
+        vx: 0.25 + Math.random() * 0.35, vy: -0.55 - Math.random() * 0.35, vz: (Math.random() - 0.5) * 0.3,
+        life: 9 + Math.random() * 4, size: 0.12 + pale * 0.1, glyph: ".,'`",
+        color: [0.3 + pale * 0.12, 0.29 + pale * 0.11, 0.28 + pale * 0.1], colorEnd: [0.16, 0.15, 0.15],
+        alpha: 0.85, alphaEnd: 0, spin: (Math.random() - 0.5) * 3, drag: 0.15,
+      });
+    }
+    this.leafAcc += dt * 1.6;
+    while (this.leafAcc >= 1) {
+      this.leafAcc -= 1;
+      const x = focus.x + (Math.random() - 0.5) * 40, z = focus.z + (Math.random() - 0.5) * 30 - 4;
+      fxA.spawn({
+        x, y: range(Math.random, 0.5, 4), z,
+        vx: 0.3 + Math.random() * 0.3, vy: 0.15 + Math.random() * 0.25, vz: (Math.random() - 0.5) * 0.3,
+        life: 3 + Math.random() * 3, size: 0.1, sizeEnd: 0.04, glyph: ".'",
+        color: [1.6, 0.5, 0.1], colorEnd: [0.4, 0.06, 0.01], alpha: 1, alphaEnd: 0, drag: 0.3, flicker: 0.5,
       });
     }
   }

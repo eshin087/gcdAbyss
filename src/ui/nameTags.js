@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { el, num } from './dom.js';
+import { bossNames } from './bossName.js';
 
 // World-anchored overlays: small white name tags above the player and the (awake) dragon, plus the
 // rotating lock-on reticle. Projected with the game camera each frame and moved with transforms only.
@@ -32,7 +33,7 @@ export class NameTags {
     this.game = game;
     this.layer = el('div', 'ab-tags ab-play', null, parent);
     this.player = new Tag(this.layer, 'ab-tag', String(game.player?.name || 'Wanderer'));
-    this.dragon = new Tag(this.layer, 'ab-tag foe', 'Vaelgrim');
+    this.dragon = new Tag(this.layer, 'ab-tag foe', bossNames(game.dragon?.name).short);
     this.reticle = new Tag(this.layer, 'ab-tag ab-reticle', '◇');
     this.v = new THREE.Vector3();
     this.pv = new THREE.Vector3();

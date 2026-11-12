@@ -5,7 +5,7 @@
     "dev": "node scripts/serve.mjs",
     "build": "node scripts/build.mjs",
     "hero-parts": "node scripts/blender/build-hero-parts.mjs",
-    "test": "node tests/integration/integ.mjs . all && node tests/glyphcheck.mjs ."
+    "test": "node tests/integration/integ.mjs . all && node tests/integration/duel.mjs . all && node tests/glyphcheck.mjs ."
   },
   "description": "ASCII soulslike demo: a wyvern boss fight in a moonlit forest",
   "dependencies": {

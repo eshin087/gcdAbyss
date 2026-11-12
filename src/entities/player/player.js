@@ -67,6 +67,21 @@ export const TUNE = {
   ghostepMaxRange: 12, // attacker farther than this: slow-mo + crit without the teleport
   ghostepAssist: 1.2, // s of aim assist toward the attacker after a Ghostep (no lock-on)
   ghostepFade: 3.2, // 1/s fade of the reappear dissolve / cold tint
+  // the duel's moments (a duelist offers them; the Ash Disciple): a roll INTO a perilous thrust
+  // (hit.mikiri) started at most mikiriWindow s before its impact steps on the blade; the counter
+  // pose lasts mikiriDur (attack / roll may cancel it after mikiriCancel)
+  mikiriWindow: 0.3,
+  mikiriToward: 0.55, // the roll's direction · against the attacker's facing (his thrust's line) must be at least this
+  mikiriDur: 0.55,
+  mikiriCancel: 0.18,
+  // impact (owner, 2026-11-12: "epic sword clashes", "more impactful hit stun, not weightless"): a
+  // blade's parry freezes the frame (normal / blue / perfect, s at ×0.02), throws a shockwave ring and
+  // kicks the camera; a PERFECT one adds a short slow motion (flow.cinematic) and a white flash. A
+  // blow that lands on the hero freezes it too (hurtStop / hurtStopBig).
+  parryStop: [0.1, 0.12, 0.15],
+  perfectParry: { slowmo: 0.35, dur: 0.36, zoom: -2.5, weight: 0.25 },
+  hurtStop: 0.085,
+  hurtStopBig: 0.13,
   plungeFade: 7, // 1/s: the plunge's reappear above the head resolves faster (it hangs only briefly)
   rollCoatKick: 0.7, // the coat tails fly out as the dodge starts
   gemGlintEvery: 1.8, // s between idle glints of the violet gem (± 40 %)
@@ -166,6 +181,7 @@ export class Player {
     // the parry chain (TUNE.deflectChainGap); perfect = the last parry was within DEFENSE.perfectParryWindow
     this.deflect = { n: 0, t: -Infinity, side: 1, perfect: false };
     this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
+    this.bladeLock = null; // { att, meter, push, decay, dur } while blades are locked (startBladeLock)
 
     // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, heal(), teleport(x, z) })
     this.debug = {
@@ -218,6 +234,7 @@ export class Player {
   isInvulnerable() {
     if (!this.alive) return true;
     if (this.state === 'plunge') return true; // the whole plunge (takeHit ignores hits in it)
+    if (this.state === 'lock') return true; // blades locked
     if (this.iframeT > 0) return true; // Ghostep / the plunge's landing
     if (this.state === 'roll') {
       const R = this.rollBack ? TUNE.backstep : TUNE.roll;
@@ -238,6 +255,7 @@ export class Player {
     const g = this.game;
     if (g.state === 'victory' || g.state === 'title') return RESULT.IGNORED;
     if (this.state === 'plunge') return RESULT.IGNORED; // in the air / on the head: out of reach
+    if (this.state === 'lock') return RESULT.IGNORED; // blades locked: the push decides it
     const kind = typeof hit.kind === 'string' ? hit.kind : 'hit';
     const tell = hit.tell === TELL.BLUE || hit.tell === TELL.RED ? hit.tell : TELL.NORMAL;
     const def = tellDefaults(tell);
@@ -246,6 +264,12 @@ export class Player {
     const attack = hit.attack ?? null;
     const attacker = hit.attacker && typeof hit.attacker === 'object' ? hit.attacker : null;
 
+    // (a) mikiri: a perilous thrust (hit.mikiri) met by a roll INTO the attacker, started at most
+    // TUNE.mikiriWindow before the impact: the hero steps on the blade (attacker.onMikiri)
+    if (hit.mikiri && attacker && this.state === 'roll' && !this.rollBack && this.stateT <= TUNE.mikiriWindow && this._rollToward(attacker)) {
+      this._mikiri(attacker, attack);
+      return RESULT.PERFECT;
+    }
     // (b) perfect dodge: the roll started within the window before this impact → the plunge (or the
     // Ghostep). A stream (breath) ticks every 0.15 s, so it only counts when dodging INTO it, not
     // rolling out of it.
@@ -329,8 +353,8 @@ export class Player {
       this._hitstop(0.12);
       return RESULT.HIT;
     }
-    g.shake?.(guarded ? 0.06 : clamp(0.25 + dmg * 0.006, 0.25, 0.5));
-    if (big) this._hitstop(0.08);
+    g.shake?.(guarded ? 0.06 : clamp(0.3 + dmg * 0.008, 0.3, 0.6));
+    if (!guarded) this._hitstop(big ? TUNE.hurtStopBig : TUNE.hurtStop, 0.02);
 
     if (knockdown) {
       if (this.state !== 'knockdown') {
@@ -411,6 +435,7 @@ export class Player {
     this.kb.x = this.kb.z = 0;
     this.groundVel.x = this.groundVel.z = 0;
     this.atk = null;
+    this.bladeLock = null;
     this.rollBack = false;
     this.healApplied = false;
     this.buf.action = null;
@@ -788,6 +813,12 @@ export class Player {
       case 'ghostep':
         this._tickGhostep();
         break;
+      case 'lock':
+        this._tickLock(dt);
+        break;
+      case 'mikiri':
+        this._tickMikiri();
+        break;
       case 'plunge':
         this._tickPlunge(dt);
         break;
@@ -926,12 +957,31 @@ export class Player {
     // light: a deflected bullet (hit.light). The same clash, without the weight of a claw behind it
     this._setKb(nx, nz, TUNE.deflectPush * (tell === TELL.BLUE ? 1.6 : 1) * (light ? 0.25 : 1));
     this._enter('parry', 'parry', 0.03);
-    this._bladePoint(0.62, this._v);
+    // the clash: in front of the guard, toward the blow, on the side the blade snaps to (the sampled
+    // blade point is still the pose before the parry, often the idle blade hanging at the hip, and a
+    // duelist's own burst at his blade then lands a body-width away: two blooms, not one clash)
+    this.getChestPos(this._v, true);
+    this._v.x += -nx * 0.42 + nz * D.side * 0.12;
+    this._v.z += -nz * 0.42 - nx * D.side * 0.12;
+    if (!Number.isFinite(this._v.x + this._v.y + this._v.z)) this._bladePoint(0.62, this._v);
     this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE, D.n, -nx, -nz);
     const ret = light && !!perfect; // a bullet sent back (bullets.js reads deflect.perfect)
     if (ret) this.fx.perfectParry?.(this._v.x, this._v.y, this._v.z, -nx, -nz);
-    this._hitstop(light ? (ret ? TUNE.returnStop : 0.03) : 0.08);
-    g.shake?.(light ? (ret ? 0.16 : 0.1) : Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
+    if (light) {
+      this._hitstop(ret ? TUNE.returnStop : 0.03);
+      g.shake?.(ret ? 0.16 : 0.1);
+    } else {
+      // a blade met: a freeze-frame, a shockwave ring through the clash, a camera kick; perfect: a
+      // beat of slow motion on top (the blade lock's own moment replaces it when he locks)
+      const S = TUNE.parryStop, big = tell === TELL.BLUE;
+      this._hitstop(perfect ? S[2] : big ? S[1] : S[0], 0.02);
+      g.shake?.(Math.min(0.5, (perfect ? 0.42 : big ? 0.36 : 0.3) + 0.03 * (D.n - 1)));
+      this.fx.shockwave?.(this._v.x, this._v.y, this._v.z, big || perfect, perfect);
+      if (perfect) {
+        const P = TUNE.perfectParry;
+        g.flow?.cinematic?.({ x: this._v.x, z: this._v.z, slowmo: P.slowmo, dur: P.dur, zoom: P.zoom, weight: P.weight, kind: 'perfectParry' });
+      }
+    }
     this._emit('player:parry', { tell, attack, chain: D.n, light, perfect: !!perfect });
   }
 
@@ -1021,7 +1071,9 @@ export class Player {
       // behind = attacker.position − attacker forward × distance (forward from its yaw, else away from us)
       let fwd = fin(attacker.yaw, NaN);
       if (!Number.isFinite(fwd)) fwd = Math.atan2(ox - ap.x, oz - ap.z);
-      const D = DEFENSE.ghostep.distanceBehind;
+      // an attacker may ask for its own distance (`ghostepBehind`: a human duelist wants the hero
+      // within sword reach of his back; the default suits a giant)
+      const D = fin(attacker.ghostepBehind, DEFENSE.ghostep.distanceBehind);
       p.x = ap.x - Math.sin(fwd) * D;
       p.z = ap.z - Math.cos(fwd) * D;
       this._collide();
@@ -1092,6 +1144,134 @@ export class Player {
     return n;
   }
 
+  // --- the duel's moments: the blade lock, the mikiri counter (a duelist offers them) ---------------
+  /**
+   * Blade lock: a duelist whose heavy blow the hero parried perfectly calls this. The blades cross;
+   * every press of attack or guard pushes (`L.push`), the attacker pushes back (`L.decay` per s). The
+   * meter (from `L.start`) reaching 1 wins, 0 loses; when `L.dur` s run out it wins if at `L.hold` or
+   * above. The attacker hears onLockEnd(won).
+   * Returns false when the hero can't lock (down, plunging).
+   */
+  startBladeLock(att, L = {}) {
+    if (!this.alive || this.state === 'plunge' || this.state === 'dead' || this.state === 'lock') return false;
+    this._interrupt();
+    this.bladeLock = { att, meter: fin(L.start, 0.5), push: fin(L.push, 0.085), decay: fin(L.decay, 0.32), dur: fin(L.dur, 2.6), hold: fin(L.hold, 0.6), shown: -1 };
+    const ap = att?.position, p = this.position;
+    if (ap && Number.isFinite(ap.x + ap.z)) this.yaw = Math.atan2(ap.x - p.x, ap.z - p.z);
+    this.object3d.rotation.y = this.yaw;
+    this.vel.x = this.vel.z = this.kb.x = this.kb.z = 0;
+    this.lmb.held = false;
+    this._enter('lock', 'block', 0.05);
+    this.recoil = 1;
+    this._emit('player:lock', { phase: 'start' });
+    return true;
+  }
+
+  _tickLock(dt) {
+    const B = this.bladeLock;
+    this.want.x = this.want.z = 0;
+    if (!B) {
+      this._toLoco(0.12);
+      return;
+    }
+    // a press of either button pushes: the buffered light (LMB, the touch ATTACK) or an RMB edge
+    let pushed = false;
+    if (this.buf.action === 'light') {
+      this.buf.action = null;
+      pushed = true;
+    }
+    if (this.rmb.edge) {
+      this.rmb.edge = false;
+      pushed = true;
+    }
+    this.lmb.held = false; // a held press must not become a charge once the lock is over
+    if (pushed) {
+      B.meter += B.push;
+      this.recoil = 1;
+      // steel grinding on steel: the block's sparks, not a full parry flare per press (a mashed
+      // flare every 0.1 s whites out the crossed blades)
+      this._bladePoint(0.7, this._v);
+      this.fx.block(this._v.x, Math.max(0.9, this._v.y), this._v.z, -Math.sin(this.yaw), -Math.cos(this.yaw), (B.pushes = (B.pushes ?? 0) + 1) % 3 === 0);
+      this.game.shake?.(0.08);
+      this._emit('player:lock', { phase: 'push' });
+    }
+    B.meter -= B.decay * dt;
+    this._lockPrompt(B);
+    if (B.meter >= 1) this._endLock(true);
+    else if (B.meter <= 0) this._endLock(false);
+    else if (this.stateT >= B.dur) this._endLock(B.meter >= B.hold);
+  }
+
+  /** The lock's prompt and meter (HUD prompt, ASCII bar): redrawn only when it moves a notch. */
+  _lockPrompt(B) {
+    const n = Math.round(clamp(B.meter, 0, 1) * 10);
+    if (n === B.shown) return;
+    B.shown = n;
+    const key = this.game.touch?.active ? 'TAP ATTACK' : 'MASH [LMB]';
+    this.game.hud?.prompt?.(`${key}  [${'#'.repeat(n)}${'-'.repeat(10 - n)}]`);
+  }
+
+  _endLock(won) {
+    const B = this.bladeLock;
+    this.bladeLock = null;
+    this.game.hud?.prompt?.(null);
+    this._emit('player:lock', { phase: won ? 'won' : 'lost' });
+    if (won) {
+      this.critTimer = DEFENSE.ghostep.critWindow;
+      this.iframeT = 0.3;
+    }
+    this._toLoco(0.1);
+    try {
+      B?.att?.onLockEnd?.(won);
+    } catch (err) {
+      console.error('[player] onLockEnd failed', err);
+    }
+  }
+
+  /** Is the current roll heading INTO the attacker's thrust (TUNE.mikiriToward)? Read against the
+   *  way he faces (his blade's line), not his position: a dashing thrust is often already alongside
+   *  the hero at the impact, where "toward him" points sideways. */
+  _rollToward(att) {
+    const ap = att?.position, p = this.position;
+    if (!ap) return false;
+    if (Number.isFinite(att.yaw)) return -(Math.sin(att.yaw) * this.rollDir.x + Math.cos(att.yaw) * this.rollDir.z) >= TUNE.mikiriToward;
+    const dx = ap.x - p.x, dz = ap.z - p.z, l = Math.hypot(dx, dz);
+    if (!(l > 1e-3)) return true;
+    return (dx * this.rollDir.x + dz * this.rollDir.z) / l >= TUNE.mikiriToward;
+  }
+
+  /** Mikiri: rolled into a perilous thrust, the hero steps on the blade: i-frames, the crit window,
+   *  a stamping counter pose; the attacker reels (onMikiri). */
+  _mikiri(att, attack) {
+    const p = this.position, ap = att.position;
+    this.atk = null;
+    this.chargeK = 0;
+    this.buf.action = null;
+    this.vel.x = this.vel.z = this.kb.x = this.kb.z = 0;
+    if (ap && Number.isFinite(ap.x + ap.z)) this.yaw = Math.atan2(ap.x - p.x, ap.z - p.z);
+    this.object3d.rotation.y = this.yaw;
+    this.iframeT = TUNE.mikiriDur;
+    this.critTimer = DEFENSE.ghostep.critWindow;
+    this.deflect.side = -this.deflect.side;
+    this._enter('mikiri', 'parry', 0.03);
+    this.anim.kickCoat(1, this.anim.noise);
+    this._bladePoint(0.5, this._v);
+    this.fx.parry(this._v.x, 0.35, this._v.z, true, 4, Math.sin(this.yaw), Math.cos(this.yaw));
+    this.game.shake?.(0.35);
+    this._emit('player:mikiri', { attack: typeof attack === 'string' ? attack : 'strike' });
+    try {
+      att.onMikiri?.({ attack });
+    } catch (err) {
+      console.error('[player] onMikiri failed', err);
+    }
+  }
+
+  _tickMikiri() {
+    this.want.x = this.want.z = 0;
+    if (this.stateT >= TUNE.mikiriCancel && this._tryAction(true, true, false)) return;
+    if (this.stateT >= TUNE.mikiriDur) this._toLoco(0.12);
+  }
+
   _tickGhostep() {
     this.want.x = this.want.z = 0;
     const t = this.stateT;
@@ -1131,13 +1311,56 @@ export class Player {
     return null;
   }
 
-  /** Posture-broken wyrm, attack pressed within DEFENSE.plunge.execRange of its head: execution. */
+  /** Posture-broken wyrm, attack pressed within DEFENSE.plunge.execRange of its head: execution.
+   *  A broken duelist (the Ash Disciple: `onExecute`, no plunge) within its `execRange`: the lunging
+   *  execution thrust (_startExecuteThrust). */
   _tryExecution() {
     const d = this.game.dragon;
-    if (!d?.broken || !this._plungeable(d)) return false;
+    if (!d?.broken) return false;
+    if (!this._plungeable(d)) return this._startExecuteThrust(d);
     if (!this._startPlunge(d, true)) return false;
     this.lmb.held = false; // the press is spent: no charge waiting after the landing
     return true;
+  }
+
+  /**
+   * The execution against a duelist: a full thrust that lunges to him and, on its first active frame,
+   * runs him through: `d.onExecute({ damage })` instead of the sweep test (DEFENSE.plunge.execDamage;
+   * the EXECUTION call-out through player:plungeHit {execution}). False when he is out of range.
+   */
+  _startExecuteThrust(d) {
+    if (typeof d?.onExecute !== 'function' || d.state === 'dying' || d.state === 'dead') return false;
+    const p = this.position, dp = d.position;
+    if (!dp) return false;
+    const dist = Math.hypot(dp.x - p.x, dp.z - p.z);
+    if (!(dist <= fin(d.execRange, 3.2))) return false;
+    this._releaseThrust(CHARGE.full);
+    this.yaw = Math.atan2(dp.x - p.x, dp.z - p.z);
+    this.object3d.rotation.y = this.yaw;
+    this.atk.exec = d;
+    this.atk.travel = clamp(dist - 1.0, 0, 3);
+    this.lmb.held = false;
+    this._emit('player:plunge', { execution: true });
+    return true;
+  }
+
+  /** The execution thrust reaches him (see _startExecuteThrust). */
+  _executeHit(a) {
+    const d = a.exec;
+    a.hit = true;
+    let dealt = 0;
+    try {
+      dealt = fin(d.onExecute({ damage: DEFENSE.plunge.execDamage }), 0);
+    } catch (err) {
+      console.error('[player] onExecute failed', err);
+    }
+    const pt = d.lockPoint?.(this._v) ?? this._v.set(d.position.x, 1.2, d.position.z);
+    const dir = { x: Math.sin(this.yaw), z: Math.cos(this.yaw) };
+    if (dealt > 0) this._emit('player:hitDragon', { damage: dealt, part: 'body', point: { x: pt.x, y: pt.y, z: pt.z }, heavy: true, crit: true, kind: 'execute' });
+    this._emit('player:plungeHit', { damage: dealt, execution: true });
+    this._hitstop(0.16);
+    this.game.shake?.(0.5);
+    this.fx.sparks(pt.x, pt.y, pt.z, dir.x, dir.z, true, true);
   }
 
   /**
@@ -1985,6 +2208,10 @@ export class Player {
   }
 
   _tryHit(a) {
+    if (a.exec) {
+      this._executeHit(a);
+      return;
+    }
     const dr = this.game.dragon;
     if (!dr || typeof dr.takeHit !== 'function') return;
     if (dr.state === 'dead' || dr.state === 'dying') return;

@@ -680,6 +680,7 @@ export class Lab {
       button(head, '×', () => this.setOpen(false), 'lab-close').title = 'close the Lab (F1)';
       this.ui.status = el('div', 'lab-status', 'ready', root);
 
+      this._buildLevel(root);
       this._buildFight(root);
       this._buildAbilities(root);
       this._buildPlayer(root);
@@ -700,6 +701,22 @@ export class Lab {
       this.prefs.collapsed[k] = c;
       this._savePrefs();
     });
+  }
+
+  /** LEVEL: reload into another level (game.levels / game.pickLevel, main.js; `?lab` is kept). */
+  _buildLevel(root) {
+    const levels = this.game.levels;
+    if (!Array.isArray(levels) || levels.length < 2) return;
+    const { body } = this._section(root, 'level', 'LEVEL');
+    const grid = el('div', 'lab-grid c2', null, body);
+    const cur = this.game.level?.id;
+    for (const L of levels) {
+      const b = button(grid, L.name, () => {
+        if (L.id !== cur) this.game.pickLevel?.(L.id);
+      });
+      b.title = L.id === cur ? 'the level loaded now' : `reload into ${L.name} (?level=${L.id})`;
+      if (L.id === cur) b.classList?.add?.('on');
+    }
   }
 
   _buildFight(root) {

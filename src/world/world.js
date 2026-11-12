@@ -22,13 +22,22 @@ export class World {
     this.colliders = new Colliders();
     this.ground = createGround(U);
     game.scene.add(this.ground);
-    this.forest = createForest(U, this.colliders);
+    // the level's static set (levels/index.js: createForest by default, createCourtyard for Ashfall);
+    // both return the same shape, kept under the name `forest`
+    const buildSet = typeof game.level?.buildSet === 'function' ? game.level.buildSet : createForest;
+    this.forest = buildSet(U, this.colliders);
     game.scene.add(this.forest.group);
     this.scorch = new Scorch(U, game);
     const extent = 150;
-    const density = meadowDensity(this.colliders, this.forest.treeSpots, this.forest.bare, extent, this.forest.slabs);
+    const meadow = meadowDensity(this.colliders, this.forest.treeSpots, this.forest.bare, extent, this.forest.slabs);
+    // a set may thin and shorten its grass (`grass: { density(x, z) → 0..1 factor, height, ash }`):
+    // the Ashfall courtyard's burned hillside
+    const G = this.forest.grass ?? null;
+    const density = typeof G?.density === 'function' ? (x, z) => meadow(x, z) * G.density(x, z) : meadow;
+    const hk = Number.isFinite(G?.height) ? G.height : 1;
+    const height = hk === 1 ? meadowHeight : (x, z, rng) => meadowHeight(x, z, rng) * hk;
     const q = CONFIG.quality[CONFIG.quality.length - 1];
-    this.grass = createGrass(U, { count: q.grass, extent, density, height: meadowHeight });
+    this.grass = createGrass(U, { count: q.grass, extent, density, height, ash: G?.ash ?? 0 });
     game.scene.add(this.grass.mesh);
     this.atmosphere = new Atmosphere(game, this.forest);
     this.bonfire = this.forest.bonfire;

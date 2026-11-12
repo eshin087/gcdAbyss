@@ -15,7 +15,7 @@ export class Minimap {
   constructor(game, parent) {
     this.game = game;
     this.root = el('div', 'ab-map ab-panel ab-play', null, parent);
-    el('div', 'ab-map-zone', 'CINDERWOOD HOLLOW', this.root);
+    el('div', 'ab-map-zone', String(game.level?.name ?? 'Cinderwood Hollow').toUpperCase(), this.root);
     this.canvas = el('canvas', '', null, this.root);
     this.dpr = Math.min(2, Math.max(1, num(window.devicePixelRatio, 1)));
     this.canvas.width = this.canvas.height = Math.round(SIZE * this.dpr);

@@ -20,11 +20,21 @@ const FIGHTING = new Set(['combat', 'staggered', 'airborne']);
 const NON_DISMISS = new Set(['KeyM', 'KeyH', 'Escape', 'Backquote', 'ContextMenu', 'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen']);
 const NON_DISMISS_RE = /^(F\d+|Alt|Control|Meta|OS)/;
 const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:phase3', 'dragon:death', 'dragon:dead', 'player:died'];
-const AREA = 'Cinderwood Hollow';
 const DEBUG_STATES = new Set(['explore', 'boss', 'dead', 'victory']);
 const DRAGON_DOWN = new Set(['dying', 'dead']);
-const PHASE2_TEXT = "THE CINDER WYRM'S FURY IGNITES";
-const PHASE3_TEXT = 'ITS HEART BURNS WHITE-HOT';
+// the level's lines (levels/index.js `text`); Cinderwood's when the game has no level (tests, old boots)
+const DEFAULT_AREA = { name: 'Cinderwood Hollow', sub: 'where the cinder wyrm sleeps' };
+const DEFAULT_TEXT = {
+  arrive: ['Ash drifts through the hollow. Something vast sleeps among the bones to the north.', 'Rest at the bonfire to restore your flasks.'],
+  stir: 'The ground trembles…',
+  phase2: "THE CINDER WYRM'S FURY IGNITES",
+  phase3: 'ITS HEART BURNS WHITE-HOT',
+  victory: 'WYRM VANQUISHED',
+  fallen: 'The cinders cool. Cinderwood Hollow falls silent.',
+  restReset: 'The wyrm returns to its slumber.',
+  again: 'The wyrm sleeps once more. The hollow waits.',
+  rise: 'You rise again at the bonfire.',
+};
 
 const TUNE = {
   restRadius: 2.4,
@@ -99,6 +109,8 @@ export class GameFlow {
     this.autoPause = false;
     this.swallowInput = false;
     this.debugVictoryT = -1;
+    this.cine = null; // a running cinematic moment (cinematic())
+    this.cineScale = 1; // its time scale this frame (multiplies the flow's own slow-mo)
     this._ghostAt = -10;
     this._errors = 0;
 
@@ -135,7 +147,11 @@ export class GameFlow {
       this.stats.hits++;
     });
     ev?.on('player:dodge', () => this.stats.dodges++);
-    ev?.on('player:parry', () => this.stats.parries++);
+    ev?.on('player:parry', (d) => {
+      this.stats.parries++;
+      // a blade met: a white flash on the clash (a perfect parry: a bright one); a deflected bullet: none
+      if (!d?.light) this.grade.flashPulse(d?.perfect ? 0.85 : d?.tell === 'blue' ? 0.4 : 0.28);
+    });
     ev?.on('player:block', () => this.stats.blocks++);
     ev?.on('player:guardBreak', () => this.stats.guardBreaks++);
     // a perfect dodge and its Ghostep blink normally arrive together: count / pulse once
@@ -178,7 +194,7 @@ export class GameFlow {
       this._report('update', err);
     }
     // always keep time + screen grade coherent, even after an error
-    g.timeScale = g.state === 'paused' ? 0 : clamp(this.slowmo, 0.05, 1);
+    g.timeScale = g.state === 'paused' ? 0 : clamp(Math.min(this.slowmo, this.cineScale), 0.05, 1);
     try {
       this._gradeTargets();
       this.grade.update(rdt);
@@ -201,7 +217,7 @@ export class GameFlow {
       const to = PLAY.has(this.pausedFrom) ? this.pausedFrom : 'explore';
       this.pausedFrom = null;
       this._setState(to);
-      g.timeScale = clamp(this.slowmo, 0.05, 1);
+      g.timeScale = clamp(Math.min(this.slowmo, this.cineScale), 0.05, 1);
       g.hud?.showPause?.(false);
     }
   }
@@ -222,6 +238,47 @@ export class GameFlow {
     g.settings.quality = q;
     this._try(() => g.applyQuality?.(), 'applyQuality');
     this._log(`Quality: ${CONFIG.quality[q].name}`, 'system');
+  }
+
+  /**
+   * A cinematic moment (a duel's full deflect, blade lock, mikiri, execution): time slows to `slowmo`
+   * for `dur` real seconds while the camera pulls in (`zoom` m, negative = closer) and leans `weight`
+   * toward (x, z). The slow-mo drops in at once and eases back over the last third; the camera eases
+   * in over the first fifth and out over the last two fifths. The slow-mo is the flow's own time
+   * scale (cineScale), not a hitstop: an actor's short freeze (hitstop, min-merged) would otherwise
+   * stretch over the whole moment. A newer moment replaces a running one. Emits 'game:cinematic'.
+   */
+  cinematic(o = {}) {
+    const x = finite(o.x, NaN), z = finite(o.z, NaN);
+    if (!Number.isFinite(x + z) || !PLAY.has(this.game.state)) return false;
+    const dur = clamp(finite(o.dur, 0.8), 0.1, 3);
+    const slowmo = clamp(finite(o.slowmo, 0.3), 0.05, 1);
+    this.cine = { t: 0, dur, x, z, slowmo, zoom: finite(o.zoom, -9), weight: clamp(finite(o.weight, 0.6), 0, 1) };
+    this.cineScale = slowmo;
+    this.game.events?.emit('game:cinematic', { kind: String(o.kind ?? 'moment') });
+    return true;
+  }
+
+  _updateCinematic(rdt) {
+    const rig = this.game.cameraRig, C = this.cine;
+    if (!C) {
+      this.cineScale = 1;
+      if (rig?.cine) rig.cine.w = rig.cine.zoom = 0;
+      return;
+    }
+    C.t += rdt;
+    const u = C.t / C.dur;
+    this.cineScale = u >= 1 ? 1 : C.slowmo + (1 - C.slowmo) * Math.max(0, (u - 0.66) / 0.34);
+    if (!rig?.cine) {
+      if (u >= 1) this.cine = null;
+      return;
+    }
+    const k = u >= 1 ? 0 : Math.min(1, u / 0.2) * Math.min(1, (1 - u) / 0.4);
+    rig.cine.x = C.x;
+    rig.cine.z = C.z;
+    rig.cine.w = C.weight * k;
+    rig.cine.zoom = C.zoom * k;
+    if (u >= 1) this.cine = null;
   }
 
   toggleMute() {
@@ -279,6 +336,7 @@ export class GameFlow {
       }
     }
     if (this.restCooldown > 0) this.restCooldown -= rdt;
+    this._updateCinematic(rdt);
     if (this.slowmoHold > 0) this.slowmoHold -= rdt;
     else if (this.slowmo < 1) {
       this.slowmo = damp(this.slowmo, 1, 1.8, rdt);
@@ -312,7 +370,8 @@ export class GameFlow {
         case 'dragon:phase3':
           if (st === 'boss' || st === 'bossIntro') {
             this.phase2 = true;
-            g.hud?.banner?.(name === 'dragon:phase3' ? PHASE3_TEXT : PHASE2_TEXT, 'phase');
+            const text = name === 'dragon:phase3' ? this._text('phase3') : this._text('phase2');
+            if (text) g.hud?.banner?.(text, 'phase');
             g.audio?.setMusic?.('boss2');
           }
           break;
@@ -378,11 +437,11 @@ export class GameFlow {
     g.hud?.hideTitle?.();
     this.stats.reset();
     this._setState('explore');
-    g.hud?.banner?.(AREA.toUpperCase(), 'area', { sub: 'where the cinder wyrm sleeps' });
-    g.events?.emit('area', { name: AREA });
+    const area = this._area();
+    g.hud?.banner?.(area.name.toUpperCase(), 'area', { sub: area.sub });
+    g.events?.emit('area', { name: area.name });
     g.audio?.setMusic?.('ambient');
-    this._log('Ash drifts through the hollow. Something vast sleeps among the bones to the north.', 'lore');
-    this._log('Rest at the bonfire to restore your flasks.', 'lore');
+    for (const line of this._text('arrive') ?? []) this._log(line, 'lore');
     if (!g.touch?.active) this._log('H: controls  ·  Esc: pause', 'system');
     // ease the camera from the establishing shot back to the player
     this._ovW = 0;
@@ -447,7 +506,7 @@ export class GameFlow {
       this._try(() => g.world?.scorch?.reset?.(), 'scorch.reset');
       g.hud?.hideBossBar?.();
       this.phase2 = false;
-      this._log('The wyrm returns to its slumber.', 'lore');
+      this._log(this._text('restReset'), 'lore');
     }
     this._try(() => g.world?.atmosphere?.setBonfireLit?.(true), 'setBonfireLit');
     g.hud?.banner?.('REST', 'bonfire');
@@ -462,7 +521,7 @@ export class GameFlow {
     this.introT = 0;
     g.hud?.prompt?.(null);
     g.audio?.setMusic?.('none');
-    this._log('The ground trembles…', 'warn');
+    this._log(this._text('stir'), 'warn');
     if (callStart) this._try(() => g.dragon?.startIntro?.(), 'dragon.startIntro');
     this._dragonFocus(this._ov.focus);
     this._ovW = TUNE.intro.weight;
@@ -493,7 +552,7 @@ export class GameFlow {
     if (g.state === 'boss') return;
     this._setState('boss');
     g.hud?.prompt?.(null); // may arrive straight from explore with the bonfire prompt up
-    g.hud?.showBossBar?.(g.dragon?.name ?? 'VAELGRIM, THE CINDER WYRM');
+    g.hud?.showBossBar?.(this._bossName());
     g.audio?.setMusic?.(this.phase2 ? 'boss2' : 'boss');
     this._ovW = 0;
     this._ovZ = 0;
@@ -636,7 +695,7 @@ export class GameFlow {
     this.victoryT = 0;
     this.statsShown = false;
     g.hud?.prompt?.(null);
-    g.hud?.banner?.('WYRM VANQUISHED', 'victory');
+    g.hud?.banner?.(this._text('victory'), 'victory');
     g.audio?.setMusic?.('victory');
     g.events?.emit('game:victory', this.stats.snapshot());
     if (this.bossBarHideT < 0) this.bossBarHideT = 1.2;
@@ -645,7 +704,7 @@ export class GameFlow {
     this._ovZ = TUNE.victoryCam.zoom;
     this._ovLambda = 1;
     this.cameraOverride = this._ov;
-    this._log('The cinders cool. Cinderwood Hollow falls silent.', 'lore');
+    this._log(this._text('fallen'), 'lore');
   }
 
   _victory(rdt) {
@@ -692,7 +751,7 @@ export class GameFlow {
     this._setState('explore');
     g.events?.emit('game:retry');
     g.audio?.setMusic?.('ambient');
-    this._log(resetRun ? 'The wyrm sleeps once more. The hollow waits.' : 'You rise again at the bonfire.', 'lore');
+    this._log(resetRun ? this._text('again') : this._text('rise'), 'lore');
   }
 
   /** Player at the bonfire spawn, dragon asleep in its nest, scorch/FX cleared, HUD + flow reset. */
@@ -722,6 +781,8 @@ export class GameFlow {
     this.deadPollT = 0;
     this.slowmo = 1;
     this.slowmoHold = 0;
+    this.cine = null;
+    this.cineScale = 1;
     this.hitWhileAsleep = false;
     this.queue.length = 0; // drop stale events from the previous attempt
     this._ovW = 0;
@@ -823,7 +884,7 @@ export class GameFlow {
     this.phase2 = d?.phase >= 2;
     this.grade.desat = 0;
     this._setState('boss');
-    g.hud?.showBossBar?.(d?.name ?? 'VAELGRIM, THE CINDER WYRM');
+    g.hud?.showBossBar?.(this._bossName());
     g.audio?.setMusic?.(this.phase2 ? 'boss2' : 'boss');
   }
 
@@ -850,7 +911,7 @@ export class GameFlow {
     if (g.state === 'victory') {
       // replay the victory beat (the prelude cleared the banner and the record)
       this.victoryT = 0;
-      g.hud?.banner?.('WYRM VANQUISHED', 'victory');
+      g.hud?.banner?.(this._text('victory'), 'victory');
       return;
     }
     if (!d || d.state === 'dead' || typeof d.debug?.kill !== 'function') {
@@ -860,7 +921,7 @@ export class GameFlow {
     // stand in the boss state so the death events are handled the normal way
     if (g.state !== 'boss') {
       this._setState('boss');
-      g.hud?.showBossBar?.(d.name ?? 'VAELGRIM, THE CINDER WYRM');
+      g.hud?.showBossBar?.(this._bossName());
       g.audio?.setMusic?.(d.phase >= 2 ? 'boss2' : 'boss');
     }
     this.debugVictoryT = TUNE.debugVictoryTimeout;
@@ -993,7 +1054,23 @@ export class GameFlow {
   }
 
   _log(text, channel) {
-    this.game.hud?.log?.(text, channel);
+    if (text) this.game.hud?.log?.(text, channel);
+  }
+
+  /** The level's line `key` (levels/index.js `text`); Cinderwood's when the level has none. */
+  _text(key) {
+    const t = this.game.level?.text;
+    return t && Object.hasOwn(t, key) ? t[key] : DEFAULT_TEXT[key];
+  }
+
+  /** The level's area name and sub line. */
+  _area() {
+    const L = this.game.level;
+    return typeof L?.name === 'string' ? { name: L.name, sub: L.sub ?? '' } : DEFAULT_AREA;
+  }
+
+  _bossName() {
+    return this.game.dragon?.name ?? 'VAELGRIM, THE CINDER WYRM';
   }
 
   _try(fn, label) {

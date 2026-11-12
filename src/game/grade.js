@@ -5,6 +5,7 @@ import { clamp, damp } from '../core/math.js';
 // with real time so it keeps animating while the game is paused or in hit-stop.
 // Ghostep slow-mo adds a short cool pulse: a little desaturation with the warm grade pulled out;
 // it only ever adds on top of the other targets and releases back to them on its own.
+// A parry's white flash (flashPulse) lifts uExposure for a few frames over its base value.
 
 const approach = (v, target, step) => (v < target ? Math.min(target, v + step) : Math.max(target, v - step));
 const finite = (v, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -26,6 +27,8 @@ export class ScreenGrade {
     this.dipT = 0;
     this.dipDur = 1;
     this.ghost = 0; // Ghostep cool pulse 0..1 (envelope below)
+    this.flash = 0; // a parry's white flash 0..1.5 (uExposure × 1 + 0.9 flash), decays in ~0.2 s
+    this.baseExposure = null; // uExposure as the pipeline set it (read once)
     this.ghostHold = 0;
     this.t = 0;
   }
@@ -65,8 +68,15 @@ export class ScreenGrade {
     if (this.ghost < 0.01) this.ghost = 0.01;
   }
 
+  /** A white flash of the whole frame (a parry's clash): `k` 0..1.5, gone in ~0.2 s. */
+  flashPulse(k = 0.4) {
+    this.flash = Math.max(this.flash, clamp(finite(k, 0.4), 0, 1.5));
+    this._write();
+  }
+
   /** Instantly drop all effects (used while the screen is fully black). */
   resetInstant() {
+    this.flash = 0;
     this.hurt = 0;
     this.warm = 0;
     this.dipT = 0;
@@ -78,6 +88,7 @@ export class ScreenGrade {
     dt = clamp(finite(dt), 0, 0.1);
     this.t += dt;
     this.hurt = Math.max(0, this.hurt - dt * 2);
+    this.flash = Math.max(0, this.flash - dt * 6);
     this.fade = approach(this.fade, this.fadeTarget, this.fadeSpeed * dt);
     this.desat = approach(this.desat, this.desatTarget, this.desatSpeed * dt);
     this.warm = damp(this.warm, this.warmTarget, 1.4, dt);
@@ -102,5 +113,9 @@ export class ScreenGrade {
     const g = this.ghost * this.ghost * (3 - 2 * this.ghost);
     if (u.uDesat) u.uDesat.value = clamp(Math.max(this.desat, g * 0.38), 0, 1);
     if (u.uWarm) u.uWarm.value = clamp(this.warm * (1 - 0.85 * g), 0, 1);
+    if (u.uExposure) {
+      if (this.baseExposure === null) this.baseExposure = finite(u.uExposure.value, 1);
+      u.uExposure.value = this.baseExposure * (1 + 0.9 * this.flash);
+    }
   }
 }

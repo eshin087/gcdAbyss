@@ -1141,3 +1141,151 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Consequences:** measured at the hems over 60 idle / 90 run frames: depth behind 0.55 m at rest
   (0.44 on `main`), 0.89 m running (0.81); width 1.28 m at rest, 1.17 m running (1.23 / 1.15 on
   `main`).
+## ADR-058 — Levels: one per page load, the boss slot keeps its name (2026-11-11)
+- **Context:** the owner wants the Ash Disciple as "a separate level" that can be loaded on its own to
+  test it. Everything was built for one zone and one boss: `World` built the forest, main.js built the
+  `Dragon`, and fourteen modules read `game.dragon` and listen for `dragon:*` events. Another session
+  is changing the wyrm (breath bullets, Armageddon) in parallel.
+- **Decision:**
+  - `src/levels/index.js` registers level definitions (`id`, `name`, `world` overrides, `buildSet`,
+    `createBoss`, the flow's `text`). `?level=<id>` picks one at boot; `applyLevel` merges its world
+    layout into `CONFIG.world` before any module is built. Switching level reloads the page: nothing
+    has to be torn down. The title screen has a stage picker and the Lab a LEVEL row.
+  - **The boss slot:** `game.dragon` stays the name of the current boss and `game.boss` is the same
+    object; a level's boss emits the same `dragon:*` events. A boss offers the Dragon contract's
+    surface; a duelist (`kind: 'duelist'`) has no plunge and offers `onExecute` instead.
+  - Wyrm-specific text moved into the level (flow banners and lore lines, the minimap's zone, the
+    combat log's names, the name tag); audio gates creature vocals on the boss's `kind`.
+- **Alternatives:** renaming `game.dragon` / `dragon:*` to `game.boss` / `boss:*` now (cleaner, but ~14
+  files and a guaranteed collision with the parallel wyrm work; it stays a refactor of its own);
+  switching levels at runtime (needs disposal of the world, the boss and the batches); a second HTML
+  page per level (two builds, two deployments).
+
+## ADR-059 — Direction: a skill boss rush with fixed rewards (2026-11-11)
+- **Context:** the owner: "kinda like phantom blade zero wuxia combat, boss rush, with some exploring
+  and rpg elements"; both the wuxia combat and the fiction; "fixed rewards as i want this to be more
+  of a skill boss rush game. i do want loot to add cool elements, skills, or abilities to the player
+  to give the player the ability to customize and change their combat style."
+- **Decision:** the game becomes a series of boss duels, each testing one skill, reached from a
+  bonfire through short approaches. Progression is fixed: each boss gives a set reward (a technique,
+  a weapon, an ability or an element) that changes how the hero fights; no XP levels, no random loot
+  tables. Bosses are wuxia figures (sect disciples, wandering swordsmen) with the Cinder Wyrm as the
+  spectacle fight. Each boss gets moves of its own, not the hero's mirrored (owner, about the Ash
+  Disciple). The first reward and the technique system come in the PR after the Ash Disciple.
+- **Consequences:** ROADMAP M2 (character stats, levels, XP, random rarity) is replaced by techniques
+  and fixed rewards; the online milestone is unchanged but not next.
+
+## ADR-060 — The Ash Disciple: a duelist on the hero's skeleton, his moves as keyframe data (2026-11-11)
+- **Context:** the first human boss. A swordsman needs the hero's quality of animation (cloth, gait,
+  two-bone IK, the ink-line look), but the owner asked that his moves not mirror the hero's.
+- **Decision:**
+  - He is `buildHero(U, ASH_LOADOUT)` with his own gear items (a douli hat, a robe and skirt on the
+    coat springs, a bracer and a bell sleeve, wrapped trousers, a jian with a tassel on a streamer
+    spring), recoloured on his own material instances.
+  - `HeroAnimator(rig, pilot, poses)`: the animator takes an optional per-instance pose table (merged
+    over the hero's; the hero passes none and is unchanged). He brings `loco` (his jian guard on the
+    hero's gait and foot planner) and `duel` (a keyframe clip).
+  - Every move and reaction is data (moves.js): beats with a tell, a windup (with an optional bait
+    hold), active frames, a hit zone, root motion and pose keys in beat-relative marks; `realise()`
+    turns a move into absolute times and a compiled clip. The blade is keyed as [azimuth, elevation]
+    so swings are arcs and over-the-top chops pass through vertical.
+  - Hits are zones (sector, line, ring) tested from his root through the active frames, so contact
+    lands on the cue: every move within 17 ms of its flash + lead in the TIMING test.
+- **Alternatives:** a new rig and animator for him (months of work to reach the hero's quality);
+  mirroring the hero's attacks (rejected by the owner); hit-testing his blade's swept segment like the
+  hero's (exact to the pose, but contact times then drift with every pose edit).
+
+## ADR-061 — The duelist's rules: a guard that counters, feints that never glint, the execution thrust (2026-11-11)
+- **Context:** the owner chose "Guards and counters": he deflects strikes into his front, they build
+  his posture, and after a few he counterattacks. A fencing bot then showed where a guard leaks.
+- **Decision:**
+  - His guard covers ±75° of his facing in footwork (after a 0.18 s raise delay at the end of a move,
+    a stagger or a recoil; at once after a clash or a flinch) and through the first 55 % of each
+    windup. A guarded strike deals nothing, adds guard posture (8 light / 20 heavy) and clashes
+    (`dragon:guard`, "GUARDED"); in footwork each one makes a counter likelier (0, 35, 70, 100 %): the
+    Riposte. A heavy strike with posture 48 or more (a charged thrust from ~90 % charge) crushes the
+    guard: it lands and he staggers. The chain's slam (40) does not.
+  - **Feints never glint:** a feint has no tell and no flash; only real impacts are cued.
+  - A perfect dodge against him is the Ghostep behind him (no plunge), and his back is never guarded.
+    The attacker may set the Ghostep's distance (`ghostepBehind`; player.js): his is 1.5 m, since the
+    wyrm's 3.2 m left the hero out of sword reach of a man's back.
+  - **Execution:** a broken duelist within `execRange` (3.2 m) is executed by a lunging full thrust
+    whose first active frame calls `onExecute`; the break is spent. While broken, hits crit ×1.5 (the
+    wyrm's 2.2: here the execution is the reward).
+  - Openings: his recoveries, the recoil after his last hit is parried, the Ghostep, the break.
+- **Tuned on bots** (`npm test` → DUEL WIN; `node tests/integration/duel.mjs . probe`): his blows ×
+  1.35 so that a bot reading 70 % of the tells is on the edge. Measured: a god-mode bot that answers
+  every tell wins in 50–54 s (three seeds); mortal bots reading 85 % win in 54 s (1 hit taken), 70 %
+  win in 70–75 s with 1 and 0 flasks left, 60 % die with him at 10 %. Easier than the wyrm (where 85 %
+  is on the edge), as the first boss should be. No human has played it.
+- **Alternatives:** no guard (the owner's other option); a guard that holds through whole windups (the
+  fencer then never trades, and nothing teaches the commit point); hits during his windups
+  interrupting them (makes mashing the answer).
+
+## ADR-062 — The duel's moments: the full deflect, the blade lock, the mikiri, the cinematic (2026-11-12)
+- **Context:** the owner wanted Shen Hui to give "sekiro/phantom blade zero parries opportunities for
+  epic combat and moments", and picked all four offered: long deflect strings, a blade lock, perilous
+  counters and cinematic finishers, at a relentless, PBZ-fast pace.
+- **Decision:**
+  - **Moments are data on a move's beats**, read by the duelist (`moves.js`): `lock: true` (a perfect
+    parry of it crosses the blades), `mikiri: true` (a perilous red thrust: `hitPlayer` passes
+    `mikiri`, its flash `perilous`); the full deflect is a rule on any string of ≥ 5 hits. The numbers
+    live in `tuning.js` (`fullDeflect`, `lock`, `mikiri`, `cinematic`, `chain`, `idleGap`).
+  - **The hero owns the inputs, the attacker owns the outcome.** `player.startBladeLock(att, L)` runs
+    the mash (a meter, a prompt, `player:lock`) and calls `att.onLockEnd(won)`; `player.takeHit` checks
+    `hit.mikiri` against a roll into the blade (the roll's direction against the attacker's facing:
+    his blade's line, since a dashing thrust is often alongside at the impact) and calls
+    `att.onMikiri()`. The wyrm offers neither and is untouched; any later duelist reuses both.
+  - **A blade lock needs a perfect parry** (0.08 s), not any parry, so it stays a moment and not a
+    tax on every heavy blow. Time-out is not a loss when the hero held his ground (≥ 0.6): pressing
+    steadily is enough, pressing nothing loses.
+  - **`flow.cinematic`** is the one place that slows time and pulls the camera in for a moment, and
+    its slow motion is the flow's own time scale, not a hitstop (the hitstop min-merges its scale, so
+    the parry's 0.04 freeze stretched over the moment). The camera uses `cameraRig.cine`, an
+    additive pull-in that never fights the boss framing.
+  - **The pace:** short idle gaps and a chance to chain one move into the next; the tell rules still
+    hold for every chained move (first windup ≥ 0.7 s, hits ≥ 0.45 s apart: the DATA test).
+  - **His look (owner pick C of three rendered sheets):** a small hat, a long slender jian, a high
+    guard (the sword hand by the temple, the blade slanting down at the hero).
+- **Tuned on bots:** the god-mode fencer wins in 52–61 s; mortal bots reading 85 % of the tells win
+  (3 of 3), 70 % die (3 of 3), 60 % die (2 of 3). The bots use neither the lock nor the mikiri.
+- **Alternatives:** a lock on any parry of a heavy blow (too frequent; it would slow the PBZ pace it
+  is meant to punctuate); mikiri as a separate button (the roll the player already has, read by
+  direction, keeps the controls as they are and works on touch); the slow motion through `hitstop`
+  (the bug above); a scripted camera orbit for each moment (more to tune, and it fights the boss
+  framing on a phone).
+
+## ADR-063 — PBZ speed, pressure that reaches, and impact you can feel (2026-11-12)
+- **Context:** after playing Shen Hui the owner found "his animation, motions, and weapon stance and
+  attacks look bad", his attacks slow, and his AI "stupid": it attacked when it could not reach the
+  hero, and the hero could kite him. They asked for an epic fast duel with sword clashes and
+  parry / dodge moments, an "epic and impactful" parry, and "more impactful hit stun" both ways.
+  Answers: PBZ-boss speed; your hits jolt him but interrupt only footwork and recovery; the parry
+  "everything, layered"; he sprints in and punishes a flask. Stance: "A", the classic jian guard.
+- **Decision:**
+  - **The hand follows the blade.** His clips may drive the sword arm from the blade's direction
+    (`arm` / `ext` / `lead`, poses.js), as the hero's swings do; a cut is authored as the blade's
+    path through the hero (moves.js `slashKeys`: gather, cock, a ~0.1 s snap, follow-through) and the
+    hips, chest and front foot go with it. Keyed hands stay for two-handed and special poses.
+  - **Speed with the cue intact:** openers 0.46–0.6 s, a string's hits ~0.34 s apart; the flash lead
+    drops to 0.3 s and the minimum impact gap to 0.32 s so every flash still comes after the hit
+    before it (the DATA test checks it per phase).
+  - **No blow at air:** every beat steps in through its windup within a budget (`close`), and
+    every step-in, windup track and dash leads the hero's velocity. A string whose next hit cannot
+    reach stops. Footwork circles only inside striking range, runs beyond it and sprints past 5.5 m at
+    8.6 m/s (above the hero's 7.2). A drinking hero is punished.
+  - **Impact is time:** a parry of a blade freezes the frame (0.1–0.15 s), a blow on either fighter
+    freezes it too (him 0.065–0.12 s with a jolt layered on his pose; the hero 0.085–0.13 s). The
+    parry's FX are built for the freeze: sparks born mid-burst and a shockwave ring born open (born at
+    the contact they stacked into one blooming white blot that hid both fighters for the freeze). A
+    white screen flash (`grade.flashPulse`) and a heavier clang; a perfect parry adds a short slow
+    motion through `flow.cinematic`.
+  - His damage × 1.15 (was 1.35): his pressure lands more blows, so each one hurts less.
+- **Measured:** god-mode bot ~45 s; 85 % bots win 3 / 3 in 48–52 s; 70 % die 3 / 3 with him at
+  8–10 %. Every non-red glint reaches a hero who stands his ground (29 / 29); a hero sprinting circles
+  is caught (0.8 m) and hit.
+- **Alternatives:** keep the keyed hands and add more keys (the arm still fights the blade between
+  them); faster windups with the old 0.35 s flash (a string's flashes would arrive before the hit
+  they follow); a homing hit test instead of the step-in (blows that land without his body getting
+  there read as unfair); particles on real time during a hitstop (every slow motion would lose its
+  frozen sparks).

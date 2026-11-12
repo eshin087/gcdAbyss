@@ -11,7 +11,7 @@ import { LightPool } from './render/lights.js';
 import { GlyphParticles } from './render/particles.js';
 import { World } from './world/world.js';
 import { Player } from './entities/player/player.js';
-import { Dragon } from './entities/dragon/dragon.js';
+import { LEVELS, levelFromSearch, applyLevel, levelUrl } from './levels/index.js';
 import { Hud } from './ui/hud.js';
 import { TouchControls } from './ui/touch.js';
 import { AudioEngine } from './audio/audio.js';
@@ -22,6 +22,10 @@ import { Lab } from './dev/lab.js';
 
 async function boot() {
   await loadFonts();
+  // the level (`?level=ash`; levels/index.js): its world overrides land in CONFIG.world before any
+  // module reads them
+  const level = levelFromSearch(location.search);
+  applyLevel(level);
 
   const canvas = document.getElementById('game');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
@@ -39,6 +43,12 @@ async function boot() {
   const game = {
     THREE,
     CONFIG,
+    level,
+    // the stage picker (title screen, Lab): every level, and a reload into one of them
+    levels: LEVELS.map((L) => ({ id: L.id, name: L.name })),
+    pickLevel(id) {
+      location.assign(levelUrl(id, location.href));
+    },
     renderer,
     scene,
     fxScene,
@@ -77,7 +87,9 @@ async function boot() {
   game.world = new World(game);
   game.audio = new AudioEngine(game);
   game.player = new Player(game);
-  game.dragon = new Dragon(game);
+  // the boss slot (ARCHITECTURE.md → Levels): the wyrm or the level's own boss; game.boss is the same
+  game.dragon = level.createBoss(game);
+  game.boss = game.dragon;
   game.hud = new Hud(game);
   game.touch = new TouchControls(game); // inert on desktop; may pick the touch quality preset
   game.flow = new GameFlow(game);

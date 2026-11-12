@@ -4,7 +4,37 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Twelve pieces of work since 0.4.0:
+Thirteen pieces of work since 0.4.0:
+- **The Ash Disciple, a second level** (2026-11-12, ADR-058 – ADR-063): a new boss and a new place,
+  loaded on their own with `?level=ash` or from the stage picker on the title screen (and the Lab's
+  LEVEL row). The Ashfall Courtyard: a ruined sword sect under falling ash, a bonfire at the foot of a
+  path, broken steps and a gate, a paved courtyard ringed by broken pillars. In it kneels the Ash
+  Disciple, Shen Hui, a grey-robed swordsman in a small straw hat with a long slender jian held in
+  the classic jian guard, the sword-finger raised over his head. He fights at Phantom Blade Zero
+  boss speed, whips his whole body into every cut, steps in so his blows always reach, sprints down a
+  hero who runs, punishes a flask, and often flows from one move straight into the next,
+  with moves of his own (thrusts, flicks, spins, overhead chops, a feint that never glints, a low
+  sweep, a gliding cut, sword qi thrown along the ground, a seven-cut Rain of Ashes, and in his second
+  phase a flurry of thrusts, a ten-cut Hundred Petals, a burning whirl and a great leap). He guards and
+  turns aside strikes into his front and counters after a few, and a broken guard ends in an
+  execution. **Sekiro / Phantom Blade Zero moments:** parry every cut of a long string and he reels
+  (PERFECT DEFLECT); parry an overhead blow perfectly and the blades lock: mash attack to win
+  (BREAKTHROUGH) or be shoved back; roll into his perilous red thrust to step on his blade (MIKIRI);
+  each plays in slow motion with the camera pulled in. The game's direction is now a wuxia skill
+  boss rush with fixed rewards; his reward comes next.
+  - Added: `src/levels/` (level registry), `world/courtyard.js`, `entities/enemies/ashDisciple/`,
+    `ui/bossName.js`, `tests/integration/duel.mjs` (in `npm test`), `docs/specs/ash-disciple.md`;
+    the `dragon:guard` event and a GUARDED call-out; the execution thrust against a broken duelist;
+    the blade lock (`player.startBladeLock`, `player:lock`), the mikiri (`player:mikiri`), the full
+    deflect (`dragon:deflected`), `flow.cinematic` + `cameraRig.cine` (`game:cinematic`, a gong).
+    Impact: a parry freezes the frame and throws a shockwave ring, a white flash and a heavier clang (a
+    perfect one adds a short slow motion); a blow that lands on either fighter freezes it too, and his
+    body jolts back from yours; his blade leaves a sweep trail.
+  - Changed: `HeroAnimator` takes an optional per-instance pose table; flow banners and lore, the
+    minimap zone, the combat log and the name tag come from the level and the boss's name; audio
+    gives a duelist no creature voice; grass can be thinned and greyed by a level, the atmosphere can
+    fall ash; the hero's parry flash sits in front of his guard (it sat at the blade's pre-parry point,
+    often by the hip, and its light blew the floor out).
 - **Attack variants, hair that reads, a fuller cloak** (2026-11-12, ADR-055 to ADR-057): every hit
   of the left-click chain has two or three different looks (a draw cut, a leaping cut, a level or
   falling backhand, a rising whirl, a skipping cross-cut, a low rising stab, a leaping slam), picked

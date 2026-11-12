@@ -649,8 +649,19 @@ export class AudioEngine {
     on('player:parry', (d) => {
       this.charge?.stop(0.05);
       // a deflect chain (parries in rhythm) rings higher with every blow met
-      this.play('parry', { tell: d.tell, chain: d.chain, perfect: !!(d.light && d.perfect) });
+      this.play('parry', { tell: d.tell, chain: d.chain, perfect: !!(d.light && d.perfect), melee: !d.light, perfectMelee: !d.light && !!d.perfect });
     });
+    // the duel's moments (a duelist; the Ash Disciple): steel on steel, heavier as they land
+    on('player:lock', (d) => {
+      if (d.phase === 'start') this.play('block', { tell: 'blue', damage: 0 });
+      else if (d.phase === 'push') this.play('parry', { tell: 'normal', chain: 1 });
+      else if (d.phase === 'won') this.play('parry', { tell: 'blue', chain: 6 });
+      else this.play('block', { tell: 'blue', damage: 10 });
+    });
+    on('player:mikiri', () => this.play('parry', { tell: 'blue', chain: 5 }));
+    // a deep gong under the slow motion (the blade lock's camera push-in has its own clash and no slow-mo)
+    on('game:cinematic', (e) => { if (e?.kind !== 'lock' && e?.kind !== 'perfectParry') this.play('gong'); });
+    on('dragon:deflected', () => this.play('parry', { tell: 'blue', chain: 8 }));
     on('player:guardBreak', () => {
       this.charge?.stop(0.05);
       this.play('guardBreak');
@@ -685,16 +696,19 @@ export class AudioEngine {
       this._autoMusic('death');
     });
 
-    // dragon
-    on('dragon:wake', () => this.play('wake', this._atDragon()));
-    on('dragon:roar', (d) => this.play('roar', this._atDragon({ strength: d.strength })));
-    on('dragon:windup', (d) => this.play('windup', this._atDragon({ name: d.name })));
+    // dragon (the boss slot: a creature's voice only for a creature; a duelist, the Ash Disciple,
+    // is steel and footfalls: his guard rings like a block, his body makes no roars or yelps)
+    const beast = () => this.game.dragon?.kind !== 'duelist';
+    on('dragon:wake', () => beast() && this.play('wake', this._atDragon()));
+    on('dragon:roar', (d) => beast() && this.play('roar', this._atDragon({ strength: d.strength })));
+    on('dragon:windup', (d) => beast() && this.play('windup', this._atDragon({ name: d.name })));
     on('dragon:attack', (d) => {
-      if (!RX_OWN_SOUND.test(String(d.name || ''))) this.play('dragonSwipe', this._atDragon());
+      if (beast() && !RX_OWN_SOUND.test(String(d.name || ''))) this.play('dragonSwipe', this._atDragon());
     });
+    on('dragon:guard', (d) => this.play('block', { tell: d?.heavy ? 'blue' : 'normal', damage: 0 }));
     on('dragon:step', (d) => this.play('dragonStep', d));
     on('dragon:wingFlap', (d) => this.play('wingFlap', this._atDragon({ strength: d.strength })));
-    on('dragon:takeoff', () => this.play('takeoff', this._atDragon()));
+    on('dragon:takeoff', () => beast() && this.play('takeoff', this._atDragon()));
     on('dragon:land', (d) => this.play('land', d));
     on('dragon:breathStart', () => this.breath?.start());
     on('dragon:breathEnd', () => this.breath?.stop());
@@ -702,6 +716,7 @@ export class AudioEngine {
     on('dragon:explosion', (d) => this.play('explosion', d));
     on('dragon:bite', () => this.play('bite', this._atDragon()));
     on('dragon:hurt', (d) => {
+      if (!beast()) return;
       const now = this.ctx.currentTime;
       if (now - this._staggerAt < 1.5 || num(d.hp, 1) <= 0) return;
       const max = num(this.game.dragon?.maxHp, 0);
@@ -713,11 +728,11 @@ export class AudioEngine {
       this._staggerAt = this.ctx.currentTime;
       this._painPending = false;
       this.breath?.stop(0.2);
-      this._staggerPending = true; // played in update() unless a posture break claims it
+      this._staggerPending = beast(); // played in update() unless a posture break claims it
     });
     on('dragon:returned', (d) => this.play('returnHit', { x: d.x, z: d.z, kind: d.kind }));
     on('dragon:parried', (d) => {
-      if (d.bullet) return; // a deflected bullet: the clash rings (player:parry), the wyrm does not yelp
+      if (d.bullet || !beast()) return; // a deflected bullet (or a duelist's blade): the clash rings (player:parry), nothing yelps
       this._painPending = false;
       this.play('dragonRecoil', this._atDragon({ tell: d.tell }));
     });
@@ -731,7 +746,7 @@ export class AudioEngine {
       // like phase2: a 'dragon:roar' in the same frame already roared, so the break claims the slot
       const last = this._last.get('roar');
       const roared = last !== undefined && now >= last && now - last < 0.3;
-      this.play('postureBreak', this._atDragon({ roar: !roared }));
+      this.play('postureBreak', this._atDragon({ roar: !roared && beast() }));
       this._last.set('roar', now);
     });
     on('dragon:phase2', () => {
@@ -740,7 +755,7 @@ export class AudioEngine {
       const now = this.ctx.currentTime;
       const last = this._last.get('roar');
       const roared = last !== undefined && now >= last && now - last < 0.3;
-      this.play('phase2', this._atDragon({ roar: !roared }));
+      this.play('phase2', this._atDragon({ roar: !roared && beast() }));
       this._last.set('roar', now);
       if (this.musicMode === 'boss' || this.game.state === 'boss') this._autoMusic('boss2');
     });
@@ -757,12 +772,12 @@ export class AudioEngine {
     on('dragon:plunged', (d) => {
       // the blade in its skull: the body-slam thump and a pained roar (an execution: the break's)
       this._painPending = false;
-      this.play(d.execution ? 'postureBreak' : 'dragonPain', this._atDragon({ roar: true }));
+      this.play(d.execution ? 'postureBreak' : 'dragonPain', this._atDragon({ roar: beast() }));
     });
     on('dragon:death', () => {
       this._painPending = false;
       this.breath?.stop(0.3);
-      this.play('dragonDeath', this._atDragon());
+      if (beast()) this.play('dragonDeath', this._atDragon());
       this._autoMusic('none');
     });
     on('dragon:dead', () => this.play('emberHiss', this._atDragon()));
