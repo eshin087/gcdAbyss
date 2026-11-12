@@ -54,6 +54,10 @@ blade is pale steel; in phase 2 it smoulders ember orange. He is drawn the hero'
 (a 1.28 m tapered blade, disc guard and pommel, a banded grip), held in a high guard (the sword hand
 by the temple, the blade slanting down at the hero); the duel's moments (the full deflect, the blade
 lock, the mikiri, the cinematic) and a faster pace: docs/COMBAT.md → "The duel's moments".
+*Revised again 2026-11-12 (owner, ADR-063):* the classic jian guard instead (side-on, the blade
+pointing at the hero at chest height, the sword-finger raised over the head), the sword hand driven by
+the blade, PBZ-boss speed, pressure that always reaches (step-ins, sprints), and impact (hit stun both
+ways, the layered parry): docs/COMBAT.md → "Pressure" and "Impact".
 
 **His own animation.** The animator accepts an extra pose table per instance (`HeroAnimator(rig,
 pilot, poses)`); the hero's table and behaviour are unchanged. His stance is a jian guard: the

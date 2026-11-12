@@ -319,7 +319,7 @@ Render helpers for creature modules:
     `core/config.js`): with it off `batchRigid` returns an empty set and every mesh is drawn as
     before — an A/B switch for frame rate and image checks.
 - `gi(ch)`, `gis(str)` (`render/glyphs.js`).
-- `game.pipeline.finalMat.uniforms` — `uHurt` (red edge 0..1), `uFade` (black 0..1), `uDesat` (0..1), `uWarm` (boss grade 0..1), `uExposure`, `uBloom`. **Owned by the HUD/flow module.**
+- `game.pipeline.finalMat.uniforms` — `uHurt` (red edge 0..1), `uFade` (black 0..1), `uDesat` (0..1), `uWarm` (boss grade 0..1), `uExposure`, `uBloom`. **Owned by the HUD/flow module** (game/grade.js `ScreenGrade`: `hurtPulse`, `ghostPulse`, `dip`, `fadeTo`, `desatTo`, and `flashPulse(k)`: a white flash, `uExposure` × (1 + 0.9 k) over its base, gone in ~0.2 s; flow fires it on every `player:parry` of a blade).
 
 ## Module contracts
 
@@ -341,6 +341,10 @@ critTimer: number                      // > 0 while the crit window is open (aft
 lockOn: boolean                        // toggled by Tab / middle mouse; facing tracks dragon.lockPoint
 get alive(): boolean
 isInvulnerable(): boolean              // roll i-frames, the whole plunge, Ghostep / plunge-landing i-frames, get-up, the blade lock, dead
+// impact (ADR-063, TUNE.parryStop / perfectParry / hurtStop): a blade's parry freezes the frame (0.1 /
+// blue 0.12 / perfect 0.15 s), its FX sit in front of the guard (fx.parry + fx.shockwave: a ring in the
+// screen's plane, born open so the freeze holds a ring, not a blot), a camera kick; a perfect one calls
+// game.flow.cinematic({ kind: 'perfectParry' }). A blow that lands freezes it 0.085 s (big 0.13 s).
 startBladeLock(att, { start, push, decay, dur, hold }): boolean
                                        // a duelist's perfectly parried `lock` blow (ADR-062): state 'lock', every press
                                        // of attack / guard pushes the meter +push, it falls decay / s; 1 wins, 0 loses,
@@ -1324,12 +1328,24 @@ debug: the Dragon shape (abilities, trigger, setAI, wake, startFight, phase2, st
 Built by `buildHero(U, ASH_LOADOUT)` (gear.js: `ash.*` items registered into the hero's gear registry)
 and driven by `HeroAnimator(rig, pilot, DUEL_POSES)` (poses.js: `loco` = his guard on the hero's gait,
 `duel` = a keyframe clip). `pilot` is his view for the animator (`position, yaw, state 'duel', stateT,
-animT, atk.def = the clip, groundVel, kb, chargeK, releaseK, recoil, lockOn, guardHold`). Moves are
-data (moves.js `MOVES`; `realise(name, phase, rnd)` → beats with absolute times + the compiled clip);
-reactions are `CLIP` (clash, flinch, backstep, sidestep, stagger, recoil, reeling, trampled, lock,
-broken, executed, death, meditate, intro). Beat flags: `lock` (a perfect parry crosses the blades),
-`mikiri` (a perilous red thrust: its hitPlayer passes `mikiri: true`, its flash `perilous: true`). Hits are zones tested from his position and facing through each beat's active
-frames (`sector`, `line`, `ring`), one result per beat. Numbers: tuning.js.
+animT, atk.def = the clip, groundVel, kb, chargeK, releaseK, recoil, lockOn, guardHold`); `recoil` is
+his **hit jolt** (`jolt` 0..1, set when a blow lands, decaying over ~0.2 s: poses.js layers a snap of
+the chest and head on any pose, so a blow shows without cancelling the move). Clip keys may drive the
+sword arm from the blade (ADR-063): the non-pose channels `arm` (0..1 blend from the keyed hand),
+`ext` (0 folded … 1 full reach) and `lead` (rad the fist runs ahead of the blade): the hand rides a
+circle round the shoulder at the blade's azimuth, as the hero's swings do, and the chest and hips turn
+with it; a cut is authored as the blade's path (moves.js `slashKeys`). Moves are data (moves.js
+`MOVES`; `realise(name, phase, rnd)` → beats with absolute times, each beat's `close` budget, and the
+compiled clip); reactions are `CLIP` (clash, flinch, backstep, sidestep, stagger, recoil, reeling,
+trampled, lock, broken, executed, death, meditate, intro). Beat flags: `lock` (a perfect parry crosses
+the blades), `mikiri` (a perilous red thrust: its hitPlayer passes `mikiri: true`, its flash
+`perilous: true`), `close` (m he may step in through the windup; default TUNING.close). Hits are zones
+tested from his position and facing through each beat's active frames (`sector`, `line`, `ring`), one
+result per beat. The brain (brain.js) **leads** the hero: `_sense()` carries his velocity (`vel`,
+capped 9 m/s) and every step-in, windup track and dash aims at where he will be at the impact; a
+string whose next hit can't reach (`_reach`) ends there. Footwork circles only inside
+`TUNING.move.band`, runs beyond it, sprints past `sprintAt`; a hero in state 'heal' is punished (no
+breather, ground-covering moves × `TUNING.punish.weight`). Numbers: tuning.js.
 **HeroAnimator** (anim.js): `new HeroAnimator(rig, player, poses = null)` — `poses` merges extra clips
 over the hero's table for that instance (a key it shares replaces the hero's clip for that instance
 only). Exported for other pose tables: `P, v3, to3, dirLerp, kf, guard, loco, turnTwist`.
@@ -1392,7 +1408,8 @@ Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash 
 Flow → hud/audio:
 - `state {from, to}`, `bonfire:rest`, `game:retry`, `game:victory`, `area {name}`,
   `game:cinematic {kind}` (flow.cinematic: slow motion and a close camera on a duel's big moment; kind
-  fullDeflect / bladeLock / mikiri / execution, or lock = the blade lock's camera push-in: no slow motion,
+  fullDeflect / bladeLock / mikiri / execution / perfectParry (the hero's perfect parry of a blade: a short
+  slow motion, no gong), or lock = the blade lock's camera push-in: no slow motion,
   audio plays no gong)
 
 ## Ownership (parallel work)

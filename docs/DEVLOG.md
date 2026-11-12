@@ -5,6 +5,60 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 20: Shen Hui at PBZ speed — the blade-driven arm, pressure, impact
+
+**Owner:** "his animation, motions, and weapon stance and attacks look bad. speed up his attacks as it
+seems slow. the ai on the boss seems stupid. it shouldn't be attacking if its not near the player or
+able to hit them. the boss should be able to sprint and catch up to the player to add pressure instead
+of the player able to kite it out easily. i want this to be an epic fast paced game with epic sword
+clashes, parry/dodge moments. make the parry effect also epic and impactful. we need to make the hit
+from both player and enemy show more impactful hit stun to not feel weightless." Answers: PBZ-boss
+speed; hits jolt him without interrupting (footwork and recovery excepted); the parry "everything,
+layered"; sprint in and punish a flask. From three rendered stance sheets: **A, the classic jian
+guard**. Same branch / PR (#16).
+
+**Diagnosis (filmed side-on next to the hero's chain):** his hand and blade were keyed apart and
+interpolated in angle space, so mid-swing the blade pointed up or behind him while the arm did
+something else; the body barely moved; his trail was a grey wisp at the tip; the AI picked moves from
+bands wider than their reach and swung at air.
+
+**Done (ADR-063):**
+- poses.js: stance A; the blade-driven arm (`arm` / `ext` / `lead`), the chest and hips turning with
+  the blade; the hit jolt (pilot `recoil`) layered on every pose; walking keeps the side-on guard.
+- moves.js: every move rewritten at PBZ speed; cuts as blade paths (`slashKeys`: gather, cock, snap,
+  follow-through, a step in), spins and the low spin on the arm, thrusts with a follow-through.
+- brain.js: the step-in (`close`) through every windup, leading the hero's velocity (step, track,
+  dash); strings stop when the next hit can't reach; footwork: circle in range, run, sprint 8.6 m/s;
+  a flask punished; a blow in his recovery flinches / staggers him.
+- Impact: his hit stun (freeze, jolt, shove); the hero's (a freeze on every blow that lands); the
+  parry layered (freeze 0.1–0.15 s, sparks born mid-burst, a shockwave ring born open, a camera kick,
+  `grade.flashPulse`, a heavier clang; perfect: `game:cinematic` 'perfectParry' slow motion); heavier
+  guard clashes; his sweep trail (fx.js `sweep`).
+- Tests: PRESSURE (every non-red glint reaches a standing hero, a kiting hero is caught, strings stop,
+  a flask is punished) and IMPACT (no windup cancelled, recovery interrupts, the hero's freeze, the
+  parry's freeze / flash / perfect slow motion); DATA / TIMING at the new rules.
+
+**Found while filming:** the parry bloomed into white blots that hid both fighters for the whole
+freeze: every layer was born at the contact and held there by the hitstop. Elimination by single
+frames (particles, lights, the screen flash toggled one by one) led to: sparks now born mid-burst, the
+ring born open and cooler, the stacked cores trimmed.
+
+**Measured (seeds 4242 / 7 / 99):** god-mode bot ~45 s; 85 % bots win 3 / 3 in 48–52 s; 70 % die
+3 / 3 with him at 8–10 % (at his old × 1.35 damage the 85 % bot won 1 / 3: now × 1.15).
+
+**Not checked / open:**
+- No human has played it; nothing ran on a phone. PBZ speed is a big step: the owner should say if it
+  is too fast to read.
+- The kiting check lands 1–7 blows depending on the seed: a hero sprinting sideways beats a thrust's
+  narrow line now and then.
+- The hero's parry FX changed for the wyrm fight too (freeze, ring, flash, slow motion on a perfect
+  parry): looked at in the duel only.
+- Reaction clips (stagger, recoil, reeling, …) still use keyed hands.
+
+**Next:** the owner plays the preview; the reward (PR #18) merges this.
+
+---
+
 ## 2026-11-12 — Session 19: Shen Hui reworked — a long jian, a high guard, the duel's moments
 
 **Owner:** "make shen hui's hat a bit smaller, its way too big right now. it looks like hes holding
