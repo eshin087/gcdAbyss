@@ -2550,7 +2550,7 @@ async function scenarioHero() {
 // ================================================================== scenario: two hands, the guard, the cloak, idle life
 async function scenarioHeroLife() {
   out('\n== scenario HEROLIFE (two hands on every swing, the raised guard, the cloak vs the charged blade, idle actions) ==');
-  const { HERO_SCALE, DIM: HD } = await imp('src/entities/player/model.js');
+  const { DIM: HD } = await imp('src/entities/player/model.js');
   const { SHROUD_SHEETS } = await imp('src/entities/player/gear/shroud.js');
   const G = build();
   const { game, input } = G;
@@ -2564,7 +2564,7 @@ async function scenarioHeroLife() {
   const offGap = () => {
     v.set(0, -HD.foreArm, 0).applyMatrix4(r.arms.L.fore.matrixWorld);
     w.set(0, 0, -HD.offGrip).applyMatrix4(r.sword.matrixWorld);
-    return v.distanceTo(w) / HERO_SCALE;
+    return v.distanceTo(w) / p.drawScale; // the player is drawn at PLAYER_SCALE (ADR-064)
   };
   const go = (s, each) => { for (let i = 0, n = Math.round(s / DT); i < n; i++) { G.tick(DT); each?.(); } };
   go(0.5);

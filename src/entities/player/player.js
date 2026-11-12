@@ -4,7 +4,7 @@ import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../..
 import { markCaster } from '../../render/pipeline.js';
 import { batchRigid } from '../../render/rigidBatch.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
-import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE } from './model.js';
+import { buildHero, setHeroGlyphScale, installLean, LEAN, PLAYER_SCALE, BLADE_BASE } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
 import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
@@ -104,6 +104,9 @@ export class Player {
   constructor(game) {
     this.game = game;
     this.name = 'Wanderer';
+    /** His drawn size (model metres → world; model.js PLAYER_SCALE, ADR-064): the lean and the
+     *  animator's foot planner read it. */
+    this.drawScale = PLAYER_SCALE;
     this.rig = buildHero(game.U);
     this.object3d = this.rig.root;
     this.position = this.object3d.position;
@@ -198,7 +201,7 @@ export class Player {
     this.anim.onFootstep = (side, dust) => this._footstep(side, dust);
     this.fx = new PlayerFx(game, this.rig);
     // camera lean (model.js LEAN): visual only; hits and the dragon's aim use unleaned positions
-    this.lean = installLean(this.object3d);
+    this.lean = installLean(this.object3d, this.drawScale);
     this.sweep = new SwordSweep(this.rig.sword, (v) => this.unlean(v));
 
     markCaster(this.object3d);
@@ -399,7 +402,7 @@ export class Player {
     L.dz = fz / h;
   }
 
-  /** World point on the drawn body (leaned, HERO_SCALE) → the same point on the upright 1.85 m
+  /** World point on the drawn body (leaned, drawScale) → the same point on the upright 1.85 m
    *  gameplay body. */
   unlean(v) {
     const L = this.lean, p = this.position;
@@ -407,15 +410,17 @@ export class Player {
     let x = v.x - p.x, y = v.y - p.y, z = v.z - p.z;
     x -= k * L.dx * y;
     z -= k * L.dz * y;
-    v.set(p.x + x / HERO_SCALE, p.y + y / HERO_SCALE, p.z + z / HERO_SCALE);
+    const S = this.drawScale;
+    v.set(p.x + x / S, p.y + y / S, p.z + z / S);
     return v;
   }
 
-  /** Point on the upright gameplay body → where it is drawn (leaned, HERO_SCALE): the name tag. */
+  /** Point on the upright gameplay body → where it is drawn (leaned, drawScale): the name tag. */
   leanPoint(v) {
     const L = this.lean, p = this.position;
     const k = L?.k || 0;
-    const x = (v.x - p.x) * HERO_SCALE, y = (v.y - p.y) * HERO_SCALE, z = (v.z - p.z) * HERO_SCALE;
+    const S = this.drawScale;
+    const x = (v.x - p.x) * S, y = (v.y - p.y) * S, z = (v.z - p.z) * S;
     v.set(p.x + x + k * (L?.dx || 0) * y, p.y + y, p.z + z + k * (L?.dz || 0) * y);
     return v;
   }
@@ -576,7 +581,7 @@ export class Player {
     this.yaw = wrapAngle(fin(this.yaw, Math.PI));
     this.object3d.rotation.y = this.yaw;
     this._updateLean();
-    // the animator poses the plain upright body; the drawn one (lean, HERO_SCALE) is applied after
+    // the animator poses the plain upright body; the drawn one (lean, drawScale) is applied after
     this.lean.on = false;
     this.anim.update(dt);
     this.lean.on = true;

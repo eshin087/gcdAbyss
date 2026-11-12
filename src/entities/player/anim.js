@@ -2197,6 +2197,13 @@ export class HeroAnimator {
     this.reset();
   }
 
+  /** The figure's drawn size (model metres → world): its owner's `drawScale` (the player's
+   *  PLAYER_SCALE), else HERO_SCALE (the Ash Disciple). */
+  get drawScale() {
+    const s = this.player?.drawScale;
+    return s > 0 ? s : HERO_SCALE;
+  }
+
   /** Start a clip, cross-fading from the current pose over `blend` seconds. */
   play(key, blend = 0.12, easeOut = false) {
     if (!this.poses[key]) key = 'loco';
@@ -2416,7 +2423,7 @@ export class HeroAnimator {
     if (Math.abs(wrapAngle(fin(pl.yaw) - this.visYaw)) > TURN_LAG_MAX) this.visYaw = wrapAngle(fin(pl.yaw) - Math.sign(dy) * TURN_LAG_MAX);
     this.turnLag = clamp(wrapAngle(this.visYaw - fin(pl.yaw)), -TURN_LAG_MAX, TURN_LAG_MAX);
     // the gait cycle: its length is matched to the speed, so a stance foot moves back at exactly the
-    // drawn ground speed (the drawn hero is HERO_SCALE tall)
+    // drawn ground speed (the drawn figure is drawScale tall: the player's PLAYER_SCALE)
     gaitParams(this.gait, sp, this.sprintW);
     if (this.cycOn ? sp < 0.22 : sp > 0.4) {
       this.cycOn = !this.cycOn;
@@ -2427,11 +2434,12 @@ export class HeroAnimator {
         this.phase = aL < aR ? this.gait.beta : this.gait.beta + 0.5;
       }
     }
-    this.phase += (sp / HERO_SCALE) * dt / this.gait.len;
+    const HS = this.drawScale;
+    this.phase += (sp / HS) * dt / this.gait.len;
     if (this.phase > 1e4) this.phase -= 1e4;
 
     {
-      const tx = (fin(pl.position?.x) - this.clipX) / HERO_SCALE, tz = (fin(pl.position?.z) - this.clipZ) / HERO_SCALE;
+      const tx = (fin(pl.position?.x) - this.clipX) / HS, tz = (fin(pl.position?.z) - this.clipZ) / HS;
       this.trav.x = tx * c - tz * s;
       this.trav.z = tx * s + tz * c;
     }
@@ -2546,7 +2554,7 @@ export class HeroAnimator {
 
   /**
    * Foot planner (walking clips: loco, block, charge, heal). A planted foot stays put in the WORLD
-   * (drawn position, HERO_SCALE) while the root moves and turns under it, so nothing skates on run
+   * (drawn position, drawScale) while the root moves and turns under it, so nothing skates on run
    * starts and stops, speed changes, curves or turns in place. The gait cycle lifts a foot off at
    * the end of its stance (its swing then blends from where it really was onto the cycle's path)
    * and plants it at touchdown. Standing, a foot whose spot has drifted from the stance pose (a turn
@@ -2563,7 +2571,7 @@ export class HeroAnimator {
     }
     this.wantOK = true;
     const yaw = fin(pl.yaw), px = fin(pl.position.x), pz = fin(pl.position.z);
-    const c = Math.cos(yaw), s = Math.sin(yaw), HS = HERO_SCALE;
+    const c = Math.cos(yaw), s = Math.sin(yaw), HS = this.drawScale;
     const G = this.gait, cyc = this.cycOn;
     if (this.stepCool > 0) this.stepCool -= dt;
     // knocked back (a blocked blow, a shove): the feet skid with the body instead of stepping
@@ -2671,8 +2679,9 @@ export class HeroAnimator {
   /** Plant foot F at model-space (x, z) with model yaw `fy`: store its drawn world spot. */
   _plant(F, x, z, fy, px, pz, c, s, yaw) {
     F.lock = true;
-    F.wx = px + HERO_SCALE * (x * c + z * s);
-    F.wz = pz + HERO_SCALE * (-x * s + z * c);
+    const HS = this.drawScale;
+    F.wx = px + HS * (x * c + z * s);
+    F.wz = pz + HS * (-x * s + z * c);
     F.wyaw = yaw + fin(fy);
     F.s = 1;
   }
