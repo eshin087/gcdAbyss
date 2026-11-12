@@ -139,6 +139,7 @@ export class DragonFx {
     this._c1 = [0, 0, 0];
     this.skyLights = [];
     this.skyAcc = 0;
+    this.bolts = Array.from({ length: 20 }, () => ({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, age: 0, hold: 0, acc: 0 }));
     this._novaAcc = 0;
     this._novaRing = 0;
     this._gatherAcc = 0;
@@ -202,6 +203,7 @@ export class DragonFx {
     this._zoneHeat.hold = this._zoneHeat.acc4 = this._zoneHeat.heatT = 0;
     this._zoneHeat.lastT = -9;
     this.skyLights.length = 0;
+    for (const b of this.bolts) b.alive = false;
     this.skyAcc = this._novaAcc = this._novaRing = this._gatherAcc = 0;
     this.d.hazards?.clear(); // (their lights were just killed with the rest)
     this.d.bullets?.clear();
@@ -354,13 +356,13 @@ export class DragonFx {
   }
 
   /** Embers leaking from the mouth / nostrils while the throat charges. */
-  mouthEmbers(dt, mouth, rate, fwd) {
+  mouthEmbers(dt, mouth, rate, fwd, up = 0) {
     this.emberAcc += dt * rate;
     while (this.emberAcc >= 1) {
       this.emberAcc -= 1;
       this._spawn(this.add, {
         x: mouth.x + rand(-0.15, 0.15) * S, y: mouth.y + rand(-0.1, 0.1) * S, z: mouth.z + rand(-0.15, 0.15) * S,
-        vx: (fwd?.x ?? 0) * 1.5 * S + rand(-0.6, 0.6), vy: rand(0.4, 1.6), vz: (fwd?.z ?? 0) * 1.5 * S + rand(-0.6, 0.6),
+        vx: (fwd?.x ?? 0) * 1.5 * S + rand(-0.6, 0.6), vy: rand(0.4, 1.6) + up * rand(0.6, 1.2), vz: (fwd?.z ?? 0) * 1.5 * S + rand(-0.6, 0.6),
         life: rand(0.4, 0.8), size: rand(0.18, 0.3) * S, sizeEnd: 0.06 * S, glyph: EMBER,
         color: [3.2, 1.2, 0.2], colorEnd: [0.6, 0.06, 0.01], alpha: 1, alphaEnd: 0, drag: 1.2, gravity: 1.2, flicker: 0.5,
       });
@@ -1195,12 +1197,13 @@ export class DragonFx {
 
   /**
    * A falling meteor at (x, y, z) moving along (vx, vy, vz): a white-hot core in an orange halo, a
-   * streak of '|' strokes laid along its screen-space motion, a fire trail, smoke, its own light.
+   * streak of '|' strokes laid along its screen-space motion, a fire trail, smoke, its own light
+   * (none when h.dark). `big`: true (a meteor), false (a barrage shell, 0.7) or a drawn scale.
    */
   meteor(life, h, dt, x, y, z, vx, vy, vz, big = true) {
     if (!Number.isFinite(x + y + z + vx + vy + vz)) return;
     const add = this.add;
-    const s = big ? 1 : 0.7;
+    const s = typeof big === 'number' ? big : big ? 1 : 0.7;
     const vl = Math.hypot(vx, vy, vz) || 1;
     if (life && add) {
       const o = this._rec(x, y, z, life, 1.5 * s, 1.5 * s, METEOR_CORE);
@@ -1226,7 +1229,7 @@ export class DragonFx {
         add.spawn(o);
       }
     }
-    h.acc += dt * 110 * s;
+    h.acc += dt * 110 * Math.min(1.5, s);
     let m = Math.min(10, Math.floor(h.acc));
     h.acc -= m;
     while (m-- > 0) {
@@ -1254,20 +1257,41 @@ export class DragonFx {
       this._col(SMOKE, 1, SMOKE, 1);
       this._spawn(this.alpha, o);
     }
-    if (!h.l0) h.l0 = this._light({ x, y, z, color: [1, 0.6, 0.25], intensity: 4.5, radius: 11, fade: 0.15, flicker: 0.3 });
+    if (!h.l0 && !h.dark) h.l0 = this._light({ x, y, z, color: [1, 0.6, 0.25], intensity: 4.5 * Math.min(1.6, s), radius: 11 * Math.min(1.6, s), fade: 0.15, flicker: 0.3 });
     h.l0?.set(x, Math.max(1, y), z);
   }
 
-  /** A meteor strikes: a white flash, a fire burst, flung rocks, a shock of ')' strokes, dust, scorch, a crater glow. */
+  /**
+   * A meteor strikes: a white flash, a fire burst, flung rocks, a shock of ')' strokes, dust, scorch,
+   * a crater glow. h.great (Armageddon's last one): the biggest impact in the fight.
+   */
   meteorImpact(h, x, z, r) {
     if (!Number.isFinite(x + z + r)) return;
     const add = this.add, g = this.game;
+    const gr = !!h.great;
     h.l0?.kill();
     h.l0 = null;
-    let o = this._rec(x, 0.8, z, 0.2, 3.4, 1.2, METEOR_CORE);
-    this._col(WHITE_HOT, 1.2, HOT, 0.6);
+    let o = this._rec(x, 0.8, z, gr ? 0.35 : 0.2, gr ? 7.5 : 3.4, 1.2, METEOR_CORE);
+    this._col(WHITE_HOT, gr ? 1.5 : 1.2, HOT, 0.6);
     this._spawn(add, o);
-    for (let i = 0; i < 44; i++) {
+    if (gr) {
+      // a second, slower shock and a column of fire thrown up out of the crater
+      this._shock(x, z, r * 0.5, r * 2.2, 0.6, 40, 0.8, FLAME, 1);
+      for (let i = 0; i < 40; i++) {
+        const a = Math.random() * Math.PI * 2, rr = r * 0.4 * Math.sqrt(Math.random());
+        o = this._rec(x + Math.cos(a) * rr, rand(0.3, 1.5), z + Math.sin(a) * rr, rand(0.6, 1.1), rand(1.2, 1.9), 0.3, FIRE_TALL);
+        o.vy = rand(10, 24);
+        o.vx = Math.cos(a) * rand(0.5, 3);
+        o.vz = Math.sin(a) * rand(0.5, 3);
+        o.gravity = -9;
+        o.drag = 0.8;
+        o.flicker = 0.3;
+        this._col(Math.random() < 0.4 ? HOT : FLAME, 1, DARK, 1);
+        this._spawn(add, o);
+      }
+      this._light({ x, y: 3, z, color: [1, 0.75, 0.45], intensity: 14, radius: 26, life: 0.7, fade: 0.6, flicker: 0.2 });
+    }
+    for (let i = 0; i < (gr ? 80 : 44); i++) {
       const a = Math.random() * Math.PI * 2, sp = rand(3, 12);
       o = this._rec(x, rand(0.2, 0.8), z, rand(0.35, 0.8), rand(0.5, 1.0), 0.12, FIRE);
       o.vx = Math.cos(a) * sp;
@@ -1302,7 +1326,7 @@ export class DragonFx {
     h.l1 = this._light({ x, y: 0.8, z, color: [1, 0.38, 0.08], intensity: 2.2, radius: 6, life: 1.3, fade: 1.0, flicker: 0.5 });
     const p = g.player?.position;
     const dist = p ? Math.hypot(p.x - x, p.z - z) : 99;
-    g.shake?.(dist < 8 ? 0.32 : dist < 16 ? 0.16 : 0.07);
+    g.shake?.(gr ? (dist < 16 ? 0.9 : 0.6) : dist < 8 ? 0.32 : dist < 16 ? 0.16 : 0.07);
   }
 
   /** A ring of ')' strokes racing out from r0 to r1 in T s (each stroke bulging outward on screen). */
@@ -1318,15 +1342,15 @@ export class DragonFx {
     }
   }
 
-  /** The meteor's crater smoulders: embers and small flames rising (k 1 -> 0). */
-  crater(h, dt, x, z, r, k) {
+  /** The meteor's crater smoulders: embers and small flames rising (k 1 -> 0); `burning`: it is on fire (contact ticks). */
+  crater(h, dt, x, z, r, k, burning = false) {
     if (k <= 0) return;
-    h.acc3 += dt * 45 * k;
-    let m = Math.min(5, Math.floor(h.acc3));
+    h.acc3 += dt * (burning ? 120 : 45) * k;
+    let m = Math.min(burning ? 8 : 5, Math.floor(h.acc3));
     h.acc3 -= m;
     while (m-- > 0) {
-      const a = Math.random() * Math.PI * 2, rr = r * 0.6 * Math.sqrt(Math.random());
-      const flame = Math.random() < 0.35;
+      const a = Math.random() * Math.PI * 2, rr = r * (burning ? 0.8 : 0.6) * Math.sqrt(Math.random());
+      const flame = Math.random() < (burning ? 0.65 : 0.35);
       const o = this._rec(x + Math.cos(a) * rr, 0.2, z + Math.sin(a) * rr, rand(0.4, 0.9), flame ? rand(0.4, 0.7) : rand(0.18, 0.3), 0.06, flame ? FIRE_LOW : EMBER);
       o.vx = rand(-0.4, 0.4);
       o.vy = flame ? rand(1, 2.4) : rand(1, 3.2);
@@ -1849,8 +1873,83 @@ export class DragonFx {
     this._light({ x, y: 2, z, color: [1, 0.6, 0.25], intensity: 9, radius: 16, life: 0.6, fade: 0.45 });
   }
 
+  /**
+   * One of Armageddon's salvo (visual only, ADR-049): a white-hot '@' bolt with a long orange trail
+   * shot up out of the jaws; it flies on until it leaves the top of the view.
+   */
+  launchBolt(x, y, z, vx, vy, vz) {
+    if (!Number.isFinite(x + y + z + vx + vy + vz)) return;
+    let b = null;
+    for (const c of this.bolts) if (!c.alive) {
+      b = c;
+      break;
+    }
+    if (!b) return;
+    b.alive = true;
+    b.x = x;
+    b.y = y;
+    b.z = z;
+    b.vx = vx;
+    b.vy = vy;
+    b.vz = vz;
+    b.age = 0;
+    b.hold = 0;
+    b.acc = 0;
+    const o = this._rec(x, y, z, 0.25, 2.2, 0.5, METEOR_HALO);
+    this._col(WHITE_HOT, 1, FLAME, 0.6);
+    this._spawn(this.add, o);
+  }
+
+  _updateBolts(dt) {
+    const add = this.add;
+    for (const b of this.bolts) {
+      if (!b.alive) continue;
+      b.age += dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.z += b.vz * dt;
+      if (b.age > 1.6 || b.y > 80 || !Number.isFinite(b.x + b.y + b.z)) {
+        b.alive = false;
+        continue;
+      }
+      const life = this._hold(b, 'hold', dt);
+      if (life && add) {
+        const o = this._rec(b.x, b.y, b.z, life, 1.3, 1.3, METEOR_CORE);
+        o.alphaEnd = 1;
+        this._col(WHITE_HOT, 1.2, WHITE_HOT, 1.2);
+        add.spawn(o);
+        o.glyph = STREAK;
+        o.rot = this._screenRot(b.vx, b.vy, b.vz, true);
+        o.stretch = 2.6;
+        const vl = Math.hypot(b.vx, b.vy, b.vz) || 1;
+        for (let i = 1; i <= 4; i++) {
+          const back = i * 1.5;
+          o.x = b.x - (b.vx / vl) * back;
+          o.y = b.y - (b.vy / vl) * back;
+          o.z = b.z - (b.vz / vl) * back;
+          o.size = o.sizeEnd = 1.2 - i * 0.18;
+          this._col(i === 1 ? HOT : FLAME, 1.25 - i * 0.2, FLAME, 1);
+          add.spawn(o);
+        }
+      }
+      b.acc += dt * 50;
+      while (b.acc >= 1) {
+        b.acc -= 1;
+        const o = this._rec(b.x + rand(-0.2, 0.2), b.y - rand(0, 1.5), b.z + rand(-0.2, 0.2), rand(0.35, 0.6), rand(0.7, 1.1), 0.15, FIRE);
+        o.vx = rand(-0.8, 0.8);
+        o.vy = rand(-2, 1);
+        o.vz = rand(-0.8, 0.8);
+        o.drag = 2;
+        o.flicker = 0.3;
+        this._col(Math.random() < 0.4 ? HOT : FLAME, 1, DARK, 1);
+        this._spawn(add, o);
+      }
+    }
+  }
+
   update(dt) {
     this._updateProjectiles(dt);
+    this._updateBolts(dt);
     this._pruneLights();
   }
 }

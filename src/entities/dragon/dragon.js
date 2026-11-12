@@ -99,6 +99,7 @@ export class Dragon {
     this._postureSent = -1;
     this.postureTimer = 0;
     this.warn = 0; // current red tell glow strength (uWarn.a)
+    this.bodyWarn = 0; // an action's red glow without a blow (0..1, set every frame: _updateWarn)
     this._warnAt = -1; // this.time of the last red timing flash (-1 = no spike)
     this._warnAction = null; // the action that flashed it (a replaced action drops the spike)
     // a deflected string hit's knock-back (visual only): t = seconds since the parry (-1 = none)
@@ -920,6 +921,10 @@ export class Dragon {
   _updateWarn() {
     const a = this.brain.action;
     let w = 0;
+    // an action's own red glow without a blow of its own (Armageddon's rear-up): bodyWarn 0..1
+    // ramps the same WARN.from -> WARN.to; set every frame by the action, read once here
+    if (this.bodyWarn > 0 && a && this.state !== 'dying' && this.state !== 'dead') w = WARN.from + (WARN.to - WARN.from) * Math.min(1, this.bodyWarn);
+    this.bodyWarn = 0;
     if (a && this.state !== 'dying' && this.state !== 'dead') {
       const B = a.beats, lead = TUNING.flashLead;
       for (let i = 0; i < B.length; i++) {

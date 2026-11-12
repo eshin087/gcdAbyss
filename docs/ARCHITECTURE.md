@@ -68,7 +68,7 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `viewOverride` | `null` or `{ pos, target, focus? }` — camera override applied by main.js after the rig (see Frame order). Only the Lab model viewer writes it. |
 | `lights` | `add({x,y,z,color:[r,g,b],intensity,radius,life,fade,fadeIn,flicker})` → light (mutable `x,y,z`, `.set()`, `.kill()`) |
 | `fx.add` / `fx.alpha` | glyph particles, additive-HDR / alpha-blended. `spawn({x,y,z,vx,vy,vz,life,size,sizeEnd,glyph,color,colorEnd,alpha,alphaEnd,gravity,drag,spin,rot,flicker,stretch})`. `glyph`: char, string of chars (random pick) or atlas index. |
-| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
+| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; `atmosphere.skyGlow(k 0..1)` (the sky over the clearing glows orange: warms the shared ambient and fog colours; call every frame while it should show, it eases in and out and lets go 0.2 s after the last call; Armageddon, ADR-049); Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
@@ -899,7 +899,9 @@ Damages the player only via `game.player.takeHit(...)` with tell data; announces
   (stagger, posture break, parry recoil, plunge reaction, death, Lab interrupt) drops it at once;
   `reset()` and death zero it. Plus a red glyph burst + red light at the striking part on the flash
   (`fx.tellFlash`). Each hit of a string is its own beat, so a red hit inside a string glows on its
-  own windup only.
+  own windup only. An action with a red glow but no blow of its own (Armageddon's rear-up and
+  salvo) sets `dragon.bodyWarn` 0..1 every frame: the same 0.1 → 0.38 ramp, read and zeroed by
+  `_updateWarn`.
 - parryable (normal / blue) hits: nothing during the windup; on the flash a white glint (star core,
   four-point sparkle, short rays, small white light) at the striking part, ×1.5 for blue.
 - parries throw white/gold sparks (bigger for blue).
@@ -925,12 +927,26 @@ event scratch).
   (ignites at r0, expands to r1); `wall({ x, z, dx, dz, len, w, speed, dist })` (sweeps along its
   normal); `line({ ax, az, dx, dz, n, step, r, stagger, active })` (lava pillars erupting one after
   another); emitters `rain({ count, first, span, warn, warnLed, ledEvery, lo, hi, r, fall })`
-  (meteors round the hero, every `ledEvery`-th on his led position) and `chase({ every, until, warn,
-  lead, r, active, linkFirst })` (pillars under the led hero).
+  (meteors round the hero, every `ledEvery`-th on his led position), `chase({ every, until, warn,
+  lead, r, active, linkFirst })` (pillars under the led hero) and `barrage({ waves, perWave,
+  waveGap, stagger, first, glowAt, warn, warnLed, ledEvery, ledGap, lead, r, fall, fallY, size,
+  damage, burn, knockback, group, crater, tickDamage, tickBurn, safeR, cover, finale })`
+  (Armageddon, ADR-049: waves of meteors over the whole clearing falling from the sky above the
+  wyrm, then `finale` { delay, radius, warn, damage, burn, knockback, fall, size }: one great
+  meteor on the hero, outside the hit cap; from `glowAt` it drives `world.atmosphere.skyGlow`).
+  The wave placement is pure and exported for the tests: `placeWave(n, r, rng, hx, hz, pts, safeR,
+  cover)` (jittered-stratified over `ARENA_R`, no two footprints overlapping by more than `OVERLAP`
+  = 1/3 of one, at most `cover` of the hero's `safeR` disc covered), `leadInto(pts, k, n, r, cx,
+  cz, hx, hz, safeR, cover)` (a led meteor takes the hero's led position only if both rules
+  still hold), `coverage()`, `overlapShare()`, `ARENA_R`.
+- `circle()` also takes `size` (drawn scale), `great` (the biggest impact), `dark` (no light of
+  its own) and, for meteors, `craterBurn` s + `tickDamage` / `tickBurn`: the crater burns on with
+  contact ticks like a burning strip (blockable, never while rolling). The pool holds 64 hazards.
 - Also: `cutStrip(ref)` (a knocked-out pass stops its front; the burnt part lingers), `timeTo(ref,
   px, pz, vx, vz, pr)` (s until the hazard reaches a moving point: the spawning attack re-times its
   own flash with it), `count(kind?)`, `clear()`.
-- Every hazard draws a red ground warning until it goes off, then deals its one blow through
+- Every hazard heats the ground under it until it goes off (ADR-048: `fx.heatDisc` / `heatBand`,
+  no red rings; the edge shows in the last `flashLead` s), then deals its one blow through
   `dragon.hitPlayer({ ..., tell: 'red', parryable: false, blockable: false, plunge })`: i-frames or
   leaving the area avoid it. `plunge` is the spawn option `plunge` (default false: a perfect dodge
   gives the slow-mo in place). Fire the wyrm breathes or spits from the air spawns with `plunge: true`
@@ -944,7 +960,8 @@ event scratch).
   hazards (`announce: false`) are covered by the spawning attack's own beat, re-timed with `timeTo`.
 - Events: `dragon:hazard {kind, stage, x, z, radius}` (stage 'fall' when a meteor starts its visible
   fall; 'hit' when a meteor or pillar goes off; the dive's crash and the nova emit it too from
-  fireAttacks.js).
+  fireAttacks.js; Armageddon: 'launch' for each bolt of the salvo, from fireAttacks.js, radius 0,
+  and 'sky' once when the sky answers, from the barrage, radius = ARENA_R).
 `dragon.hitPlayer(o, action)` forwards `plunge` (`o.plunge ?? the current beat's plunge`) to
 `player.takeHit`; without it `plunge: false` never reaches the hero.
 
@@ -1258,7 +1275,8 @@ Dragon (any attacker) → hud/audio/flow:
   `dragon:death`, `dragon:dead`,
   `dragon:spell {name, x, z}` (a fire attack's signature moment: the strafe's pass, the dive, the barrage's
   rise, a spell's cast / the nova's charge start), `dragon:hazard {kind, stage, x, z, radius}` (a fire hazard:
-  stage 'fall' = a meteor starts its visible fall, 'hit' = a meteor / pillar / the dive's crash / the nova goes off)
+  stage 'fall' = a meteor starts its visible fall, 'hit' = a meteor / pillar / the dive's crash / the nova goes off,
+  'launch' = a bolt of Armageddon's salvo leaves the jaws, 'sky' = the sky answers it: the barrage begins)
 - Hazard tells: a self-announcing hazard (meteors, chase pillars) emits combat:tell / combat:flash with
   source 'dragon', its spell as the attack, tell 'red' and hazard: true (audio plays a lighter cue)
 - Bullet tells: a bullet about to hit, or an approaching spoke of the fire wheel, emits combat:tell /

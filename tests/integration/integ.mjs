@@ -219,7 +219,7 @@ function build(opts = {}) {
   game.player.takeHit = (h) => {
     const hp0 = game.player.hp;
     const r = takeHit(h);
-    G.hits.push({ t: game.time, r, attack: h?.attack, tell: h?.tell, damage: h?.damage, kind: h?.kind, hp0, hp1: game.player.hp });
+    G.hits.push({ t: game.time, r, attack: h?.attack, tell: h?.tell, damage: h?.damage, kind: h?.kind, hp0, hp1: game.player.hp, fx: h?.from?.x, fz: h?.from?.z });
     return r;
   };
   game.cameraRig.snap(game.player.position);
@@ -1850,8 +1850,11 @@ async function scenarioLab() {
     settle(G);
     place(G, a.name === 'breath' || a.name === 'fireball' || a.name === 'charge' ? 11 : 6);
     const e0 = errors.length;
-    const r = forceAttack(G, a.name, { max: 9, settle: 600 });
+    // (Armageddon's meteors fall for ~12 s after the trigger: its window is longer; a background
+    // hazard never spills into the next ability's count)
+    const r = forceAttack(G, a.name, { max: a.name === 'meteorRain' ? 17 : 9, settle: 600 });
     run(G, 10, { passive: true, god: true }, () => !d.brain.action && d.state === 'combat');
+    d.hazards.clear();
     const ok = r.trigger === true && evn(r, 'dragon:windup') >= 1 && r.tellT !== null && r.tells.includes(a.tell) && errors.length === e0; // multi-hit: abilities() lists the headline tell
     assert(ok, `ability ${a.name.padEnd(9)} [${a.tell}] tells [${r.tells.join(' ')}] trigger ${r.trigger} windup ${evn(r, 'dragon:windup')} tells ${evn(r, 'combat:tell')} flashes ${evn(r, 'combat:flash')} result ${r.res}${errors.length > e0 ? ' ERRORS' : ''}`);
     assert(evn(r, 'combat:flash') >= 1 && evn(r, 'combat:flash') === evn(r, 'combat:tell'), `   ${a.name}: one combat:flash per combat:tell`);
@@ -2005,10 +2008,12 @@ async function scenarioFire() {
       if (dd?.attack !== name) return;
       if (n === 'combat:tell') tells.push(game.time);
       if (n === 'combat:flash') flashes.push(game.time);
+      if (n === 'combat:flash') flashAt.push({ t: game.time, x: dd.x, z: dd.z });
     };
+    const flashAt = [];
     const trig = game.lab.trigger(name);
     let done = false;
-    for (let i = 0; i < Math.round(14 / DT) && !done; i++) {
+    for (let i = 0; i < Math.round(20 / DT) && !done; i++) {
       input.axis = { x: 0, y: 0 };
       G.tick(DT);
       const pt = d.rig.pt, s = d.rig.s;
@@ -2028,7 +2033,10 @@ async function scenarioFire() {
     // each red blow lands flashLead after its timing flash (within ~2 frames)
     let worst = 0;
     for (const h of hits) {
-      const f = flashes.filter((t) => t <= h.t + 1e-6).pop();
+      // its own flash: a hazard flashes at its own centre (Armageddon's impacts are 0.12 s apart, so
+      // the latest flash is often a neighbour's); other blows: the latest flash
+      const own = flashAt.filter((e) => e.t <= h.t + 1e-6 && Number.isFinite(h.fx) && Math.hypot(e.x - h.fx, e.z - h.fz) < 0.6).pop();
+      const f = own ? own.t : flashes.filter((t) => t <= h.t + 1e-6).pop();
       const err = f === undefined ? Infinity : h.t - (f + lead);
       if (Math.abs(err) > Math.abs(worst)) worst = err;
     }
@@ -2048,6 +2056,123 @@ async function scenarioFire() {
   }
   out('   flash timing: ' + timing.join(' · '));
   assert(!badPay.length, `dragon:spell / dragon:hazard payloads ${JSON.stringify(badPay.slice(0, 4))}`);
+
+  // ---- ARMAGEDDON (meteorRain, ADR-049): the wave placement's guarantees (pure, 200 seeded runs),
+  // then the whole move per phase: counts, cues, the cap + finale, a rolling hero, the clear
+  {
+    const HZ = await imp('src/entities/dragon/hazards.js');
+    const MR = TUNING.attacks.meteorRain;
+    const rngOf = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    let worstCover = 0, worstOverlap = 0, outside = 0;
+    for (let sd = 0; sd < 200; sd++) {
+      const rng = rngOf(sd * 7919 + 13);
+      const n = sd & 1 ? 10 : 8, pts = new Float64Array(n * 2);
+      const a = rng() * Math.PI * 2, rr = 28 * Math.sqrt(rng());
+      let hx = Math.sin(a) * rr, hz = Math.cos(a) * rr;
+      HZ.placeWave(n, MR.radius, rng, hx, hz, pts, MR.safeR, MR.safeCover - 0.08);
+      // the led ones come in at spawn time on a hero who has moved a little since
+      for (let k = 0; k < n; k += MR.ledEvery) {
+        hx += (rng() - 0.5) * 4;
+        hz += (rng() - 0.5) * 4;
+        HZ.leadInto(pts, k, n, MR.radius, hx + (rng() - 0.5) * 2, hz + (rng() - 0.5) * 2, hx, hz, MR.safeR, MR.safeCover);
+      }
+      worstCover = Math.max(worstCover, HZ.coverage(pts, n, MR.radius, hx, hz, MR.safeR));
+      for (let i = 0; i < n; i++) {
+        if (Math.hypot(pts[2 * i], pts[2 * i + 1]) > HZ.ARENA_R + 1e-6) outside++;
+        for (let j = 0; j < i; j++) worstOverlap = Math.max(worstOverlap, HZ.overlapShare(Math.hypot(pts[2 * i] - pts[2 * j], pts[2 * i + 1] - pts[2 * j + 1]), MR.radius));
+      }
+    }
+    out(`   Armageddon waves, 200 seeded runs: within ${MR.safeR} m of the hero at most ${(worstCover * 100).toFixed(1)} % covered · worst overlap ${(worstOverlap * 100).toFixed(1)} % of a footprint · ${outside} spots outside ${HZ.ARENA_R} m`);
+    assert(worstCover <= MR.safeCover + 1e-9, `safe ground: a wave covers at most ${MR.safeCover * 100} % within ${MR.safeR} m of the hero (worst ${(worstCover * 100).toFixed(1)} %)`);
+    assert(worstOverlap <= HZ.OVERLAP + 1e-9 && outside === 0, `no two footprints of a wave overlap by more than a third (worst ${(worstOverlap * 100).toFixed(1)} %), none outside the clearing`);
+
+    /** The whole move in `phase` against a hero 12 m out: standing (god) or answering the cues (makeDefender). */
+    const armageddon = (phase, answer, cutAt = -1) => {
+      settle(G, 12);
+      H.clear();
+      if (d.phase !== phase) { d.enterPhase(phase); run(G, 0.2, { passive: true }); settle(G, 12); }
+      H.clear();
+      d.position.set(0, 0, -8);
+      d.yaw = 0;
+      d.rig.snap();
+      run(G, 0.3, { passive: true });
+      front(12);
+      p.debug.god = !answer;
+      p.debug.heal();
+      p.burnT = 0;
+      const def = answer ? makeDefender(G) : null;
+      const rec = { launches: 0, sky: 0, impacts: [], flashes: [], tells: 0, glow: 0 };
+      const h0 = G.hits.length;
+      G.watch = (n, dd) => {
+        def?.onEvent(n, dd);
+        if (n === 'dragon:hazard' && dd?.kind === 'meteor') {
+          if (dd.stage === 'launch') rec.launches++;
+          if (dd.stage === 'sky') rec.sky++;
+          if (dd.stage === 'hit') rec.impacts.push({ t: game.time, x: dd.x, z: dd.z, r: dd.radius });
+        }
+        if (dd?.attack !== 'meteorRain') return;
+        if (n === 'combat:tell') rec.tells++;
+        if (n === 'combat:flash') rec.flashes.push({ t: game.time, x: dd.x, z: dd.z });
+      };
+      const trig = game.lab.trigger('meteorRain');
+      let cut = false;
+      for (let i = 0; i < Math.round(24 / DT); i++) {
+        input.axis = { x: 0, y: 0 };
+        def?.act();
+        G.tick(DT);
+        for (const h of H.list) if (h.alive && h.shape === HZ.SHAPE.BARRAGE && h.t >= h.glowAt) rec.glow = 1;
+        if (cutAt >= 0 && !cut && rec.impacts.length >= cutAt) {
+          cut = true;
+          rec.beforeCut = rec.impacts.length;
+          d.enterPhase(Math.min(3, d.phase + 1));
+          run(G, 2 * DT, { passive: true });
+          rec.afterCut = { meteors: H.count('meteor'), barrage: H.count('barrage') };
+          run(G, 4, { passive: true });
+          break;
+        }
+        if (!d.brain.action && !H.count(null)) break;
+      }
+      G.watch = null;
+      input.up(2);
+      p.debug.god = true;
+      const hits = G.hits.slice(h0).filter((h) => h.attack === 'meteorRain');
+      rec.trig = trig;
+      rec.red = hits.filter((h) => h.tell === TELL.RED);
+      rec.redHits = rec.red.filter((h) => h.r === RESULT.HIT);
+      rec.ticks = hits.filter((h) => h.tell !== TELL.RED && h.r === RESULT.HIT).length;
+      // each red blow against its own flash (the flash at its own centre)
+      rec.worst = 0;
+      for (const h of rec.red) {
+        const f = rec.flashes.filter((e) => e.t <= h.t + 1e-6 && Math.hypot(e.x - h.fx, e.z - h.fz) < 0.6).pop();
+        const err = f ? h.t - (f.t + lead) : Infinity;
+        if (Math.abs(err) > Math.abs(rec.worst)) rec.worst = err;
+      }
+      rec.out = rec.impacts.filter((e) => Math.hypot(e.x, e.z) > HZ.ARENA_R + 1e-6).length;
+      rec.great = rec.impacts.filter((e) => e.r > MR.radius + 0.5).length;
+      return rec;
+    };
+    for (const phase of [2, 3]) {
+      const per = (v) => (Array.isArray(v) ? v[Math.min(v.length - 1, phase - 1)] : v);
+      const want = per(MR.waves) * per(MR.perWave);
+      const st = armageddon(phase, false);
+      out(`   P${phase} Armageddon, standing: bolts ${st.launches}/${per(MR.missiles)} · sky ${st.sky} · impacts ${st.impacts.length} (${want} + 1 great: ${st.great}) · outside ${st.out} · tells ${st.tells}/${st.flashes.length} · red hits ${st.redHits.length}/${MR.maxHits}+1 · crater ticks ${st.ticks} · worst hit-(flash+lead) ${(st.worst * 1000).toFixed(0)} ms`);
+      assert(st.trig === true && st.launches === per(MR.missiles) && st.sky === 1 && st.glow === 1, `P${phase} Armageddon: ${per(MR.missiles)} bolts into the sky, then the sky answers`);
+      assert(st.impacts.length === want + 1 && st.great === 1, `P${phase} Armageddon: ${per(MR.waves)} waves x ${per(MR.perWave)} meteors + one great meteor (${st.impacts.length})`);
+      assert(st.out === 0, `P${phase} Armageddon: no meteor lands outside ${HZ.ARENA_R} m`);
+      assert(st.tells === st.flashes.length && st.redHits.length >= 1 && st.redHits.length <= MR.maxHits + 1, `P${phase} Armageddon: one flash per tell; a standing hero is hit at most maxHits + the finale (${st.redHits.length})`);
+      assert(Math.abs(st.worst) <= 1.05 * DT, `P${phase} Armageddon: every blow lands within a frame of its own flash + lead (worst ${(st.worst * 1000).toFixed(0)} ms)`);
+      if (per(MR.craterBurn) > 0) assert(st.ticks >= 1, `P${phase} Armageddon: the craters burn (contact ticks ${st.ticks})`);
+      const an = armageddon(phase, true);
+      out(`   P${phase} Armageddon, rolling on the cues: red hits ${an.redHits.length} · dodged ${an.red.filter((h) => h.r === RESULT.DODGED || h.r === RESULT.PERFECT).length} · crater ticks ${an.ticks} · tells ${an.tells}`);
+      assert(an.redHits.length <= 1, `P${phase} Armageddon: a hero who rolls on the cues takes at most one hit (${an.redHits.length})`);
+    }
+    const cl = armageddon(2, false, 3);
+    out(`   Armageddon cut by a phase change after ${cl.beforeCut} impacts: meteors ${cl.afterCut?.meteors} · barrage ${cl.afterCut?.barrage} · impacts after ${cl.impacts.length - cl.beforeCut}`);
+    assert(cl.afterCut && cl.afterCut.meteors === 0 && cl.afterCut.barrage === 0 && cl.impacts.length === cl.beforeCut, 'a phase change clears the Armageddon (no meteor lands after it)');
+    settle(G, 12);
+    d.enterPhase(1);
+    H.clear();
+  }
 
   // ---- a hazard against the hero: standing → hit, rolling (i-frames) → dodged, rolling out of its ring → untouched
   const meteorAt = (delay) => H.circle({ kind: 'meteor', attack: 'meteorRain', x: p.position.x, z: p.position.z, r: 3.4, delay, damage: 18, burn: 0, knockback: 3, fall: 0.6, from: { x: p.position.x + 5, y: 30, z: p.position.z - 11 } });
