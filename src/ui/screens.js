@@ -45,13 +45,25 @@ const TITLE_TOUCH = [
 ];
 
 export class TitleScreen {
-  constructor(parent, visible) {
+  /** stage (optional): { levels: [{ id, name }], current: id, pick(id) } — the stage picker (each
+   *  level is its own page load: picking one reloads the game into it, levels/index.js). */
+  constructor(parent, visible, stage = null) {
     this.root = el('div', 'ab-title', null, parent);
     const inner = el('div', 'ab-title-inner', null, this.root);
     inner.style.cssText = 'display:flex;flex-direction:column;align-items:center';
     this.logo = el('pre', 'ab-logo', LOGO.join('\n'), inner);
     el('div', 'ab-title-rule', '◆', inner);
-    el('div', 'ab-title-sub', 'an ASCII action RPG  ·  demo: the Cinder Wyrm', inner);
+    el('div', 'ab-title-sub', 'an ASCII action RPG', inner);
+    if (stage?.levels?.length > 1) {
+      const row = el('div', 'ab-stage', null, inner);
+      for (const L of stage.levels) {
+        const b = button(row, L.id === stage.current ? 'on' : '', () => {
+          if (L.id !== stage.current) stage.pick?.(L.id);
+        });
+        b.textContent = String(L.name).toUpperCase();
+        b.dataset.level = L.id;
+      }
+    }
     el('div', 'ab-press kb-only', 'PRESS ANY KEY', inner);
     el('div', 'ab-press tp-only', 'TAP TO BEGIN', inner);
     const ctrl = el('div', 'ab-title-ctrl kb-only', null, inner);

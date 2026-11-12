@@ -1,4 +1,5 @@
 import { num } from './dom.js';
+import { bossNames } from './bossName.js';
 
 // Turns gameplay events into log lines without spamming. Player hits are batched per frame
 // (flushed from hud.update) so a hit that raises both 'player:hitDragon' and 'dragon:hurt' is
@@ -138,25 +139,30 @@ export class CombatFeed {
 
     // dragon
     on('dragon:hurt', (d) => this.hurts.push({ damage: d.damage, part: d.part, crit: !!d.crit, heavy: false }));
-    on('dragon:wake', () => log('The wyrm stirs…', 'warn', 'wake', 5));
+    // (the boss slot: the wyrm or a duelist; names from its full name, ui/bossName.js)
+    const duel = () => this.game.dragon?.kind === 'duelist';
+    on('dragon:wake', () => log(duel() ? `${this._name()} rises…` : 'The wyrm stirs…', 'warn', 'wake', 5));
     on('dragon:roar', () => log(`${this._name()} roars!`, 'combat', 'roar', 6));
-    on('dragon:introDone', () => log(`${this._name()}, the Cinder Wyrm, bars your path.`, 'warn', 'intro', 5));
+    on('dragon:introDone', () => log(`${this._name()}, ${this._title()}, bars your path.`, 'warn', 'intro', 5));
     on('dragon:breathStart', () => log(`${this._name()} breathes fire!`, 'combat', 'breath', 4));
-    on('dragon:takeoff', () => log(`${this._name()} takes to the sky!`, 'combat', 'takeoff', 4));
+    on('dragon:takeoff', () => log(duel() ? `${this._name()} leaps!` : `${this._name()} takes to the sky!`, 'combat', 'takeoff', 4));
     on('dragon:stagger', () => log(`${this._name()} staggers!`, 'warn', 'stagger', 1));
     on('dragon:postureBreak', () => log(`${this._name()}'s posture breaks! Critical hits land now.`, 'warn', 'postureBreak', 2));
-    on('dragon:phase2', () => log("The Cinder Wyrm's fury ignites!", 'warn'));
-    on('dragon:death', () => log(`${this._name()}, the Cinder Wyrm, falls.`, 'warn'));
+    on('dragon:phase2', () => log(duel() ? `${this._name()}'s blade kindles!` : "The Cinder Wyrm's fury ignites!", 'warn'));
+    on('dragon:death', () => log(`${this._name()}, ${this._title()}, falls.`, 'warn'));
 
     // flow
     on('area', (d) => log(`Entered ${d.name || 'Cinderwood Hollow'}.`, 'system'));
   }
 
-  /** Short boss name for log lines ("Vaelgrim"). */
+  /** Short boss name for log lines ("Vaelgrim", "Shen Hui"). */
   _name() {
-    const full = String(this.game.dragon?.name || 'Vaelgrim');
-    const first = full.split(',')[0].trim().toLowerCase();
-    return first ? first[0].toUpperCase() + first.slice(1) : 'Vaelgrim';
+    return bossNames(this.game.dragon?.name).short;
+  }
+
+  /** The boss's title ("the Cinder Wyrm", "the Ash Disciple"). */
+  _title() {
+    return bossNames(this.game.dragon?.name).title;
   }
 
   _log(text, channel, key = null, gap = 0) {

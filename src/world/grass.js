@@ -16,8 +16,9 @@ const FLOWERS = [['o', 4], ['*', 3], ['·', 5], ['°', 2], ['.', 3]];
 
 /**
  * density(x, z) -> 0..1 acceptance, height(x, z, rng) -> blade height in meters.
+ * ash 0..1: how far the blades are dried to ash grey (0 = the green meadow; the Ashfall level: ~0.85).
  */
-export function createGrass(U, { count = 260000, extent = 150, density, height, seed = 7 } = {}) {
+export function createGrass(U, { count = 260000, extent = 150, density, height, seed = 7, ash = 0 } = {}) {
   const rng = mulberry32(seed);
   const root = new Float32Array(count * 4);
   const data = new Float32Array(count * 4);
@@ -65,6 +66,7 @@ export function createGrass(U, { count = 260000, extent = 150, density, height, 
       uCamRight: U.uCamRight, uBladeUp: U.uBladeUp, uPushers: U.uPushers, uGust: U.uGust,
       uCullDist: U.uCullDist,
       uBurnt: { value: new THREE.Vector3(...burnt) },
+      uAsh: { value: Math.min(1, Math.max(0, Number(ash) || 0)) },
     },
     vertexShader: /* glsl */ `
       ${COMMON_GLSL}
@@ -76,6 +78,7 @@ export function createGrass(U, { count = 260000, extent = 150, density, height, 
       uniform vec4 uGust;
       uniform float uCullDist;
       uniform vec3 uBurnt;
+      uniform float uAsh;
       varying vec2 vUv;
       varying vec3 vCol;
       varying float vGlyph;
@@ -135,6 +138,9 @@ export function createGrass(U, { count = 260000, extent = 150, density, height, 
         // calmer than v0.1: ~20 % darker so the hero and the wyrm stay the brightest things on screen
         vec3 tipC = mix(vec3(0.1, 0.16, 0.072), vec3(0.132, 0.188, 0.08), iData.z);
         tipC = mix(tipC, vec3(0.12, 0.144, 0.104), step(0.82, iData.z));
+        // dried to ash (uAsh, the Ashfall level): grey-brown blades, darker roots
+        tipC = mix(tipC, mix(vec3(0.105, 0.1, 0.095), vec3(0.14, 0.13, 0.115), iData.z), uAsh);
+        rootC = mix(rootC, vec3(0.012, 0.011, 0.011), uAsh);
         vec3 alb = mix(rootC, tipC, tip);
         alb = mix(alb, vec3(0.014, 0.012, 0.011) * (0.6 + tip), burn);
         float sh = shadowAtFast(vec3(root.x, 0.3, root.z));

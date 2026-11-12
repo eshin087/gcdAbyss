@@ -18,6 +18,8 @@ const KINDS = {
   // a deflect chain: the parry call-out of that blow turns into "DEFLECT ×N" (styled as deflect)
   chain: { text: 'DEFLECT', life: 1.15, rise: 34, pop: 1.5, cls: 'deflect' },
   exec: { text: 'EXECUTION', life: 1.4, rise: 30, pop: 1.6, cls: 'deflect' },
+  // a duelist's guard turned the hero's strike (dragon:guard; the Ash Disciple)
+  guard: { text: 'GUARDED', life: 0.7, rise: 16, pop: 1.15 },
 };
 const NUM = { life: 0.95, rise: 34 };
 const CALL_POOL = 6;
@@ -79,6 +81,7 @@ export class Callouts {
     game.events?.on?.('player:plungeHit', (d) => {
       if (d?.execution) this.call('exec');
     });
+    game.events?.on?.('dragon:guard', () => this.call('guard'));
   }
 
   /** Pop a call-out over the player's head. kind ∈ KINDS. */
@@ -86,8 +89,8 @@ export class Callouts {
     const k = KINDS[kind];
     if (!k) return;
     // blocks come in bursts (multi-hit attacks): refresh the live one instead of stacking
-    if (kind === 'block') {
-      const live = this.calls.find((c) => c.active && c.kind === 'block' && c.age < 0.3);
+    if (kind === 'block' || kind === 'guard') {
+      const live = this.calls.find((c) => c.active && c.kind === kind && c.age < 0.3);
       if (live) {
         live.age = 0;
         return;

@@ -46,7 +46,9 @@ export class Hud {
     this.help = new HelpPanel(this.root);
     const hint = el('div', 'ab-hint ab-play kb-only', null, this.root);
     fillKeyText(hint, '[H] help  [Esc] pause');
-    this.titleUi = new TitleScreen(this.root, (game.state || 'title') === 'title');
+    // the stage picker: game.levels / game.pickLevel (main.js; levels/index.js)
+    const stage = Array.isArray(game.levels) ? { levels: game.levels, current: game.level?.id, pick: (id) => game.pickLevel?.(id) } : null;
+    this.titleUi = new TitleScreen(this.root, (game.state || 'title') === 'title', stage);
     this.pauseUi = new PauseMenu(game, this.root);
     this.feed = new CombatFeed(game, this);
     this._ghostAt = -10;

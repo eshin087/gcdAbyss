@@ -20,11 +20,21 @@ const FIGHTING = new Set(['combat', 'staggered', 'airborne']);
 const NON_DISMISS = new Set(['KeyM', 'KeyH', 'Escape', 'Backquote', 'ContextMenu', 'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen']);
 const NON_DISMISS_RE = /^(F\d+|Alt|Control|Meta|OS)/;
 const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:phase3', 'dragon:death', 'dragon:dead', 'player:died'];
-const AREA = 'Cinderwood Hollow';
 const DEBUG_STATES = new Set(['explore', 'boss', 'dead', 'victory']);
 const DRAGON_DOWN = new Set(['dying', 'dead']);
-const PHASE2_TEXT = "THE CINDER WYRM'S FURY IGNITES";
-const PHASE3_TEXT = 'ITS HEART BURNS WHITE-HOT';
+// the level's lines (levels/index.js `text`); Cinderwood's when the game has no level (tests, old boots)
+const DEFAULT_AREA = { name: 'Cinderwood Hollow', sub: 'where the cinder wyrm sleeps' };
+const DEFAULT_TEXT = {
+  arrive: ['Ash drifts through the hollow. Something vast sleeps among the bones to the north.', 'Rest at the bonfire to restore your flasks.'],
+  stir: 'The ground trembles…',
+  phase2: "THE CINDER WYRM'S FURY IGNITES",
+  phase3: 'ITS HEART BURNS WHITE-HOT',
+  victory: 'WYRM VANQUISHED',
+  fallen: 'The cinders cool. Cinderwood Hollow falls silent.',
+  restReset: 'The wyrm returns to its slumber.',
+  again: 'The wyrm sleeps once more. The hollow waits.',
+  rise: 'You rise again at the bonfire.',
+};
 
 const TUNE = {
   restRadius: 2.4,
@@ -307,7 +317,8 @@ export class GameFlow {
         case 'dragon:phase3':
           if (st === 'boss' || st === 'bossIntro') {
             this.phase2 = true;
-            g.hud?.banner?.(name === 'dragon:phase3' ? PHASE3_TEXT : PHASE2_TEXT, 'phase');
+            const text = name === 'dragon:phase3' ? this._text('phase3') : this._text('phase2');
+            if (text) g.hud?.banner?.(text, 'phase');
             g.audio?.setMusic?.('boss2');
           }
           break;
@@ -373,11 +384,11 @@ export class GameFlow {
     g.hud?.hideTitle?.();
     this.stats.reset();
     this._setState('explore');
-    g.hud?.banner?.(AREA.toUpperCase(), 'area', { sub: 'where the cinder wyrm sleeps' });
-    g.events?.emit('area', { name: AREA });
+    const area = this._area();
+    g.hud?.banner?.(area.name.toUpperCase(), 'area', { sub: area.sub });
+    g.events?.emit('area', { name: area.name });
     g.audio?.setMusic?.('ambient');
-    this._log('Ash drifts through the hollow. Something vast sleeps among the bones to the north.', 'lore');
-    this._log('Rest at the bonfire to restore your flasks.', 'lore');
+    for (const line of this._text('arrive') ?? []) this._log(line, 'lore');
     if (!g.touch?.active) this._log('H: controls  ·  Esc: pause', 'system');
     // ease the camera from the establishing shot back to the player
     this._ovW = 0;
@@ -442,7 +453,7 @@ export class GameFlow {
       this._try(() => g.world?.scorch?.reset?.(), 'scorch.reset');
       g.hud?.hideBossBar?.();
       this.phase2 = false;
-      this._log('The wyrm returns to its slumber.', 'lore');
+      this._log(this._text('restReset'), 'lore');
     }
     this._try(() => g.world?.atmosphere?.setBonfireLit?.(true), 'setBonfireLit');
     g.hud?.banner?.('REST', 'bonfire');
@@ -457,7 +468,7 @@ export class GameFlow {
     this.introT = 0;
     g.hud?.prompt?.(null);
     g.audio?.setMusic?.('none');
-    this._log('The ground trembles…', 'warn');
+    this._log(this._text('stir'), 'warn');
     if (callStart) this._try(() => g.dragon?.startIntro?.(), 'dragon.startIntro');
     this._dragonFocus(this._ov.focus);
     this._ovW = TUNE.intro.weight;
@@ -488,7 +499,7 @@ export class GameFlow {
     if (g.state === 'boss') return;
     this._setState('boss');
     g.hud?.prompt?.(null); // may arrive straight from explore with the bonfire prompt up
-    g.hud?.showBossBar?.(g.dragon?.name ?? 'VAELGRIM, THE CINDER WYRM');
+    g.hud?.showBossBar?.(this._bossName());
     g.audio?.setMusic?.(this.phase2 ? 'boss2' : 'boss');
     this._ovW = 0;
     this._ovZ = 0;
@@ -631,7 +642,7 @@ export class GameFlow {
     this.victoryT = 0;
     this.statsShown = false;
     g.hud?.prompt?.(null);
-    g.hud?.banner?.('WYRM VANQUISHED', 'victory');
+    g.hud?.banner?.(this._text('victory'), 'victory');
     g.audio?.setMusic?.('victory');
     g.events?.emit('game:victory', this.stats.snapshot());
     if (this.bossBarHideT < 0) this.bossBarHideT = 1.2;
@@ -640,7 +651,7 @@ export class GameFlow {
     this._ovZ = TUNE.victoryCam.zoom;
     this._ovLambda = 1;
     this.cameraOverride = this._ov;
-    this._log('The cinders cool. Cinderwood Hollow falls silent.', 'lore');
+    this._log(this._text('fallen'), 'lore');
   }
 
   _victory(rdt) {
@@ -687,7 +698,7 @@ export class GameFlow {
     this._setState('explore');
     g.events?.emit('game:retry');
     g.audio?.setMusic?.('ambient');
-    this._log(resetRun ? 'The wyrm sleeps once more. The hollow waits.' : 'You rise again at the bonfire.', 'lore');
+    this._log(resetRun ? this._text('again') : this._text('rise'), 'lore');
   }
 
   /** Player at the bonfire spawn, dragon asleep in its nest, scorch/FX cleared, HUD + flow reset. */
@@ -818,7 +829,7 @@ export class GameFlow {
     this.phase2 = d?.phase >= 2;
     this.grade.desat = 0;
     this._setState('boss');
-    g.hud?.showBossBar?.(d?.name ?? 'VAELGRIM, THE CINDER WYRM');
+    g.hud?.showBossBar?.(this._bossName());
     g.audio?.setMusic?.(this.phase2 ? 'boss2' : 'boss');
   }
 
@@ -845,7 +856,7 @@ export class GameFlow {
     if (g.state === 'victory') {
       // replay the victory beat (the prelude cleared the banner and the record)
       this.victoryT = 0;
-      g.hud?.banner?.('WYRM VANQUISHED', 'victory');
+      g.hud?.banner?.(this._text('victory'), 'victory');
       return;
     }
     if (!d || d.state === 'dead' || typeof d.debug?.kill !== 'function') {
@@ -855,7 +866,7 @@ export class GameFlow {
     // stand in the boss state so the death events are handled the normal way
     if (g.state !== 'boss') {
       this._setState('boss');
-      g.hud?.showBossBar?.(d.name ?? 'VAELGRIM, THE CINDER WYRM');
+      g.hud?.showBossBar?.(this._bossName());
       g.audio?.setMusic?.(d.phase >= 2 ? 'boss2' : 'boss');
     }
     this.debugVictoryT = TUNE.debugVictoryTimeout;
@@ -988,7 +999,23 @@ export class GameFlow {
   }
 
   _log(text, channel) {
-    this.game.hud?.log?.(text, channel);
+    if (text) this.game.hud?.log?.(text, channel);
+  }
+
+  /** The level's line `key` (levels/index.js `text`); Cinderwood's when the level has none. */
+  _text(key) {
+    const t = this.game.level?.text;
+    return t && Object.hasOwn(t, key) ? t[key] : DEFAULT_TEXT[key];
+  }
+
+  /** The level's area name and sub line. */
+  _area() {
+    const L = this.game.level;
+    return typeof L?.name === 'string' ? { name: L.name, sub: L.sub ?? '' } : DEFAULT_AREA;
+  }
+
+  _bossName() {
+    return this.game.dragon?.name ?? 'VAELGRIM, THE CINDER WYRM';
   }
 
   _try(fn, label) {

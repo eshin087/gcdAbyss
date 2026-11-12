@@ -613,6 +613,10 @@ const CSS = `
 .ab-title-rule::after { content: ''; width: 120px; height: 1px; background: linear-gradient(90deg, rgba(207, 214, 230, 0), rgba(207, 214, 230, 0.45)); }
 .ab-title-rule::after { background: linear-gradient(270deg, rgba(207, 214, 230, 0), rgba(207, 214, 230, 0.45)); }
 .ab-title-sub { margin-top: 12px; font-size: 12px; letter-spacing: 0.28em; color: #d9dfec; text-shadow: 0 1px 3px #000; }
+/* the stage picker (levels/index.js): the current stage lit, another one reloads into it */
+.ab-stage { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 16px; pointer-events: auto; }
+.ab-stage .ab-btn { display: inline-flex; justify-content: center; width: auto; min-height: 0; margin: 0; font-size: 10.5px; letter-spacing: 0.16em; padding: 6px 12px; color: var(--ab-dim); border-color: rgba(207, 214, 230, 0.18); }
+.ab-stage .ab-btn.on { color: #f2e7d2; border-color: var(--ab-ember); text-shadow: 0 0 8px rgba(255, 138, 61, 0.45); cursor: default; }
 .ab-press {
   margin-top: 34px;
   font-size: 12px;
