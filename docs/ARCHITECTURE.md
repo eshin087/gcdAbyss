@@ -467,9 +467,17 @@ segments (the lower one is two meshes: `coat` above, the lavender torn zone `hem
 `IDLE_FLARE` follow the panel order); `streamers` (two-segment spring sheets: the Shrouded set's
 cloak, seven sheets on the chest and the upper arms, `SHROUD_SHEETS` in `gear/shroud.js`, ADR-043;
 or the Wanderer's torn cape, four sheets behind the right shoulder, `CAPE_SHEETS`, ADR-037; each
-record `{ segs, len, out, lag?, max? }`, `out` = its own outward flare, `lag` = how much it trails
-the motion (default 1 = a light ribbon, the cloak 0.5), `max` = how far it may swing from hanging
-(rad; default 2.6, the cloak 1.45));
+record `{ segs, len, out, lag?, max?, w?, arm? }`, `out` = its own outward flare, `lag` = how much
+it trails the motion (default 1 = a light ribbon, the cloak 0.5), `max` = how far it may swing from
+hanging (rad; default 2.6, the cloak 1.45), `w` = its widths [root, seam, hem] (default 0.3 m
+across), `arm` = 1 / 2 when it hangs on the right / left upper arm (0: the chest)). **Cloth vs steel**
+(ADR-048): every frame `_colliders` places spheres along the blade (`COL_BLADE`; the arm lists
+`COL_FORE` / `COL_UPPER` are empty: holding the sheets out round the arms widened his back), and
+`_sheetBound` keeps each streamer segment on the side of each sphere it came in from
+(`streamState[i].side`), by the sphere's radius: from the body side it holds the cloth out (the
+cloth drapes over a drawn-back sword), from outside it holds it in; the inside wins a conflict; a
+sheet ignores the arm it hangs on (`arm`, for arm spheres). `UPDRAFT_STREAM` (a charge's lift of the
+sheets) is 0. Coat panels and strips have their own steel rules (below); hair has none;
 `hair` = 5 spring clusters (`HAIR_CLUSTERS`: fringe, left, right, crown, nape), each with a dark-root
 mesh (`hair`) and a sheened-tip mesh (`hairTip`); since ADR-034 the locks are layered pointed
 blades (crown spikes, top, two back layers, nape, sides, a jagged fringe, cowlicks). Static meshes
@@ -493,8 +501,10 @@ skeleton and the body (neck, head, face, hair, the flask); everything worn or he
 `{ id, slot, name, build(ctx) }` in one of `SLOTS` = head, chest, shoulders, arms, legs, waist, back,
 weapon. `DEFAULT_LOADOUT` is the Shrouded set (ADR-043: `shroud.hood`, `shroud.tunic`,
 `shroud.arms`, `shroud.cloak` over `wanderer.legs`, `wanderer.skirt`, `wanderer.sword`; no shoulder
-item); `WANDERER_LOADOUT` is the outfit before it. A head item with `hidesHair: true` (the hood)
-leaves the hair meshes out; the five hair joints stay. `buildHero(U, loadout = DEFAULT_LOADOUT)`
+item); `WANDERER_LOADOUT` is the outfit before it. A head item may keep only part of the hair:
+`hair: [...]` lists the pieces built under it (`'cap'` and `HAIR_CLUSTERS` names; the hood keeps
+the cap and the fringe, and builds its own gold locks by the cheeks), `hidesHair: true` builds none;
+the five hair joints stay either way. The hair is gold (ADR-049). `buildHero(U, loadout = DEFAULT_LOADOUT)`
 builds each slot's item (an empty chest / arms /
 legs slot gets the `base.*` undersuit), merges static meshes per joint + material + slot, and
 returns the usual rig plus `rig.loadout` (slot → id or null) and `rig.slots` (slot → the objects it
@@ -510,7 +520,25 @@ pauldron joint is the right shoulder only.
 **Hands** (ADR-041, `heroGeo.js`): the sword hand is `gripFist`, four finger rolls, a thumb and a
 knuckle ridge round the grip, hung on the `sword` joint by the `arms` item so it closes round the
 grip in every pose (with no weapon it is a closed fist); the free hand is `looseHand` on the left
-forearm (palm, four curled fingers, thumb).
+forearm (palm, four curled fingers, thumb). An `arms` item may return `offHand: { open, grip }`
+(`rig.offHand`, else null): the free hand open on the forearm, and the same hand closed round the grip
+`DIM.offGrip` (0.08 m) below the sword hand on the `sword` joint; `apply()` shows `grip` while the
+pose's `twoHand` > 0.6 and `open` otherwise (the Shrouded set's bare hands do; the Wanderer's arms
+do not). **Two hands** (ADR-046): every light swing (the chain, the sprint slash, the roll cut) and
+the stab hold the grip with both hands (`twoHand` 1, the off hand IK'd to the grip point): `slashH`
+moves the grip off the sword shoulder onto a circle round the chest's centre line in front of it
+(`TWO_R`, `TWO_Z`) and turns the chest less to the left; the slam, the charge and the thrust already
+were two-handed. The block is two-handed too: the grip before the chest, the blade raised ~50°
+across the body past the left shoulder, the flat to the enemy; `locoGuard` carries `twoHand` in
+`GUARD_CH`. At rest and on the move he carries the sword in one hand.
+**Idle life** (ADR-047): in the loco clip, standing still in the `idle` state, not locked on, with no
+guard held, for `IDLE_LIFE.after` (2.5 s), `HeroAnimator._idleLife` starts an action from `FIDGETS`
+every `IDLE_LIFE.gap` (2–4.5 s after the last one ends), picked with the animator's own noise (never
+`Math.random`), never the same twice in a row: `look`, `stretch`, `inspect`, `twirl`, `shoulder`,
+`lean` (1.7–4.2 s each). Each is a layer over the ready stance (`idleLife` in `locoGuard`) with a
+0.45 s fade in and 0.55 s out; anything else (a move, a lock-on, a guard, another clip) cuts it within
+`IDLE_LIFE.cancel` (0.16 s). State: `anim.fidget = { k, t, w, cut, still, wait, last, count, name }`.
+Visual only: no hit test runs outside attacks.
 **Idle** (`guard`, ADR-041; ADR-040 put the blade out to his side, where the game camera sees it):
 weight on the left leg, the right foot a shoulder's width out and forward with the knee soft, the
 upper arm hanging by the ribs with the elbow a little back, the grip beside the right hip and

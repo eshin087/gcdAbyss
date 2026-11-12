@@ -5,6 +5,57 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 14: two hands, a raised guard, idle life, gold hair, a clear charge
+
+**Owner:** "make the character use both hands when he's swinging ... add some idle animations of the
+character doing random stuff while not moving ... i like the new hooded look but the front details
+and visuals makes him look like death. have his hair show a bit and make his hair colored gold to
+stand out. also his hood is too pointy at the top. when he guards, make him hold the sword up in a
+higher angle ... when he's charging the sword, the sword and arm are clipping through the cape."
+Answers: both hands on every swing, one-handed carry at rest; all four idle kinds; the hood pushed
+back a little; a two-handed guard raised across the body. Branch `player/two-hands-idle-life`.
+
+**Done:**
+- **Two hands (ADR-046):** every light swing and the stab are two-handed; `slashH` moves the grip to
+  the chest's centre line and turns the chest less to the left; `DIM.offGrip` 0.08; the off hand
+  closes round the grip (`rig.offHand`). The block is two-handed, the blade ~50° up across the body.
+- **Idle life (ADR-047):** `FIDGETS` (look, stretch, inspect, twirl, shoulder, lean) after 2.5 s of
+  standing still, cut by any input.
+- **Cloak vs steel (ADR-048):** streamer sheets collide with spheres on the blade, keeping the side
+  they came from; the charge pose's hands before the hip, the blade out to the side.
+- **Follow-up, the owner: "the back cape is too floaty now and makes the character look wider from
+  the back view. make it look similar to the original look."** The first version also held the
+  sheets out round both arms, moved the sheet behind the sword shoulder onto the shoulder blade and
+  lifted the cloak in the charge. All three are reverted; only the blade collides. Compared side by
+  side with `main` (a second dev server on the old commit): the same back view at rest, running and
+  stopping; hem width 1.29 m vs 1.23 m at rest, 1.15 m vs 1.15 m running.
+- **Hood and hair (ADR-049):** a rounder hood worn further back; gold fringe and cheek locks; a
+  warmer face and smaller brown eyes.
+- **Tests:** a new HEROLIFE scenario (two hands in every swing's active frames, the guard's angle,
+  the charged blade vs the cloak, idle actions and their cut, none while locked on); HERO checks the
+  hair kept under the hood.
+
+**Verification:** `npm test` ALL PASSED, `npm run build` ok. In the Lab model viewer (solid and
+ASCII): the head from six angles, the chain frame by frame from the front three-quarter, the block
+and the charge from the front, back and sides, every idle action. At the phone camera (852 x 393):
+the block and the charge facing four ways, the first three hits. A probe of blade and arm points
+against the cloak sheets over idle, run, block, the chain and the charge.
+
+**Measured:** off hand to grip ≤ 2.5 cm in every swing (was up to 8 cm before the chest-turn fix);
+charged blade inside the cloak in 0 of 96 test frames (was 94 of 150); bot `win` 139 s; REACH
+unchanged.
+
+**Not checked / open:**
+- No human has played it; not tried on the phone.
+- The arms still pass through the cloak near the sheets' roots (as before this session).
+- The left arm still locks straight at the end of the two-handed stab and the slam.
+- The twirl passes the blade through the cloak region behind him for ~0.3 s.
+- Gold hair applies to the Wanderer's set too; `docs/art/hero.md` is still out of date.
+
+**Next:** the owner's phone test of the preview.
+
+---
+
 ## 2026-11-11 — Session 13: a hooded cloak, arms that bend, fewer draw calls
 
 **Owner** (with the reference again: a hooded swordsman in a huge ragged cloak, the sword low at his

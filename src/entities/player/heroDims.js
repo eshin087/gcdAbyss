@@ -29,6 +29,9 @@ export const DIM = {
   gripBack: 0.08, // grip runs from −gripBack …
   guard: 0.1, // … to the crossguard
   gem: 0.116, // the violet star gem at the heart of the guard, where the quillons meet
+  // the OFF hand on the grip (two-handed): this far down from the sword hand toward the pommel,
+  // fist against fist (was 0.11 in anim.js, a hand's width of gap between them)
+  offGrip: 0.08,
   forte: 0.2, // end of the dark gunmetal base under the barbs (the cyan glyph blade from here on)
   // the steel length the animator poses with (anim.js keeps this point off the grass and out of the
   // legs; the integration test checks it). A little past the drawn point, so the drawn steel never

@@ -31,7 +31,7 @@ gets the `base.*` item for it. Any other slot may be empty.
 
 | Slot | Covers | Hangs on | Default item |
 | --- | --- | --- | --- |
-| `head` | helmets, hoods, masks. Hair, face and neck are the body, not gear; an item with `hidesHair: true` leaves the hair out | `head` | `shroud.hood` |
+| `head` | helmets, hoods, masks. Hair, face and neck are the body, not gear; an item with `hair: [...]` keeps only those pieces of the hair (`'cap'` and `HAIR_CLUSTERS` names), `hidesHair: true` none of it | `head` | `shroud.hood` (keeps the cap and the fringe) |
 | `chest` | the torso from the hips' top (1.09 m) to the collar: shell, shirt, buttons, belts, baldric, lapels, collar, yoke, emblem | `spine`, `chest` | `shroud.tunic` |
 | `shoulders` | shoulder armour: the pauldron on its own joint, and any lames riding on the upper arms | `pauldron`, `arms.R.upper`, `arms.L.upper` | none (`wanderer.pauldron` in the Wanderer's set) |
 | `arms` | both arms from the shoulder joint to the hand: sleeves, deltoid caps, vambrace / bracer, gauntlet / glove (the hands), elbow and wrist points. The SWORD hand's fist (`gripFist`) hangs on the `sword` joint, the grip's own frame, so it closes round the grip in every pose; it belongs to this slot, not to `weapon` | `arms.{R,L}.{upper,fore}`, `sword` (the fist) | `shroud.arms` |
@@ -96,7 +96,8 @@ The `head` joint is scaled by `BODY.headScale`, so head gear is modelled at 1.0 
 | Handle | From | Shape |
 | --- | --- | --- |
 | `coat` | `waist` | array of panels `{ anchor, segs: [upper, lower], def, strips, len: [upper, lower], r0 }` (below) |
-| `streamers` | `back` | array of `{ segs: [root, tip], len: [l0, l1], out, lag?, max? }` (below) |
+| `streamers` | `back` | array of `{ segs: [root, tip], len: [l0, l1], out, lag?, max?, w?, arm? }` (below) |
+| `offHand` | `arms` | `{ open, grip }`: the free hand open on the left forearm, and the same hand closed round the grip `DIM.offGrip` below the sword hand (on the `sword` joint); the animator shows one or the other with `twoHand` |
 | `gem` | `weapon` | an Object3D on the weapon whose world position is where the gem glows |
 | `flask` | any | a mesh shown only while he drinks (the animator sets its `visible` and `scale`) |
 | `keep` | any | meshes of yours that must not be merged (see "Merging") |
@@ -153,11 +154,15 @@ any item:
   `−len[0]` below it; `out` is the resting outward flare; `lag` (default 1) scales how far the
   sheet trails the motion: 1 is a light ribbon that streams out level at a run, the cloak uses 0.5;
   `max` (default 2.6 rad) is how far a segment may swing from hanging, the cloak uses 1.45.
-  The root may hang on any joint (the cloak drapes one sheet over each upper arm); the springs have
-  no collision, so keep sheets off the sword arm's side or short there.
+  The root may hang on any joint (the cloak drapes one sheet over each upper arm). Give `w` (the
+  widths [root, seam, hem]) so the animator can keep the sheet off the blade (ADR-048: spheres along
+  the steel), and `arm` (1 / 2 for a sheet on the right / left upper arm). The arms do not push the
+  cloth: a cloak hangs over its wearer's arms (holding the sheets out round them made the figure
+  wide from behind).
 - **The arms.** `_arm` compresses the last fifth of each arm's reach (ADR-044), so a hand target at
   full stretch is reached with the elbow bent ~35°: model sleeves and hands for a bent arm, and do
-  not rely on a pose locking the elbow.
+  not rely on a pose locking the elbow. Every swing and the block are two-handed (ADR-046): the
+  free hand spends a lot of time on the grip, so return `offHand` if the item draws hands.
 - **The weapon.** The animator's ground clamp and blade-in-body checks (`steelTip`, `forte`,
   `drawnTip`), the hit segment in `combat.js` (`bladeBase`, `bladeTip`) and the sword FX in `fx.js`
   (`forte`, `drawnTip`) read the sword's numbers from `DIM`. The weapon item carries a copy of

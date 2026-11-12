@@ -4,7 +4,12 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Nine pieces of work since 0.4.0:
+Ten pieces of work since 0.4.0:
+- **Two hands, a raised guard, idle life, gold hair** (2026-11-12, ADR-046 to ADR-049): the hero
+  swings with both hands, blocks with the sword raised across his body, and when you stop for a few
+  seconds he looks around, stretches, inspects or twirls his sword, rests it on his shoulder or leans
+  on it. His hood is rounder and pushed back, with gold hair showing and a warmer face. Charging no
+  longer drives the sword through the cloak, and the cloak hangs as it did before.
 - **A hooded cloak, arms that bend, fewer draw calls** (2026-11-11, ADR-043, ADR-044, ADR-045): the hero
   wears a pointed hood and a huge tattered cloak, like the reference image; the old coat-and-pauldron
   outfit is still there as a loadout. His sword arm no longer swings as one straight stick: the

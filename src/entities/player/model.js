@@ -191,8 +191,10 @@ export const ART_GAIN = 1.1;
 // the cloth's silhouette ink: the reference's dim blue-lavender dotted outline
 const CLOTH_RIM = [0.6, 0.64, 1.0, 0.8];
 export const HERO_INK = {
-  skin: { part: 1, fill: [0.92, 0.66, 0.58], rim: 0.3, line: [0.75, 0.5, 0.46, 0.8], rimLine: [1.0, 0.86, 0.8, 0.9], fillGain: 3.0, farFill: 0.6, open: true },
-  eye: { part: 2, fill: [0.07, 0.055, 0.12], rim: 0, line: [0.75, 0.62, 1.0, 0.9] },
+  // (Session 14: a warmer, less pale face and brown eyes; framed by the hood, the white face with
+  // two dark violet-rimmed eyes read "like death")
+  skin: { part: 1, fill: [0.95, 0.62, 0.44], rim: 0.3, line: [0.7, 0.42, 0.3, 0.75], rimLine: [0.95, 0.72, 0.55, 0.85], fillGain: 2.2, farFill: 0.6, open: true },
+  eye: { part: 2, fill: [0.16, 0.1, 0.08], rim: 0, line: [0.55, 0.36, 0.22, 0.8] },
   shirt: { part: 3, fill: [0.07, 0.07, 0.085], line: [1, 1, 1, 0.45], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.35 },
   lining: { part: 4, fill: [0.05, 0.048, 0.07], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.6 },
   collarIn: { part: 4, fill: [0.12, 0.1, 0.24], line: [0.8, 0.78, 1.0, 0.7], rimLine: CLOTH_RIM, rimDotted: true, farFill: 0.6 },
@@ -205,8 +207,10 @@ export const HERO_INK = {
   hem: { part: 8, fill: [0.32, 0.3, 0.44], sub: 0.6, rim: 1.2, line: [0.8, 0.78, 1.0, 0.75], rimLine: [0.72, 0.72, 1.0, 0.95], dotted: true, rimDotted: true, farFill: 1.1 },
   piping: { part: 9, fill: [0.3, 0.28, 0.36], line: [0.95, 0.93, 1.0, 0.95], farFill: 0.6 },
   leather: { part: 10, fill: [0.34, 0.23, 0.17], line: [1.0, 0.93, 0.85, 0.9], farFill: 0.8 },
-  hair: { part: 11, fill: [0.085, 0.08, 0.14], rim: 0.9, line: [0.5, 0.48, 0.8, 0.3], rimLine: [0.6, 0.58, 0.95, 0.7], fillGain: 1.3, rimDotted: true, farFill: 0.5 },
-  hairTip: { part: 11, fill: [0.14, 0.12, 0.28], rim: 0.9, line: [0.5, 0.48, 0.8, 0.3], rimLine: [0.6, 0.58, 0.95, 0.7], fillGain: 1.3, rimDotted: true, farFill: 0.5 },
+  // gold hair (Session 14, owner: "make his hair colored gold to stand out"): warm gold letters
+  // with brighter tips, lines under the bloom threshold (the blade and the gem keep the glow)
+  hair: { part: 11, fill: [0.62, 0.42, 0.1], rim: 0.9, line: [1.25, 0.92, 0.38, 0.85], rimLine: [1.3, 1.0, 0.45, 0.95], fillGain: 1.3, rimDotted: true, farFill: 1.0 },
+  hairTip: { part: 11, fill: [0.85, 0.62, 0.2], rim: 0.9, line: [1.25, 0.92, 0.38, 0.85], rimLine: [1.3, 1.0, 0.45, 0.95], fillGain: 1.3, rimDotted: true, farFill: 1.0 },
   armor: { part: 12, fill: [0.17, 0.17, 0.2], spec: 1.1, specPow: 18, line: [1, 1, 1, 0.8], rimLine: [1, 1, 1, 0.95], fillGain: 1.0, farLine: 0.45, farFill: 0.78 },
   spike: { part: 13, fill: [0.2, 0.2, 0.24], spec: 0.8, specPow: 16, line: [1, 1, 1, 0.9], rimLine: [1, 1, 1, 1.0], fillGain: 1.05, farLine: 0.55, farFill: 0.9 },
   bevel: { part: 14, fill: [0.3, 0.31, 0.38], spec: 0.5, line: [1, 1, 1, 0.8], fillGain: 1.1, farLine: 0.5, farFill: 0.85 },
@@ -238,8 +242,8 @@ export function createHeroMaterials(U) {
   const Z = 1.0; // close-up glyph zoom for cloth / plates (> GLYPH_SCALE.farZoom: smaller glyphs, more black)
   const hair = {
     levels: HAIR_LEVELS, cell: [0.09, 0.1], rowShift: 0.5, base: [0.005, 0.005, 0.01],
-    levelInk: [[0.16, 0.16, 0.21], [0.2, 0.2, 0.26], [0.25, 0.25, 0.32]], ink: [0.22, 0.22, 0.3],
-    inkAlt: [0.55, 0.42, 0.95], altChance: 0, lumScale: 3.5, gain: 1.1, rim: 0.1, outline: 0.06, inkGlow: 0.26, glowMask: 0,
+    levelInk: [[0.36, 0.25, 0.08], [0.46, 0.33, 0.1], [0.58, 0.42, 0.14]], ink: [0.52, 0.38, 0.12],
+    inkAlt: [0.85, 0.66, 0.26], altChance: 0, lumScale: 3.5, gain: 1.1, rim: 0.1, outline: 0.06, inkGlow: 0.26, glowMask: 0,
   };
   const cloth = {
     levels: CLOTH_LEVELS, rowShift: 0, base: [0.007, 0.007, 0.011],
@@ -481,9 +485,13 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
   const sword = joint(body);
 
   // ---------------------------------------------------------------- body: head and hair
-  // (a head item with `hidesHair`, a hood or a closed helm, leaves the hair out: the joints stay)
+  // a head item may keep only part of the hair under it: `hair` = the pieces to build ('cap' and
+  // HAIR_CLUSTERS names; the hood keeps the cap and the fringe), `hidesHair` = none of it (a
+  // closed helm). The hair joints stay either way (the animator springs them)
   const worn = resolveLoadout(loadout);
-  const hideHair = worn.some(({ item }) => item?.hidesHair);
+  const headItem = worn.find(({ slot }) => slot === 'head')?.item;
+  const hairKeep = headItem?.hidesHair ? new Set() : Array.isArray(headItem?.hair) ? new Set(headItem.hair) : null;
+  const hairOn = (name) => !hairKeep || hairKeep.has(name);
   {
     const [sx, sy, sz] = DIM.skull;
     mesh(head, limb({ length: 0.12, r0: BODY.neck[0], r1: BODY.neck[1], radial: 8, rings: 2, capSegs: 1 }), M.skin, 0, 0.1, 0.0);
@@ -500,24 +508,23 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
     mesh(head, jaw, M.skin, sx, sy - 0.066, sz + 0.016);
     // the right ear shows below the swept-back locks
     mesh(head, ellipsoidGeometry(0.012, 0.024, 0.018, { widthSegs: 6, heightSegs: 4 }), M.skin, sx - 0.08, sy - 0.014, sz - 0.008);
-    // the visible LEFT eye (the right one is under the fringe): a dark half-lidded almond, large
-    // enough to print as a few dark letters with a violet rim between the fringe strands
-    for (const ex of [0.032, -0.032]) mesh(head, ellipsoidGeometry(0.017, 0.008, 0.006, { widthSegs: 8, heightSegs: 4 }), M.eye, sx + ex, sy - 0.012, sz + 0.089);
-    if (!hideHair) mesh(head, partGeometry('hair.cap'), M.hair);
+    // the eyes: half-lidded almonds (smaller since Session 14: two large dark holes in a pale face
+    // under the hood read as a skull's sockets)
+    for (const ex of [0.032, -0.032]) mesh(head, ellipsoidGeometry(0.014, 0.0065, 0.005, { widthSegs: 8, heightSegs: 4 }), M.eye, sx + ex, sy - 0.012, sz + 0.09);
+    if (hairOn('cap')) mesh(head, partGeometry('hair.cap'), M.hair);
   }
-  if (!hideHair) {
-    for (const c of HAIR_CLUSTERS) {
-      const j = hair[c.name];
-      mesh(j, partGeometry(`hair.${c.name}.mass`), M.hair);
-      mesh(j, partGeometry(`hair.${c.name}.tip`), M.hairTip);
-    }
+  for (const c of HAIR_CLUSTERS) {
+    if (!hairOn(c.name)) continue;
+    const j = hair[c.name];
+    mesh(j, partGeometry(`hair.${c.name}.mass`), M.hair);
+    mesh(j, partGeometry(`hair.${c.name}.tip`), M.hairTip);
   }
 
   // ---------------------------------------------------------------- gear
   // each equipped item hangs its meshes on the skeleton (gear/README.md: the item contract) and
   // may hand back the handles the animator needs
   const skeleton = { root, body, pelvis, spine, chest, head, arms, legs, pauldron, sword };
-  const handles = { coat: [], streamers: [], keep: [], gem: null, flask: null };
+  const handles = { coat: [], streamers: [], keep: [], gem: null, flask: null, offHand: null };
   const equipped = {};
   for (const { slot, item } of worn) {
     equipped[slot] = item ? item.id : null;
@@ -528,6 +535,7 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
     if (h?.keep) handles.keep.push(...h.keep);
     if (h?.gem) handles.gem = h.gem;
     if (h?.flask) handles.flask = h.flask;
+    if (h?.offHand) handles.offHand = h.offHand;
   }
   // what an empty slot leaves the animator and the player (they read these every frame): no coat
   // panels, no streamers, the gem's marker joint at its usual spot on the weapon joint (its glow
@@ -551,6 +559,9 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
   const mats = Object.values(M);
   return {
     root, body, pelvis, spine, chest, head, hair, arms, legs, coat, streamers, sword, gem, pauldron, flask,
+    // { open, grip } | null: the free hand hanging open, and the same hand closed on the grip below
+    // the sword hand; the animator shows one or the other with `twoHand` (gear/README.md)
+    offHand: handles.offHand,
     loadout: equipped,
     slots,
     materials: M,

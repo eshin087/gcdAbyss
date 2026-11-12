@@ -1,14 +1,16 @@
 import { ellipsoidGeometry } from '../../../render/glyphGeometry.js';
 import {
   shellGeometry, skirtSheet, tatterStrip, bandGeometry, boxGeometry, mergeGeometries, sub, foldLines, ribbonCrease, lerp, limb,
-  gripFist, looseHand, sheetOffset,
+  gripFist, looseHand, sheetOffset, clumpGeometry, orientTo,
 } from '../heroGeo.js';
 
 // The Shrouded set (owner reference 2026-11-11: a hooded swordsman in a huge tattered cloak, seen
 // from behind, the sword low in his right hand, the cloak thrown wide to his left; ADR-043). The
 // default outfit since then (gear/index.js DEFAULT_LOADOUT), worn over the Wanderer's boots, coat
 // tails and sword:
-//   head   shroud.hood    a deep pointed hood (the hair is not built under it: `hidesHair`)
+//   head   shroud.hood    a hood worn pushed back, a rounded crown; the gold fringe shows, and
+//                         gold locks fall by the cheeks (`hair`: the pieces of the hair built
+//                         under it)
 //   chest  shroud.tunic   a closed wrap tunic, a neck scarf, one belt
 //   arms   shroud.arms    cloth sleeves, bound forearms, bare hands
 //   back   shroud.cloak   a mantle over the shoulders and SHROUD_SHEETS: wide ragged sheets on the
@@ -48,29 +50,32 @@ export const SHROUD_SHEETS = [
 // ---------------------------------------------------------------- head: the hood
 /** Hood rings in head space (y above the neck-base joint, before BODY.headScale): half-width rx,
  *  half-depth rz, centre offset cz, and the face opening's half-chord `gap`. From the drape on the
- *  shoulders up over the brow (the rim overhangs the face) to a point that leans back. */
+ *  shoulders up round the head to a rounded crown with a soft, short peak at the back.
+ *  (Session 14, owner: "his hood is too pointy at the top", and the deep hood over a pale face read
+ *  "like death". The hood now sits pushed back: the rim runs over the crown of the head behind the
+ *  hairline, the opening is wide, and the gold fringe and side locks fall out in front of it.) */
 const HOOD_RINGS = [
-  { y: -0.03, rx: 0.172, rz: 0.128, cz: -0.012, gap: 0.062 },
-  { y: 0.03, rx: 0.134, rz: 0.118, cz: -0.004, gap: 0.056 },
-  { y: 0.085, rx: 0.128, rz: 0.134, cz: 0.012, gap: 0.078 },
-  { y: 0.145, rx: 0.136, rz: 0.152, cz: 0.028, gap: 0.098 },
-  { y: 0.205, rx: 0.13, rz: 0.15, cz: 0.03, gap: 0.078 },
-  { y: 0.252, rx: 0.106, rz: 0.126, cz: 0.014, gap: 0.03 },
-  { y: 0.288, rx: 0.07, rz: 0.09, cz: -0.022, gap: 0.004 },
-  { y: 0.318, rx: 0.036, rz: 0.05, cz: -0.062, gap: 0.004 },
-  { y: 0.338, rx: 0.01, rz: 0.016, cz: -0.094, gap: 0.003 },
+  { y: -0.03, rx: 0.172, rz: 0.13, cz: -0.02, gap: 0.07 },
+  { y: 0.03, rx: 0.136, rz: 0.12, cz: -0.016, gap: 0.068 },
+  { y: 0.085, rx: 0.13, rz: 0.13, cz: -0.012, gap: 0.098 },
+  { y: 0.145, rx: 0.136, rz: 0.142, cz: -0.012, gap: 0.112 },
+  { y: 0.205, rx: 0.132, rz: 0.142, cz: -0.016, gap: 0.104 },
+  { y: 0.255, rx: 0.114, rz: 0.13, cz: -0.024, gap: 0.072 },
+  { y: 0.292, rx: 0.084, rz: 0.104, cz: -0.036, gap: 0.03 },
+  { y: 0.314, rx: 0.046, rz: 0.066, cz: -0.05, gap: 0.006 },
+  { y: 0.322, rx: 0.012, rz: 0.022, cz: -0.062, gap: 0.003 },
 ];
 
 function buildHood({ head, M, mesh }) {
   // the cloth: the outside in the coat's black, the inside in the lining (a dark cavity round the
   // face); folds drawn down it from the point (foldLines)
-  const g = foldLines(shellGeometry(HOOD_RINGS, { sub: 2, cols: 26 }), (x, y, z, u) => 0.5 + 0.6 * Math.sin(u * 62 + y * 9) - 1.4 * Math.max(0, (y - 0.2) / 0.14));
+  const g = foldLines(shellGeometry(HOOD_RINGS, { sub: 2, cols: 26 }), (x, y, z, u) => 0.5 + 0.6 * Math.sin(u * 62 + y * 9) - 1.4 * Math.max(0, (y - 0.22) / 0.1));
   mesh(head, g, M.coat);
   mesh(head, g, M.lining);
   // the rim round the face opening: a paler torn edge, so the opening reads from the front
   const rim = [];
   for (const s of [-1, 1]) {
-    rim.push(...[0, 1, 2, 3].map((k) => {
+    rim.push(...[0, 1, 2, 3, 4].map((k) => {
       const A = HOOD_RINGS[k + 1], B = HOOD_RINGS[k + 2];
       const pt = (R) => {
         const a = Math.asin(Math.min(0.95, R.gap / R.rx));
@@ -88,6 +93,15 @@ function buildHood({ head, M, mesh }) {
     }));
   }
   mesh(head, mergeGeometries(rim), M.hem);
+  // gold locks falling out of the hood by each cheek, inside the opening (the body's side clusters
+  // sweep out through the cloth, so the hood builds its own): [x, y, z of the root, length, half-width]
+  const locks = [];
+  for (const s of [-1, 1]) {
+    for (const [x, y, z, L, w, out] of [[0.07, 0.19, 0.06, 0.12, 0.016, 0.12], [0.078, 0.16, 0.035, 0.1, 0.013, 0.2]]) {
+      locks.push(orientTo(clumpGeometry(L, w, 0.007, { curl: 0.15, taper: 0.8, cols: 6, rows: 3 }), [s * x, y, z], [s * out, -1, 0.12], [s, 0, 0.4]));
+    }
+  }
+  mesh(head, mergeGeometries(locks), M.hairTip);
 }
 
 // ---------------------------------------------------------------- chest: the wrap tunic
@@ -124,6 +138,7 @@ function buildTunic({ spine, chest, M, BODY, REST, mesh }) {
  *  closed. The forearm stops short of the grip so the WRIST reads between the binding and the fist. */
 function buildArms({ arms, sword, M, DIM, BODY, mesh }) {
   const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
+  let open = null, grip = null;
   {
     const F = gripFist(HK);
     mesh(sword, mergeGeometries([F.fingers, F.thumb, F.ridge]), M.skin);
@@ -156,12 +171,17 @@ function buildArms({ arms, sword, M, DIM, BODY, mesh }) {
       ]), M.skin);
     } else {
       const H = looseHand(DIM.foreArm - 0.03, side, HK);
-      mesh(fore, mergeGeometries([
-        limb({ length: 0.05, r0: fa1 - 0.006, r1: fa1 - 0.004, radial: 8, rings: 2, capSegs: 1 }).translate(0, -DIM.foreArm + 0.075, 0),
-        H.palm, H.fingers, H.tips, H.thumb,
-      ]), M.skin);
+      mesh(fore, limb({ length: 0.05, r0: fa1 - 0.006, r1: fa1 - 0.004, radial: 8, rings: 2, capSegs: 1 }).translate(0, -DIM.foreArm + 0.075, 0), M.skin);
+      // the free hand open (hanging, reaching, bracing), and the same hand closed round the grip
+      // below the sword hand (on the sword joint, so it closes round the grip in every pose): the
+      // animator shows one or the other as the hand joins the grip (rig.offHand, anim.js twoHand)
+      open = mesh(fore, mergeGeometries([H.palm, H.fingers, H.tips, H.thumb]), M.skin);
+      const F = gripFist(HK);
+      grip = mesh(sword, mergeGeometries([F.fingers, F.thumb, F.ridge]).translate(0, 0, -DIM.offGrip), M.skin);
+      grip.visible = false;
     }
   }
+  return { offHand: { open, grip }, keep: [open, grip] };
 }
 
 // ---------------------------------------------------------------- back: the tattered cloak
@@ -224,14 +244,18 @@ function buildCloak({ chest, arms, M, REST, mesh, joint }) {
       const m = mesh(s1, foldLines(tatterStrip(d.strips[k], sw, { fork: !!d.fork[k], curl: 0.2, seed: 500 + d.seed * 13 + k * 7 }), ribbonCrease(sw, i * 2.7 + k * 1.3)), M.hem, Math.sin(a) * R2, -L1 + 0.012, (Math.cos(a) - 1) * R2);
       m.rotation.y = a;
     }
-    streamers.push({ segs: [s0, s1], len: d.len, out: d.out, lag: d.lag ?? SHROUD_LAG, max: SHROUD_MAX });
+    // `w` (widths) and `arm` (1 / 2: hung on the right / left upper arm, which then does not push it)
+    // feed the animator's cloth-vs-steel bound
+    streamers.push({ segs: [s0, s1], len: d.len, out: d.out, lag: d.lag ?? SHROUD_LAG, max: SHROUD_MAX, w: d.w, arm: d.on === 'armR' ? 1 : d.on === 'armL' ? 2 : 0 });
   });
   return { streamers };
 }
 
-/** The set. `hidesHair` on a head item: model.js leaves the hair out under it. */
+/** The set. `hair` on a head item: the pieces of the hair model.js builds under it ('cap' and
+ *  HAIR_CLUSTERS names; `hidesHair: true` = none). The hood keeps the scalp cap and the fringe; the
+ *  crown, the nape and both side clusters would poke through the cloth. */
 export const SHROUD_ITEMS = [
-  { id: 'shroud.hood', slot: 'head', name: 'Tattered Hood', hidesHair: true, build: buildHood },
+  { id: 'shroud.hood', slot: 'head', name: 'Tattered Hood', hair: ['cap', 'fringe'], build: buildHood },
   { id: 'shroud.tunic', slot: 'chest', name: 'Wrap Tunic', build: buildTunic },
   { id: 'shroud.arms', slot: 'arms', name: 'Bound Sleeves', build: buildArms },
   { id: 'shroud.cloak', slot: 'back', name: 'Tattered Shroud', build: buildCloak },
