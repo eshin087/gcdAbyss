@@ -348,7 +348,7 @@ A standing hero now takes the full cap in almost every pattern; the cue-answerin
 so the patterns stay fair to perfect reads. Whether a person can read a P3 torrent with orbs is not
 something a bot shows: a human playtest is owed.
 
-## The Ash Disciple (2026-11-12, ADR-060, ADR-061; `?level=ash`)
+## The Ash Disciple (2026-11-12, ADR-060, ADR-061, ADR-062; `?level=ash`)
 A duelist: the same tell rules as the wyrm (every hit cued `flashLead` before impact, a move's first
 windup ≥ 0.7 s in every phase, a string's hits ≥ 0.45 s apart, red hits glow and red areas ring the
 ground), and the deflect chain (a move's non-final hit is deflected, its last recoils him). His own:
@@ -361,46 +361,88 @@ ground), and the deflect chain (a move's non-final hit is deflected, its last re
   the guard: it lands and he staggers (0.8 s). The chain's slam (posture 40) is turned aside.
 - **Openings:** his recoveries; the recoil (1.0 s) after his last hit is parried; the Ghostep (a
   perfect dodge blinks the hero 1.5 m behind him, his `ghostepBehind`: the wyrm's 3.2 m is out of
-  sword reach of a man's back; he offers no plunge, and his back is never guarded);
-  the posture break. Strikes that land in his footwork make him flinch (his guard comes straight back
-  up); after 2 within 1.6 s he backsteps out.
+  sword reach of a man's back; he offers no plunge, and his back is never guarded); the reeling and
+  trampled reactions of the moments below; the posture break. Strikes that land in his footwork make
+  him flinch (his guard comes straight back up); after 2 within 1.6 s he backsteps out.
 - **Feints never glint:** a feint has no tell and no flash. Only real impacts are cued.
 - **Posture break → execution:** broken for 3.2 s on one knee (hits crit ×1.5); an attack within
-  3.2 m runs him through: the execution thrust, 260 final damage, the break spent, he gives ground.
+  3.2 m runs him through: the execution thrust (a cinematic moment), 260 final damage, the break
+  spent, he gives ground.
 - **Two phases:** P1 100–50 %, P2 50–0 % (the gate holds damage at 50 % until the transition). The
   transition is **the Kindling**: he kneels, the blade kindles, a red shock ring (r 6 m, 10 damage,
-  kb 6) at 1.75 s. In P2 windups × 0.92 and recoveries × 0.85; three moves join.
-- **Footwork:** he circles at 3.0–5.6 m with his guard up, runs in beyond 7.5 m, backsteps (60 %)
-  when the hero is closer than 1.9 m, and sidesteps a charged thrust levelled at him (45 %, once
-  per 3 s). Idle gaps between moves: P1 0.45–0.95 s, P2 0.25–0.65 s.
+  kb 6) at 1.75 s. Windups × [1, 0.92], recoveries × [0.88, 0.75]; four moves join in P2.
+- **Pace (relentless, PBZ-fast):** idle gaps between moves P1 0.25–0.6 s, P2 0.15–0.42 s, and when
+  a move ends he flows straight into the next one (no footwork, no gap) 35 % of the time in P1, 55 %
+  in P2; the chained move still opens with a windup ≥ 0.7 s. **Footwork:** he circles at 3.0–5.6 m
+  with his guard up, runs in beyond 7.5 m, backsteps (60 %) when the hero is closer than 1.9 m, and
+  sidesteps a charged thrust levelled at him (45 %, once per 3 s).
 
-**Moves** (`moves.js`; N normal, B blue, R red; P1 windup s (damage); hits test a zone from his
-root through their active frames: sector r / ±ang, line r × w, ring r, metres):
+### The duel's moments (ADR-062)
+Sekiro / Phantom Blade Zero beats, each read from his data (`moves.js` beat flags, `tuning.js`):
+- **Full deflect** — parry every hit of a string of ≥ 5 (Rain of Ashes 7, Thousand Needles 5) and
+  the last parry throws him off balance: "PERFECT DEFLECT", `dragon:deflected`, posture +70, he
+  **reels** (1.45 s, wide open) and the moment plays in slow motion. (Hundred Petals ends on a
+  perilous thrust, so its climax is the mikiri instead.)
+- **Blade lock** — a **perfect** parry (≤ `perfectParryWindow` 0.08 s before the impact) of a blow
+  marked `lock` (Falling Ash, Falling Star, Crane Spins' leaping chop, the overhead cut in Rain of
+  Ashes and Hundred Petals) crosses the blades: "BLADE LOCK", the camera closes in (7 m, no slow
+  motion), a prompt `MASH [LMB]  [#####-----]` (touch: TAP ATTACK). Each press of attack or guard
+  pushes +0.085; he pushes back 0.32 / s (P2 0.38). Full = won, empty = lost; when 2.6 s run out the
+  hero wins at ≥ 0.6. About 1.5 s at 8 presses a second; 5 a second just holds it to the end; none
+  loses in ~1.5 s. **Won:** "BREAKTHROUGH", posture +110, he reels, the hero gets the crit window
+  (1.6 s) and 0.3 s of i-frames, slow motion. **Lost:** he shoves the hero (16, kb 2.6, unblockable)
+  and comes straight in with the Riposte. The hero can't be hit while locked.
+- **Mikiri (perilous thrust)** — a red thrust marked `mikiri` (Piercing Ash; the last hit of Hundred
+  Petals) flashes `combat:flash` with `perilous: true`. A roll **into** it (the roll's direction
+  against his facing, dot ≥ 0.55: read against his blade's line, so it holds when his dash has
+  brought him alongside) whose impact comes within 0.3 s of the roll's start steps on the blade:
+  "MIKIRI", `player:mikiri`, 0.55 s of i-frames, the crit window, posture +130, he is **trampled**
+  (1.5 s, pinned), slow motion. A roll across or away is an ordinary dodge (perfect: the Ghostep).
+- **The cinematic** (`flow.cinematic`) — the full deflect, a won lock, the mikiri and the execution:
+  time × 0.28 for 0.9 real s, easing back over the last third (the flow's own time scale, so an
+  actor's short hitstop is not stretched over it), the camera 10 m closer, leaning 60 % toward the
+  clash, a deep gong. A newer moment replaces a running one.
+
+**Moves** (`moves.js`; N normal, B blue, R red; P1 windup s (damage); LOCK = a perfect parry locks
+the blades, MIKIRI = perilous; hits test a zone from his root through their active frames: sector
+r / ±ang, line r × w, ring r, metres):
 
 | Move (phase ≥) | Hits | Zone / motion | AI band (m) · weight [P1, P2] · cooldown |
 |---|---|---|---|
 | Plum Thrust (1) | N 0.8 (18) | line 1.9 × 0.7; lunges ≤ 3.8 m | 3.2–6.8 · [2.2, 1.8] · 2.5 |
-| Falling Ash (1) | B 0.95 (26) two-handed overhead chop | sector 2.3 / ±0.5; steps 0.9 m | 1.2–4.2 · [1.8, 1.6] · 3 |
+| Falling Ash (1) | B 0.95 (26) LOCK, two-handed overhead chop | sector 2.3 / ±0.5 | 1.2–4.2 · [1.8, 1.6] · 3 |
+| Falling Star (1) | B 0.8 (24) LOCK, a one-handed chop from over the head | sector 2.3 / ±0.5 | 1.4–4.8 · [2.4, 2.0] · 3 |
+| Piercing Ash (1) | R 1.0 (30) MIKIRI, a low coiled thrust | line 2.1 × 0.7; dashes ≤ 5.5 m | 3.5–9 · [1.6, 1.8] · 6 |
+| Rain of Ashes (1) | N 0.8 (14) rising · N 0.45 (13) backhand · N 0.45 (13) flat · B 0.55 + hold 0.15–0.4 (20) LOCK over the top · N 0.45 (12) · N 0.45 (12) · B 0.6 (20) thrust | sectors 2.15–2.3, line 2.0 (dash ≤ 1.8) | 1.4–4.2 · [2.4, 2.2] · 8 |
 | Swallow Flicks (1) | N 0.78 (14) · N 0.48 (14) · B thrust 0.55 (20) | sectors 2.1 / ±0.9, line 2.0 | 1.4–4.4 · [2.6, 2.2] · 4 |
-| Crane Spins (1) | N spin 0.8 (15) · N spin 0.5 (15) · B leaping chop 0.65 (24) | rings 2.2 (steps 0.8 m into each), sector 2.4 | 1.4–4.0 · [2.0, 2.0] · 5 |
+| Crane Spins (1) | N spin 0.8 (15) · N spin 0.5 (15) · B leaping chop 0.65 (24) LOCK | rings 2.2, sector 2.4 (dash ≤ 3) | 1.4–4.0 · [2.0, 2.0] · 5 |
 | Hesitating Blade (1) | feint 0.65 · B thrust 0.6 + hold 0.2–0.7 (22) · 50 %: N flick 0.48 (14) | line 2.0, sector 2.1 | 2.4–5.4 · [2.0, 2.2] · 5 |
 | Lotus Sweep (1) | R 0.9 (22, knockdown) a low spin at the ankles | ring 3.0 (red ground ring) | 0–3.0 · [1.6, 1.6] · 6 |
 | Wind Step (1) | N 0.85 (18) | glides in ≤ 9 m, sector 2.2 / ±1.0 | 5.5–12 · [2.4, 2.4] · 4 |
 | Ash Crescent (1) | N 0.8 (14) sword qi along the ground, 14 m/s; P2 a fan of three (±0.36 rad) | each crescent cues itself `flashLead` before it reaches the hero (too late: it fizzles); parry or roll, block chips | 6–16 · [1.2, 2.0] · 5 |
-| Riposte (counter) | N 0.78 (16) · B 0.5 (22) | sector 2.1, line 2.0 | only from his guard |
+| Riposte (counter) | N 0.78 (16) · B 0.5 (22) | sector 2.1, line 2.0 | only from his guard, or after he wins a blade lock |
 | Thousand Needles (2) | N 0.8 · N 0.45 · N 0.45 · N 0.45 (10 each) · B 0.55 (18) | lines 1.95 | 1.4–4.4 · [0, 2.6] · 7 |
+| Hundred Petals (2) | N 0.8 · N 0.45 × 3 (11 each) · B 0.55 + hold 0.1–0.35 (18) LOCK · N 0.45 × 3 (10) · B 0.5 thrust (16) · R 0.8 (26) MIKIRI | sectors 2.15–2.3, lines 2.0–2.1 | 1.4–4.4 · [0, 2.6] · 10 |
 | Ember Whirl (2) | N spin 0.8 (14) · N spin 0.5 (14) · R burning spin 0.75 (26, knockdown) | rings 2.2, ring 3.4 (red) | 1.4–4.6 · [0, 2.2] · 8 |
 | Heaven-Splitting Fall (2) | R 1.5 (30, knockdown): a crouch, a leap (apex 3.6 m) | the red ring follows the hero until 67 % of the windup, then locks; ring 2.6 where he lands | 4.5–14 · [0, 1.6] · 10 |
 
+**His look (owner pick C, 2026-11-12):** a small straw hat (r 0.235 m), a long slender jian (a
+1.28 m blade from the guard, tapering to 60 %, bevelled edges and a ridge, disc guard and pommel, a
+banded grip, a red tassel) held in a high guard: the sword hand by the right temple, the blade
+slanting down across the body at the hero, the free hand's two fingers raised before the chest.
+
 Numbers (`tuning.js`): HP 3000, phases at [1, 0.5]; posture max [320, 380], regen after 2.5 s at
 20 / s, parries `POSTURE.parry` (26 / 48), weapon hits 5 / 16 that land, guarded 8 / 20, a parried
-Ash Crescent 8. Part multipliers head 1.3, body 1, legs 0.9. Every blow he deals (the table's
-damage, the crescents) × `damageScale` 1.35 (a 26 lands as 35).
-**Difficulty (measured, `npm test` → DUEL WIN, `node tests/integration/duel.mjs . probe`):** a god-mode
-fencing bot that answers every tell wins in 50–54 s (three seeds; 3–4 breaks and executions);
-mortal bots reading 85 % of the tells win in 54 s taking 1 hit; 70 % wins in 70–75 s on two seeds
-with 1 and 0 flasks left (12–13 hits, worst 35); 60 % dies with him at 10 % HP. Target: 1.5–2.5 min
-for a player who knows him. No human has played him yet.
+Ash Crescent 8; the moments above. Part multipliers head 1.3, body 1, legs 0.9. Every blow he deals
+(the table's damage, the crescents, the shove) × `damageScale` 1.35 (a 26 lands as 35).
+**Difficulty (measured after the rework, `npm test` → DUEL WIN, `node tests/integration/duel.mjs .
+probe`; seeds 4242 / 7 / 99):** a god-mode fencing bot that answers every tell wins in 52–61 s (3–5
+breaks and executions); mortal bots reading 85 % of the tells win all three in 55–64 s (6–7 hits taken,
+2–4 flasks left); 70 % die all three (at 26–51 s, him at 37–70 % HP); 60 % die two of three. The bots
+never use the blade lock (their parries are not perfect) or the mikiri (they roll across red), so a
+player who does gets far more posture than they do. Harder than before the rework (70 % used to win)
+and still easier than the wyrm (85 % on the edge there). Target: 1.5–2.5 min for a player who knows
+him. No human has played him yet.
 
 ## Current numbers (v0.6 "bullet hell", 2026-11-09)
 Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,

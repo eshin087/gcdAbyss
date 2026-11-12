@@ -1221,3 +1221,36 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Alternatives:** no guard (the owner's other option); a guard that holds through whole windups (the
   fencer then never trades, and nothing teaches the commit point); hits during his windups
   interrupting them (makes mashing the answer).
+
+## ADR-062 — The duel's moments: the full deflect, the blade lock, the mikiri, the cinematic (2026-11-12)
+- **Context:** the owner wanted Shen Hui to give "sekiro/phantom blade zero parries opportunities for
+  epic combat and moments", and picked all four offered: long deflect strings, a blade lock, perilous
+  counters and cinematic finishers, at a relentless, PBZ-fast pace.
+- **Decision:**
+  - **Moments are data on a move's beats**, read by the duelist (`moves.js`): `lock: true` (a perfect
+    parry of it crosses the blades), `mikiri: true` (a perilous red thrust: `hitPlayer` passes
+    `mikiri`, its flash `perilous`); the full deflect is a rule on any string of ≥ 5 hits. The numbers
+    live in `tuning.js` (`fullDeflect`, `lock`, `mikiri`, `cinematic`, `chain`, `idleGap`).
+  - **The hero owns the inputs, the attacker owns the outcome.** `player.startBladeLock(att, L)` runs
+    the mash (a meter, a prompt, `player:lock`) and calls `att.onLockEnd(won)`; `player.takeHit` checks
+    `hit.mikiri` against a roll into the blade (the roll's direction against the attacker's facing:
+    his blade's line, since a dashing thrust is often alongside at the impact) and calls
+    `att.onMikiri()`. The wyrm offers neither and is untouched; any later duelist reuses both.
+  - **A blade lock needs a perfect parry** (0.08 s), not any parry, so it stays a moment and not a
+    tax on every heavy blow. Time-out is not a loss when the hero held his ground (≥ 0.6): pressing
+    steadily is enough, pressing nothing loses.
+  - **`flow.cinematic`** is the one place that slows time and pulls the camera in for a moment, and
+    its slow motion is the flow's own time scale, not a hitstop (the hitstop min-merges its scale, so
+    the parry's 0.04 freeze stretched over the moment). The camera uses `cameraRig.cine`, an
+    additive pull-in that never fights the boss framing.
+  - **The pace:** short idle gaps and a chance to chain one move into the next; the tell rules still
+    hold for every chained move (first windup ≥ 0.7 s, hits ≥ 0.45 s apart: the DATA test).
+  - **His look (owner pick C of three rendered sheets):** a small hat, a long slender jian, a high
+    guard (the sword hand by the temple, the blade slanting down at the hero).
+- **Tuned on bots:** the god-mode fencer wins in 52–61 s; mortal bots reading 85 % of the tells win
+  (3 of 3), 70 % die (3 of 3), 60 % die (2 of 3). The bots use neither the lock nor the mikiri.
+- **Alternatives:** a lock on any parry of a heavy blow (too frequent; it would slow the PBZ pace it
+  is meant to punctuate); mikiri as a separate button (the roll the player already has, read by
+  direction, keeps the controls as they are and works on touch); the slow motion through `hitstop`
+  (the bug above); a scripted camera orbit for each moment (more to tune, and it fights the boss
+  framing on a phone).

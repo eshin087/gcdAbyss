@@ -160,6 +160,10 @@ Spec: `docs/specs/ash-disciple.md`.
 - [x] Nine moves and a counter in P1, three more in P2, the Kindling transition; feints that never
       glint; Ash Crescent projectiles
 - [x] His guard and counters, the Ghostep behind him, the execution thrust (ADR-061)
+- [x] Owner rework: a small hat, a long slender jian in a high guard (pick C of three sheets), four
+      new moves (Falling Star, Piercing Ash, Rain of Ashes, Hundred Petals), a PBZ-fast pace
+- [x] The duel's moments (ADR-062): the full deflect, the blade lock, the mikiri, `flow.cinematic`;
+      MOMENTS tests; film strips of each with real input
 - [x] Duel tests (`tests/integration/duel.mjs`: levels, data rules, timing, guard, deflect, Ghostep,
       execution, phases, flow, a bot win; `probe` opt-in); `npm test` + build green
 - [ ] Owner review of the PR preview (`?level=ash`, and on the phone); merge
@@ -167,8 +171,9 @@ Spec: `docs/specs/ash-disciple.md`.
 - Follow-ups:
   - [ ] **The reward** (the next PR, ADR-059): the technique system (slots, a meter filled by parries
         and perfect dodges, an equip screen) and his technique as the first one
-  - [ ] Look at every move and reaction frame by frame (only Plum Thrust, Swallow Flicks and Crane
-        Spins were filmed; the rest were checked by the tests, not by eye)
+  - [ ] Look at every move and reaction frame by frame (filmed: Plum Thrust, Swallow Flicks, Crane
+        Spins, Rain of Ashes, Falling Star, Piercing Ash, Hundred Petals; the rest by the tests only)
+  - [ ] The blade lock's mash rate on a phone (tap ATTACK): is 8 taps / s to win in ~1.5 s fair?
   - [ ] Sounds of his own: a jian whoosh per swing, a step / glide, the Kindling (today: the cues,
         the parry and block clangs, no creature voice)
   - [ ] His hit zones are not his blade: check the zones against the poses in the Lab hitbox overlay

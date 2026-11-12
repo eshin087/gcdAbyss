@@ -5,6 +5,71 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 19: Shen Hui reworked — a long jian, a high guard, the duel's moments
+
+**Owner:** "make shen hui's hat a bit smaller, its way too big right now. it looks like hes holding
+some weird flute instead of a weapon. make his weapon look way more epic, longer, and more natural.
+the way hes holding it right now looks really bad. make him have more dynamic and cooler attacks and
+animation and combos as i want to have sekiro/phantom blade zero parries opportunities for epic combat
+and moments." Answers: a long jian held one-handed; all four moments (long deflect strings, the
+blade lock, perilous counters, cinematic finishers); the pace relentless, PBZ-fast. From three
+rendered look sheets the owner picked **C: slender jian, high guard**. Same branch / PR (#16).
+
+**Done:**
+- **The look:** the hat 0.235 m in radius (was a wide douli); a 1.28 m slender jian with a tapered
+  blade, bevelled edges and a ridge, a disc guard and pommel, a banded grip and a red tassel streamer
+  (`gear.js` `LOOK`, `JIAN`); a slimmer bell sleeve; the **high guard** (`poses.js` `GUARD_HIGH`:
+  the sword hand by the temple, the blade slanting down at the hero, the free hand's two fingers up).
+- **New moves:** Falling Star (B, lock), Piercing Ash (R, perilous, a 5.5 m dash), Rain of Ashes (a
+  7-hit string with an over-the-top lock cut), Hundred Petals (P2, 10 hits, ending on a perilous
+  thrust); the cut library in `moves.js` (`CUTS`, `cut()`, `perilKeys()`). Reactions: reeling,
+  trampled, lock.
+- **The pace (PBZ-fast):** idle gaps 0.25–0.6 / 0.15–0.42 s, recoveries × 0.88 / 0.75, and 35 / 55 %
+  of moves flow straight into the next (`TUNING.chain`).
+- **The moments (ADR-062):** the full deflect (all hits of a ≥ 5-hit string parried: he reels), the
+  blade lock (a perfect parry of a `lock` blow: mash to push, `player.startBladeLock`, a camera
+  push-in, won = he reels, lost = a shove and the Riposte), the mikiri (roll into a `mikiri` thrust:
+  he is trampled), and `flow.cinematic` (slow motion + `cameraRig.cine` pull-in, a gong) on each of
+  them and on the execution. Call-outs BLADE LOCK / BREAKTHROUGH / MIKIRI / PERFECT DEFLECT; audio.
+- **Tests:** a MOMENTS scenario (lock won / lost → the Riposte / held to time-out, the mikiri head-on
+  and off his line, a roll across is no mikiri, the full deflect, the slow motion is not a freeze,
+  the camera returns); the WIN fencer mashes in a lock.
+
+**Found and fixed while filming (browser, real synthetic input):**
+- The cinematic's slow motion went through `game.hitstop`, which min-merges the scale: the parry's
+  0.04 freeze stretched over the whole 0.9 s moment (a freeze, not slow motion). It is now the flow's
+  own time scale (`cineScale`).
+- Parry flashes bloomed into two white blots a body-width apart: the hero's burst sat at his blade's
+  pre-parry point (the idle blade at the hip, ~0.3 m up, its light blowing out the paving) and his at
+  his own blade. The hero's clash now sits in front of his guard toward the blow; his is the point of
+  his blade nearest the hero's chest, and smaller; the hero's parry light stays ≥ 1 m up.
+- The blade lock was over in 0.25 s at a bot's mash rate and every push fired a full parry flare:
+  retuned to a ~1.5 s tug (push 0.085, decay 0.32 / 0.38, 2.6 s, won at the bell if ≥ 0.6), pushes
+  throw the block's grinding sparks.
+- The mikiri read "toward him" from positions: a dashing thrust is often alongside at the impact,
+  so the roll became a Ghostep. It now reads the roll against his facing (his blade's line).
+
+**Verification:** `npm test` ALL PASSED (wyrm suite, DUEL ALL PASSED incl. MOMENTS, glyph check),
+`npm run build` ok. Film strips (desktop 1200 × 800, synthetic mouse / keys through the real input):
+Rain of Ashes parried ×7 → the full deflect; Falling Star → perfect parry → lock at 8 presses / s →
+breakthrough; Piercing Ash → mikiri from off his line; Hundred Petals (P2) ×9 parried + the mikiri →
+posture break. Phone landscape (812 × 375) boots into the duel.
+
+**Measured (seeds 4242 / 7 / 99):** WIN 52–61 s (3–5 breaks). Probes: 85 % wins 3 / 3 in 55–64 s
+with 2–4 flasks left; 70 % dies 3 / 3; 60 % dies 2 / 3. Before the rework 70 % won in 70–75 s: the
+faster pace is harder, as asked, and the bots use neither the lock nor the mikiri.
+
+**Not checked / open:**
+- No human has played it; nothing ran on a phone (the owner's iPhone: fps unverified).
+- The lock's mash rate is a guess at a person's (8 / s wins in ~1.5 s, 5 / s holds).
+- Hits are still zones, not the blade; the new cuts were checked by TIMING (every hit lands within
+  ±85 ms of its flash + lead), not against the drawn blade.
+- The hero's parry FX point moved (all parries, the wyrm's too): looked at in the duel only.
+
+**Next:** the owner tries the preview; the reward (PR #18, `player/techniques`) rebases on this.
+
+---
+
 ## 2026-11-12 — Session 18: the Ash Disciple, a second level
 
 **Owner:** "help me think of making content for this game. i want this to be kinda like phantom blade
