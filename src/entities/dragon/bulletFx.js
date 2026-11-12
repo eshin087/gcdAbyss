@@ -9,6 +9,7 @@
 //   orb    red '@' in a turning 'O' ring, a '!' / '#' tail    (dodge only)
 
 import { TELL_STYLE } from '../../combat/rules.js';
+import { TUNING } from './tuning.js';
 
 const EMBER_CORE = '*';
 const EMBER_TAIL = ".'`*";
@@ -23,7 +24,6 @@ const CLASH = '+x*×';
 const STREAK = '-';
 const GLINT_PLUS = '+';
 const GLINT_STAR = '*';
-const WARN_DOT = '•';
 const WARN_MARK = '!';
 const FLAME_TALL = '^*#%&';
 const BEAM_CORE = '#';
@@ -209,37 +209,14 @@ export function muzzle(fx, x, y, z, dx, dz, n = 8, blue = false) {
 }
 
 // ---------------------------------------------------------------- fire wheel
-/** The warning: dotted red lines where the spokes will ignite, brightening (k 0..1). */
+/** The warning: the ground heats up along the lines where the spokes will ignite (k 0..1, ADR-048). */
 export function wheelWarn(fx, w, dt, k) {
   const life = fx._hold(w, 'hold', dt);
-  if (!(life > 0)) return;
-  const step = 1.3, n = Math.floor((w.r1 - w.r0) / step);
-  const lum = 0.35 + 0.75 * k + 0.25 * Math.sin(w.t * (8 + 14 * k));
+  const hot = w.warn <= TUNING.flashLead;
   for (let i = 0; i < w.n; i++) {
     const a = w.ang + (i * TAU) / w.n;
-    const sx = Math.sin(a), sz = Math.cos(a);
-    for (let j = 0; j <= n; j++) {
-      const r = w.r0 + j * step;
-      const mark = j % 4 === 2;
-      fx._col(RED, lum * (mark ? 1.3 : 1), RED, lum);
-      const o = fx._rec(w.x + sx * r, 0.35, w.z + sz * r, life, mark ? 0.8 : 0.5, mark ? 0.8 : 0.5, mark ? WARN_MARK : WARN_DOT);
-      o.alphaEnd = 1;
-      fx._spawn(fx.add, o);
-    }
-  }
-  // embers creep in along the lines as the fire gathers
-  w.acc += dt * 30 * k;
-  while (w.acc >= 1) {
-    w.acc -= 1;
-    const a = w.ang + (((Math.random() * w.n) | 0) * TAU) / w.n;
-    const r = rand(w.r0, w.r1);
-    fx._col(ORANGE, 1, DARK, 1);
-    const o = fx._rec(w.x + Math.sin(a) * r, 0.2, w.z + Math.cos(a) * r, rand(0.4, 0.7), 0.3, 0.05, EMBER_TAIL);
-    o.vy = rand(0.6, 2);
-    o.vx = -Math.sin(a) * 2.5;
-    o.vz = -Math.cos(a) * 2.5;
-    o.flicker = 0.4;
-    fx._spawn(fx.add, o);
+    // (one scorch stamp budget per spoke would be n x the rate: only spoke 0 stamps, the rest glow)
+    fx.heatBand(life, w, dt, w.x, w.z, Math.sin(a), Math.cos(a), w.r0, w.r1, w.width / 2 + 0.2, k, hot, 7.3 + i * 3.1, -1, w.r1, i === 0);
   }
 }
 

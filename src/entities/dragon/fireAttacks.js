@@ -114,7 +114,7 @@ function retime(d, a, b, ref) {
   if (Number.isFinite(tau)) b.impactIn = Math.max(0.05, a.T - b.at + tau);
 }
 
-/** On the beat's timing flash, a red flare where the hazard will meet the hero too (x, z). */
+/** On the beat's timing flash, a heat flare where the hazard will meet the hero too (x, z). */
 function flareOnFlash(d, a, b, x, z, r = 2.2) {
   if (!b || !b.flashed || a.flared) return;
   a.flared = true;
@@ -1113,8 +1113,8 @@ const nova = {
       d.flash = Math.max(d.flash ?? 0, 0.15 + 0.7 * k * k); // white-hot (the hit-flash white)
       const c = pt.chest;
       d.fx.novaCharge(dt, c.x, c.y, c.z, k);
-      // the blast radius in red, its inner ring closing in on the wyrm: a countdown to the blast
-      d.fx.hzRing(d.fx.holdLife(a, dt), a.cx, a.cz, NV.radius, k, k > 1 - TUNING.flashLead / Math.max(0.5, a.dur));
+      // the blast radius: the whole clearing round it heats up toward the blast (ADR-048)
+      d.fx.heatDisc(d.fx.holdLife(a, dt), a, dt, a.cx, a.cz, NV.radius, k, k > 1 - TUNING.flashLead / Math.max(0.5, a.dur), 41.7);
       if (a.light) {
         a.light.set(c.x, c.y, c.z);
         a.light.intensity = 1 + 7 * k * k;

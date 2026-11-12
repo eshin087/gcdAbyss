@@ -646,7 +646,7 @@ export class Dragon {
     const z = a.def?.zone;
     if (typeof z === 'function') {
       const r = z(this, a, this._tmp);
-      if (r > 0) this.fx.ringPulse(this._tmp.x, this._tmp.z, r, b.tell);
+      if (r > 0) this.fx.ringPulse(this._tmp.x, this._tmp.z, r);
     }
   }
 

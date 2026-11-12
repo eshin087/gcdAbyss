@@ -82,7 +82,7 @@ export class Bullets {
     this.wheel = {
       on: false, lit: false, attack: 'fireWheel', x: 0, z: 0, n: 4, ang: 0, dir: 1, u: 0, t: 0, fade: 1,
       warn: 0, warn0: 1, dur: 4, speed: 1, r0: 3, r1: 26, width: 1, damage: 0, burn: 0, knockback: 0,
-      hits: 0, max: 2, cd: 0, cueT: NEVER, acc: 0, scorchT: 0, lightT: 0, hold: 0,
+      hits: 0, max: 2, cd: 0, cueT: NEVER, acc: 0, acc4: 0, heatT: 0, scorchT: 0, lightT: 0, hold: 0,
       tt: Infinity, // s until the next spoke reaches the hero (Infinity: none coming)
       headline: false, // the first crossing is announced by the attack's headline beat
     };

@@ -12,7 +12,8 @@ import { clamp } from '../../core/math.js';
 // pillars along A + dir * k * step, erupting one after another) and two emitters that spawn
 // circles over time: rain (meteors round the player) and chase (pillars under the player).
 //
-// Every hazard draws a red glyph ground warning from spawn until it goes off, then hits through
+// Every hazard heats the ground under it from spawn until it goes off (ADR-048: a glow of small
+// ground glyphs + scorch heat, its edge drawn in the last flashLead s), then hits through
 // dragon.hitPlayer({ ..., tell: TELL.RED, plunge: false }): i-frames dodge it, block / parry fail
 // (a hazard spawned with plunge: true, fire breathed or spat from the air, lets a perfect dodge plunge).
 // The main hit lands at most once per hazard (a strip's lingering fire ticks: blockable contact
@@ -55,8 +56,8 @@ function blank(i) {
     // emitters
     count: 0, done: 0, first: 0, span: 0, warn: 0, warnLed: 0, ledEvery: 0, lo: 0, hi: 0, every: 0, until: 0,
     lead: 0, linkFirst: false,
-    // fx scratch (accumulators, held sprites, pillars burst bitmask, lights)
-    hold: 0, acc: 0, acc2: 0, acc3: 0, acc4: 0, seed: 0, mask: 0,
+    // fx scratch (accumulators, held sprites, scorch-heat stamp timer, pillars burst bitmask, lights)
+    hold: 0, acc: 0, acc2: 0, acc3: 0, acc4: 0, heatT: 0, seed: 0, mask: 0,
     l0: null, l1: null, l2: null,
   };
 }
@@ -491,9 +492,9 @@ export class Hazards {
     if (h.announce) this._announce(h, h.x, h.z, dist <= h.r + pr + ANNOUNCE_PAD);
     const life = fx.holdLife(h, dt);
     if (left > 0) {
-      // the red ground warning until impact (an inner ring closes in as it nears), the projectile
+      // the ground heats up until impact (its edge shows in the last flashLead s), the projectile
       const k = clamp(1 - left / Math.max(0.3, h.impact), 0, 1);
-      fx.hzRing(life, h.x, h.z, h.r, k, h.flashed, h.kind === 'pillar' ? 1 : 0);
+      fx.heatDisc(life, h, dt, h.x, h.z, h.r, k, h.flashed || left <= TUNING.flashLead, h.seed, h.kind === 'pillar' ? 1 : 0);
       if (h.kind === 'pillar') fx.pillarRumble(h, dt, h.x, h.z, h.r, k);
       if (h.fall > 0 && left <= h.fall) {
         if (!h.fell) {
@@ -527,8 +528,8 @@ export class Hazards {
     const f = clamp(run * h.speed, 0, h.len);
     const b0 = clamp((run - h.linger) * h.speed, 0, h.len); // start of the part still burning
     const life = fx.holdLife(h, dt);
-    // red warning ahead of the front; flames behind it
-    if (f < h.len) fx.stripWarn(life, h, dt, f, clamp(1 - Math.max(0, -run) / Math.max(0.3, h.impact), 0, 1));
+    // the ground heats up ahead of the front; flames behind it
+    if (f < h.len) fx.stripWarn(life, h, dt, f, clamp(1 - Math.max(0, -run) / Math.max(0.3, h.impact), 0, 1), run > -TUNING.flashLead);
     if (run > 0) fx.stripFire(h, dt, b0, f, run < h.len / h.speed);
     const ex = px - h.ax, ez = pz - h.az;
     const s = ex * h.dx + ez * h.dz;
@@ -570,7 +571,7 @@ export class Hazards {
     const run = h.t - h.impact;
     const life = fx.holdLife(h, dt);
     if (run < 0) {
-      fx.ringWarn(life, h, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1));
+      fx.ringWarn(life, h, dt, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1), -run <= TUNING.flashLead);
       return;
     }
     const r = Math.min(h.r1, h.r0 + run * h.speed);
@@ -605,7 +606,7 @@ export class Hazards {
     const run = h.t - h.impact;
     const life = fx.holdLife(h, dt);
     if (run < 0) {
-      fx.wallWarn(life, h, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1));
+      fx.wallWarn(life, h, dt, clamp(1 - -run / Math.max(0.3, h.impact), 0, 1), -run <= TUNING.flashLead);
       return;
     }
     const s = Math.min(h.dist, run * h.speed);
@@ -642,7 +643,7 @@ export class Hazards {
       const left = ik - h.t;
       if (left > 0) {
         const kk = clamp(1 - left / Math.max(0.3, ik), 0, 1);
-        fx.hzRing(life, x, z, h.r, kk, left <= TUNING.flashLead, 1);
+        fx.heatDisc(life, h, dt, x, z, h.r, kk, left <= TUNING.flashLead, h.seed + k * 13.1, 1);
         fx.pillarRumble(h, dt, x, z, h.r, kk);
         continue;
       }
