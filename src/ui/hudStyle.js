@@ -377,6 +377,7 @@ const CSS = `
   box-shadow: 0 0 8px ${rgba(CYAN, 0.9)};
 }
 .ab-call.k-parry > .t { color: #fff6e6; text-shadow: 0 0 10px rgba(255, 226, 170, 0.95), 0 0 2px #000, 0 1px 2px #000; }
+.ab-call.k-return > .t { color: #ffd98a; font-size: clamp(16px, 1.3vw, 22px); text-shadow: 0 0 12px rgba(255, 196, 90, 1), 0 0 24px rgba(255, 150, 40, 0.6), 0 0 2px #000; }
 .ab-call.k-deflect > .t { color: #e8f4ff; font-size: clamp(16px, 1.3vw, 22px); text-shadow: 0 0 12px ${rgba(BLUE, 1)}, 0 0 24px ${rgba(BLUE, 0.6)}, 0 0 2px #000; }
 .ab-call.k-ghostep > .t { color: ${CYAN}; font-size: clamp(16px, 1.3vw, 22px); font-style: italic; text-shadow: 0 0 12px ${rgba(CYAN, 1)}, -8px 0 10px ${rgba(CYAN, 0.45)}, 0 0 2px #000; }
 .ab-call.k-gbreak > .t { color: #ff6a55; text-shadow: 0 0 10px ${rgba(RED, 0.95)}, 0 0 2px #000, 0 1px 2px #000; }

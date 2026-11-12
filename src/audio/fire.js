@@ -7,7 +7,8 @@ import { env, perc, glide, spikes, rnd, num } from './dsp.js';
 //   dragon:spell {name}         skyStrafe -> skyRoar · diveBomb -> diveScream · meteorRain -> meteorCast
 //                               eruptions -> rumble · flameRing / flameWall -> flameIgnite · nova -> novaCharge
 //   dragon:hazard {kind, stage} meteor fall -> meteorFall · meteor hit -> meteorHit · pillar -> pillar
-//                               crash -> crash · nova -> novaBlast
+//                               crash -> crash · nova -> novaBlast · Armageddon: meteor launch (a
+//                               bolt of the salvo) -> boltLaunch · meteor sky (the sky answers) -> rumble
 //   combat:tell {hazard: true}  -> hazardTell (a hazard's own tell: lighter than the brass sting)
 
 // --- small building blocks (local copies of sfx.js's) -----------------------------------------
@@ -78,6 +79,16 @@ export const FIRE_SFX = {
       env(wg.gain, t, [[0, 0], [D * 0.3, 0.035], [D, 0.06], [D + 0.03, 0]]);
       w.connect(wg).connect(v.out);
       swish(v, t, 'brown', 'lowpass', 300, 0.7, [[0, 0], [D, 0.5], [D + 0.05, 0]]);
+    },
+  },
+
+  /** One bolt of Armageddon's salvo shot into the sky: a short rising hiss over a thud. */
+  boltLaunch: {
+    prio: 3, rev: 0.25, gap: 0.05, falloff: 0.7,
+    play(v, t) {
+      const bp = swish(v, t, 'white', 'bandpass', 900, 2.2, [[0, 0], [0.03, 0.22], [0.35, 0]]);
+      glide(bp.frequency, t, 900, 4200, 0.35);
+      thump(v, t, 140, 60, 0.08, 0.35, 0.12);
     },
   },
 
@@ -256,6 +267,9 @@ export const FIRE_SFX = {
   },
 };
 
+// (the bullet patterns keep their keys: emberStorm = the Ember torrent, fanVolley = the Cinder burst,
+// fireWheel = the Scouring breath; the torrent and the breath also run the breath loop through
+// dragon:breathStart / breathEnd, ADR-050)
 const SPELL = { skyStrafe: 'skyRoar', diveBomb: 'diveScream', meteorRain: 'meteorCast', eruptions: 'rumble', flameRing: 'flameIgnite', flameWall: 'flameIgnite', nova: 'novaCharge', emberStorm: 'flameIgnite', fanVolley: 'flameIgnite', fireWheel: 'flameIgnite', wispSwarm: 'meteorCast' };
 const SPELL_OPTS = { flameRing: { length: 1.6 }, flameWall: { length: 2.6 }, nova: { time: 2.5 } };
 const HIT = { meteor: 'meteorHit', pillar: 'pillar', crash: 'crash', nova: 'novaBlast' };
@@ -276,8 +290,8 @@ export function subscribeFire(on, E) {
     E.play(name, o);
   });
   on('dragon:hazard', (d) => {
-    const fall = d.stage === 'fall';
-    const name = fall ? (d.kind === 'meteor' ? 'meteorFall' : null) : HIT[d.kind];
+    const st = d.stage;
+    const name = st === 'fall' ? (d.kind === 'meteor' ? 'meteorFall' : null) : st === 'launch' ? 'boltLaunch' : st === 'sky' ? 'rumble' : HIT[d.kind];
     if (!name) return;
     E.play(name, { x: d.x, z: d.z, fall: 0.75 });
   });

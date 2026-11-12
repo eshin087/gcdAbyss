@@ -68,7 +68,7 @@ const PAYLOAD = {
   'player:slam': { x: 'n', z: 'n' },
   'player:hurt': { damage: 'n', kind: 's', hp: 'n' },
   'player:block': { damage: 'n', tell: 't' },
-  'player:parry': { tell: 't', attack: 's', chain: 'n' },
+  'player:parry': { tell: 't', attack: 's', chain: 'n', perfect: 'b' },
   'player:guardBreak': { attack: 's' },
   'player:dodge': { kind: 's' },
   'player:perfectDodge': { attack: 's', tell: 't' },
@@ -89,6 +89,7 @@ const PAYLOAD = {
   'dragon:explosion': { x: 'n', z: 'n', radius: 'n' },
   'dragon:hurt': { damage: 'n', part: 's', hp: 'n', crit: 'b' },
   'dragon:parried': { attack: 's', tell: 't', hit: 'n', last: 'b' },
+  'dragon:returned': { kind: 'n', damage: 'n', x: 'n', y: 'n', z: 'n' },
   'combat:deflectChain': { count: 'n' },
   'dragon:phase': { n: 'n' },
   'dragon:plunged': { execution: 'b' },
@@ -218,7 +219,7 @@ function build(opts = {}) {
   game.player.takeHit = (h) => {
     const hp0 = game.player.hp;
     const r = takeHit(h);
-    G.hits.push({ t: game.time, r, attack: h?.attack, tell: h?.tell, damage: h?.damage, kind: h?.kind, hp0, hp1: game.player.hp });
+    G.hits.push({ t: game.time, r, attack: h?.attack, tell: h?.tell, damage: h?.damage, kind: h?.kind, hp0, hp1: game.player.hp, fx: h?.from?.x, fz: h?.from?.z });
     return r;
   };
   game.cameraRig.snap(game.player.position);
@@ -1372,20 +1373,21 @@ async function scenarioBullets() {
     run(G, 0.8, { passive: true });
     place(G, 7);
     d.posture = 0;
-    const c0 = { ...G.counts }, h0 = G.hits.length, hp0 = p.hp;
-    const rec = { cues: [], flashAt: [], light: null, parried: [], postureAtHit: null, state: [] };
+    const c0 = { ...G.counts }, h0 = G.hits.length, hp0 = p.hp, dhp0 = d.hp;
+    const rec = { cues: [], flashAt: [], light: null, perfect: null, parried: [], returned: [], postureAtHit: null, state: [], pressAt: [] };
     G.watch = (n, e) => {
       if (n === 'combat:tell' && e?.bullet) rec.cues.push({ t: game.time, impactIn: e.impactIn, tell: e.tell, hazard: e.hazard });
       if (n === 'combat:flash' && e?.bullet) rec.flashAt.push(game.time);
-      if (n === 'player:parry') rec.light = e.light;
+      if (n === 'player:parry') { rec.light = e.light; rec.perfect = e.perfect; }
       if (n === 'dragon:parried') rec.parried.push(e);
+      if (n === 'dragon:returned') rec.returned.push({ ...e, t: game.time });
     };
     const from = o.from ?? 6, speed = o.speed ?? 9, n = o.n ?? 1;
     const dx = d.position.x - p.position.x, dz = d.position.z - p.position.z, l = Math.hypot(dx, dz) || 1;
     const ux = dx / l, uz = dz / l;
     const sx = p.position.x + ux * from, sz = p.position.z + uz * from;
     const yaw = Math.atan2(-ux, -uz);
-    const grp = o.cap ? B.group(o.cap) : -1;
+    const grp = o.grp ?? (o.cap ? B.group(o.cap) : -1);
     let spawned = 0, next = game.time, answered = 0, seenHits = 0;
     if (o.hold) input.press(2);
     for (let i = 0; i < Math.round((o.T ?? 2.4) / DT); i++) {
@@ -1398,7 +1400,7 @@ async function scenarioBullets() {
       input.axis = { x: 0, y: 0 };
       if (answered < rec.flashAt.length) {
         const left = rec.flashAt[answered] + lead - game.time - DT;
-        if (o.answer === 'parry' && left <= 0.12) { answered++; input.click(2); }
+        if (o.answer === 'parry' && left <= (o.parryLead ?? 0.12)) { answered++; input.click(2); rec.pressAt.push(game.time + DT); }
         else if (o.answer === 'roll' && left <= 0.1) { answered++; input.axis = { x: ux, y: -uz }; input.tap('Space'); }
         else if (o.answer === 'swing' && left <= (o.swingLead ?? 0.3)) { answered++; input.click(0); }
         else if (!o.answer || o.answer === 'none') answered++;
@@ -1416,6 +1418,9 @@ async function scenarioBullets() {
     rec.ev = {};
     for (const k in G.counts) rec.ev[k] = G.counts[k] - (c0[k] || 0);
     rec.live = B.live;
+    rec.dmg = dhp0 - d.hp; // the wyrm's HP lost during the shot (a returned bullet)
+    rec.postureEnd = d.posture;
+    rec.gap = rec.hits[0] && rec.pressAt[0] !== undefined ? rec.hits[0].t - rec.pressAt[0] : NaN; // RMB press -> impact
     return rec;
   };
   const cnt = (r, what) => r.res.filter((x) => x === what).length;
@@ -1439,6 +1444,90 @@ async function scenarioBullets() {
   const wi = shot(KIND.wisp, { answer: 'parry' });
   out(`   wisp, parried: ${wi.res.join(' ')} · posture ${wi.postureAtHit} · cue ${wi.cues[0]?.tell}`);
   assert(wi.res[0] === RESULT.PARRIED && near(wi.postureAtHit, K.wisp.posture, 0.5) && wi.cues[0]?.tell === TELL.BLUE, 'a wisp is a blue tell: deflected for K.wisp.posture');
+
+  // --- a PERFECT parry (RMB within DEFENSE.perfectParryWindow of the impact) returns the bullet:
+  // HP damage + returnPosture on the head when the shot lands, dragon:returned; the wyrm goes on
+  const PW = DEFENSE.perfectParryWindow;
+  assert(PW > 0 && PW < DEFENSE.parryWindow, `DEFENSE.perfectParryWindow ${PW} s sits inside the parry window`);
+  const actBefore = d.brain.action;
+  const st0 = { dealt: game.flow.stats.damageDealt, hits: game.flow.stats.hits };
+  const pf = shot(KIND.ember, { answer: 'parry', parryLead: 0.05 });
+  const stDealt = game.flow.stats.damageDealt - st0.dealt, stHits = game.flow.stats.hits - st0.hits;
+  out(`   ember, RMB ${pf.gap.toFixed(3)} s before impact: ${pf.res.join(' ')} · perfect ${pf.perfect} · dragon:parried.perfect ${pf.parried[0]?.perfect} · returned ${JSON.stringify(pf.returned.map((r) => r.damage))} · wyrm −${pf.dmg} HP · posture ${pf.postureEnd.toFixed(1)} · live ${pf.live}`);
+  assert(pf.res[0] === RESULT.PARRIED && pf.hp === 0 && pf.gap <= PW + 1e-6, `a parry ${pf.gap.toFixed(3)} s before impact parries the ember`);
+  assert(pf.perfect === true && pf.parried[0]?.perfect === true && pf.parried[0]?.bullet === true, 'player:parry { perfect: true } and dragon:parried { bullet, perfect: true }');
+  assert(pf.returned.length === 1 && pf.returned[0].damage === K.ember.returnDamage && pf.dmg === K.ember.returnDamage, `the returned ember lands on the head for returnDamage (${pf.dmg} / ${K.ember.returnDamage}), dragon:returned once`);
+  assert(near(pf.postureEnd, K.ember.returnPosture, 0.5), `the return adds returnPosture instead of the deflect's posture (${pf.postureEnd.toFixed(1)} / ${K.ember.returnPosture})`);
+  assert(pf.live === 0 && d.brain.action === actBefore, 'the shot burst on the head; the wyrm was not interrupted');
+  assert(stDealt === K.ember.returnDamage && stHits === 1, `the run stats count the return as the hero's hit (${stDealt} damage, ${stHits} hit)`);
+  const pw = shot(KIND.wisp, { answer: 'parry', parryLead: 0.05 });
+  out(`   wisp, RMB ${pw.gap.toFixed(3)} s before impact: perfect ${pw.perfect} · wyrm −${pw.dmg} HP · posture ${pw.postureEnd.toFixed(1)}`);
+  assert(pw.perfect === true && pw.dmg === K.wisp.returnDamage && near(pw.postureEnd, K.wisp.returnPosture, 0.5), `a perfectly parried wisp returns for ${K.wisp.returnDamage} HP + ${K.wisp.returnPosture} posture (${pw.dmg}, ${pw.postureEnd.toFixed(1)})`);
+  const pn = shot(KIND.ember, { answer: 'parry', parryLead: 0.18 });
+  out(`   ember, RMB ${pn.gap.toFixed(3)} s before impact: ${pn.res.join(' ')} · perfect ${pn.perfect} · wyrm −${pn.dmg} HP · posture ${pn.postureEnd.toFixed(1)}`);
+  assert(pn.res[0] === RESULT.PARRIED && pn.perfect === false && pn.gap > PW, `a parry ${pn.gap.toFixed(3)} s before impact is a normal deflect`);
+  assert(pn.dmg === 0 && pn.returned.length === 0 && near(pn.postureEnd, K.ember.posture, 0.5), 'a normal deflect: no HP damage, the kind\'s posture only');
+  // a pattern's returns are budgeted (TUNING.bullets.returnBudget): past it a perfect parry deflects
+  {
+    let dealt = 0, plain = 0, perf = 0;
+    const grp = B.group(9);
+    const per = K.ember.returnDamage, budget = B.groups[grp].retMax;
+    for (let i = 0; i < Math.floor(budget / per) + 2; i++) {
+      const r = shot(KIND.ember, { answer: 'parry', parryLead: 0.05, grp });
+      if (r.perfect) perf++;
+      dealt += r.dmg;
+      if (r.perfect && r.returned.length === 0) plain++;
+    }
+    out(`   ${perf} perfect parries in one pattern (budget ${budget} HP): returned ${dealt} HP, ${plain} past the budget were plain deflects`);
+    assert(budget === K.returnBudget && dealt <= budget && dealt === Math.floor(budget / per) * per && plain >= 1, `a pattern's returns deal at most its budget (${dealt} / ${budget} HP), then perfect parries deflect`);
+  }
+  const po = shot(KIND.orb, { answer: 'parry', parryLead: 0.05 });
+  out(`   orb, RMB on the perfect timing: ${po.res.join(' ')} · wyrm −${po.dmg} HP`);
+  assert(cnt(po, RESULT.PARRIED) === 0 && po.dmg === 0 && po.returned.length === 0, 'an orb cannot be parried, even on the perfect timing');
+  // a return goes through the wyrm's own damage entry: the phase gate holds as for a sword hit, and
+  // during a transition roar it deals what a sword hit deals there
+  {
+    settle(G);
+    d.debug.setAI(true);
+    const gate = d.nextPhaseHp;
+    d.hp = gate + 10;
+    const gt = shot(KIND.ember, { answer: 'parry', parryLead: 0.05, T: 1.6 });
+    const gateHeld = d.hp, pend = Math.max(d.brain.pendingPhase, d.brain.action?.name === 'phase2' ? 2 : 0, d.phase);
+    d.debug.setAI(false);
+    d.brain.pendingPhase = 0;
+    if (d.brain.action) d.brain.stopAction?.(true);
+    out(`   return at gate + 10 HP (AI on): perfect ${gt.perfect} · HP ${gate + 10} → ${gateHeld} (gate ${gate}) · next phase pending / started: ${pend}`);
+    assert(gt.perfect === true && gt.returned.length === 1 && gateHeld === gate && pend === 2, 'a return cannot push the wyrm past the phase gate (it waits for the transition, like a sword hit)');
+    d.hp = d.maxHp;
+    settle(G);
+    d.debug.phase2();
+    run(G, 0.9, { passive: true });
+    const roar = d.brain.action?.name;
+    const hpA = d.hp;
+    B.clear();
+    place(G, 7);
+    const dx = d.position.x - p.position.x, dz = d.position.z - p.position.z, l = Math.hypot(dx, dz) || 1;
+    const b = B.spawn(KIND.ember, 'emberStorm', p.position.x + (dx / l) * 3, 1.0, p.position.z + (dz / l) * 3, Math.atan2(-dx, -dz), 9);
+    b.cued = true;
+    d.posture = 0;
+    let fired = false;
+    const rr = [];
+    G.watch = (n, e) => { if (n === 'dragon:returned') rr.push(e.damage); };
+    for (let i = 0; i < Math.round(1.2 / DT); i++) {
+      aimAt(G);
+      if (!fired && b.alive && B.tti(b) <= 0.05) { fired = true; input.click(2); }
+      G.tick(DT);
+    }
+    G.watch = null;
+    const lost = hpA - d.hp;
+    const sword = d.takeHit({ damage: K.ember.returnDamage, part: 'head', exact: true, posture: 0 });
+    out(`   return during the ${roar} roar: returned ${JSON.stringify(rr)} · wyrm −${lost} HP · the same blow as a sword hit there: −${sword}`);
+    assert(roar === 'phase2' && rr.length === 1 && lost === sword, `a return during a transition roar deals what a sword hit deals there (${lost} / ${sword})`);
+    run(G, 4, { passive: true }, () => !d.brain.action);
+    d.enterPhase(1);
+    d.hp = d.maxHp;
+    settle(G, 12);
+  }
 
   // --- block (chip) and roll (i-frames, no Ghostep off a small bullet)
   const bl = shot(KIND.ember, { hold: true });
@@ -1522,6 +1611,9 @@ async function scenarioBullets() {
     const def = answer ? makeDefender(G) : null;
     const h0 = G.hits.length, c0 = { ...G.counts };
     let tells = 0, flashes = 0, peak = 0, bad = 0;
+    // ADR-050: every bullet is breathed: born at pt.mouth, along the head's aim (a cone / fork round it)
+    const born = { n: 0, far: 0, worst: 0, aimWorst: 0, offWorst: 0 };
+    const SPREAD = { emberStorm: TUNING.attacks.emberStorm.laneGap + TUNING.attacks.emberStorm.orbSpread * 1.5, fanVolley: TUNING.attacks.fanVolley.spread + 0.06 };
     G.watch = (n, e) => { def?.onEvent(n, e); if (n === 'combat:tell') tells++; if (n === 'combat:flash') flashes++; };
     const ok = game.lab.trigger(name);
     let ended = -1;
@@ -1533,6 +1625,25 @@ async function scenarioBullets() {
       G.tick(DT);
       peak = Math.max(peak, B.live);
       for (let j = 0; j < B.pool.length; j++) { const b = B.pool[j]; if (b.alive && !Number.isFinite(b.x + b.y + b.z + b.vx + b.vz)) bad++; }
+      if (name !== 'fireWheel') {
+        const m = d.rig.pt.mouth, f = d.rig.pt.headFwd, hy = Math.atan2(f.x, f.z);
+        let sx = 0, sz = 0, cn = 0;
+        for (let j = 0; j < B.pool.length; j++) {
+          const b = B.pool[j];
+          if (!b.alive || b.attack !== name || b.t > DT * 1.01 || b.deflected) continue;
+          // back to where it was spawned this frame (it already flew one step)
+          const ox = b.x - b.vx * b.t, oz = b.z - b.vz * b.t;
+          const dm = Math.hypot(ox - m.x, b.y0 - m.y, oz - m.z);
+          born.n++;
+          born.worst = Math.max(born.worst, dm);
+          if (dm > 0.6) born.far++;
+          if (b.kind === KIND.wisp) continue; // (a swarm is roared out in a spray round the head)
+          const yb = Math.atan2(b.vx, b.vz);
+          born.offWorst = Math.max(born.offWorst, Math.abs(angleDiffT(hy, yb)));
+          sx += Math.sin(yb); sz += Math.cos(yb); cn++;
+        }
+        if (cn > 0) born.aimWorst = Math.max(born.aimWorst, Math.abs(angleDiffT(hy, Math.atan2(sx, sz))));
+      }
       if (ended < 0 && !d.brain.action) ended = i;
       if (ended >= 0 && B.live === 0 && !B.wheel.on && i - ended > 30) break;
     }
@@ -1540,7 +1651,7 @@ async function scenarioBullets() {
     input.up(2);
     const hs = G.hits.slice(h0).filter((h) => h.attack === name);
     const by = (r) => hs.filter((h) => h.r === r).length;
-    return { ok, ended, tells, flashes, peak, bad, hit: by(RESULT.HIT), parried: by(RESULT.PARRIED), blocked: by(RESULT.BLOCKED), dodged: by(RESULT.DODGED) + by(RESULT.PERFECT), live: B.live, wheel: B.wheel.on, hurt: (G.counts['player:hurt'] || 0) - (c0['player:hurt'] || 0) };
+    return { born, spread: SPREAD[name] ?? 0, ok, ended, tells, flashes, peak, bad, hit: by(RESULT.HIT), parried: by(RESULT.PARRIED), blocked: by(RESULT.BLOCKED), dodged: by(RESULT.DODGED) + by(RESULT.PERFECT), live: B.live, wheel: B.wheel.on, hurt: (G.counts['player:hurt'] || 0) - (c0['player:hurt'] || 0) };
   };
   const DIST = { emberStorm: 9, fanVolley: 11, wispSwarm: 10, fireWheel: 9 };
 
@@ -1578,12 +1689,14 @@ async function scenarioBullets() {
       return r;
     };
 
-    // an even count (phase 2: 8 embers): the first volley still has an ember dead on the hero (the
-    // lead the headline flash follows) and the second still puts him in a gap
-    assert(d.phase === 2 && (perPhaseOf(FV.count, 2) & 1) === 0, `phase 2 fans have an even count (${perPhaseOf(FV.count, 2)})`);
+    // the first cough has an ember dead on the hero (the lead the headline flash follows) and the
+    // second puts him in a gap, whatever the count (the Hard cones are odd: an even count is forced
+    // here). From the mouth a gap is wider than the hero only at range (spacing x distance > 2 R).
+    const count0 = FV.count;
+    FV.count = [9, 10, 13];
     const miss = [];
     let leadSeen = false, embers = 0;
-    const fv = watchPattern('fanVolley', 11, () => {
+    const fv = watchPattern('fanVolley', 26, () => {
       if (B.leadAlive()) leadSeen = true;
       const n = B.count(KIND.ember);
       if (n > embers && miss.length < 2) {
@@ -1598,8 +1711,9 @@ async function scenarioBullets() {
       }
       embers = n;
     });
+    FV.count = count0;
     const fvLag = fv.hits[0] && fv.headFlash !== null ? fv.hits[0].t - fv.headFlash : NaN;
-    out(`   P2 fan of ${perPhaseOf(FV.count, 2)} at ${fv.dist.toFixed(1)} m: lead bullet ${leadSeen} · nearest ember passes ${miss.map((m) => m.toFixed(2)).join(' / ')} m off (volley 1 / 2, touch radius ${R.toFixed(2)}) · headline flash ${fvLag.toFixed(3)} s before the first hit · tells ${fv.tells}/${fv.flashes}`);
+    out(`   P2 burst of 10 (even, forced) at ${fv.dist.toFixed(1)} m: lead bullet ${leadSeen} · nearest ember passes ${miss.map((m) => m.toFixed(2)).join(' / ')} m off (volley 1 / 2, touch radius ${R.toFixed(2)}) · headline flash ${fvLag.toFixed(3)} s before the first hit · tells ${fv.tells}/${fv.flashes}`);
     assert(fv.ok && leadSeen, 'even-count fan: the first volley has a lead ember (setLead)');
     assert(miss.length === 2 && miss[0] < 0.1 && miss[1] > R, `even-count fan: volley 1 is centred on the hero, volley 2 has him in a gap (${miss.map((m) => m.toFixed(2)).join(' / ')})`);
     assert(fvLag >= K.cueMin - DT && fvLag <= lead + 3 * DT, `even-count fan: the headline flash leads the first impact by ~flashLead (${fvLag.toFixed(3)} s)`);
@@ -1649,6 +1763,7 @@ async function scenarioBullets() {
     assert(wsLag >= K.cueMin - DT && wsLag <= lead + 3 * DT, `far wisp swarm: the headline flash leads the first impact by ~flashLead (${wsLag.toFixed(3)} s)`);
     assert(ws.tells === ws.flashes && ws.hits.length >= 1 && ws.hits.length <= WS.maxHits, `far wisp swarm: one flash per tell, hits within the budget (${ws.tells}/${ws.flashes}, ${ws.hits.length})`);
   };
+  const angleDiffT = (a, b) => { let x = (b - a) % (2 * Math.PI); if (x > Math.PI) x -= 2 * Math.PI; if (x < -Math.PI) x += 2 * Math.PI; return x; };
   const perPhaseOf = (v, ph) => (Array.isArray(v) ? v[Math.min(v.length - 1, ph - 1)] : v);
 
   for (const phase of [1, 2, 3]) {
@@ -1664,11 +1779,44 @@ async function scenarioBullets() {
       assert(idle.tells === idle.flashes && ans.tells === ans.flashes && idle.tells >= 1, `P${phase} ${name}: one combat:flash per combat:tell (${idle.tells}/${idle.flashes}, ${ans.tells}/${ans.flashes})`);
       // (the scripted defender answers one cue at a time: the phase-3 storm's crossing arms cost it a second hit)
       assert(ans.hit < idle.hit && ans.hit <= (name === 'emberStorm' ? 2 : 1), `P${phase} ${name}: answering the cues takes fewer hits than standing still (${ans.hit} < ${idle.hit})`);
+      if (name !== 'fireWheel') {
+        const bo = idle.born;
+        out(`      breathed: ${bo.n} bullets born ≤ ${bo.worst.toFixed(2)} m from pt.mouth · emission centre ≤ ${bo.aimWorst.toFixed(3)} rad off headFwd · widest ${bo.offWorst.toFixed(3)} rad`);
+        assert(bo.n > 0 && bo.far === 0, `P${phase} ${name}: every bullet is born within 0.6 m of pt.mouth (worst ${bo.worst.toFixed(2)} m)`);
+        if (name !== 'wispSwarm') assert(bo.aimWorst <= 0.2 && bo.offWorst <= idle.spread + 0.2, `P${phase} ${name}: every emission leaves along the head's aim (centre ${bo.aimWorst.toFixed(3)} ≤ 0.2 rad, widest ${bo.offWorst.toFixed(3)} ≤ ${(idle.spread + 0.2).toFixed(2)})`);
+      }
       if (name === 'emberStorm') assert(ans.parried + ans.dodged >= 1, `P${phase} emberStorm: embers deflected / orbs rolled (${ans.parried} + ${ans.dodged})`);
       else if (name !== 'fireWheel') assert(ans.parried >= 1, `P${phase} ${name}: bullets were deflected (${ans.parried})`);
       else assert(ans.dodged >= 1, `P${phase} fireWheel: a spoke was rolled through (${ans.dodged})`);
     }
     if (phase === 2) lateCues();
+  }
+  // P3: a Cinder burst may run straight into an Ember torrent (the brain's queue, no idle between)
+  {
+    settle(G, 12);
+    B.clear();
+    place(G, 12);
+    const FV = TUNING.attacks.fanVolley, chain0 = FV.chain;
+    FV.chain = [0, 0, 1];
+    d.debug.setAI(true);
+    d.brain.cooldowns.emberStorm = 0;
+    game.lab.trigger('fanVolley');
+    let after = null, gap = Infinity, endT = null, seen = false;
+    for (let i = 0; i < Math.round(8 / DT); i++) {
+      aimAt(G);
+      d.posture = 0;
+      G.tick(DT);
+      const a = d.brain.action;
+      if (a?.name === 'fanVolley') seen = true;
+      if (seen && endT === null && a?.name !== 'fanVolley') endT = game.time;
+      if (endT !== null && a && a.name !== 'fanVolley') { after = a.name; gap = game.time - endT; break; }
+    }
+    d.debug.setAI(false);
+    FV.chain = chain0;
+    if (d.brain.action) d.brain.stopAction(true);
+    B.clear();
+    out(`   P3 burst with chain 1: next action ${after} ${Number.isFinite(gap) ? (gap * 1000).toFixed(0) + ' ms' : ''} after it`);
+    assert(after === 'emberStorm' && gap <= DT + 1e-6, 'P3: a Cinder burst can run straight into an Ember torrent (brain.queued, no idle)');
   }
   out(`   console errors so far: ${errors.length}`);
   return G;
@@ -1719,8 +1867,11 @@ async function scenarioLab() {
     settle(G);
     place(G, a.name === 'breath' || a.name === 'fireball' || a.name === 'charge' ? 11 : 6);
     const e0 = errors.length;
-    const r = forceAttack(G, a.name, { max: 9, settle: 600 });
+    // (Armageddon's meteors fall for ~12 s after the trigger: its window is longer; a background
+    // hazard never spills into the next ability's count)
+    const r = forceAttack(G, a.name, { max: a.name === 'meteorRain' ? 17 : 9, settle: 600 });
     run(G, 10, { passive: true, god: true }, () => !d.brain.action && d.state === 'combat');
+    d.hazards.clear();
     const ok = r.trigger === true && evn(r, 'dragon:windup') >= 1 && r.tellT !== null && r.tells.includes(a.tell) && errors.length === e0; // multi-hit: abilities() lists the headline tell
     assert(ok, `ability ${a.name.padEnd(9)} [${a.tell}] tells [${r.tells.join(' ')}] trigger ${r.trigger} windup ${evn(r, 'dragon:windup')} tells ${evn(r, 'combat:tell')} flashes ${evn(r, 'combat:flash')} result ${r.res}${errors.length > e0 ? ' ERRORS' : ''}`);
     assert(evn(r, 'combat:flash') >= 1 && evn(r, 'combat:flash') === evn(r, 'combat:tell'), `   ${a.name}: one combat:flash per combat:tell`);
@@ -1874,10 +2025,12 @@ async function scenarioFire() {
       if (dd?.attack !== name) return;
       if (n === 'combat:tell') tells.push(game.time);
       if (n === 'combat:flash') flashes.push(game.time);
+      if (n === 'combat:flash') flashAt.push({ t: game.time, x: dd.x, z: dd.z });
     };
+    const flashAt = [];
     const trig = game.lab.trigger(name);
     let done = false;
-    for (let i = 0; i < Math.round(14 / DT) && !done; i++) {
+    for (let i = 0; i < Math.round(20 / DT) && !done; i++) {
       input.axis = { x: 0, y: 0 };
       G.tick(DT);
       const pt = d.rig.pt, s = d.rig.s;
@@ -1897,7 +2050,10 @@ async function scenarioFire() {
     // each red blow lands flashLead after its timing flash (within ~2 frames)
     let worst = 0;
     for (const h of hits) {
-      const f = flashes.filter((t) => t <= h.t + 1e-6).pop();
+      // its own flash: a hazard flashes at its own centre (Armageddon's impacts are 0.12 s apart, so
+      // the latest flash is often a neighbour's); other blows: the latest flash
+      const own = flashAt.filter((e) => e.t <= h.t + 1e-6 && Number.isFinite(h.fx) && Math.hypot(e.x - h.fx, e.z - h.fz) < 0.6).pop();
+      const f = own ? own.t : flashes.filter((t) => t <= h.t + 1e-6).pop();
       const err = f === undefined ? Infinity : h.t - (f + lead);
       if (Math.abs(err) > Math.abs(worst)) worst = err;
     }
@@ -1917,6 +2073,123 @@ async function scenarioFire() {
   }
   out('   flash timing: ' + timing.join(' · '));
   assert(!badPay.length, `dragon:spell / dragon:hazard payloads ${JSON.stringify(badPay.slice(0, 4))}`);
+
+  // ---- ARMAGEDDON (meteorRain, ADR-053): the wave placement's guarantees (pure, 200 seeded runs),
+  // then the whole move per phase: counts, cues, the cap + finale, a rolling hero, the clear
+  {
+    const HZ = await imp('src/entities/dragon/hazards.js');
+    const MR = TUNING.attacks.meteorRain;
+    const rngOf = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    let worstCover = 0, worstOverlap = 0, outside = 0;
+    for (let sd = 0; sd < 200; sd++) {
+      const rng = rngOf(sd * 7919 + 13);
+      const n = sd & 1 ? 10 : 8, pts = new Float64Array(n * 2);
+      const a = rng() * Math.PI * 2, rr = 28 * Math.sqrt(rng());
+      let hx = Math.sin(a) * rr, hz = Math.cos(a) * rr;
+      HZ.placeWave(n, MR.radius, rng, hx, hz, pts, MR.safeR, MR.safeCover - 0.08);
+      // the led ones come in at spawn time on a hero who has moved a little since
+      for (let k = 0; k < n; k += MR.ledEvery) {
+        hx += (rng() - 0.5) * 4;
+        hz += (rng() - 0.5) * 4;
+        HZ.leadInto(pts, k, n, MR.radius, hx + (rng() - 0.5) * 2, hz + (rng() - 0.5) * 2, hx, hz, MR.safeR, MR.safeCover);
+      }
+      worstCover = Math.max(worstCover, HZ.coverage(pts, n, MR.radius, hx, hz, MR.safeR));
+      for (let i = 0; i < n; i++) {
+        if (Math.hypot(pts[2 * i], pts[2 * i + 1]) > HZ.ARENA_R + 1e-6) outside++;
+        for (let j = 0; j < i; j++) worstOverlap = Math.max(worstOverlap, HZ.overlapShare(Math.hypot(pts[2 * i] - pts[2 * j], pts[2 * i + 1] - pts[2 * j + 1]), MR.radius));
+      }
+    }
+    out(`   Armageddon waves, 200 seeded runs: within ${MR.safeR} m of the hero at most ${(worstCover * 100).toFixed(1)} % covered · worst overlap ${(worstOverlap * 100).toFixed(1)} % of a footprint · ${outside} spots outside ${HZ.ARENA_R} m`);
+    assert(worstCover <= MR.safeCover + 1e-9, `safe ground: a wave covers at most ${MR.safeCover * 100} % within ${MR.safeR} m of the hero (worst ${(worstCover * 100).toFixed(1)} %)`);
+    assert(worstOverlap <= HZ.OVERLAP + 1e-9 && outside === 0, `no two footprints of a wave overlap by more than a third (worst ${(worstOverlap * 100).toFixed(1)} %), none outside the clearing`);
+
+    /** The whole move in `phase` against a hero 12 m out: standing (god) or answering the cues (makeDefender). */
+    const armageddon = (phase, answer, cutAt = -1) => {
+      settle(G, 12);
+      H.clear();
+      if (d.phase !== phase) { d.enterPhase(phase); run(G, 0.2, { passive: true }); settle(G, 12); }
+      H.clear();
+      d.position.set(0, 0, -8);
+      d.yaw = 0;
+      d.rig.snap();
+      run(G, 0.3, { passive: true });
+      front(12);
+      p.debug.god = !answer;
+      p.debug.heal();
+      p.burnT = 0;
+      const def = answer ? makeDefender(G) : null;
+      const rec = { launches: 0, sky: 0, impacts: [], flashes: [], tells: 0, glow: 0 };
+      const h0 = G.hits.length;
+      G.watch = (n, dd) => {
+        def?.onEvent(n, dd);
+        if (n === 'dragon:hazard' && dd?.kind === 'meteor') {
+          if (dd.stage === 'launch') rec.launches++;
+          if (dd.stage === 'sky') rec.sky++;
+          if (dd.stage === 'hit') rec.impacts.push({ t: game.time, x: dd.x, z: dd.z, r: dd.radius });
+        }
+        if (dd?.attack !== 'meteorRain') return;
+        if (n === 'combat:tell') rec.tells++;
+        if (n === 'combat:flash') rec.flashes.push({ t: game.time, x: dd.x, z: dd.z });
+      };
+      const trig = game.lab.trigger('meteorRain');
+      let cut = false;
+      for (let i = 0; i < Math.round(24 / DT); i++) {
+        input.axis = { x: 0, y: 0 };
+        def?.act();
+        G.tick(DT);
+        for (const h of H.list) if (h.alive && h.shape === HZ.SHAPE.BARRAGE && h.t >= h.glowAt) rec.glow = 1;
+        if (cutAt >= 0 && !cut && rec.impacts.length >= cutAt) {
+          cut = true;
+          rec.beforeCut = rec.impacts.length;
+          d.enterPhase(Math.min(3, d.phase + 1));
+          run(G, 2 * DT, { passive: true });
+          rec.afterCut = { meteors: H.count('meteor'), barrage: H.count('barrage') };
+          run(G, 4, { passive: true });
+          break;
+        }
+        if (!d.brain.action && !H.count(null)) break;
+      }
+      G.watch = null;
+      input.up(2);
+      p.debug.god = true;
+      const hits = G.hits.slice(h0).filter((h) => h.attack === 'meteorRain');
+      rec.trig = trig;
+      rec.red = hits.filter((h) => h.tell === TELL.RED);
+      rec.redHits = rec.red.filter((h) => h.r === RESULT.HIT);
+      rec.ticks = hits.filter((h) => h.tell !== TELL.RED && h.r === RESULT.HIT).length;
+      // each red blow against its own flash (the flash at its own centre)
+      rec.worst = 0;
+      for (const h of rec.red) {
+        const f = rec.flashes.filter((e) => e.t <= h.t + 1e-6 && Math.hypot(e.x - h.fx, e.z - h.fz) < 0.6).pop();
+        const err = f ? h.t - (f.t + lead) : Infinity;
+        if (Math.abs(err) > Math.abs(rec.worst)) rec.worst = err;
+      }
+      rec.out = rec.impacts.filter((e) => Math.hypot(e.x, e.z) > HZ.ARENA_R + 1e-6).length;
+      rec.great = rec.impacts.filter((e) => e.r > MR.radius + 0.5).length;
+      return rec;
+    };
+    for (const phase of [2, 3]) {
+      const per = (v) => (Array.isArray(v) ? v[Math.min(v.length - 1, phase - 1)] : v);
+      const want = per(MR.waves) * per(MR.perWave);
+      const st = armageddon(phase, false);
+      out(`   P${phase} Armageddon, standing: bolts ${st.launches}/${per(MR.missiles)} · sky ${st.sky} · impacts ${st.impacts.length} (${want} + 1 great: ${st.great}) · outside ${st.out} · tells ${st.tells}/${st.flashes.length} · red hits ${st.redHits.length}/${MR.maxHits}+1 · crater ticks ${st.ticks} · worst hit-(flash+lead) ${(st.worst * 1000).toFixed(0)} ms`);
+      assert(st.trig === true && st.launches === per(MR.missiles) && st.sky === 1 && st.glow === 1, `P${phase} Armageddon: ${per(MR.missiles)} bolts into the sky, then the sky answers`);
+      assert(st.impacts.length === want + 1 && st.great === 1, `P${phase} Armageddon: ${per(MR.waves)} waves x ${per(MR.perWave)} meteors + one great meteor (${st.impacts.length})`);
+      assert(st.out === 0, `P${phase} Armageddon: no meteor lands outside ${HZ.ARENA_R} m`);
+      assert(st.tells === st.flashes.length && st.redHits.length >= 1 && st.redHits.length <= MR.maxHits + 1, `P${phase} Armageddon: one flash per tell; a standing hero is hit at most maxHits + the finale (${st.redHits.length})`);
+      assert(Math.abs(st.worst) <= 1.05 * DT, `P${phase} Armageddon: every blow lands within a frame of its own flash + lead (worst ${(st.worst * 1000).toFixed(0)} ms)`);
+      if (per(MR.craterBurn) > 0) assert(st.ticks >= 1, `P${phase} Armageddon: the craters burn (contact ticks ${st.ticks})`);
+      const an = armageddon(phase, true);
+      out(`   P${phase} Armageddon, rolling on the cues: red hits ${an.redHits.length} · dodged ${an.red.filter((h) => h.r === RESULT.DODGED || h.r === RESULT.PERFECT).length} · crater ticks ${an.ticks} · tells ${an.tells}`);
+      assert(an.redHits.length <= 1, `P${phase} Armageddon: a hero who rolls on the cues takes at most one hit (${an.redHits.length})`);
+    }
+    const cl = armageddon(2, false, 3);
+    out(`   Armageddon cut by a phase change after ${cl.beforeCut} impacts: meteors ${cl.afterCut?.meteors} · barrage ${cl.afterCut?.barrage} · impacts after ${cl.impacts.length - cl.beforeCut}`);
+    assert(cl.afterCut && cl.afterCut.meteors === 0 && cl.afterCut.barrage === 0 && cl.impacts.length === cl.beforeCut, 'a phase change clears the Armageddon (no meteor lands after it)');
+    settle(G, 12);
+    d.enterPhase(1);
+    H.clear();
+  }
 
   // ---- a hazard against the hero: standing → hit, rolling (i-frames) → dodged, rolling out of its ring → untouched
   const meteorAt = (delay) => H.circle({ kind: 'meteor', attack: 'meteorRain', x: p.position.x, z: p.position.z, r: 3.4, delay, damage: 18, burn: 0, knockback: 3, fall: 0.6, from: { x: p.position.x + 5, y: 30, z: p.position.z - 11 } });

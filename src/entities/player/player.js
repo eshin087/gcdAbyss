@@ -53,6 +53,7 @@ export const TUNE = {
   chipPush: 0.15, // fraction of block pushback applied per stream tick (fire breath)
   blockEventGap: 0.4, // s: blocked stream ticks are reported at most this often (summed damage)
   parryDur: 0.3, // s of the deflect flick
+  returnStop: 0.05, // s hit-stop of a perfectly parried bullet (light 0.03 < this < melee 0.08)
   parryCancel: 0.12, // s into the parry after which an attack / roll may cancel it (riposte)
   // the deflect chain (parries in rhythm against a multi-hit string): parries at most this far
   // apart count up (sparks, the clang's pitch, the snap side); each one slides the hero back a little
@@ -162,7 +163,8 @@ export class Player {
       hitPt: { x: 0, y: 0, z: 0 }, flipDur: 0.5, fxT: 0, streak: false,
     };
     this.plungeAnim = { phase: PL.VANISH, u: 0, t: 0, exec: false, h: 0 }; // read by anim.js
-    this.deflect = { n: 0, t: -Infinity, side: 1 }; // the parry chain (TUNE.deflectChainGap)
+    // the parry chain (TUNE.deflectChainGap); perfect = the last parry was within DEFENSE.perfectParryWindow
+    this.deflect = { n: 0, t: -Infinity, side: 1, perfect: false };
     this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
 
     // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, heal(), teleport(x, z) })
@@ -287,14 +289,16 @@ export class Player {
       }
     }
 
-    // (d) parry: RMB pressed shortly before impact, attacker in the front arc
+    // (d) parry: RMB pressed shortly before impact, attacker in the front arc; pressed within
+    // perfectParryWindow it is a perfect parry (computed for every parry; only bullets consume it)
     if (
       parryable &&
       this._canGuard() &&
       this.time - this.rmb.parryT <= DEFENSE.parryWindow &&
       this._inArc(DEFENSE.parryArc, hasFrom, fx, fz, hasAtk ? ap : null)
     ) {
-      this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN, !!hit.light);
+      const perfect = this.time - this.rmb.parryT <= DEFENSE.perfectParryWindow;
+      this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN, !!hit.light, perfect);
       return RESULT.PARRIED;
     }
     // (e) block / (f) guard break
@@ -436,6 +440,7 @@ export class Player {
     this.pl.phase = PL.VANISH;
     this.deflect.n = 0;
     this.deflect.t = -Infinity;
+    this.deflect.perfect = false;
     this.guardHold = 0;
     this.flash = 0;
     this.burnGlow = 0;
@@ -893,9 +898,11 @@ export class Player {
    * A parry (deflect). Parries in rhythm (≤ TUNE.deflectChainGap apart: a multi-hit string, Sekiro
    * style) count up the chain: the blade snaps to alternate sides, the clash sparks grow, the clang
    * rises in pitch (player:parry `chain`). No lockout: the next tap can parry the next hit at once
-   * (the state allows a guard), and the guard lingers between taps (guardHold).
+   * (the state allows a guard), and the guard lingers between taps (guardHold). `perfect`: pressed
+   * within DEFENSE.perfectParryWindow (stored on deflect.perfect for the attacker to read; a light
+   * perfect parry is a perfectly parried bullet, which flies back as a shot: a gold burst, 0.05 s stop).
    */
-  _parry(tell, attack, sx, sz, light = false) {
+  _parry(tell, attack, sx, sz, light = false, perfect = false) {
     const g = this.game, p = this.position;
     let nx = -Math.sin(this.yaw), nz = -Math.cos(this.yaw); // the pushback: away from the blow
     if (Number.isFinite(sx) && Number.isFinite(sz)) {
@@ -912,6 +919,7 @@ export class Player {
     D.n = this.time - D.t <= TUNE.deflectChainGap ? Math.min(99, D.n + 1) : 1;
     D.t = this.time;
     D.side = D.n & 1 ? 1 : -1;
+    D.perfect = !!perfect;
     this.atk = null;
     this.chargeK = 0;
     this.blockStunT = 0;
@@ -920,9 +928,11 @@ export class Player {
     this._enter('parry', 'parry', 0.03);
     this._bladePoint(0.62, this._v);
     this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE, D.n, -nx, -nz);
-    this._hitstop(light ? 0.03 : 0.08);
-    g.shake?.(light ? 0.1 : Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
-    this._emit('player:parry', { tell, attack, chain: D.n, light });
+    const ret = light && !!perfect; // a bullet sent back (bullets.js reads deflect.perfect)
+    if (ret) this.fx.perfectParry?.(this._v.x, this._v.y, this._v.z, -nx, -nz);
+    this._hitstop(light ? (ret ? TUNE.returnStop : 0.03) : 0.08);
+    g.shake?.(light ? (ret ? 0.16 : 0.1) : Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
+    this._emit('player:parry', { tell, attack, chain: D.n, light, perfect: !!perfect });
   }
 
   _block(dmg, tell, attack, chip, nx, nz) {

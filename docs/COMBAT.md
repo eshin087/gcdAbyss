@@ -27,6 +27,9 @@ each actor's `tuning`.
    plunge" needs an attacker with a head to stab (the wyrm) within range; otherwise a perfect dodge
    gives the slow-mo and the crit window where you dodged (rule 5).
 4. **Parry** = RMB pressed ≤ `parryWindow` (0.22 s) before impact, attacker within the front arc.
+   Pressed ≤ `perfectParryWindow` (0.08 s) before impact it is a **perfect parry**
+   (`player:parry.perfect`): a perfectly parried bullet comes back as a damaging shot (ADR-051,
+   *Bullets* below); melee perfect parries change nothing yet.
    Mashing is prevented: RMB must be released `parryRearm` (0.25 s) before a new press counts —
    **except right after a successful parry**: a deflect re-arms at once, so the next press counts as
    soon as RMB was released, even when the guard was held between blows (ADR-032). A press that
@@ -63,33 +66,35 @@ each actor's `tuning`.
    single melee attack) recoils the wyrm: the punish window. A red hit inside a string must be
    dodged; a perfect dodge of it plunges and ends the string (ADR-026).
 9. **Hazards** are world threats that live on their own (meteors, lava pillars, burning strips, fire
-   rings and walls), so the wyrm can keep fighting while they burn. Each shows a red ground warning
-   from spawn to impact. They are red: block and parry fail, i-frames or leaving the area avoid them,
+   rings and walls), so the wyrm can keep fighting while they burn. Each heats the ground it will hit
+   from spawn to impact (ADR-052: a glow of small ground glyphs and scorch heat, darker to brighter
+   as it nears; the exact edge in the last 0.35 s). They are red: block and parry fail, i-frames or leaving the area avoid them,
    and a perfect dodge of one never plunges (slow-mo + crits in place). A burning strip's lingering
    fire deals small blockable contact ticks, never while you roll (ADR-029).
 10. **Fairness checklist for every new attack:** tell type set (per hit for strings) · windup
     ≥ 0.7 s (melee; a string's first hit) and readable from the animation alone (parryable hits get
     no colour before the glint) · flash ~0.35 s before impact · string follow-ups ≥ 0.45 s apart ·
     hitbox matches the visual · recovery window to punish · no unavoidable damage (AoE red attacks
-    and hazards show a red ground ring until impact; every hazard can be dodged with i-frames or by
-    moving).
+    and hazards heat the ground they will hit until impact, the edge drawn in the last flashLead s;
+    every hazard can be dodged with i-frames or by moving) · every projectile has a visible source
+    (bullets leave the jaws, ADR-050).
 
 ## Tell presentation
 ```
        windup start (combat:tell)            timing cue (combat:flash), 0.35 s before impact
 red    body glows red, 0.1 ramping to 0.38   body spike 1.6, gone in 0.25 s
-       red ground ring (AoE attacks)         red glyph burst + red light at the part
+       the ground heats up (AoE attacks)     red glyph burst + red light at the part
        audio: low brass sting                red screen-edge flash, ~0.25 s
 normal animation only (faint audio tick)     white glint + bright ting
 blue   animation only (blade 'shing')        white glint x1.5 (size, brightness)
-hazard red ground warning from its spawn     its ring flares, red glyphs + a red light
+hazard the ground heats up from its spawn     its edge shows, the heat flares, a warm light
        audio: a lighter hazard cue           no screen-edge flash
 ```
 - **Dodge-only (`red`) — the attacker warns.** It glows red through the windup (creature material
   uniform `uWarn`: hot red `[1.0, 0.12, 0.05]`, strength ramps from 0.1 at the tell to 0.38 at the
   cue), gives a hard red flash on the cue (strength 1.6 decaying to 0 over 0.25 s, plus a red glyph
   burst and red light at the striking part). Audio: a low brass sting at windup start, a sharp
-  crack on the cue. Area attacks also show a red glyph danger ring on the ground until impact. The
+  crack on the cue. Area attacks also heat the ground of their danger area until impact (ADR-052). The
   HUD only adds a brief red screen-edge vignette on the cue (fades in ~0.25 s, stronger on the
   attacker's side) — nothing during the windup. Numbers: `TELL_STYLE.red.warn` in `rules.js`. In a
   string every hit is its own beat: a red hit glows through its own windup only.
@@ -98,13 +103,17 @@ hazard red ground warning from its spawn     its ring flares, red glyphs + a red
   core, four-point sparkle, a few short rays, a small white light) pops at the striking part with a
   short bright "ting". `blue` (heavy, big-posture) gets a ~1.5× larger, brighter glint
   (`TELL_STYLE.blue.glint`) and a richer ting — still white, never blue.
-- **Hazards warn on the ground.** A ring of red `•` dots and `!` marks (an inner ring closes in as
-  the impact nears), `>` chevrons down the path of a fire strip or wall, a hot red ring where a
-  flame ring will ignite. Meteors and chase pillars announce themselves (their own `combat:tell` /
+- **Hazards warn on the ground, diegetically (ADR-052).** The ground they will hit heats up: a
+  sparse fill of small ground glyphs and the scorch map's heat, dark ember at spawn, orange by
+  half way, white-orange at impact, sparks rising near the end; a thin bright rim marks the exact
+  edge only in the last `flashLead` s; on the flash the heat flares. A strip heats ahead of its
+  fire front (hottest just ahead of it), a flame ring where it catches round the body, a wall along
+  its line. No red rings, no `!` marks, no chevrons. Meteors and chase pillars announce themselves (their own `combat:tell` /
   `combat:flash` with `hazard: true`): audio plays a lighter cue (no brass sting, no music dip) and
-  the HUD skips the red screen edge, so a meteor rain doesn't pulse the screen. The other hazards
-  are covered by the spawning attack's own tell (the wyrm glows red through that windup). The
-  meteor cast itself has no tell: it deals nothing, and each meteor warns for itself.
+  the HUD skips the red screen edge, so a meteor storm doesn't pulse the screen. The other hazards
+  are covered by the spawning attack's own tell (the wyrm glows red through that windup).
+  Armageddon's rear-up and salvo glow red on the body (`dragon.bodyWarn`) but send no tell: the
+  salvo deals nothing, and each meteor warns for itself.
 - The glow clears the moment the windup is cancelled: stagger, posture break, parry recoil, the
   plunge's reaction, death, reset, or a Lab interrupt replacing the attack.
 - After-the-fact feedback (PARRY / DEFLECT / DEFLECT ×N / GHOSTEP / EXECUTION / GUARD BROKEN
@@ -124,8 +133,8 @@ hazard red ground warning from its spawn     its ring flares, red glyphs + a red
   Ghosteps behind an attacker without that API.
 - Attackers announce tells via events: `combat:tell` at windup start (per hit), `combat:flash` at the
   timing cue. The attacker draws its own tell in the world (red windup glow via `uWarn`, white
-  glint / red burst on the flash, red ground rings for areas and hazards); audio plays the cues; the
-  HUD adds only the red edge flash (not for hazards).
+  glint / red burst on the flash, the ground heating up for areas and hazards); audio plays the
+  cues; the HUD adds only the red edge flash (not for hazards).
 
 ## Player moveset (owner concept sheet "Combat key poses")
 Numbers live in `src/entities/player/combat.js` (`LIGHT`, `SPRINT_ATK`, `ROLL_ATK`, `THRUST`,
@@ -232,8 +241,18 @@ not all at once after the roar.
   2.5 s), the **Sky dive** (climbs, hovers beside you while a red ring tracks you, dives onto the
   spot: the crash landing is the blow) and the **Hover barrage** (3–5 fireballs from the air, each
   landing in a red ring). Flying, the wyrm is out of sword reach; its body circles are off.
-- **Spells:** **Meteor rain** (a background hazard: meteors fall for ~5 s while the wyrm keeps
-  fighting; every 3rd one is led onto you), **Fire eruptions** (lava pillars in a line toward you;
+- **Spells:** **Armageddon** (ADR-053, key `meteorRain`; replaced the Meteor rain): the wyrm
+  rears onto its hind legs, glowing red, the throat white-hot (1.4 s), and fires a salvo of 12 / 16
+  bolts into the sky out of its jaws (1.6 s; it deals nothing: rearing for ~3 s, it is open to a
+  hero close enough to reach its legs and belly). The sky answers: an orange glow overhead and a
+  rumble while it drops to all fours and fights on. Then the meteors come down in waves over the
+  whole clearing, falling on a slant from the sky above it: 3 waves of 8 (P2) / 4 of 10 (P3), 1.6
+  s apart, 0.12 s between impacts. Each heats its ground for 1.5 s (a led one 1.2 s): every 3rd is
+  led onto you (never two within 0.5 s), the rest spread evenly, and within 12 m of you a wave never
+  covers more than 45 % of the ground, nor do two of its craters overlap by more than a third: there
+  is always somewhere to stand. In P3 the craters burn on for 2 s (blockable contact ticks, never
+  while rolling: walk out). 1.2 s after the last wave one great meteor falls on you (r 7, a 2 s
+  warning). **Fire eruptions** (lava pillars in a line toward you;
   in phase 3 they may chase you instead), **Flame ring** (expands from the wyrm: roll through it or
   be beyond 20 m), **Flame wall** (sweeps across the arena: roll through it), **Inferno nova** (a
   2.5 s charge, then an arena-sized blast: flee beyond 22 m or perfect-dodge it).
@@ -241,9 +260,12 @@ not all at once after the roar.
   wyrm is on the ground for both).
 - Flash timing (`npm test` → FIRE): every blow lands within 17 ms of its flash + lead.
 
-## Bullets (2026-11-09, ADR-039)
+## Bullets (2026-11-09, ADR-039; breathed, perfect returns and Hard: 2026-11-11, ADR-050, ADR-051)
 The wyrm's bullet-hell patterns (`bullets.js`, `bulletAttacks.js`; numbers `tuningBullets.js`) fill
-the arena with small fire projectiles that fly at the hero's chest height. Three kinds:
+the arena with small fire projectiles that fly at the hero's chest height. **Every bullet is
+breathed** (ADR-050): it leaves the wyrm's jaws along the way its head points, at mouth height, and
+comes down to chest height before it reaches you (the head draws in over a close hero so the stream
+is not fired over him). Nothing comes out of the body or the wings. Three kinds:
 
 | Bullet | Tell | Answers | Damage (final) |
 |---|---|---|---|
@@ -251,13 +273,21 @@ the arena with small fire projectiles that fly at the hero's chest height. Three
 | **Wisp** (blue-white, hangs, then homes in) | blue | parry · block · roll · cut | 13 + burn 0.8 |
 | **Orb** (red, big, straight) | red | dodge only | 20 + burn 1.5, kb 3 |
 
+- **Perfect parry → return** (ADR-051). RMB ≤ 0.08 s before the impact: the ember or wisp comes
+  back as a bigger white-gold shot (34 m/s) that hits the wyrm's head for HP damage (ember 30 ≈ a
+  light hit, wisp 70 ≈ a heavy hit) and 14 / 30 posture instead of the deflect's, flinching the
+  head (RETURN call-out, a gold burst, a 0.05 s stop, a brighter clang). Through the wyrm's own
+  damage path: the phase gate holds, it may kill. It never interrupts the wyrm. Only the struck
+  bullet returns. Orbs are never parried. A pattern gives back at most 120 HP in all
+  (`returnBudget`, ~8 % of a phase: four embers or one wisp); past that a perfect parry is a plain
+  deflect, so returns never out-damage the sword.
 - **Deflect.** A parried ember or wisp flies back to the wyrm's head (24 m/s) and adds posture (5 /
   12). It is a *light* clash (`player:parry {light: true}`: hit-stop 0.03 s, a quarter of the push
   back, a small shake), so a stream of them does not freeze the game; it counts in the hero's own
   parry rhythm (`chain`) but never recoils the wyrm and is not part of a string's `DEFLECT ×N`
   (`dragon:parried {bullet: true}`, no `onParried`).
 - **One parry answers a clump.** A deflect opens a 0.3 s shield: small bullets that touch the hero
-  in it pop, and so do the ones within 2.2 m of him or about to land within ~0.33 s.
+  in it pop, and so do the ones within 1.5 m of him (was 2.2) or about to land within ~0.33 s.
 - **Cut.** A light or heavy swing's active frames cut the small bullets within 0.45 m of the blade
   (`Player.isSwinging()`, the sweep segment). **Roll.** Rolling through a small bullet is a plain
   dodge (`hit.perfect === false`: no Ghostep, no slow-mo); the bullet flies on. An orb can be
@@ -278,20 +308,39 @@ the arena with small fire projectiles that fly at the hero's chest height. Three
 
 | Pattern (phase ≥) | Tell | P1 timing (s) | What flies | Hit cap | Weight [P1, P2, P3] / cooldown | AI gate |
 |---|---|---|---|---|---|---|
-| Ember storm `emberStorm` (1) | N | windup 1.1 · cast [3.4, 3.8, 4.2] · recovery 1.0 | [4, 4, 5] spiral arms of embers round the body (one per arm every 0.11 s, 7.5 m/s, the arms turning 1.05 rad/s); P2+ a ring of 8 / 10 red orbs every 1.6 s (5.5 m/s, one aimed at you); P3 three more arms winding the other way | 4 | [1.4, 1.8, 1.8] / 14 | ≤ 26 m |
-| Cinder fan `fanVolley` (1) | N | windup 1.0 · [3, 4, 5] wing beats 0.7 apart · recovery 0.9 | each beat a fan of [7, 8, 9] embers over ±0.62 rad at 9 m/s; the first fan has an ember dead on you whatever the count, every second fan puts you in a gap; P2+ the last beat is a wave of 5 red orbs (7 m/s) | 3 | [2.2, 2.6, 2.6] / 9 | 5–30 m |
-| Wisp swarm `wispSwarm` (2) | B | windup 1.0 · cast 1.3 · recovery 0.8 | [–, 7, 9] wisps roared out of the maw: they hang, then home in 0.45 s apart (cruise 5.2 m/s, turning 1.9 rad/s and tighter with age, 6.5 s of life); they outlive the roar | 4 | [0, 1.6, 1.8] / 16 | ≤ 30 m |
-| Fire wheel `fireWheel` (2) | R | windup 1.3 (red lines on the ground) · burns [4.2, 4.2, 5.0] · recovery 1.2 | [4, 4, 5] walls of fire from 3.2 to 26 m, 1.1 m thick, turning like spokes at 1.05 rad/s and reversing once: roll through a spoke or run with it. 20 + burn 1.5, kb 4; each approaching spoke flashes | 2 | [0, 1.2, 1.5] / 20 | ≤ 24 m |
+| Ember torrent `emberStorm` (1) | N | windup 1.1 · cast [3.6, 4.2, 4.8] · recovery 1.0 | plants its feet and sweeps its head ±[0.9, 1.1, 1.25] rad across your bearing at [0.45, 0.55, 0.65] Hz, breathing an ember every 0.06 s (9 m/s) in [1, 2, 3] lanes 0.22 rad apart: snaking curtains that cross you once per half-sweep (parry the crossing or walk with the wave); P2+ at each sweep extreme the head snaps round and coughs [–, 3, 4] red orbs at you (6.5 m/s); P3's last 1.5 s is a full body pirouette, breathing: one spiral arm | 6 | [1.6, 2.0, 2.0] / 10 | ≤ 26 m |
+| Cinder burst `fanVolley` (1) | N | windup 1.0 · [4, 6, 7] coughs 0.55 apart · recovery 0.9 | the head snaps onto you and coughs cones of [9, 11, 13] embers over ±0.55 rad at 10.5 m/s; the first has an ember dead on you, every second puts you in a gap (wider than you only from ~14 m off the jaws); P2+ the last cough is [–, 6, 7] red orbs (8 m/s); P3 every other cough is a double tap (a second cone 0.14 s later, half a spacing over: one parry's shield answers both), and 35 % of P3 bursts run straight into an Ember torrent | 5 | [2.4, 2.8, 2.8] / 6.5 | 5–30 m |
+| Wisp swarm `wispSwarm` (2) | B | windup 1.0 · cast 1.3 · recovery 0.8 | [–, 10, 13] wisps roared out of the maw: they hang, then home in 0.36 s apart (cruise 6.2 m/s, turning 1.9 rad/s and tighter with age, 6.5 s of life); they outlive the roar; a new swarm may start while ≤ 3 are alive | 6 | [0, 1.6, 1.8] / 12 | ≤ 30 m |
+| Scouring breath `fireWheel` (2) | R | windup 1.3 (the ground heats where the tongues will catch) · burns [4.6, 4.6, 5.4] · recovery 1.2 | a sustained breath strikes the ground before the snout and runs out as [3, 3, 5] tongues of fire over ±[0.45, 0.45, 0.8] rad of its aim, 1.5–26 m from the strike point, 1.1 m thick; the body turns them round at 2.15 rad/s (≥ 1.25 turns in all), the head stopping 0.25 s before it reverses once. It catches 0.55 rad beside you and sweeps onto you: roll through a tongue, or stay behind it. 20 + burn 1.5, kb 4; each approaching tongue flashes | 3 | [0, 1.2, 1.5] / 15 | ≤ 24 m |
 
-The Cinder flurry's last blow (below) also scatters four embers that drop on the hero one by one
-(0.55 s after the slam, 0.34 s apart, 11 m/s): the string ends on four more parries, not on a free
-punish.
+The Cinder flurry's last blow (below) also scatters four embers that rise out of a puff of flame
+where it lands and drop on the hero one by one (0.55 s after the slam, 0.34 s apart, 11 m/s): the
+string ends on four more parries, not on a free punish.
 
-Checked by `npm test` → BULLETS: every answer above per bullet kind, the cue's lead, the clump
-rule, the grace, the hit caps, the point-blank dud, the clears, and each pattern in each phase it
-runs in (a standing hero is hit at most `maxHits` times; a hero who answers the cues takes fewer
-hits than one who stands still); the even-count fan's centring, a sidestepped wisp's second cue,
-and the opening flash of a wisp swarm roared from 28 m.
+Checked by `npm test` → BULLETS: every answer above per bullet kind, the perfect parry (RMB 0.05 s
+before impact returns the shot for its damage and posture; 0.17 s is a plain deflect; an orb is
+never parried; a return cannot push the wyrm past a phase gate; in a transition roar it deals what
+a sword hit deals), the cue's lead, the clump rule, the grace, the hit caps, the point-blank dud,
+the clears, and each pattern in each phase it runs in (every bullet born at the jaws along the
+head's aim; a standing hero is hit at most `maxHits` times; a hero who answers the cues takes fewer
+hits than one who stands still); the even-count burst's centring at range, a sidestepped wisp's
+second cue, the opening flash of a wisp swarm roared from 28 m, and the P3 burst → torrent chain.
+
+**Difficulty of the patterns** (scripted heroes, 2026-11-11; hits taken, standing / answering every
+cue, before → after the Hard breath patterns):
+
+| Pattern | P1 | P2 | P3 |
+|---|---|---|---|
+| Ember storm → torrent | 2 / 1 → 4 / 0 | 4 / 1 → 6 / 0 | 4 / 2 → 6 / 0 |
+| Cinder fan → burst | 2 / 1 → 4 / 1 | 3 / 1 → 5 / 1 | 3 / 1 → 5 / 1 |
+| Wisp swarm | – | 4 / 1 → 6 / 1 | 4 / 0 → 6 / 0 |
+| Fire wheel → Scouring breath | – | 2 / 0 → 1 / 0 | 2 / 0 → 1 / 0 |
+| Meteor rain → Armageddon | – | 3 (P1 values) → 5 / 0 | – → 5 / 0 (+ 31 crater ticks) |
+
+A standing hero now takes the full cap in almost every pattern; the cue-answering bot (it parries
+0.12 s before impact and rolls 0.1 s before a red one, in a frame) still comes through nearly clean,
+so the patterns stay fair to perfect reads. Whether a person can read a P3 torrent with orbs is not
+something a bot shows: a human playtest is owed.
 
 ## Current numbers (v0.6 "bullet hell", 2026-11-09)
 Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,
@@ -303,8 +352,8 @@ are the data values *before* that scale (a 20 lands as 17). Bullets and the fire
 S = `SCALE` 1.875 (model units → metres).
 
 **Player:** HP 160, 5 flasks (+70 HP, 0.85 s), roll 0.6 s (i-frames 0.04–0.4 s), backstep 0.4 s
-(0.03–0.22 s), the moveset above. Parry window 0.22 s, re-arm 0.25 s (skipped right after a
-deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s at ×1.8.
+(0.03–0.22 s), the moveset above. Parry window 0.22 s (perfect within 0.08 s: a bullet returns),
+re-arm 0.25 s (skipped right after a deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s at ×1.8.
 
 **The wyrm:**
 - HP 4500. Phase gates at 66 % (2970 HP) and 33 % (1485 HP).
@@ -356,7 +405,7 @@ deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s
 | Burning pass `skyStrafe` (1) | windup 1.0 · takeoff 0.75 · pass 1.9 (7 m up) · land 1.05 | front 26 + burn 2, kb 4; the burning ground 4 per 0.25 s (blockable) | strip 4.6 m wide from 10 m out to 3 m short of the landing (24–40 m along the line), burns 2.5 s | [0.9, 1.4, 1.2] / 16 | 7–34 m |
 | Sky dive `diveBomb` (2) | windup 0.8 · climb 1.1 · hover 1.2 (13 m up, 9 m beside the target; the tell) · dive 0.5 · recovery 1.4 | 34, knockdown, burn 1, kb 7; a perfect dodge may plunge | r 7.5 | [0, 1.6, 1.4] / 15 | any distance |
 | Hover barrage `hoverBarrage` (2) | windup 0.8 · rise 1.0 (9 m up, 13 m beside you) · 3–5 shells 0.5 s apart, each ringing 0.4 s before its spit · land 1.2 | 15 each, burn 1.2, kb 2.5; ≤ 2 hits | r 3.2 | [0, 1.4, 1.2] / 13 | any distance |
-| Meteor rain `meteorRain` (2) | windup 1.0 · cast 0.7 · recovery 0.8; impacts from 1.3 s over 5 s, rings 1.5 s (led ones 1.1 s), a 0.75 s visible fall | 18 each, burn 1.5, kb 3; ≤ 3 hits | r 3.4; 8–11 meteors (P3 11–14), every 3rd led onto you, the rest 4–14 m round you | [0, 1.3, 1.4] / 24 | not while a rain falls |
+| Armageddon `meteorRain` (2) | windup 1.4 · salvo 1.6 · recovery 0.9; the sky answers 0.8 s later, waves 1.6 s apart (0.12 s between impacts), the ground heating 1.5 s (led 1.2 s) under each, a 0.9 s visible fall; the great meteor 1.2 s after the last wave (a 2 s warning) | 20 each, burn 1.5, kb 3; ≤ 4 hits; the great one 34, kb 7 (not capped); P3 craters 4 per 0.25 s for 2 s (blockable) | r 3.4 (great r 7); 3 × 8 (P3 4 × 10) over the whole clearing, every 3rd led onto you, a wave covers ≤ 45 % within 12 m of you | [0, 1.2, 1.5] / 28 | not while a barrage or meteors fall |
 | Fire eruptions `eruptions` (2) | windup 0.9 · slam 0.2 · recovery 1.5; pillar k erupts 0.65 + 0.11 k after the slam | 20, burn 1.2, kb 4 | r 2.4; ≤ 9 pillars 3.4 m apart from 5.5 m out to 7 m past you; P3 chase (60 %): a pillar under you every 0.42 s for 3 s, each ringing 0.7 s, ≤ 2 hits | [0, 1.5, 1.4] / 11 | 6–28 m, ≤ 1.3 rad |
 | Flame ring `flameRing` (2) | windup 1.1 · cast 0.25 · recovery until the ring has run (≥ 1.85) | 24, burn 2, kb 4 | from 3 m round the wyrm to 20 m at 10 m/s, band 2.2 m | [0, 1.4, 1.2] / 12 | ≤ 14 m |
 | Flame wall `flameWall` (3) | windup 1.2 · cast 0.3 · recovery until the sweep ends (≥ 3.15) | 28, burn 2, kb 5 | 40 m long × 2.4 m thick, springs up 4 m ahead, sweeps 30 m at 10 m/s | [0, 0, 1.6] / 14 | any |
