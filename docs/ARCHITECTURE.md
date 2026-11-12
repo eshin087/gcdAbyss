@@ -69,7 +69,8 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `lights` | `add({x,y,z,color:[r,g,b],intensity,radius,life,fade,fadeIn,flicker})` → light (mutable `x,y,z`, `.set()`, `.kill()`) |
 | `fx.add` / `fx.alpha` | glyph particles, additive-HDR / alpha-blended. `spawn({x,y,z,vx,vy,vz,life,size,sizeEnd,glyph,color,colorEnd,alpha,alphaEnd,gravity,drag,spin,rot,flicker,stretch})`. `glyph`: char, string of chars (random pick) or atlas index. |
 | `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
-| `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
+| `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below. `dragon` is **the boss slot** (the wyrm in Cinderwood, the Ash Disciple in Ashfall; see Levels and the boss slot); `boss` is the same object |
+| `level`, `levels`, `pickLevel(id)` | the level this page load built (`levels/index.js` definition), every level as `{ id, name }` (the title's stage picker, the Lab's LEVEL row), and a reload into another one (`?level=<id>`, other parameters kept). Tests may leave them out: flow falls back to Cinderwood's lines |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
 | `settings` | `{ quality: 0..2, showFps: bool }`; `applyQuality()` re-applies. A preset (`CONFIG.quality[i]`) is `{ name, grass, dpr, shadow }`: grass blades drawn, max device pixel ratio, moon shadow map size in texels (LOW 1024, MEDIUM / HIGH 2048; `CONFIG.render.shadowSize` 2048 is only the size before the first `applyQuality`). Touch devices start on `CONFIG.defaultQualityTouch` (LOW) unless the player picked one. |
@@ -363,7 +364,11 @@ parries), `rmb { held, upT, parryT, edge, chain }`.
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
 light chain of five (falling cut → rising backhand → whirl → stab → two-handed slam finisher; ADR-041),
 LMB while sprinting = the sprint slash, LMB out of a forward roll = the roll cut (`SPRINT_ATK`,
-`ROLL_ATK`; both count as hit 1), LMB hold ≥ 0.3 s then release = charged lunging thrust · LMB tap with a posture-broken wyrm's head within 9 m = the execution ·
+`ROLL_ATK`; both count as hit 1), LMB hold ≥ 0.3 s then release = charged lunging thrust · LMB tap with a posture-broken wyrm's head within 9 m = the execution
+(a broken **duelist** within its `execRange`: the execution thrust, `_startExecuteThrust`: a full
+thrust that lunges to him; its first active frame calls `onExecute({ damage: DEFENSE.plunge.execDamage })`
+instead of the sweep test and emits `player:plunge` / `player:plungeHit {execution: true}` and
+`player:hitDragon {kind: 'execute'}`) ·
 RMB hold = block, RMB tap before impact = parry · Space = dodge roll · Shift = sprint · F = flask ·
 Tab / MMB = lock-on. (E is flow's.)
 Drawn body vs gameplay body (ADR-017): the root draws the hero `HERO_SCALE` (1.2) tall and leaned
@@ -1186,6 +1191,59 @@ quality is still the default. Pointer Events with multi-touch (each control capt
 pointer); long-press menus, iOS gesture zoom and page panning are blocked while active (the Lab
 panel and the pause panel still scroll). Tuning: `CONFIG.touch`, sizes / look in `ui/touchStyle.js`.
 
+## Levels and the boss slot (2026-11-12, ADR-050, ADR-052)
+`src/levels/index.js`: `LEVELS` (Cinderwood `cinderwood`, Ashfall `ash`), `DEFAULT_LEVEL`,
+`getLevel(id)` (id or alias, case-insensitive), `levelFromSearch(search)` (`?level=`; unknown → the
+default), `applyLevel(level)` (merges `level.world` into `CONFIG.world`: main.js calls it once,
+before building any module), `levelUrl(id, href)`. One level per page load; switching reloads.
+A level: `{ id, aliases, name, sub, world, buildSet(U, colliders), createBoss(game), text }`.
+- `buildSet` returns createForest's shape (`group, treeSpots, bare, slabs, nest, bonfire, material,
+  stoneMaterial, slabMaterial`) plus, optionally, `ash: true` (atmosphere: falling ash flakes and a
+  few embers instead of fireflies, mist and leaves) and `grass: { density(x, z) → 0..1 factor,
+  height (×), ash 0..1 }` (world.js thins / shortens / greys the meadow; grass.js `uAsh`).
+- `text`: `arrive[]`, `stir`, `phase2`, `phase3` (null: no banner), `victory`, `fallen`, `restReset`,
+  `again`, `rise` (GameFlow `_text(key)`; Cinderwood's lines when the game has no level).
+- **The boss slot.** `game.dragon` (=== `game.boss`) is the level's boss. Every consumer (player,
+  HUD, flow, camera, audio, name tags, minimap, touch aim, Lab) reads the Dragon contract's surface
+  below and listens for the `dragon:*` events, so a boss offers: `name` (the HUD splits it at the
+  comma: ui/bossName.js), `state` (`sleeping|waking|combat|staggered|airborne|dying|dead`), `hp,
+  maxHp, phase, phaseAt, nextPhaseHp, posture, maxPosture, broken`, `hurtSpheres`, `bodyCircles`,
+  `position, yaw, object3d, batch`, `isTargetable()`, `lockPoint(out)`, `startIntro()`, `takeHit(o)`,
+  `onParried(info)`, `reset()`, `update(dt)`, `debug` (the Lab's generic shape). A plunge target adds
+  `plungePoint` / `onPlunge` (the wyrm); a **duelist** (`kind: 'duelist'`) instead offers
+  `onExecute({ damage })` and `execRange` (the execution thrust, Player below) and gets no creature
+  voice (audio.js gates roars, pain and recoil yelps on `kind`).
+
+### Ash Disciple — `src/entities/enemies/ashDisciple/disciple.js` exports `class AshDisciple`
+The boss slot's surface above (no plunge), plus:
+```
+kind = 'duelist';  name = 'SHEN HUI, THE ASH DISCIPLE';  execRange = 3.2
+mode: 'sleep'|'intro'|'foot'|'act'|'react'|'broken'|'dying'|'dead'   // brain.js (state follows it)
+guarding: boolean        // his guard covers his front (±TUNING.guard.arc): footwork after the raise
+                         // delay, a clash, and the first TUNING.guard.windupOpen of each windup
+takeHit(o): number       // a strike into his guarded front: 0 damage, guard posture, 'dragon:guard',
+                         // a counter likelier (footwork only); heavy with poise >= TUNING.guard.crushPoise
+                         // (a ~full charged thrust) crushes it: lands + stagger. Otherwise as the wyrm's
+                         // (part multipliers, ×breakCritMult while broken, the 50 % phase gate)
+onExecute({ damage })    // a broken disciple: final damage, the break spent, 'dragon:plunged {execution: true}'
+onParried({ attack, tell })   // the deflect chain (as the wyrm's): a move's non-final hit deflected, the
+                         // last recoils him (react 'recoil'); 'dragon:parried', 'combat:deflectChain'
+hitPlayer(o): RESULT     // his blows (and the Ash Crescents) through player.takeHit
+debug: the Dragon shape (abilities, trigger, setAI, wake, startFight, phase2, stagger, postureBreak,
+       kill, reset, setHp, hitboxes, currentAction); phase3() → false (two phases)
+```
+Built by `buildHero(U, ASH_LOADOUT)` (gear.js: `ash.*` items registered into the hero's gear registry)
+and driven by `HeroAnimator(rig, pilot, DUEL_POSES)` (poses.js: `loco` = his guard on the hero's gait,
+`duel` = a keyframe clip). `pilot` is his view for the animator (`position, yaw, state 'duel', stateT,
+animT, atk.def = the clip, groundVel, kb, chargeK, releaseK, recoil, lockOn, guardHold`). Moves are
+data (moves.js `MOVES`; `realise(name, phase, rnd)` → beats with absolute times + the compiled clip);
+reactions are `CLIP` (clash, flinch, backstep, sidestep, stagger, recoil, broken, executed, death,
+meditate, intro). Hits are zones tested from his position and facing through each beat's active
+frames (`sector`, `line`, `ring`), one result per beat. Numbers: tuning.js.
+**HeroAnimator** (anim.js): `new HeroAnimator(rig, player, poses = null)` — `poses` merges extra clips
+over the hero's table for that instance (a key it shares replaces the hero's clip for that instance
+only). Exported for other pose tables: `P, v3, to3, dirLerp, kf, guard, loco, turnTwist`.
+
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:
 - `player:attack {kind:'light'|'slam'|'thrust', combo, charge}` (swing starts; combo 1–5 = the chain hit, slam = hit 5, the sprint slash and the roll cut report 1; thrust = charge release),
@@ -1202,7 +1260,8 @@ Player → hud/audio/fx/flow:
   it dealt damage), `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
   `player:footstep {x, z, sprint}` (a planted foot's touchdown while moving, and the thrust dash's
   two bounding steps), `player:lockOn {on}`
-Dragon (any attacker) → hud/audio/flow:
+Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash Disciple, emits the same
+`dragon:*` names, see "Levels and the boss slot") → hud/audio/flow:
 - `combat:tell {source:'dragon', attack, tell, impactIn, x, z}` (windup start, per hit, so once per hit of a
   string; x/z = the striking part; impactIn is a first estimate in game seconds),
   `combat:flash {source:'dragon', attack, tell, x, y, z}` (~0.35 s before impact — the **authoritative**
@@ -1221,6 +1280,8 @@ Dragon (any attacker) → hud/audio/flow:
   `dragon:phase3`, `dragon:phase {n}` (with each of the two above, on the transition roar), `dragon:plunged {execution}`
   (contract 2: every plunge that lands, even during a transition or the killing one),
   `dragon:death`, `dragon:dead`,
+  `dragon:guard {heavy}` (a duelist's guard turned the hero's strike: no damage, guard posture; the Ash Disciple;
+  HUD "GUARDED", audio a block clang),
   `dragon:spell {name, x, z}` (a fire attack's signature moment: the strafe's pass, the dive, the barrage's
   rise, a spell's cast / the nova's charge start), `dragon:hazard {kind, stage, x, z, radius}` (a fire hazard:
   stage 'fall' = a meteor starts its visible fall, 'hit' = a meteor / pillar / the dive's crash / the nova goes off)

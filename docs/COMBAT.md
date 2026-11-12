@@ -293,6 +293,58 @@ runs in (a standing hero is hit at most `maxHits` times; a hero who answers the 
 hits than one who stands still); the even-count fan's centring, a sidestepped wisp's second cue,
 and the opening flash of a wisp swarm roared from 28 m.
 
+## The Ash Disciple (2026-11-12, ADR-052, ADR-053; `?level=ash`)
+A duelist: the same tell rules as the wyrm (every hit cued `flashLead` before impact, a move's first
+windup ≥ 0.7 s in every phase, a string's hits ≥ 0.45 s apart, red hits glow and red areas ring the
+ground), and the deflect chain (a move's non-final hit is deflected, its last recoils him). His own:
+- **His guard** covers ±75° of his facing: in footwork (0.18 s after a move, a stagger or a recoil
+  ends; at once after a clash or a flinch), through a clash, and through the first 55 % of each windup
+  (after that he has committed: the strike can be traded). A strike into it deals nothing, adds guard
+  posture (light 8, heavy 20) and clashes ("GUARDED"). In footwork each guarded strike in a row (within
+  2.5 s) makes a counter likelier: 0, 35, 70, 100 % on the 1st–4th: the **Riposte** (N 0.78 · B 0.5).
+  A heavy strike with posture ≥ 48 (the charged thrust from ~90 % charge; THRUST.poise 30–50) crushes
+  the guard: it lands and he staggers (0.8 s). The chain's slam (posture 40) is turned aside.
+- **Openings:** his recoveries; the recoil (1.0 s) after his last hit is parried; the Ghostep (a
+  perfect dodge blinks the hero 3.2 m behind him: he offers no plunge, and his back is never guarded);
+  the posture break. Strikes that land in his footwork make him flinch (his guard comes straight back
+  up); after 2 within 1.6 s he backsteps out.
+- **Feints never glint:** a feint has no tell and no flash. Only real impacts are cued.
+- **Posture break → execution:** broken for 3.2 s on one knee (hits crit ×1.5); an attack within
+  3.2 m runs him through: the execution thrust, 260 final damage, the break spent, he gives ground.
+- **Two phases:** P1 100–50 %, P2 50–0 % (the gate holds damage at 50 % until the transition). The
+  transition is **the Kindling**: he kneels, the blade kindles, a red shock ring (r 6 m, 10 damage,
+  kb 6) at 1.75 s. In P2 windups × 0.92 and recoveries × 0.85; three moves join.
+- **Footwork:** he circles at 3.0–5.6 m with his guard up, runs in beyond 7.5 m, backsteps (60 %)
+  when the hero is closer than 1.9 m, and sidesteps a charged thrust levelled at him (45 %, once
+  per 3 s). Idle gaps between moves: P1 0.55–1.1 s, P2 0.3–0.75 s.
+
+**Moves** (`moves.js`; N normal, B blue, R red; P1 windup s (damage); hits test a zone from his
+root through their active frames: sector r / ±ang, line r × w, ring r, metres):
+
+| Move (phase ≥) | Hits | Zone / motion | AI band (m) · weight [P1, P2] · cooldown |
+|---|---|---|---|
+| Plum Thrust (1) | N 0.8 (18) | line 1.9 × 0.7; lunges ≤ 3.8 m | 3.2–6.8 · [2.2, 1.8] · 2.5 |
+| Falling Ash (1) | B 0.95 (26) two-handed overhead chop | sector 2.3 / ±0.5; steps 0.9 m | 1.2–4.2 · [1.8, 1.6] · 3 |
+| Swallow Flicks (1) | N 0.78 (14) · N 0.48 (14) · B thrust 0.55 (20) | sectors 2.1 / ±0.9, line 2.0 | 1.4–4.4 · [2.6, 2.2] · 4 |
+| Crane Spins (1) | N spin 0.8 (15) · N spin 0.5 (15) · B leaping chop 0.65 (24) | rings 2.2 (steps 0.8 m into each), sector 2.4 | 1.4–4.0 · [2.0, 2.0] · 5 |
+| Hesitating Blade (1) | feint 0.65 · B thrust 0.6 + hold 0.2–0.7 (22) · 50 %: N flick 0.48 (14) | line 2.0, sector 2.1 | 2.4–5.4 · [2.0, 2.2] · 5 |
+| Lotus Sweep (1) | R 0.9 (22, knockdown) a low spin at the ankles | ring 3.0 (red ground ring) | 0–3.0 · [1.6, 1.6] · 6 |
+| Wind Step (1) | N 0.85 (18) | glides in ≤ 9 m, sector 2.2 / ±1.0 | 5.5–12 · [2.4, 2.4] · 4 |
+| Ash Crescent (1) | N 0.8 (14) sword qi along the ground, 14 m/s; P2 a fan of three (±0.36 rad) | each crescent cues itself `flashLead` before it reaches the hero (too late: it fizzles); parry or roll, block chips | 6–16 · [1.2, 2.0] · 5 |
+| Riposte (counter) | N 0.78 (16) · B 0.5 (22) | sector 2.1, line 2.0 | only from his guard |
+| Thousand Needles (2) | N 0.8 · N 0.45 · N 0.45 · N 0.45 (10 each) · B 0.55 (18) | lines 1.95 | 1.4–4.4 · [0, 2.6] · 7 |
+| Ember Whirl (2) | N spin 0.8 (14) · N spin 0.5 (14) · R burning spin 0.75 (26, knockdown) | rings 2.2, ring 3.4 (red) | 1.4–4.6 · [0, 2.2] · 8 |
+| Heaven-Splitting Fall (2) | R 1.5 (30, knockdown): a crouch, a leap (apex 3.6 m) | the red ring follows the hero until 67 % of the windup, then locks; ring 2.6 where he lands | 4.5–14 · [0, 1.6] · 10 |
+
+Numbers (`tuning.js`): HP 3000, phases at [1, 0.5]; posture max [320, 380], regen after 2.5 s at
+20 / s, parries `POSTURE.parry` (26 / 48), weapon hits 5 / 16 that land, guarded 8 / 20, a parried
+Ash Crescent 8. Part multipliers head 1.3, body 1, legs 0.9. Damage is final (no damage scale).
+**Difficulty (measured, `npm test` → DUEL WIN, `node tests/integration/duel.mjs . probe`):** a god-mode
+fencing bot that answers every tell wins in 53–59 s (three seeds; 3–4 breaks and executions);
+mortal bots that read 95 / 85 / 70 % of the tells win in 56 / 68 / 69 s, taking 2 / 10 / 15 hits
+(worst 26 damage) with 5 / 3 / 0 flasks left. Target: 1.5–2.5 min for a player who knows him.
+No human has played him yet.
+
 ## Current numbers (v0.6 "bullet hell", 2026-11-09)
 Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,
 `tuningBullets.js`.

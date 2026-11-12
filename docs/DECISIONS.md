@@ -979,3 +979,80 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     bloom threshold. The face is warmer and less pale (skin fill gain 3.0 → 2.2), the eyes smaller and
     brown instead of large dark violet-rimmed almonds.
 - **Consequences:** the Wanderer's set is gold-haired too. The face is still the same mesh.
+## ADR-050 — Levels: one per page load, the boss slot keeps its name (2026-11-11)
+- **Context:** the owner wants the Ash Disciple as "a separate level" that can be loaded on its own to
+  test it. Everything was built for one zone and one boss: `World` built the forest, main.js built the
+  `Dragon`, and fourteen modules read `game.dragon` and listen for `dragon:*` events. Another session
+  is changing the wyrm (breath bullets, Armageddon) in parallel.
+- **Decision:**
+  - `src/levels/index.js` registers level definitions (`id`, `name`, `world` overrides, `buildSet`,
+    `createBoss`, the flow's `text`). `?level=<id>` picks one at boot; `applyLevel` merges its world
+    layout into `CONFIG.world` before any module is built. Switching level reloads the page: nothing
+    has to be torn down. The title screen has a stage picker and the Lab a LEVEL row.
+  - **The boss slot:** `game.dragon` stays the name of the current boss and `game.boss` is the same
+    object; a level's boss emits the same `dragon:*` events. A boss offers the Dragon contract's
+    surface; a duelist (`kind: 'duelist'`) has no plunge and offers `onExecute` instead.
+  - Wyrm-specific text moved into the level (flow banners and lore lines, the minimap's zone, the
+    combat log's names, the name tag); audio gates creature vocals on the boss's `kind`.
+- **Alternatives:** renaming `game.dragon` / `dragon:*` to `game.boss` / `boss:*` now (cleaner, but ~14
+  files and a guaranteed collision with the parallel wyrm work; it stays a refactor of its own);
+  switching levels at runtime (needs disposal of the world, the boss and the batches); a second HTML
+  page per level (two builds, two deployments).
+
+## ADR-051 — Direction: a skill boss rush with fixed rewards (2026-11-11)
+- **Context:** the owner: "kinda like phantom blade zero wuxia combat, boss rush, with some exploring
+  and rpg elements"; both the wuxia combat and the fiction; "fixed rewards as i want this to be more
+  of a skill boss rush game. i do want loot to add cool elements, skills, or abilities to the player
+  to give the player the ability to customize and change their combat style."
+- **Decision:** the game becomes a series of boss duels, each testing one skill, reached from a
+  bonfire through short approaches. Progression is fixed: each boss gives a set reward (a technique,
+  a weapon, an ability or an element) that changes how the hero fights; no XP levels, no random loot
+  tables. Bosses are wuxia figures (sect disciples, wandering swordsmen) with the Cinder Wyrm as the
+  spectacle fight. Each boss gets moves of its own, not the hero's mirrored (owner, about the Ash
+  Disciple). The first reward and the technique system come in the PR after the Ash Disciple.
+- **Consequences:** ROADMAP M2 (character stats, levels, XP, random rarity) is replaced by techniques
+  and fixed rewards; the online milestone is unchanged but not next.
+
+## ADR-052 — The Ash Disciple: a duelist on the hero's skeleton, his moves as keyframe data (2026-11-11)
+- **Context:** the first human boss. A swordsman needs the hero's quality of animation (cloth, gait,
+  two-bone IK, the ink-line look), but the owner asked that his moves not mirror the hero's.
+- **Decision:**
+  - He is `buildHero(U, ASH_LOADOUT)` with his own gear items (a douli hat, a robe and skirt on the
+    coat springs, a bracer and a bell sleeve, wrapped trousers, a jian with a tassel on a streamer
+    spring), recoloured on his own material instances.
+  - `HeroAnimator(rig, pilot, poses)`: the animator takes an optional per-instance pose table (merged
+    over the hero's; the hero passes none and is unchanged). He brings `loco` (his jian guard on the
+    hero's gait and foot planner) and `duel` (a keyframe clip).
+  - Every move and reaction is data (moves.js): beats with a tell, a windup (with an optional bait
+    hold), active frames, a hit zone, root motion and pose keys in beat-relative marks; `realise()`
+    turns a move into absolute times and a compiled clip. The blade is keyed as [azimuth, elevation]
+    so swings are arcs and over-the-top chops pass through vertical.
+  - Hits are zones (sector, line, ring) tested from his root through the active frames, so contact
+    lands on the cue: every move within 17 ms of its flash + lead in the TIMING test.
+- **Alternatives:** a new rig and animator for him (months of work to reach the hero's quality);
+  mirroring the hero's attacks (rejected by the owner); hit-testing his blade's swept segment like the
+  hero's (exact to the pose, but contact times then drift with every pose edit).
+
+## ADR-053 — The duelist's rules: a guard that counters, feints that never glint, the execution thrust (2026-11-11)
+- **Context:** the owner chose "Guards and counters": he deflects strikes into his front, they build
+  his posture, and after a few he counterattacks. A fencing bot then showed where a guard leaks.
+- **Decision:**
+  - His guard covers ±75° of his facing in footwork (after a 0.18 s raise delay at the end of a move,
+    a stagger or a recoil; at once after a clash or a flinch) and through the first 55 % of each
+    windup. A guarded strike deals nothing, adds guard posture (8 light / 20 heavy) and clashes
+    (`dragon:guard`, "GUARDED"); in footwork each one makes a counter likelier (0, 35, 70, 100 %): the
+    Riposte. A heavy strike with posture 48 or more (a charged thrust from ~90 % charge) crushes the
+    guard: it lands and he staggers. The chain's slam (40) does not.
+  - **Feints never glint:** a feint has no tell and no flash; only real impacts are cued.
+  - A perfect dodge against him is the Ghostep behind him (no plunge), and his back is never guarded.
+  - **Execution:** a broken duelist within `execRange` (3.2 m) is executed by a lunging full thrust
+    whose first active frame calls `onExecute`; the break is spent. While broken, hits crit ×1.5 (the
+    wyrm's 2.2: here the execution is the reward).
+  - Openings: his recoveries, the recoil after his last hit is parried, the Ghostep, the break.
+- **Measured** (`npm test` → DUEL WIN; `node tests/integration/duel.mjs . probe`): a god-mode bot that
+  answers every tell wins in 53–59 s (three seeds); mortal bots reading 95 / 85 / 70 % of the tells all
+  win (56 / 68 / 69 s, 2 / 10 / 15 hits taken, 5 / 3 / 0 flasks left). Easier than the wyrm, as the
+  first boss should be. No human has played it.
+- **Alternatives:** no guard (the owner's other option); a guard that holds through whole windups (the
+  fencer then never trades, and nothing teaches the commit point); hits during his windups
+  interrupting them (makes mashing the answer).

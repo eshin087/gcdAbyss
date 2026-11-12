@@ -4,7 +4,24 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Ten pieces of work since 0.4.0:
+Eleven pieces of work since 0.4.0:
+- **The Ash Disciple, a second level** (2026-11-12, ADR-050 – ADR-053): a new boss and a new place,
+  loaded on their own with `?level=ash` or from the stage picker on the title screen (and the Lab's
+  LEVEL row). The Ashfall Courtyard: a ruined sword sect under falling ash, a bonfire at the foot of a
+  path, broken steps and a gate, a paved courtyard ringed by broken pillars. In it kneels the Ash
+  Disciple, a grey-robed swordsman in a wide straw hat with a straight jian. He has moves of his own
+  (thrusts, flicks, spins, a feint that never glints, a low sweep, a gliding cut, sword qi thrown
+  along the ground, and in his second phase a flurry of thrusts, a burning whirl and a great leap),
+  he guards and turns aside strikes into his front and counters after a few, and a broken guard ends
+  in an execution. The game's direction is now a wuxia skill boss rush with fixed rewards; his reward
+  comes next.
+  - Added: `src/levels/` (level registry), `world/courtyard.js`, `entities/enemies/ashDisciple/`,
+    `ui/bossName.js`, `tests/integration/duel.mjs` (in `npm test`), `docs/specs/ash-disciple.md`;
+    the `dragon:guard` event and a GUARDED call-out; the execution thrust against a broken duelist.
+  - Changed: `HeroAnimator` takes an optional per-instance pose table; flow banners and lore, the
+    minimap zone, the combat log and the name tag come from the level and the boss's name; audio
+    gives a duelist no creature voice; grass can be thinned and greyed by a level, the atmosphere can
+    fall ash.
 - **Two hands, a raised guard, idle life, gold hair** (2026-11-12, ADR-046 to ADR-049): the hero
   swings with both hands, blocks with the sword raised across his body, and when you stop for a few
   seconds he looks around, stretches, inspects or twirls his sword, rests it on his shoulder or leans

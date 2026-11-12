@@ -5,6 +5,75 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 15: the Ash Disciple, a second level
+
+**Owner:** "help me think of making content for this game. i want this to be kinda like phantom blade
+zero wuxia combat, boss rush, with some exploring and rpg elements." After a pitch (a bonfire hub,
+short approaches, a roster of duelist bosses each handing over a technique): "lets do the ash
+disciple as a separate level and allow me to load it separately to test it"; setting: both the wuxia
+combat and the fiction; progression: fixed rewards, loot that adds elements, skills and abilities to
+change the combat style. Four answers: a grey-robed jian swordsman whose moves "should not mirror the
+main character and have its own many different movesets"; guards and counters; the fight first, the
+reward in the next PR; a ruined sect courtyard. Branch `level/ash-disciple` (a worktree off
+`origin/main`: the main checkout had another session's uncommitted hero work). Spec:
+`docs/specs/ash-disciple.md`.
+
+**Done:**
+- **Levels (ADR-050):** `src/levels/` (Cinderwood, Ashfall), `?level=ash`, `applyLevel` into
+  `CONFIG.world` at boot, a stage picker on the title, a LEVEL row in the Lab. The boss slot keeps
+  `game.dragon` (+ `game.boss`) and the `dragon:*` events. Wyrm text moved into the level (flow banners
+  and lore, the minimap zone, the log, the name tag); audio gives a duelist no creature voice.
+- **The courtyard** (`world/courtyard.js`, the forest's prop builders exported): a staggered paving of
+  carved slabs with a calmer glyph ramp, a ring of broken pillars and lanterns, a gate with its lintel
+  fallen, a bronze bell, a stele, steps and a flagstone path down to the bonfire, ~340 charred trees
+  and stumps. Atmosphere `ash` mode (falling flakes, drifting embers); grass thinned, shortened and
+  greyed through a set's `grass` hook (`uAsh` in grass.js).
+- **The Ash Disciple (ADR-052):** gear items on the hero's skeleton (a wide douli, a robe with a
+  crossed collar and sash, a skirt on the coat springs, a bracer and a bell sleeve, wrapped shins, a
+  jian with a red tassel on a streamer spring), recoloured on his own materials. `HeroAnimator` takes a
+  per-instance pose table; his `loco` is a jian guard on the hero's gait, his `duel` clips are keyframe
+  data (`moves.js`): twelve moves, the Riposte counter, the Kindling, eleven reaction clips.
+- **His rules (ADR-053):** the guard and the counter, the windup guard up to the commit point, feints
+  without a tell or a glint, Ash Crescents that cue themselves, the Ghostep behind him, the execution
+  thrust (player.js `_startExecuteThrust`, `onExecute`). `dragon:guard` + a GUARDED call-out.
+- **Tests:** `tests/integration/duel.mjs` (own file: the main suite was being edited elsewhere),
+  in `npm test`: LEVELS, DATA (every move, both phases, both ends of every roll), TIMING, GUARD,
+  DEFLECT, GHOSTEP, EXECUTE, PHASE, FLOW, WIN; `probe` opt-in.
+- **Direction (ADR-051):** CLAUDE.md, ROADMAP vision and M2 rewritten for the skill boss rush.
+
+**Found and fixed on the way:** `limb()` with `capSegs: 0` makes NaN vertices (the bell sleeve drew
+as a black slab through the art pass: now a lofted shell); the douli's veil drew as a solid black
+panel (removed); the jian on the `flask` material glowed gold (now `armor` + `bevel`, pale steel);
+his raised sword-finger hid under the hat's brim (now forward beside the jian). The DATA rules caught
+two P2 first windups under 0.7 s (Swallow, Riposte → 0.78); TIMING caught the spins landing 150 ms
+late (their step moved into the windup). The WIN bot found three leaks: no guard while winding up,
+a 0.25 s re-raise after a flinch that let a chain flinch-lock him, and a crush threshold (18) the
+slam and every charged thrust passed; then a break was worth ~1250 of his 2000 HP (break crit 2.2 →
+1.5, HP 3000, the executed reaction 2.0 → 1.3 s and he gives ground).
+
+**Verification:** `npm test` ALL PASSED (the wyrm suite unchanged, DUEL ALL PASSED, glyph check),
+`npm run build` ok (1748 KB). In the browser: both levels boot with no new console errors; the title
+picker, the Lab row, the courtyard from above and at the game camera, the disciple from eight angles
+(ASCII), film strips of Plum Thrust, Swallow Flicks and Crane Spins; the phone preset (852 x 393, LOW).
+
+**Measured:** phone preset, Ashfall: 51 draw calls a frame in the duel (the wyrm fight: 56), ~360k
+triangles (Cinderwood ~690k: the thinner grass). WIN: 53–59 s on three seeds; probe 95 / 85 / 70 %:
+wins in 56 / 68 / 69 s with 5 / 3 / 0 flasks left.
+
+**Not checked / open:**
+- No human has played it; nothing ran on a phone. Is the guard readable? Are the feints fair?
+- Only three moves were looked at frame by frame; the other moves and the reactions (stagger, recoil,
+  broken, executed, death, the intro's salute, the Kindling) were checked by the tests, not by eye.
+- His hits are zones, not his blade: a pose edit can drift from them unseen.
+- No sounds of his own beyond the cues and the clangs. The reward is the next PR.
+- The duel suite copies the main suite's harness (`build`, the input mock): share it once the
+  parallel edits to `integ.mjs` have landed.
+
+**Next:** the owner tries `?level=ash` on the Vercel preview (desktop and phone); then the technique
+system and his reward.
+
+---
+
 ## 2026-11-12 — Session 14: two hands, a raised guard, idle life, gold hair, a clear charge
 
 **Owner:** "make the character use both hands when he's swinging ... add some idle animations of the

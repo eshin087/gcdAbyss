@@ -1,9 +1,13 @@
 # Roadmap
 
-Vision: an Elden-Ring-like open-world action RPG with MMO-style systems (party, chat, classes,
-loot, shared world), presented entirely in a crafted ASCII look. Combat is readable and fair
-(clear tells; block / parry / perfect dodge inspired by Phantom Blade Zero), not a stamina-gated
-pure soulslike. Built incrementally as browser vertical slices that are always playable.
+Vision (owner, 2026-11-11, ADR-051): a **wuxia skill boss rush** in the vein of Phantom Blade Zero,
+with some exploring and RPG elements, presented entirely in a crafted ASCII look. Boss duels, each
+testing one skill, reached from a bonfire through short approaches; wuxia combat and fiction (sects,
+robes, wandering swordsmen), the Cinder Wyrm as the spectacle fight. **Fixed rewards**: each boss gives
+a technique, weapon, ability or element that changes how the hero fights (no XP levels, no random
+loot tables). Combat is readable and fair (clear tells; block / parry / perfect dodge), not a
+stamina-gated pure soulslike. Built as browser vertical slices that are always playable. (The
+earlier vision, an open-world RPG with MMO-style systems, survives as the online milestone, not next.)
 
 Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 
@@ -146,6 +150,32 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.16 — The Ash Disciple: a second level, a human duelist (2026-11-11, `level/ash-disciple`)
+Spec: `docs/specs/ash-disciple.md`.
+- [x] Levels: `?level=ash`, a stage picker on the title, a LEVEL row in the Lab; the boss slot (ADR-050)
+- [x] The Ashfall Courtyard: bonfire, a path and broken steps, a gate, a paved courtyard in a ring of
+      pillars and lanterns, a fallen bell, burned trees, falling ash, thin grey grass
+- [x] The Ash Disciple on the hero's skeleton: douli hat, grey robe, bracer and bell sleeve, a jian
+      with a tassel; his own stance and keyframe moves (ADR-052)
+- [x] Nine moves and a counter in P1, three more in P2, the Kindling transition; feints that never
+      glint; Ash Crescent projectiles
+- [x] His guard and counters, the Ghostep behind him, the execution thrust (ADR-053)
+- [x] Duel tests (`tests/integration/duel.mjs`: levels, data rules, timing, guard, deflect, Ghostep,
+      execution, phases, flow, a bot win; `probe` opt-in); `npm test` + build green
+- [ ] Owner review of the PR preview (`?level=ash`, and on the phone); merge
+- [ ] A human playtest: is the guard readable, are the feints fair, is he too easy (bots: ~1 min)?
+- Follow-ups:
+  - [ ] **The reward** (the next PR, ADR-051): the technique system (slots, a meter filled by parries
+        and perfect dodges, an equip screen) and his technique as the first one
+  - [ ] Look at every move and reaction frame by frame (only Plum Thrust, Swallow Flicks and Crane
+        Spins were filmed; the rest were checked by the tests, not by eye)
+  - [ ] Sounds of his own: a jian whoosh per swing, a step / glide, the Kindling (today: the cues,
+        the parry and block clangs, no creature voice)
+  - [ ] His hit zones are not his blade: check the zones against the poses in the Lab hitbox overlay
+  - [ ] The courtyard: a walled edge so the duel cannot drift out through the gaps between pillars
+        (he is bounded; the hero is not), and the approach's own encounters (mobs: M2)
+  - [ ] Rename `game.dragon` / `dragon:*` to `game.boss` / `boss:*` once the wyrm work has landed
+
 ## M1.15 — Two hands, a raised guard, idle life, gold hair (2026-11-12, `player/two-hands-idle-life`)
 - [x] Both hands on every swing and the stab; the off hand closes round the grip (ADR-046)
 - [x] A two-handed guard, the blade raised ~50° across the body
@@ -210,13 +240,16 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Look at `slamBurst`, the Storm flurry and the frame cost of a phase-3 storm on a low-end device
   - [ ] The drawn steel is 0.44 m shorter than the hit segment: decide whether to shorten the reach
 
-## M2 — RPG foundations (v0.3)
-- [ ] Actor base class shared by player / enemies / NPCs; data-driven enemy definitions
-- [ ] Regular mobs (2–3 types) using the shared combat system and tell rules
-- [ ] Character stats, levels, XP; equipment slots; inventory UI
-- [ ] Loot drops, item rarity, consumables
+## M2 — The boss rush's foundations (revised 2026-11-12, ADR-051)
+- [ ] Techniques: a slot system, a meter filled by parries and perfect dodges, an equip screen; the
+      Ash Disciple's technique first (the next PR)
+- [ ] Fixed rewards per boss (techniques, weapons, abilities, elements); weapons of other lengths
+      (the animator, the hit segment and the blade FX read `DIM`)
+- [ ] A hub that links the levels (the bonfire), and a boss-rush mode (refights back to back, a timer)
+- [ ] More duelists from the roster (The Moth, The Bell-Warden, The Calligrapher, The Iron Abbot)
+- [ ] Regular mobs (2–3 types) on the approaches, using the shared combat system and tell rules
 - [ ] Save / load (localStorage), settings menu (keybinds, volume, quality)
-- [ ] Skill hotbar (MMO-style abilities with cooldowns) bound to 1–9
+- ~~Character stats, levels, XP; loot rarity~~ (dropped: fixed rewards, ADR-051)
 
 ## M3 — World (v0.4)
 - [ ] Zone streaming: multiple connected areas, transitions, minimap per zone
