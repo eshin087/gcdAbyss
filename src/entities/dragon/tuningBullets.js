@@ -23,7 +23,7 @@ export const BULLETS = {
   // and the posture it adds instead of `posture`
   ember: { tell: TELL.NORMAL, r: 0.32, damage: 8, burn: 0, knockback: 0, posture: 5, returnDamage: 30, returnPosture: 14 },
   // turn rad/s (x (1 + 0.25 age)), cruise m/s, burst: the outward speed decays to this fraction / s
-  wisp: { tell: TELL.BLUE, r: 0.4, damage: 13, burn: 0.8, knockback: 0, posture: 12, returnDamage: 70, returnPosture: 30, turn: 1.9, cruise: 5.2, life: 6.5 },
+  wisp: { tell: TELL.BLUE, r: 0.4, damage: 13, burn: 0.8, knockback: 0, posture: 12, returnDamage: 70, returnPosture: 30, turn: 1.9, cruise: 6.2, life: 6.5 },
   orb: { tell: TELL.RED, r: 0.62, damage: 20, burn: 1.5, knockback: 3 },
   height: 1.0, // flight height (m): chest height of the hero
   arm: 0.05, // a bullet cannot hit in its first `arm` s

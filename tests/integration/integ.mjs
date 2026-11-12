@@ -1450,13 +1450,16 @@ async function scenarioBullets() {
   const PW = DEFENSE.perfectParryWindow;
   assert(PW > 0 && PW < DEFENSE.parryWindow, `DEFENSE.perfectParryWindow ${PW} s sits inside the parry window`);
   const actBefore = d.brain.action;
+  const st0 = { dealt: game.flow.stats.damageDealt, hits: game.flow.stats.hits };
   const pf = shot(KIND.ember, { answer: 'parry', parryLead: 0.05 });
+  const stDealt = game.flow.stats.damageDealt - st0.dealt, stHits = game.flow.stats.hits - st0.hits;
   out(`   ember, RMB ${pf.gap.toFixed(3)} s before impact: ${pf.res.join(' ')} · perfect ${pf.perfect} · dragon:parried.perfect ${pf.parried[0]?.perfect} · returned ${JSON.stringify(pf.returned.map((r) => r.damage))} · wyrm −${pf.dmg} HP · posture ${pf.postureEnd.toFixed(1)} · live ${pf.live}`);
   assert(pf.res[0] === RESULT.PARRIED && pf.hp === 0 && pf.gap <= PW + 1e-6, `a parry ${pf.gap.toFixed(3)} s before impact parries the ember`);
   assert(pf.perfect === true && pf.parried[0]?.perfect === true && pf.parried[0]?.bullet === true, 'player:parry { perfect: true } and dragon:parried { bullet, perfect: true }');
   assert(pf.returned.length === 1 && pf.returned[0].damage === K.ember.returnDamage && pf.dmg === K.ember.returnDamage, `the returned ember lands on the head for returnDamage (${pf.dmg} / ${K.ember.returnDamage}), dragon:returned once`);
   assert(near(pf.postureEnd, K.ember.returnPosture, 0.5), `the return adds returnPosture instead of the deflect's posture (${pf.postureEnd.toFixed(1)} / ${K.ember.returnPosture})`);
   assert(pf.live === 0 && d.brain.action === actBefore, 'the shot burst on the head; the wyrm was not interrupted');
+  assert(stDealt === K.ember.returnDamage && stHits === 1, `the run stats count the return as the hero's hit (${stDealt} damage, ${stHits} hit)`);
   const pw = shot(KIND.wisp, { answer: 'parry', parryLead: 0.05 });
   out(`   wisp, RMB ${pw.gap.toFixed(3)} s before impact: perfect ${pw.perfect} · wyrm −${pw.dmg} HP · posture ${pw.postureEnd.toFixed(1)}`);
   assert(pw.perfect === true && pw.dmg === K.wisp.returnDamage && near(pw.postureEnd, K.wisp.returnPosture, 0.5), `a perfectly parried wisp returns for ${K.wisp.returnDamage} HP + ${K.wisp.returnPosture} posture (${pw.dmg}, ${pw.postureEnd.toFixed(1)})`);

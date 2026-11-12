@@ -1270,7 +1270,8 @@ Dragon (any attacker) → hud/audio/flow:
   index in its string, last = the string's last hit or a single attack: only then a recoil; bullet: true = a
   deflected bullet, hit 0, last false: posture only, the wyrm is not interrupted and audio stays silent; perfect:
   true = the bullet is returned), `dragon:returned {kind, damage, x, y, z}` (a perfectly parried bullet's return
-  lands on the head: kind 0 ember / 1 wisp, damage dealt, x/y/z the head; audio plays its hit, the HUD its number),
+  lands on the head: kind 0 ember / 1 wisp, damage dealt, x/y/z the head; audio plays its hit, the HUD its number,
+  flow counts it in the run stats like a sword hit),
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
   `dragon:phase3`, `dragon:phase {n}` (with each of the two above, on the transition roar), `dragon:plunged {execution}`
   (contract 2: every plunge that lands, even during a transition or the killing one),

@@ -52,7 +52,7 @@ ADR-050 to ADR-053 here.
   frame; the first, stronger tint read as a brown wash (with the hurt vignette of a god-mode hero
   standing in craters on top of it).
 
-**Verification:** `npm test` ALL PASSED (687 checks on the tree rebased onto #14, 635 before this session; BULLETS and FIRE grew),
+**Verification:** `npm test` ALL PASSED (688 checks on the tree rebased onto #14, 635 before this session; BULLETS and FIRE grew),
 `npm run build` ok (1695 KB). Film strips in the dev server (`__tick` + an overlay canvas): a
 meteor's heat at k 0.2 / 0.6 / hot, a stomp zone, the burning pass, the flame ring and wall; a
 perfect parry's shot flying back and landing (−30 HP); the torrent, the burst and the Scouring breath
@@ -67,7 +67,7 @@ particles torrent 634, burst 449, Scouring breath 1013, Armageddon 1805 (pool 70
 |---|---|---|---|
 | Ember storm → torrent | 2 / 1 → 4 / 0 | 4 / 1 → 6 / 0 | 4 / 2 → 6 / 0 |
 | Cinder fan → burst | 2 / 1 → 4 / 1 | 3 / 1 → 5 / 1 | 3 / 1 → 5 / 1 |
-| Wisp swarm | – | 4 / 1 → 6 / 0 | 4 / 0 → 6 / 1 |
+| Wisp swarm | – | 4 / 1 → 6 / 1 | 4 / 0 → 6 / 0 |
 | Fire wheel → Scouring breath | – | 2 / 0 → 1 / 0 | 2 / 0 → 1 / 0 |
 | Meteor rain → Armageddon | 3 (standing) | → 5 / 0 | → 5 / 0, + 31 crater ticks |
 

@@ -333,7 +333,7 @@ cue, before → after the Hard breath patterns):
 |---|---|---|---|
 | Ember storm → torrent | 2 / 1 → 4 / 0 | 4 / 1 → 6 / 0 | 4 / 2 → 6 / 0 |
 | Cinder fan → burst | 2 / 1 → 4 / 1 | 3 / 1 → 5 / 1 | 3 / 1 → 5 / 1 |
-| Wisp swarm | – | 4 / 1 → 6 / 0 | 4 / 0 → 6 / 1 |
+| Wisp swarm | – | 4 / 1 → 6 / 1 | 4 / 0 → 6 / 0 |
 | Fire wheel → Scouring breath | – | 2 / 0 → 1 / 0 | 2 / 0 → 1 / 0 |
 | Meteor rain → Armageddon | – | 3 (P1 values) → 5 / 0 | – → 5 / 0 (+ 31 crater ticks) |
 
