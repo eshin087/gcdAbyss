@@ -48,6 +48,62 @@ const thrustKeys = (k = 1) => [
   [2.0, { ...LUNGE }],
 ];
 
+/**
+ * The cuts long strings are made of: where the blade is cocked (`from`, at u 0.55 of the windup) and
+ * where the cut ends (`to`, at the impact), the zone, the step. Each one turns the body with the
+ * blade (yaw), so a string rocks him side to side instead of flicking a stiff arm.
+ */
+const CUTS = {
+  rise: { // low right → high left
+    from: { bY: -0.18, yaw: 0.15, rH: [-0.12, -0.36, 0.22], rP: [-0.8, -0.5, -0.2], sw: [-1.3, -0.55], swF: [0, 1, 0.2], lH: [0.1, -0.05, 0.3] },
+    to: { bY: -0.12, yaw: 0.62, rH: [0.18, -0.02, 0.4], rP: [-0.7, -0.4, -0.2], sw: [0.75, 0.55], swF: [0, 1, -0.3], lH: [0.24, 0.12, -0.12] },
+    zone: { kind: 'sector', r: 2.15, ang: 0.9 },
+  },
+  back: { // high left → low right
+    from: { yaw: 0.75, rH: [0.22, 0.08, 0.3], sw: [1.0, 0.75], swF: [0, 1, -0.3], lH: [-0.05, 0.0, 0.3] },
+    to: { yaw: 0.05, bY: -0.16, rH: [-0.14, -0.22, 0.42], sw: [-1.15, -0.18], swF: [0, 1, 0.3], lH: [0.22, 0.1, -0.15] },
+    zone: { kind: 'sector', r: 2.15, ang: 0.9 },
+  },
+  flat: { // a level cut from his right to his left
+    from: { yaw: -0.25, bY: -0.16, rH: [-0.26, -0.1, 0.18], rP: [-0.9, -0.2, -0.3], sw: [-1.85, 0.05], swF: [0, 1, 0], lH: [0.2, 0.0, 0.25] },
+    to: { yaw: 0.8, bY: -0.18, rH: [0.22, -0.12, 0.38], sw: [1.15, 0.0], swF: [0, 1, 0], lH: [0.26, 0.05, -0.15] },
+    zone: { kind: 'sector', r: 2.2, ang: 1.0 },
+  },
+  flatBack: { // a level cut from his left back to his right
+    from: { yaw: 0.85, bY: -0.16, rH: [0.24, -0.08, 0.3], sw: [1.25, 0.08], swF: [0, 1, 0], lH: [-0.04, -0.05, 0.3] },
+    to: { yaw: -0.2, bY: -0.18, rH: [-0.24, -0.12, 0.36], sw: [-1.55, 0.0], swF: [0, 1, 0], lH: [0.25, 0.08, -0.1] },
+    zone: { kind: 'sector', r: 2.2, ang: 1.0 },
+  },
+  over: { // raised over the head, a stepping chop
+    from: { ...RAISED, sw: [0.0, 2.3] },
+    to: { ...CHOP },
+    zone: { kind: 'sector', r: 2.3, ang: 0.5 },
+  },
+};
+
+/** One beat of a long string: `kind` a CUTS entry or 'thrust'; `extra` overrides any beat field. */
+function cut(kind, tell, windup, damage, extra = {}) {
+  if (kind === 'thrust') {
+    return {
+      tell, windup, active: 0.12, damage, knockback: tell === N ? 0.6 : 1.4, zone: { kind: 'line', r: 2.0, w: 0.7 },
+      dash: { from: 0.6, to: 1.0, stop: 1.1, max: 1.8 }, keys: thrustKeys(), ...extra,
+    };
+  }
+  const K = CUTS[kind];
+  return {
+    tell, windup, active: 0.12, damage, knockback: tell === N ? 0.6 : 1.5, zone: K.zone,
+    travel: [[0.6, 0], [1.0, kind === 'over' ? 0.8 : 0.3]],
+    keys: [[0.55, { ...K.from }], [1.0, { e: 'i', ...K.to }], [2.0, { ...K.to }]],
+    ...extra,
+  };
+}
+
+/** The perilous thrust (red, a mikiri can answer it): a deep coil, the blade drawn back low along his
+ *  side, held a beat, then a long lunge. */
+const PERIL_COIL = { ...COIL, bY: -0.3, bZ: -0.12, yaw: 0.9, rH: [-0.1, -0.3, -0.06], sw: [-0.9, -0.06], lH: [0.26, 0.04, 0.08], lP: [0.9, 0.2, -0.2], hdY: -0.75, rF: [-0.1, 0.36], lF: [0.18, -0.34] };
+const PERIL_LUNGE = { ...LUNGE, bZ: 0.28, bY: -0.32, rF: [-0.08, 1.02], lF: [0.22, -0.64], lH: [0.18, 0.08, -0.42] };
+const perilKeys = () => [[0.45, { ...PERIL_COIL }], [0.86, { ...PERIL_COIL, bY: -0.32, rH: [-0.12, -0.31, -0.08] }], [1.0, { ...PERIL_LUNGE, e: 'i' }], [2.0, { ...PERIL_LUNGE }]];
+
 // ---------------------------------------------------------------- the moves
 export const MOVES = {
   /** Plum Blossom Thrust: a coiled, lunging thrust from mid range. */
@@ -64,7 +120,7 @@ export const MOVES = {
   fallingAsh: {
     label: 'Falling Ash', phase: 1, weight: [1.8, 1.6], cooldown: 3, band: [1.2, 4.2], recovery: 0.85,
     beats: [{
-      tell: B, windup: 0.95, active: 0.14, damage: 26, knockback: 1.6, zone: { kind: 'sector', r: 2.3, ang: 0.5 },
+      tell: B, windup: 0.95, active: 0.14, damage: 26, knockback: 1.6, zone: { kind: 'sector', r: 2.3, ang: 0.5 }, lock: true,
       travel: [[0.8, 0], [1.0, 0.9]],
       keys: [
         [0.55, { ...RAISED, rF: [-0.1, 0.3], lF: [0.17, -0.24] }],
@@ -74,6 +130,46 @@ export const MOVES = {
       ],
     }],
     recoveryKeys: [[0.5, { ...CHOP, two: 0.4, bY: -0.22, sw: [-0.3, -0.5], rH: [0.0, -0.32, 0.4] }]],
+  },
+
+  /** Falling Star: straight down out of his high guard, a stepping two-handed cut. Lock-able. */
+  fallingStar: {
+    label: 'Falling Star', phase: 1, weight: [2.4, 2.0], cooldown: 3, band: [1.4, 4.8], recovery: 0.8,
+    beats: [{
+      tell: B, windup: 0.8, active: 0.13, damage: 24, knockback: 1.6, zone: { kind: 'sector', r: 2.3, ang: 0.5 }, lock: true,
+      travel: [[0.6, 0], [1.0, 1.2]],
+      keys: [
+        [0.55, { two: 0.5, bY: -0.1, pitch: -0.1, yaw: 0.2, rH: [0.06, 0.3, 0.12], rP: [-0.8, 0.5, -0.2], sw: [0.0, 1.75], swF: [1, 0, 0], rF: [-0.1, 0.42], lF: [0.17, -0.22] }],
+        [1.0, { ...CHOP, e: 'i' }],
+        [2.0, { ...CHOP }],
+      ],
+    }],
+    recoveryKeys: [[0.5, { ...CHOP, two: 0.3, bY: -0.22, sw: [-0.3, -0.45] }]],
+  },
+
+  /** Piercing Ash: a PERILOUS thrust (red). Dodge into it (mikiri) to step on the blade, or roll aside. */
+  piercingAsh: {
+    label: 'Piercing Ash', phase: 1, weight: [1.6, 1.8], cooldown: 6, band: [3.5, 9], recovery: 0.9,
+    beats: [{
+      tell: R, windup: 1.0, active: 0.16, damage: 30, knockback: 2.5, zone: { kind: 'line', r: 2.1, w: 0.7 }, mikiri: true,
+      dash: { from: 0.86, to: 1.0, stop: 0.9, max: 5.5 }, track: 0.8, keys: perilKeys(),
+    }],
+    recoveryKeys: [[0.45, { ...PERIL_LUNGE, bY: -0.24, rH: [0.04, -0.1, 0.45] }]],
+  },
+
+  /** Rain of Ashes: a seven-hit string that changes rhythm (a held overhead), ending on a heavy
+   *  thrust. Parry all seven and he reels. The overhead can be locked. */
+  ashRain: {
+    label: 'Rain of Ashes', phase: 1, weight: [2.4, 2.2], cooldown: 8, band: [1.4, 4.2], recovery: 1.0,
+    beats: [
+      cut('rise', N, 0.8, 14),
+      cut('back', N, 0.45, 13),
+      cut('flat', N, 0.45, 13),
+      cut('over', B, 0.55, 20, { hold: [0.15, 0.4], cock: 0.7, lock: true }),
+      cut('rise', N, 0.45, 12),
+      cut('back', N, 0.45, 12),
+      cut('thrust', B, 0.6, 20),
+    ],
   },
 
   /** Swallow Flicks: a rising flick, a backhand flick, then a heavy thrust. */
@@ -130,7 +226,7 @@ export const MOVES = {
         ],
       },
       {
-        tell: B, windup: 0.65, active: 0.14, damage: 24, knockback: 1.6, zone: { kind: 'sector', r: 2.4, ang: 0.55 },
+        tell: B, windup: 0.65, active: 0.14, damage: 24, knockback: 1.6, zone: { kind: 'sector', r: 2.4, ang: 0.55 }, lock: true,
         dash: { from: 0.45, to: 1.0, stop: 1.3, max: 3.0 }, lift: [[0.42, 0], [0.75, 0.85], [1.0, 0]],
         keys: [
           [0.42, { two: 1, yaw: 0.2, bY: -0.32, rH: [0.1, -0.2, 0.3], sw: [0.0, 0.3], hdY: -0.1, rF: [-0.1, 0.28], lF: [0.16, -0.22] }],
@@ -260,6 +356,24 @@ export const MOVES = {
     }),
   },
 
+  /** Hundred Petals: ten hits, every direction, a held overhead in the middle, ending on a PERILOUS
+   *  thrust: parry nine, then dodge into the last. */
+  petals: {
+    label: 'Hundred Petals', phase: 2, weight: [0, 2.6], cooldown: 10, band: [1.4, 4.4], recovery: 1.1,
+    beats: [
+      cut('rise', N, 0.8, 11),
+      cut('back', N, 0.45, 11),
+      cut('flat', N, 0.45, 11),
+      cut('flatBack', N, 0.45, 11),
+      cut('over', B, 0.55, 18, { hold: [0.1, 0.35], cock: 0.7, lock: true }),
+      cut('rise', N, 0.45, 10),
+      cut('back', N, 0.45, 10),
+      cut('flat', N, 0.45, 10),
+      cut('thrust', B, 0.5, 16),
+      { tell: R, windup: 0.8, active: 0.16, damage: 26, knockback: 2.5, zone: { kind: 'line', r: 2.1, w: 0.7 }, mikiri: true, dash: { from: 0.86, to: 1.0, stop: 0.9, max: 2.4 }, track: 0.7, keys: perilKeys() },
+    ],
+  },
+
   /** Ember Whirl: two spinning cuts walking forward, then a low burning spin (red). */
   emberWhirl: {
     label: 'Ember Whirl', phase: 2, weight: [0, 2.2], cooldown: 8, band: [1.4, 4.6], recovery: 1.0,
@@ -355,6 +469,35 @@ export const CLIPS = {
     keys: [
       [0.1, { e: 'o', pitch: -0.24, bZ: -0.1, rH: [-0.1, 0.2, 0.15], rP: [-0.8, 0.4, -0.4], sw: [-0.5, 1.4], swF: [1, 0, 0], lH: [0.3, 0.05, 0.05], hdX: -0.2, ...STEP_BACK }],
       [0.6, { pitch: -0.12, rH: [-0.1, 0.05, 0.25], sw: [-0.6, 0.8], lH: [0.25, 0.1, 0.1] }],
+    ],
+  },
+  /** Thrown off balance (a full deflect, a lost blade lock): the jian flung wide, arms out, two
+   *  stumbling steps back before he finds his guard. The big opening. */
+  reeling: {
+    dur: 1.45,
+    keys: [
+      [0.12, { e: 'o', pitch: -0.32, bZ: -0.14, bY: -0.12, yaw: -0.2, rH: [-0.34, 0.05, 0.05], rP: [-0.9, 0.3, -0.3], sw: [-2.3, 0.45], swF: [0, 1, 0], lH: [0.32, 0.1, 0.0], lP: [0.9, 0.3, 0.0], hdX: -0.3, rF: [-0.12, 0.05], lF: [0.2, -0.5] }],
+      [0.6, { pitch: -0.2, bY: -0.2, yaw: 0.0, rH: [-0.3, -0.05, 0.12], sw: [-2.0, 0.2], lH: [0.3, 0.0, 0.1], hdX: -0.1, rF: [-0.14, -0.15], lF: [0.18, -0.45] }],
+      [1.1, { pitch: -0.05, bY: -0.18, rH: [-0.1, -0.1, 0.3], sw: [-0.9, 0.2], lH: [0.1, -0.05, 0.3] }],
+    ],
+  },
+  /** Pinned by a mikiri: the hero's boot on his blade, he is dragged forward and down, then
+   *  wrenches the jian free and stumbles back. */
+  trampled: {
+    dur: 1.5,
+    keys: [
+      [0.1, { e: 'o', pitch: 0.42, bY: -0.34, bZ: 0.1, rH: [0.02, -0.38, 0.45], rP: [-0.6, -0.6, 0.2], sw: [-0.25, -1.15], swF: [1, 0, 0], lH: [0.2, -0.2, 0.2], hdX: 0.45, rF: [-0.08, 0.7], lF: [0.22, -0.48] }],
+      [0.75, { pitch: 0.35, bY: -0.3, rH: [0.0, -0.36, 0.42], sw: [-0.3, -1.1], hdX: 0.4 }],
+      [1.0, { e: 'o', pitch: -0.2, bY: -0.16, bZ: -0.1, rH: [-0.25, 0.0, 0.15], sw: [-1.9, 0.3], swF: [0, 1, 0], lH: [0.3, 0.05, 0.05], hdX: -0.1, ...STEP_BACK }],
+    ],
+  },
+  /** Blades locked: his jian pressed against the hero's, both hands on it, leaning in. Held until
+   *  the push is decided (brain.js startLock / disciple.js onLockEnd). */
+  lock: {
+    dur: 3, hold: true,
+    keys: [
+      [0.08, { e: 'o', two: 0.8, bY: -0.22, bZ: 0.06, pitch: 0.1, yaw: 0.3, rH: [0.1, -0.02, 0.42], rP: [-0.7, -0.2, -0.3], sw: [0.55, 0.7], swF: [0, 1, -0.4], hdX: 0.1, hdY: -0.3, rF: [-0.1, 0.4], lF: [0.2, -0.42] }],
+      [3, { two: 0.8, bY: -0.24, bZ: 0.08, pitch: 0.12, yaw: 0.3, rH: [0.1, -0.02, 0.43], sw: [0.5, 0.72], swF: [0, 1, -0.4], rF: [-0.1, 0.42], lF: [0.2, -0.44] }],
     ],
   },
   /** Posture broken: down on one knee, the jian's point on the stones, head bowed. */

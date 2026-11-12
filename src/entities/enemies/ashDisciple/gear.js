@@ -6,27 +6,39 @@ import {
 } from '../../player/heroGeo.js';
 
 // The Ash Disciple's outfit (docs/specs/ash-disciple.md §3): gear items on the hero's skeleton, so
-// he is built by the same buildHero(U, loadout) and driven by the same animator. A wide straw douli
-// hat with a veil at the back, an ash-grey long robe with a crossed collar and a charcoal sash, a
-// bracer on the sword arm and a wide sleeve on the free arm, loose trousers with cloth-wrapped shins,
-// and a slim jian with a red tassel. The colours are his own material instances (disciple.js
-// tintDisciple): `coat` = the robe's grey, `leather` = straw, `shirt` = the charcoal sash and shoes,
-// `hem` = the off-white collar, veil and wraps, `facing` = the red tassel, `flask` = the jian's
-// steel (its warm ink lines read as ash and ember), `trim` = old bronze fittings.
+// he is built by the same buildHero(U, loadout) and driven by the same animator. A small straw douli
+// hat (LOOK.hat), an ash-grey long robe with a crossed collar and a charcoal sash, a bracer on the
+// sword arm and a slim bell sleeve on the free arm, loose trousers with cloth-wrapped shins, and a
+// long slender jian (LOOK.jian: a tapered blade with bevelled edges and a ridge, a disc guard and
+// pommel, a banded grip, a red tassel). The colours are his own material instances (disciple.js
+// tintDisciple): `coat` = the robe's grey, `leather` = straw, `shirt` = the charcoal sash, shoes and
+// grip bands, `hem` = the off-white collar and wraps, `facing` = the red tassel, `armor` / `bevel` =
+// the jian's pale steel and its edges, `trim` = old bronze fittings.
 //
 // Heights in comments are metres in the idle stance; head-space numbers are before BODY.headScale.
 
+// ---------------------------------------------------------------- his look (owner pick, 2026-11-12)
+/** Picked from three rendered options ("C"): a smaller, steeper douli (brim radius `r`, crown height
+ *  `h`, head space: drawn ×1.3 by the head and hero scales; it was r 0.4, "way too big") and a long
+ *  slender jian with bright honed edges, a small disc guard and a very long tassel (sword space, the
+ *  blade along +Z: the grip from −gripBack to the guard, the steel from `base` to `tip`: 1.2 m; it
+ *  was 0.77 m and read as a flute). The guard stance that goes with it is poses.js GUARD. */
+const LOOK = {
+  hat: { r: 0.235, h: 0.12 },
+  jian: { gripBack: 0.12, guard: 0.07, base: 0.085, tip: 1.28, width: 0.036, tipW: 0.6, guardStyle: 'disc', pommel: 'disc', edge: true, tassel: [0.1, 0.36] },
+};
+
 // ---------------------------------------------------------------- head: the douli hat
-/** The hat's shell, brim to peak (head space): a wide, shallow cone (a douli is broad and flat: it
- *  shades the shoulders), a little steeper at the crown. */
-const HAT_RINGS = [
-  { y: 0.196, rx: 0.4, rz: 0.4 },
-  { y: 0.204, rx: 0.37, rz: 0.37 },
-  { y: 0.226, rx: 0.27, rz: 0.27 },
-  { y: 0.25, rx: 0.17, rz: 0.17 },
-  { y: 0.278, rx: 0.075, rz: 0.075 },
-  { y: 0.298, rx: 0.014, rz: 0.014 },
-];
+/** The hat's shell, brim to peak (head space): a shallow cone, steeper toward the crown. */
+const BRIM_Y = 0.196;
+const HAT_RINGS = (({ r, h }) => [
+  { y: BRIM_Y, rx: r, rz: r },
+  { y: BRIM_Y + 0.008, rx: r * 0.92, rz: r * 0.92 },
+  { y: BRIM_Y + 0.3 * h, rx: r * 0.66, rz: r * 0.66 },
+  { y: BRIM_Y + 0.55 * h, rx: r * 0.42, rz: r * 0.42 },
+  { y: BRIM_Y + 0.82 * h, rx: r * 0.19, rz: r * 0.19 },
+  { y: BRIM_Y + h, rx: 0.014, rz: 0.014 },
+])(LOOK.hat);
 
 function buildHat({ head, M, mesh }) {
   const rings = HAT_RINGS.map((r) => ({ ...r, gap: 0, cz: -0.01 }));
@@ -35,7 +47,8 @@ function buildHat({ head, M, mesh }) {
   mesh(head, g, M.leather);
   mesh(head, g, M.lining); // the shadowed underside
   // the binding round the brim's edge, and the crown cap that holds it on the head
-  mesh(head, sub(bandGeometry(0.402, 0.402, 0.012, 40), 1), M.shirt, 0, 0.196, -0.01);
+  const R = LOOK.hat.r;
+  mesh(head, sub(bandGeometry(R + 0.002, R + 0.002, 0.012, 40), 1), M.shirt, 0, BRIM_Y, -0.01);
   mesh(head, sub(bandGeometry(0.1, 0.11, 0.05, 20), 1), M.shirt, 0, 0.19, -0.01);
   // his hair, tied in a short tail at the nape under the hat
   mesh(head, sub(ellipsoidGeometry(0.03, 0.05, 0.03, { widthSegs: 8, heightSegs: 6 }).translate(0, 0.1, -0.1), 1), M.hair);
@@ -94,12 +107,13 @@ function buildSleeves({ arms, sword, M, DIM, BODY, mesh }) {
     } else {
       // the free arm: a wide sleeve flaring from the elbow to past the wrist (the sword-finger hand
       // shows out of it)
-      // (an open bell: lofted rings down the forearm, like the hat; limb() always caps its ends)
+      // (an open bell: lofted rings down the forearm, like the hat; limb() always caps its ends. Kept
+      // slim and stopping short of the wrist: wider, seen end-on, it read as a ball in his hand)
       const sl = shellGeometry([
-        { y: -DIM.foreArm + 0.02, rx: fa0 + 0.07, rz: fa0 + 0.064, gap: 0 },
-        { y: -0.17, rx: fa0 + 0.05, rz: fa0 + 0.046, gap: 0 },
-        { y: -0.1, rx: fa0 + 0.026, rz: fa0 + 0.024, gap: 0 },
-        { y: -0.04, rx: fa0 + 0.012, rz: fa0 + 0.012, gap: 0 },
+        { y: -DIM.foreArm + 0.06, rx: fa0 + 0.034, rz: fa0 + 0.03, gap: 0 },
+        { y: -0.16, rx: fa0 + 0.026, rz: fa0 + 0.023, gap: 0 },
+        { y: -0.1, rx: fa0 + 0.016, rz: fa0 + 0.015, gap: 0 },
+        { y: -0.04, rx: fa0 + 0.01, rz: fa0 + 0.01, gap: 0 },
       ], { sub: 2, cols: 14 });
       const sg = foldLines(sl, (x, y, z) => 0.5 + 0.6 * Math.sin(Math.atan2(x, z) * 4 + y * 6));
       mesh(fore, sg, M.coat);
@@ -194,52 +208,85 @@ function buildRobeSkirt({ pelvis, M, DIM, mesh, joint }) {
 }
 
 // ---------------------------------------------------------------- weapon: the jian
-/** The jian (sword space: origin = the grip centre, blade along +Z). */
-export const JIAN = { gripBack: 0.11, guard: 0.075, base: 0.09, tip: 0.86, width: 0.034 };
+/** The jian (sword space: origin = the grip centre, blade along +Z): the picked look's. */
+export const JIAN = Object.freeze({ ...LOOK.jian });
+
+/** A tapered steel slab along +Z from z0 over `len`: width w0 → w1, thickness th. */
+function slab(w0, w1, th, z0, len) {
+  const g = boxGeometry(w0, th, len, 0, 0, z0 + len / 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const t = (p.getZ(i) - z0) / len;
+    p.setX(i, p.getX(i) * (1 + (w1 / w0 - 1) * t));
+  }
+  g.computeVertexNormals();
+  return g;
+}
 
 function buildJian({ sword, M, mesh, joint }) {
   const D = JIAN;
-  // the blade: a slim straight double edge with a raised ridge, narrowing a little to a short point
+  const L = D.tip - D.base, w = D.width, body = L * 0.92;
+  // the blade: a long straight double edge narrowing to a short, sharp point; a ridge down each flat
   {
-    const L = D.tip - D.base, w = D.width;
-    const g = boxGeometry(w, 0.009, L * 0.93, 0, 0, D.base + L * 0.465);
-    // taper the box toward the point
-    const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const t = (p.getZ(i) - D.base) / (L * 0.93);
-      p.setX(i, p.getX(i) * (1 - 0.3 * t));
-    }
-    g.computeVertexNormals();
-    const tip = boxGeometry(w * 0.7, 0.008, L * 0.07, 0, 0, D.tip - L * 0.035);
-    const tp = tip.attributes.position;
-    for (let i = 0; i < tp.count; i++) {
-      const t = (tp.getZ(i) - (D.tip - L * 0.07)) / (L * 0.07);
-      tp.setX(i, tp.getX(i) * (1 - 0.95 * t));
-    }
-    tip.computeVertexNormals();
+    const g = slab(w, w * D.tipW, 0.011, D.base, body);
+    const tip = slab(w * D.tipW, 0.002, 0.01, D.base + body, L - body);
     mesh(sword, mergeGeometries([sub(g, 0), sub(tip, 1)]), M.armor);
-    // the ridge down the middle of each flat
-    mesh(sword, mergeGeometries([
-      boxGeometry(0.005, 0.013, L * 0.9, 0, 0, D.base + L * 0.45),
-    ]), M.bevel);
+    const lines = [boxGeometry(0.006, 0.015, body * 0.96, 0, 0, D.base + body * 0.48)];
+    if (D.edge) {
+      // bright honed edges down both sides (the slender look)
+      for (const s of [-1, 1]) {
+        const e = slab(0.005, 0.004, 0.012, D.base + 0.02, body - 0.02);
+        const p = e.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const t = (p.getZ(i) - D.base) / body;
+          p.setX(i, p.getX(i) + s * (w / 2) * (1 + (D.tipW - 1) * t));
+        }
+        lines.push(e);
+      }
+    }
+    mesh(sword, mergeGeometries(lines), M.bevel);
+    // the broad look: a bronze-inlaid forte, engraved (alternating ink sub-ids)
+    if (D.forte) mesh(sword, mergeGeometries([0, 1, 2].map((k) => sub(boxGeometry(w * 1.04, 0.013, 0.05, 0, 0, D.base + 0.03 + k * 0.055), k & 1))), M.trim);
   }
-  // grip wrapped in charcoal cord, a short guard bent toward the blade, a round pommel
-  mesh(sword, limbGeometry({ length: D.gripBack + D.guard - 0.02, r0: 0.014, r1: 0.016, radial: 6, rings: 4 }), M.shirt, 0, 0, -D.gripBack);
-  mesh(sword, mergeGeometries([
-    boxGeometry(0.1, 0.022, 0.02, 0, 0, D.guard),
-    boxGeometry(0.03, 0.03, 0.022, 0.05, 0, D.guard + 0.008, 0, 0.5, 0),
-    boxGeometry(0.03, 0.03, 0.022, -0.05, 0, D.guard + 0.008, 0, -0.5, 0),
-    ellipsoidGeometry(0.022, 0.022, 0.018, { widthSegs: 8, heightSegs: 6 }).translate(0, 0, -D.gripBack - 0.012),
-    ring(0.017, 0.017, 0.006, 8).rotateX(Math.PI / 2).translate(0, 0, D.guard - 0.012),
-  ]), M.trim);
-  // the red tassel off the pommel: a cord and a fringe on a short spring (anim.js _streamers)
-  const base = joint(sword, 0, 0, -D.gripBack - 0.03);
+  // the grip: long enough for a second hand, wrapped in charcoal cord (bands of alternating sub-ids)
+  {
+    const len = D.gripBack + D.guard - 0.015;
+    const bands = [];
+    for (let k = 0; k < 7; k++) bands.push(sub(limbGeometry({ length: len / 7 + 0.002, r0: 0.0155, r1: 0.016, radial: 6, rings: 1 }).translate(0, 0, -D.gripBack + (k * len) / 7), k & 1));
+    mesh(sword, mergeGeometries(bands), M.shirt);
+  }
+  // the guard and the pommel in old bronze
+  {
+    const gz = D.guard, parts = [];
+    if (D.guardStyle === 'wing') {
+      // a central block and two wings swept toward the blade, like a bat's spread wings
+      parts.push(ellipsoidGeometry(0.03, 0.02, 0.022, { widthSegs: 10, heightSegs: 6 }).translate(0, 0, gz));
+      for (const s of [-1, 1]) {
+        parts.push(boxGeometry(0.075, 0.018, 0.022, s * 0.05, 0, gz + 0.012, 0, -s * 0.38, 0));
+        parts.push(boxGeometry(0.03, 0.02, 0.02, s * 0.088, 0, gz + 0.036, 0, -s * 0.9, 0));
+      }
+    } else if (D.guardStyle === 'cross') {
+      // a heavy flat bar, its tips turned up toward the blade
+      parts.push(boxGeometry(0.16, 0.026, 0.024, 0, 0, gz));
+      for (const s of [-1, 1]) parts.push(boxGeometry(0.026, 0.028, 0.05, s * 0.085, 0, gz + 0.02));
+    } else {
+      // a small round disc guard
+      parts.push(ellipsoidGeometry(0.045, 0.022, 0.012, { widthSegs: 14, heightSegs: 4 }).translate(0, 0, gz));
+    }
+    parts.push(ring(0.018, 0.018, 0.007, 8).rotateX(Math.PI / 2).translate(0, 0, gz - 0.014));
+    if (D.pommel === 'ring') parts.push(ring(0.03, 0.03, 0.008, 12).rotateY(Math.PI / 2).translate(0, 0, -D.gripBack - 0.032));
+    else parts.push(ellipsoidGeometry(0.026, 0.026, 0.016, { widthSegs: 10, heightSegs: 6 }).translate(0, 0, -D.gripBack - 0.014));
+    mesh(sword, mergeGeometries(parts), M.trim);
+  }
+  // the red tassel off the pommel: a cord and a fringe on a spring (anim.js _streamers)
+  const [cord, fringe] = D.tassel;
+  const base = joint(sword, 0, 0, -D.gripBack - (D.pommel === 'ring' ? 0.06 : 0.03));
   const s0 = joint(base);
-  mesh(s0, sub(limb({ length: 0.06, r0: 0.004, r1: 0.004, radial: 4, rings: 1, capSegs: 1 }), 1), M.facing);
-  const s1 = joint(s0, 0, -0.06, 0);
-  mesh(s1, foldLines(tatterStrip(0.11, 0.04, { fork: true, curl: 0.1, seed: 404 }), ribbonCrease(0.04, 0.3)), M.facing);
+  mesh(s0, sub(limb({ length: cord, r0: 0.004, r1: 0.004, radial: 4, rings: 1, capSegs: 1 }), 1), M.facing);
+  const s1 = joint(s0, 0, -cord, 0);
+  mesh(s1, foldLines(tatterStrip(fringe, 0.045, { fork: true, curl: 0.1, seed: 404 }), ribbonCrease(0.045, 0.3)), M.facing);
   // the sword turns every way: a wide swing limit lets the tassel find the ground's down from any grip
-  return { streamers: [{ segs: [s0, s1], len: [0.06, 0.11], out: 0.05, lag: 0.8, max: 2.6 }] };
+  return { streamers: [{ segs: [s0, s1], len: [cord, fringe], out: 0.05, lag: 0.9, max: 2.6 }] };
 }
 
 /** The set (registered into the hero's gear registry on import: gear/index.js registerItem). */

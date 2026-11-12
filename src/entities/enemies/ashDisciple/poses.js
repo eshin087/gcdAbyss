@@ -29,8 +29,16 @@ const SCALAR = {
 const VEC = { rH: P.rH, rP: P.rP, lH: P.lH, lP: P.lP, swF: P.swF, rK: P.rK, lK: P.lK, rF: P.rF, lF: P.lF };
 const FEET = new Set(['rF', 'lF']);
 
+/** His guard stance (the owner's pick of three, "C"): a high hanging guard, the jian raised over his
+ *  head pointing at the opponent, the sword-finger aimed below it; sunk low, ready to fall on you. */
+const GUARD_HIGH = {
+  yaw: 0.36, bY: -0.15, hdY: -0.3,
+  rH: [0.02, 0.2, 0.2], rP: [-0.8, 0.5, -0.2], sw: [-0.3, 0.3], swF: [1, 0, 0],
+  lH: [-0.06, -0.08, 0.36], lP: [0.7, -0.5, 0.2],
+};
+
 /** His guard (no breathing): the static pose clips start from and return to. Exported for the data. */
-export const GUARD = Object.freeze({
+const GUARD_BASE = Object.freeze({
   // a jian guard: right foot forward, the body turned to lead with the sword side, sunk low; the jian
   // held out at chest height pointing at the opponent, edge up; the free hand in a sword-finger held
   // forward beside the sword wrist (raised behind the head, the other classic guard, it hid under
@@ -43,6 +51,7 @@ export const GUARD = Object.freeze({
   rF: [-0.1, ANK, 0.3], lF: [0.17, ANK, -0.24],
   sw: [-0.36, 0.1],
 });
+export const GUARD = Object.freeze({ ...GUARD_BASE, ...GUARD_HIGH });
 
 const _az = [0, 0];
 /** [az, el] of a direction (body axes). */

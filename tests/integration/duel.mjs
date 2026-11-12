@@ -270,6 +270,11 @@ function fencer(G, mortal = false) {
   d.lockPoint(tgt);
   game.mouseGround.set(tgt.x, 0, tgt.z);
   const dx = tgt.x - p.position.x, dz = tgt.z - p.position.z, dist = Math.hypot(dx, dz);
+  // locked blades: push (a press every few frames: a player mashing)
+  if (p.state === 'lock') {
+    if (((game.realTime * 60) | 0) % 5 === 0) input.click(0);
+    return;
+  }
   const busy = G.defend.act();
   if (dist > 2.6) input.axis = { x: dx / dist, y: -dz / dist };
   const a = d.brain.act;
@@ -369,7 +374,7 @@ async function scenarioTiming() {
     G.watch = (n, e) => { if (n === 'combat:flash' && e?.attack === name) flashes.push(game.time); };
     const h0 = G.hits.length;
     const ok = d.debug.trigger(name);
-    run(G, 5, (GG) => { GG.game.mouseGround.set(d.position.x, 0, d.position.z); }, () => d.mode === 'foot' && !d.fx.crescentsAlive);
+    run(G, 9, (GG) => { GG.game.mouseGround.set(d.position.x, 0, d.position.z); }, () => d.mode === 'foot' && !d.fx.crescentsAlive);
     G.watch = null;
     for (const h of G.hits.slice(h0)) if (h.attack === name) contacts.push(h.t);
     // each contact against the nearest flash before it
@@ -639,6 +644,197 @@ async function scenarioWin() {
   return G;
 }
 
+// ================================================================== scenario: moments
+/** Force `name` and answer each of its hits: onFlash(seconds to impact, flash) every frame from
+ *  the hit's flash until it returns true. Keeps any watcher already set (it still sees events). */
+function answerMove(G, name, onFlash, max = 9) {
+  const { game } = G, d = game.dragon;
+  const due = [];
+  const prev = G.watch;
+  G.watch = (n, e) => {
+    prev?.(n, e);
+    if (n === 'combat:flash' && e?.attack === name) due.push({ at: game.time + TUNING.flashLead, e, done: false });
+  };
+  const ok = d.debug.trigger(name);
+  run(G, max, () => {
+    G.input.axis = { x: 0, y: 0 };
+    game.mouseGround.set(d.position.x, 0, d.position.z);
+    for (const x of due) if (!x.done) x.done = onFlash(x.at - game.time - DT, x.e) === true;
+  }, () => game.player.state === 'lock' || d.mode === 'foot'); // a lock hands over to the caller at once
+  G.watch = prev;
+  return ok;
+}
+
+/** Him back on his mark mid-courtyard, facing the gate (+z): each moment starts from the same spot,
+ *  clear of the pillars, whatever the last one left behind. */
+function home(G) {
+  const d = G.game.dragon, S = CONFIG.world.dragonSleep;
+  d.position.set(S.x, 0, S.z);
+  d.yaw = 0;
+}
+
+async function scenarioMoments() {
+  out('\n== scenario MOMENTS (the blade lock, the mikiri, the full deflect, the cinematic) ==');
+  const G = build();
+  duel(G, { dist: 2.4 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.god = true;
+  const seen = [];
+  let postAtCine = 0; // his posture when the moment's cinematic starts (its posture is already added)
+  const log = (n, e) => {
+    if (!/player:lock|player:mikiri|dragon:deflected|game:cinematic/.test(n)) return;
+    seen.push(`${n}${e?.phase ? ':' + e.phase : ''}${e?.kind ? ':' + e.kind : ''}`);
+    if (n === 'game:cinematic') postAtCine = d.posture;
+  };
+  // ---- the blade lock: a PERFECT parry of Falling Star, then mash
+  const post0 = d.posture;
+  let parried = false;
+  const ok1 = answerMove(G, 'fallingStar', (left) => {
+    if (left > 0.05) return false; // inside the perfect window (0.08 s)
+    input.up(2);
+    input.click(2);
+    parried = true;
+    return true;
+  }, 1.6);
+  const wasLock = p.state === 'lock' && d.brain.react?.kind === 'lock';
+  assert(ok1 && parried && wasLock, `a perfect parry of Falling Star locks the blades (hero ${p.state}, him ${d.brain.react?.kind})`);
+  const w0 = G.watch;
+  G.watch = log;
+  let won = null;
+  run(G, 3, () => { if (((game.realTime * 60) | 0) % 4 === 0) input.click(0); }, () => p.state !== 'lock');
+  won = seen.includes('player:lock:won');
+  assert(won && d.brain.react?.kind === 'reeling' && d.posture > post0 + TUNING.lock.posture * 0.8, `mashing wins the lock: he reels, posture ${post0.toFixed(0)} → ${d.posture.toFixed(0)}`);
+  assert(seen.includes('game:cinematic:bladeLock'), 'a won lock plays a cinematic moment');
+  assert(game.flow.cine?.slowmo < 1, 'its slow motion replaces the camera push-in of the lock itself');
+  G.watch = w0;
+  settle(G);
+  // a lock not pushed is lost: he shoves the hero and counters (his AI on, no move of his own)
+  home(G);
+  place(G, 2.4);
+  d.debug.setAI(true);
+  d.brain.gapT = 99;
+  run(G, 0.2);
+  answerMove(G, 'fallingStar', (left) => {
+    if (left > 0.05) return false;
+    input.up(2);
+    input.click(2);
+    return true;
+  }, 1.6);
+  const hp0 = p.hp;
+  seen.length = 0;
+  G.watch = log;
+  p.debug.god = false;
+  run(G, 3.5, null, () => p.state !== 'lock');
+  p.debug.god = true;
+  G.watch = null;
+  assert(seen.includes('player:lock:lost') && p.hp < hp0, `a lock left alone is lost: he shoves the hero (hp ${hp0} → ${p.hp})`);
+  run(G, 1.2, null, () => d.brain.act?.name === 'riposte');
+  assert(d.brain.act?.name === 'riposte', 'he follows the shove with the Riposte');
+  run(G, 3, null, () => d.mode === 'foot');
+  d.debug.setAI(false);
+  settle(G);
+  // slow, steady presses (5 a second) never fill it but hold it: when time runs out the hero wins
+  home(G);
+  place(G, 2.4);
+  run(G, 0.2);
+  answerMove(G, 'fallingStar', (left) => {
+    if (left > 0.05) return false;
+    input.up(2);
+    input.click(2);
+    return true;
+  }, 1.6);
+  seen.length = 0;
+  G.watch = log;
+  const lockT0 = game.time;
+  run(G, 4, () => { if (((game.realTime * 60) | 0) % 12 === 0) input.click(0); }, () => p.state !== 'lock');
+  G.watch = null;
+  assert(seen.includes('player:lock:won') && game.time - lockT0 >= TUNING.lock.dur - 0.1, `5 presses a second hold the lock to the end of its ${TUNING.lock.dur} s and win it (${(game.time - lockT0).toFixed(2)} s; ${seen.filter((s) => !s.endsWith(":push")).join(", ")}; pushes ${seen.filter((s) => s.endsWith(":push")).length})`);
+  settle(G);
+  // ---- the mikiri: roll INTO Piercing Ash
+  home(G);
+  place(G, 6);
+  d.posture = 0;
+  run(G, 0.2);
+  seen.length = 0;
+  G.watch = log;
+  const post1 = d.posture;
+  answerMove(G, 'piercingAsh', (left) => {
+    if (left > 0.12) return false;
+    const dx = d.position.x - p.position.x, dz = d.position.z - p.position.z, l = Math.hypot(dx, dz) || 1;
+    input.axis = { x: dx / l, y: -dz / l };
+    input.tap('Space');
+    return true;
+  }, 3);
+  G.watch = null;
+  assert(seen.includes('player:mikiri') && postAtCine >= post1 + TUNING.mikiri.posture - 1, `rolling into the perilous thrust is the mikiri: posture ${post1.toFixed(0)} → ${postAtCine.toFixed(0)} (${seen.join(', ')})`);
+  settle(G);
+  // off his line (he turns to the hero as he comes): the roll into his blade still reads as the mikiri
+  home(G);
+  place(G, 6, 0.5);
+  d.posture = 0;
+  run(G, 0.2);
+  seen.length = 0;
+  G.watch = log;
+  answerMove(G, 'piercingAsh', (left) => {
+    if (left > 0.12) return false;
+    input.axis = { x: -Math.sin(d.yaw), y: Math.cos(d.yaw) }; // against the way he faces
+    input.tap('Space');
+    return true;
+  }, 3);
+  G.watch = null;
+  assert(seen.includes('player:mikiri'), `from off his line (0.5 rad) the roll against his blade is the mikiri too (${seen.join(', ')})`);
+  settle(G);
+  // a roll ACROSS the same thrust is no mikiri (a plain or perfect dodge)
+  home(G);
+  place(G, 6);
+  run(G, 0.2);
+  seen.length = 0;
+  G.watch = log;
+  answerMove(G, 'piercingAsh', (left) => {
+    if (left > 0.1) return false;
+    const dx = d.position.x - p.position.x, dz = d.position.z - p.position.z, l = Math.hypot(dx, dz) || 1;
+    input.axis = { x: dz / l, y: dx / l };
+    input.tap('Space');
+    return true;
+  }, 3);
+  G.watch = null;
+  assert(!seen.includes('player:mikiri'), 'a roll across it is no mikiri');
+  settle(G);
+  // ---- the full deflect: parry every hit of the Rain of Ashes (7)
+  home(G);
+  place(G, 2.6);
+  d.posture = 0;
+  run(G, 0.2);
+  seen.length = 0;
+  G.watch = log;
+  let reeled = false;
+  const ok3 = answerMove(G, 'ashRain', (left) => {
+    if (left > 0.12) return false;
+    input.up(2);
+    input.click(2);
+    return true;
+  }, 9);
+  reeled = seen.includes('dragon:deflected') || d.brain.react?.kind === 'reeling';
+  G.watch = null;
+  assert(ok3 && seen.includes('dragon:deflected'), `parrying all seven hits of the Rain of Ashes is the full deflect (${seen.join(', ')}${ok3 ? '' : '; not triggered: ' + d.mode + ' ' + (d.brain.react?.kind ?? '')})`);
+  assert(reeled && seen.some((s) => s.startsWith('game:cinematic')), 'he reels and the moment plays in slow motion');
+  // the slow motion is the flow's own: a parry's short freeze doesn't stretch over the moment
+  settle(G);
+  const C = TUNING.cinematic;
+  game.hitstop(0.06, 0.04);
+  game.flow.cinematic({ x: d.position.x, z: d.position.z, zoom: C.zoom, weight: C.weight, slowmo: C.slowmo, dur: C.dur, kind: 'test' });
+  const t0 = game.time;
+  run(G, 0.3);
+  const mid = game.timeScale;
+  run(G, C.dur);
+  const sim = game.time - t0;
+  assert(Math.abs(mid - C.slowmo) < 0.01 && game.timeScale === 1, `the moment runs at ${C.slowmo}× then returns to 1× (mid ${mid.toFixed(2)}, after ${game.timeScale})`);
+  assert(sim > (0.3 + C.dur) * C.slowmo && sim < (0.3 + C.dur) * 0.75, `${(0.3 + C.dur).toFixed(2)} real s of it are ${sim.toFixed(2)} s of play: slowed, not frozen`);
+  assert(game.cameraRig.cine.w === 0 && game.cameraRig.cine.zoom === 0 && !game.flow.cine, 'the camera is back from the pull-in');
+  return G;
+}
+
 // ================================================================== scenario: probe (opt-in)
 /** A mortal fencer that reads only a share of the tells (ABYSS_SKILL, default 0.85). Not a pass /
  *  fail check: it measures how dangerous he is. node duel.mjs . probe */
@@ -658,7 +854,7 @@ async function scenarioProbe() {
   return G;
 }
 
-const SCENARIOS = { probe: scenarioProbe, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
+const SCENARIOS = { probe: scenarioProbe, moments: scenarioMoments, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());

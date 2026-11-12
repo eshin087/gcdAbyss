@@ -46,7 +46,12 @@ const REACT = {
   stagger: { travel: -0.7 },
   recoil: { travel: -0.55 },
   executed: { travel: -1.4 },
+  reeling: { travel: -1.0 },
+  trampled: { travel: -0.5 },
+  lock: { travel: 0 },
 };
+/** Reactions that leave him open (state 'staggered': the camera, the HUD, the bots read it). */
+const OPEN = new Set(['stagger', 'recoil', 'executed', 'reeling', 'trampled']);
 
 export class DuelBrain {
   constructor(d) {
@@ -263,12 +268,30 @@ export class DuelBrain {
     this.leap = null;
     d.position.y = 0;
     d.mode = 'react';
-    d.state = kind === 'stagger' || kind === 'recoil' || kind === 'executed' ? 'staggered' : 'combat';
+    d.state = OPEN.has(kind) ? 'staggered' : 'combat';
     d.warn = 0;
     const R = REACT[kind] ?? {};
     this.react = { kind, clip, t: 0, travel: R.travel ?? 0, side: R.side ? R.side * (Math.random() < 0.5 ? -1 : 1) : 0, moved: 0 };
     this.modeT = 0;
     this._play(clip, kind === 'clash' || kind === 'flinch' ? 0.05 : 0.08);
+    return true;
+  }
+
+  /** The blade lock (a perfect parry of a `lock` blow): blades crossed until the hero's push is
+   *  decided (player.startBladeLock → disciple.onLockEnd). False if the hero can't lock. */
+  startLock() {
+    const d = this.d, p = d.game.player, L = TUNING.lock;
+    if (typeof p?.startBladeLock !== 'function') return false;
+    if (!this.startReact('lock')) return false;
+    const ok = p.startBladeLock(d, { start: L.start, push: L.push, decay: perPhase(L.decay, d.phase), dur: L.dur, hold: L.hold });
+    if (!ok) {
+      this.startReact('recoil');
+      return false;
+    }
+    d.emit('dragon:windup', { name: 'bladeLock' });
+    // the camera closes in on the crossed blades (no slow motion: the push is in real time); the
+    // lock's end (won: the reeling moment) replaces it, a loss lets it ease out over the counter
+    d._cinematic('lock', { ...L.camera, slowmo: 1, dur: L.dur });
     return true;
   }
 
@@ -450,7 +473,8 @@ export class DuelBrain {
       if (!b.flashed && t >= b.flash && !b.def.release) {
         b.flashed = true;
         const p = d.tellPoint(b.def.part, d._v2);
-        d.emit('combat:flash', { source: 'dragon', attack: a.name, tell: b.def.tell, x: p.x, y: p.y, z: p.z });
+        // perilous: a thrust a mikiri answers (its own read: the deep low coil, the held beat)
+        d.emit('combat:flash', { source: 'dragon', attack: a.name, tell: b.def.tell, x: p.x, y: p.y, z: p.z, perilous: !!b.def.mikiri });
         d.fx.tellFlash(b.def.tell, p.x, p.y, p.z);
         if (b.def.tell === TELL.RED) d.warn = 1.6;
         if (b.def.ring) d.fx.ringPulse(d.position.x, d.position.z, b.def.ring);
@@ -483,7 +507,7 @@ export class DuelBrain {
       if (s && this._inZone(b.def.zone, s)) {
         const r = d.hitPlayer({
           damage: b.def.damage, knockback: b.def.knockback, knockdown: !!b.def.knockdown, kind: 'slash', tell: b.def.tell, attack: a.name,
-          from: { x: d.position.x, z: d.position.z },
+          from: { x: d.position.x, z: d.position.z }, mikiri: !!b.def.mikiri,
         });
         if (r !== RESULT.IGNORED) {
           b.done = true;
@@ -496,6 +520,11 @@ export class DuelBrain {
     }
     if (this.act === a && t >= a.end) {
       if (a.def.transition) d.kindle = Math.max(d.kindle, 0.3);
+      // PBZ pace: he often flows straight into another move (TUNING.chain), no footwork between
+      if (!a.def.transition && !a.def.counter && this.aiEnabled && !this.pendingPhase && s && Math.random() < perPhase(TUNING.chain, d.phase)) {
+        const next = this._choose(s.dist);
+        if (next && next !== a.name && this.startAct(next)) return;
+      }
       this._toFoot();
     }
   }
@@ -617,6 +646,11 @@ export class DuelBrain {
     if (R.travel) d.moveBy(fx * R.travel * step, fz * R.travel * step);
     if (R.side) d.moveBy(-fz * R.side * step, fx * R.side * step);
     d.groundVelSet((d.position.x - x0) / Math.max(dt, 1e-4), (d.position.z - z0) / Math.max(dt, 1e-4));
+    if (R.kind === 'lock') {
+      // held until the hero's push is decided (onLockEnd); a lock the hero never resolves times out
+      if (R.t > TUNING.lock.dur + 1.5) this._toFoot(0.2);
+      return;
+    }
     if (R.t >= R.clip.dur) {
       this._toFoot(R.kind === 'clash' || R.kind === 'backstep' || R.kind === 'sidestep' ? 0.25 : null);
       // a clash or a flinch: the guard is straight back up (a cut does not open him for the next one)

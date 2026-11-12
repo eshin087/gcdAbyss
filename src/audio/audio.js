@@ -651,6 +651,17 @@ export class AudioEngine {
       // a deflect chain (parries in rhythm) rings higher with every blow met
       this.play('parry', { tell: d.tell, chain: d.chain, perfect: !!(d.light && d.perfect) });
     });
+    // the duel's moments (a duelist; the Ash Disciple): steel on steel, heavier as they land
+    on('player:lock', (d) => {
+      if (d.phase === 'start') this.play('block', { tell: 'blue', damage: 0 });
+      else if (d.phase === 'push') this.play('parry', { tell: 'normal', chain: 1 });
+      else if (d.phase === 'won') this.play('parry', { tell: 'blue', chain: 6 });
+      else this.play('block', { tell: 'blue', damage: 10 });
+    });
+    on('player:mikiri', () => this.play('parry', { tell: 'blue', chain: 5 }));
+    // a deep gong under the slow motion (the blade lock's camera push-in has its own clash and no slow-mo)
+    on('game:cinematic', (e) => { if (e?.kind !== 'lock') this.play('gong'); });
+    on('dragon:deflected', () => this.play('parry', { tell: 'blue', chain: 8 }));
     on('player:guardBreak', () => {
       this.charge?.stop(0.05);
       this.play('guardBreak');

@@ -45,6 +45,10 @@ export class CameraRig {
     this.trauma = 0;
     this.t = 0;
     this.extraZoom = 0; // gameplay may push the camera out (e.g. boss framing), in meters
+    // a cinematic moment (flow.cinematic): `zoom` m added to the distance (negative = in close) and
+    // the follow focus leaned `w` (0..1) toward (x, z); flow eases them in and out
+    this.cine = { zoom: 0, x: 0, z: 0, w: 0 };
+    this._cineFocus = new THREE.Vector3();
     // keep-in-view: this frame's subjects and the eased pan (fitX / fitZ, m) and zoom (fitZoom, m)
     this.fitX = 0;
     this.fitZ = 0;
@@ -104,12 +108,19 @@ export class CameraRig {
 
   _extra() {
     const e = Number.isFinite(this.extraZoom) ? this.extraZoom : 0;
-    return Math.min(e, this.maxExtraZoom);
+    const k = Number.isFinite(this.cine.zoom) ? this.cine.zoom : 0;
+    return Math.min(e, this.maxExtraZoom) + k;
   }
 
   update(dt, desiredFocus) {
     const c = CONFIG.camera;
     this.t += dt;
+    const C = this.cine;
+    if (C.w > 0 && Number.isFinite(C.x + C.z + C.w)) {
+      desiredFocus = this._cineFocus.copy(desiredFocus);
+      desiredFocus.x += (C.x - desiredFocus.x) * Math.min(1, C.w);
+      desiredFocus.z += (C.z - desiredFocus.z) * Math.min(1, C.w);
+    }
     const b = this._base;
     b.x = damp(b.x, desiredFocus.x, c.followLambda, dt);
     b.y = damp(b.y, desiredFocus.y, c.followLambda, dt);

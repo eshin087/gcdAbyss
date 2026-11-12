@@ -210,11 +210,13 @@ export class DiscipleFx {
     this._light({ x, y: Math.max(0.8, y), z, color: [1, 0.9, 0.65], intensity: heavy ? 4.5 : 3.5, radius: heavy ? 6 : 5, life: 0.2, fade: 0.18 });
   }
 
-  /** The hero parried his blow: the full white-gold burst (blue: bigger). */
+  /** The hero parried his blow: the white-gold burst at the clash (blue: bigger). The core stays
+   *  compact: the hero's own parry flash lands on the same spot (player fx.parry), and two big
+   *  blooms read as a white blot on a human-sized duel, not a spark. */
   parrySpark(x, y, z, tell = TELL.NORMAL) {
     if (!Number.isFinite(x + y + z)) return;
     const big = tell === TELL.BLUE;
-    this._spawn(this.add, { x, y, z, life: big ? 0.26 : 0.22, size: big ? 1.9 : 1.5, sizeEnd: 0.4, glyph: '*', color: [WHITE[0] * 1.5, WHITE[1] * 1.5, WHITE[2] * 1.5], colorEnd: GOLD, alpha: 1, alphaEnd: 0 });
+    this._spawn(this.add, { x, y, z, life: big ? 0.2 : 0.16, size: big ? 1.1 : 0.85, sizeEnd: 0.2, glyph: '*', color: [WHITE[0] * 1.5, WHITE[1] * 1.5, WHITE[2] * 1.5], colorEnd: GOLD, alpha: 1, alphaEnd: 0 });
     for (let i = 0; i < (big ? 30 : 22); i++) {
       const a = this.rnd() * Math.PI * 2, sp = this.rand(5, big ? 14 : 12);
       this._spawn(this.add, {

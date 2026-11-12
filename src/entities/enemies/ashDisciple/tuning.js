@@ -12,7 +12,7 @@ export const TUNING = {
   minFirstWindup: 0.7, // a move's first real hit, every phase
   minHitGap: 0.45, // impact to impact inside a move
   windupScale: [1, 0.92], // the windups of later phases (moves are authored with first windups >= 0.78)
-  recoveryScale: [1, 0.85],
+  recoveryScale: [0.88, 0.75],
 
   // ---- posture (POSTURE.parry in combat/rules.js for parries)
   posture: {
@@ -59,7 +59,27 @@ export const TUNING = {
     backstep: { dist: 2.4, time: 0.42 },
     strafeSwitch: [1.4, 3.0], // s between changes of circling direction
   },
-  idleGap: [[0.45, 0.95], [0.25, 0.65]], // s of footwork between moves [min, max] per phase
+  // PBZ pace (owner, 2026-11-12: "relentless"): short breathers, and after a move he often flows
+  // straight into the next one without footwork (`chain`: the chance per move end, per phase)
+  idleGap: [[0.25, 0.6], [0.15, 0.42]], // s of footwork between moves [min, max] per phase
+  chain: [0.35, 0.55],
+
+  // ---- the duel's moments (ADR-062)
+  // the full deflect: every real hit of a string of at least `minHits` parried → he reels (react
+  // 'reeling'), +`posture`, a cinematic moment
+  fullDeflect: { minHits: 5, posture: 70 },
+  // the blade lock: a PERFECT parry (DEFENSE.perfectParryWindow) of a blow marked `lock` crosses the
+  // blades (player.startBladeLock): the hero's presses push the meter up `push` each, he pushes it down
+  // `decay` per s (per phase); full wins, empty loses, and when `dur` s run out the hero wins if he
+  // held it at `hold` or above (a tug of ~1.5 s at 8 presses a second; 5 a second just holds; none
+  // loses in ~1.5 s). Won: he reels, +`posture`. Lost: he shoves the hero (`shove`) and counters.
+  lock: { start: 0.5, push: 0.085, decay: [0.32, 0.38], dur: 2.6, hold: 0.6, posture: 110, shove: { damage: 12, knockback: 2.6 }, camera: { zoom: -7, weight: 0.55 } },
+  // the mikiri: a roll INTO a perilous thrust (a beat marked `mikiri`) steps on his blade (player.js
+  // _mikiri): he is pinned and stumbles (react 'trampled'), +`posture`
+  mikiri: { posture: 130 },
+  // the cinematic moment (flow.cinematic): the camera `zoom` m closer, leaning `weight` toward the
+  // clash, time × `slowmo` for `dur` real seconds
+  cinematic: { zoom: -10, weight: 0.6, slowmo: 0.28, dur: 0.9 },
   // every blow he deals (moves.js damage, the Ash Crescents) × this: the probe bots set it (a bot reading
   // 70 % of the tells should be on the edge, one reading 85 % should win)
   damageScale: 1.35,

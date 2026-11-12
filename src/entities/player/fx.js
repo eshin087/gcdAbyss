@@ -371,6 +371,11 @@ export class PlayerFx {
   parry(x, y, z, blue, chain = 1, dx = 0, dz = 0) {
     const fx = this.add;
     if (!fx || !Number.isFinite(x + y + z)) return;
+    // the blade point is sampled from the pose BEFORE the parry snaps up (the idle blade hangs low):
+    // keep the clash at a blade's height, and its light well off the floor (a light ~0.3 m above the
+    // paving blows it out into a white disc, worse with every parry of a long string)
+    const ly = Math.max(1, y);
+    y = Math.max(0.75, y);
     const c0 = blue ? COL.parryBlue : COL.parry, c1 = blue ? COL.parryBlueEnd : COL.parryEnd;
     const n = Math.max(1, Math.min(6, Number.isFinite(chain) ? chain : 1));
     const k = 1 + 0.16 * (n - 1);
@@ -442,7 +447,7 @@ export class PlayerFx {
     fx.spawn({ x, y, z, life: 0.1, size: 1.25 * k, sizeEnd: 0.25, glyph: '*', color: COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
     fx.spawn({ x, y, z, life: 0.14, size: 0.8 * k, sizeEnd: 1.6 * k, glyph: '°', color: c0, colorEnd: c1, alpha: 0.6, alphaEnd: 0 });
     // (the light barely grows with the chain: the wyrm's own parry light lands on top of it)
-    this._light({ x, y, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5 * (1 + 0.05 * (n - 1)), radius: 7, life: 0.2, fade: 0.18 });
+    this._light({ x, y: ly, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5 * (1 + 0.05 * (n - 1)), radius: 7, life: 0.2, fade: 0.18 });
   }
 
   /**
