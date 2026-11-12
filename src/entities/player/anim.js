@@ -272,7 +272,26 @@ function guard(p, A) {
   p[P.lFf] = 1;
   p[P.flask] = 0;
   p[P.twoHand] = 0;
+  const r = A.readyW;
+  if (r > 0) {
+    // the ready guard after a swing (Session 20, owner: "swings finish with the sword pointing down
+    // at the floor ... end them higher, in a ready guard"): both hands before the belt, the blade
+    // raised forward ~37° on his line, the chest a little more upright; then back to the low carry
+    to3(p, P.rH, READY.hand[0], READY.hand[1], READY.hand[2], r);
+    to3(p, P.rP, -0.75, -0.75, -0.15, r);
+    to3(p, P.lP, 0.75, -0.75, -0.15, r);
+    dirTo(p, P.swD, READY.dir[0], READY.dir[1], READY.dir[2], r);
+    to3(p, P.swF, 1, 0, 0.2, r);
+    p[P.twoHand] = r;
+    p[P.spX] -= 0.03 * r;
+    p[P.hdX] -= 0.06 * r;
+    p[P.bodyY] -= 0.02 * r;
+  }
 }
+/** The raised ready guard after a swing: the grip before the belt (an offset from the sword
+ *  shoulder, as IDLE's), the blade's direction (forward, up ~37°, a touch to his right), how long it
+ *  is held after the swing ends (s) and how fast it then sinks back to the low carry (1/s). */
+const READY = { hand: [0.12, -0.33, 0.25], dir: [-0.14, 0.6, 0.79], hold: 0.9, fall: 3 };
 
 /** One foot of the gait (model space). u = this foot's cycle phase: stance [0, β) sweeps the foot
  *  back under the hips at exactly the ground speed (the cycle length is matched to the speed, so
@@ -450,8 +469,8 @@ function stance(p, A, lunge) {
   v3(p, P.rK, -0.35, 0, 1);
   v3(p, P.lK, 0.3, 0, 1);
   p[P.bodyX] = 0;
-  p[P.bodyY] = -0.12 - 0.05 * lunge;
-  p[P.bodyZ] = 0.06 * lunge;
+  p[P.bodyY] = -0.1 - 0.06 * lunge;
+  p[P.bodyZ] = 0.1 * lunge;
   p[P.pelvZ] = 0;
   p[P.spZ] = 0;
   p[P.hdX] = 0.02;
@@ -478,6 +497,7 @@ const SLASH_R = [0.23, 0.42]; // the sword hand's radius round the shoulder: fol
 // in front, never closer than TWO_Z[0]), a little higher than one hand would, and the hips and the
 // chest turn the swing; the elbows hang down and out. The blade's direction is unchanged.
 const TWO_R = [0.17, 0.3], TWO_Z = [0.13, 0.2, 0.18]; // across: folded … open; in front: min, centre, swing
+const SLASH_LIFT = 0.3; // m the grip rides higher while the blade is in front of him (ADR-066)
 function slashH(p, A, th, elev, lunge, ext = 1, lead = 0, two = 0) {
   stance(p, A, lunge);
   const s = Math.sin(th), c = Math.cos(th);
@@ -486,20 +506,27 @@ function slashH(p, A, th, elev, lunge, ext = 1, lead = 0, two = 0) {
   // before the left hip, so the turn that way is smaller; the right turn brings it forward)
   p[P.pelvY] = tw * (tw < 0 ? 0.18 : lerp(0.19, 0.15, two));
   p[P.spY] = tw * (tw < 0 ? 0.26 : lerp(0.36, 0.14, two));
-  p[P.spX] = 0.27 - 0.14 * Math.max(0, elev); // ≈15° lean through the coil and the strike
+  // ≈9° lean through the coil and the strike (Session 20: 15°, with the hands at the hips, bowed
+  // the whole swing down to hip height)
+  p[P.spX] = 0.16 - 0.1 * Math.max(0, elev);
   p[P.spZ] = -0.06 * s;
   p[P.hdY] = -(p[P.pelvY] + p[P.spY]) * 0.75; // eyes stay on the target
   p[P.hdX] = 0.02 - 0.2 * Math.max(0, elev);
   const ha = th + lead, hs = Math.sin(ha), hc = Math.cos(ha);
   const r = lerp(SLASH_R[0], SLASH_R[1], ext);
   // folded, the fist sits nearer shoulder height (a cocked arm), whatever the blade's pitch
-  const hy = lerp(-0.2 + elev * 0.3, -0.34 + elev * 0.55, ext) + 0.14 * Math.max(0, hs) * ext;
+  // (Session 20, owner: the swings "sit too low": the grip rode at the belt, 0.9 m off the ground
+  // through the cut. It is lifted SLASH_LIFT while the blade is in front of him, where the cut is
+  // seen; with the blade behind his right side (the coils, the finishes) a higher grip ran the steel
+  // through the sword arm, so there it keeps the old height)
+  const lift = SLASH_LIFT * (1 - smoothstep(1.5, 2.3, Math.abs(th)));
+  const hy = lerp(-0.2 + elev * 0.3, -0.34 + elev * 0.55, ext) + 0.14 * Math.max(0, hs) * ext + lift;
   v3(p, P.rH, hs * r, hy, hc * r + 0.14 * ext);
   // the elbow: under the arm when it is open, out to the side and back when it is cocked
   v3(p, P.rP, lerp(-0.85, -0.3, ext), lerp(-0.45, -1, ext), lerp(-0.3, -0.45, ext));
   if (two > 0) {
     const rx = lerp(TWO_R[0], TWO_R[1], ext);
-    const y2 = lerp(-0.1 + elev * 0.25, -0.2 + elev * 0.36, ext);
+    const y2 = lerp(-0.1 + elev * 0.25, -0.2 + elev * 0.36, ext) + lift;
     to3(p, P.rH, DIM.gripShoulder[0] + hs * rx, y2, Math.max(TWO_Z[0], TWO_Z[1] + hc * TWO_Z[2] * ext), two);
     to3(p, P.rP, -0.75, -0.75, -0.15, two);
   }
@@ -630,7 +657,7 @@ function thrustPose(p, A, t, W, Ac) {
 // before it is the hit sweep's start). Entries already behind-right (out of a run) take the direct
 // way (L → 0: the via points collapse onto the straight path).
 const LOOP = {
-  T: 0.1, // s: arrival at the coil (light windup 0.14: two 30 fps frames of margin before it)
+  T: 0.15, // s: arrival at the coil (light windup 0.2: well over a 30 fps frame of margin before it)
   k: [0, 0.38, 0.68, 1], // spline knots
   h1: [-0.05, -0.3, 0.17], d1: [-0.33, 0.82, 0.47], // hand up before the right ribs, point up (right, front)
   h2: [-0.15, -0.2, -0.08], d2: [-0.66, 0.4, -0.64], // hand at the shoulder, point up-back over it
@@ -737,7 +764,7 @@ function loopWindup(p, A, t) {
 // back, torso arched). Arrives on the slam's own pose by SLAM_WU.T, so the apex and everything
 // after it are untouched (blade bit-identical); the step in still comes from lungeFeet.
 const SLAM_WU = {
-  T: 0.36, // s (windup 0.4): from here the slam pose runs as before
+  T: 0.42, // s (windup 0.46): from here the slam pose runs as before
   k: [0, 0.32, 0.7, 1], // knots: gather 0.115 s, raise 0.25 s, apex
   h1: [-0.13, -0.34, 0.08], d1: [-0.52, -0.42, -0.74], // gather: hands at the right hip, point down-back-right (clear of the right shin)
   h2: [-0.1, 0.12, 0.1], d2: [-0.38, 0.92, -0.08], // raise: hands by the right temple, blade up the right side
@@ -902,10 +929,12 @@ function attackPose(p, A) {
       // body dips and leans into the strike
       const act = t >= W && t < W + Ac ? Math.sin((Math.PI * (t - W)) / Ac) : 0;
       const prog = t < W ? 0 : t < W + Ac ? (t - W) / Ac : 1;
-      p[P.pelvY] += dir * FLOW.hips * act;
+      // the wind-up: the hips turn back against the cut and the legs load, both let go into it
+      const wind = smoothstep(0, W, t) * (1 - smoothstep(W, W + Ac * 0.45, t));
+      p[P.pelvY] += dir * (FLOW.hips * act - FLOW.coil * wind);
       p[P.spY] -= dir * FLOW.chest * act;
       p[P.bodyX] += FLOW.weight * dir * (2 * prog - 1) * (1 - smoothstep(W + Ac + R * 0.4, W + Ac + R, t));
-      p[P.bodyY] -= FLOW.dip * act;
+      p[P.bodyY] -= FLOW.dip * act + FLOW.load * wind;
       p[P.spX] += FLOW.lean * act;
     }
   }
@@ -925,6 +954,9 @@ function attackPose(p, A) {
     // a skip: off the ground through the windup's end and the strike's start, landing in the cut
     const h = k.hop * Math.sin(Math.PI * clamp((t - W * 0.35) / (W * 0.65 + Ac * 0.55), 0, 1));
     p[P.bodyY] += h;
+    // the skip carries him forward into the cut (and the blade with him: the longer windups of
+    // ADR-066 left the leaping cut short at the step-in assist's 3.5 m edge)
+    p[P.bodyZ] += h * 0.8;
     p[P.rF + 1] += h * 0.7;
     p[P.lF + 1] += h * 0.7;
     p[P.footFlat] = lerp(p[P.footFlat], 0.4, clamp(h / k.hop, 0, 1));
@@ -955,7 +987,10 @@ function attackPose(p, A) {
 }
 // the body through a light sweep (Session 16): hip lead / chest trail (rad), weight shift (m across),
 // the dip (m) and lean (rad) into the strike, each at the active window's middle
-const FLOW = { hips: 0.14, chest: 0.05, weight: 0.035, dip: 0.03, lean: 0.05 };
+// (Session 20, owner: "stiff, no body weight": hips 0.14, chest 0.05, weight 0.035, dip 0.03, lean
+// 0.05, and no wind of the body against the cut; `coil` = the hips' extra wind against the cut and
+// `load` = the legs' sink through the windup, released into the strike)
+const FLOW = { hips: 0.3, chest: 0.1, weight: 0.07, dip: 0.04, lean: 0.09, coil: 0.16, load: 0.035 };
 /** Turn the whole pose `yaw` rad about the root (+ = to his left), the foot spots with it. */
 function pivotYaw(p, yaw) {
   if (Math.abs(yaw) < 1e-5) return;
@@ -1009,12 +1044,13 @@ function stabPose(p, A, t, W, Ac, R, k = null) {
   const low = (k?.low ?? 0) * (1 - smoothstep(W + Ac, W + Ac + R * 0.6, t)), rise = (k?.rise ?? 0) * drive;
   p[P.pelvY] = lerp(-0.22 * draw, 0.24, drive);
   p[P.spY] = lerp(-0.42 * draw, 0.2, drive); // (two hands: a smaller turn into the drive)
-  p[P.spX] = lerp(0.1 + 0.08 * draw, 0.4, drive) - 0.08 * settle;
+  p[P.spX] = lerp(0.06 + 0.05 * draw, 0.22, drive) - 0.06 * settle;
   p[P.spZ] = 0;
   p[P.hdY] = -(p[P.pelvY] + p[P.spY]) * 0.8; // eyes stay on the target
   p[P.hdX] = 0.04 - 0.12 * drive;
   // both hands (Session 14): drawn back to the right hip, then driven out along the centre line
-  v3(p, P.rH, lerp(0.02, 0.15, drive), lerp(-0.28, -0.13, drive), lerp(0.04, 0.46 - 0.06 * settle, drive));
+  // (Session 20: drawn back to the ribs and driven out at the chest; it was the belt and the navel)
+  v3(p, P.rH, lerp(0.02, 0.15, drive), lerp(-0.08, 0.1, drive), lerp(0.04, 0.46 - 0.06 * settle, drive));
   v3(p, P.rP, -0.7, -0.6, -0.3);
   v3(p, P.swD, lerp(0.1, 0.0, drive), lerp(0.04, -0.03, drive) + Math.tan(rise), 1);
   v3(p, P.swF, 0.25, 1, 0);
@@ -2107,6 +2143,8 @@ export class HeroAnimator {
     this.moveW = 0;
     this.sprintW = 0;
     this.swordW = 0;
+    this.readyW = 0; // the raised ready guard after a swing (READY), 0..1
+    this.readyT = 0; // s since the last swing ended
     this.speed = 0;
     this.phase = 0;
     this.mx = 0;
@@ -2194,6 +2232,18 @@ export class HeroAnimator {
     this.reset();
   }
 
+  /** Carry on from `prev`, the animator of a rig with the same cloth (as many coat panels and
+   *  streamers; Player.setLoadout checks): its pose, clip, cross-fade, springs, foot planner and
+   *  idle life, so swapping a head item (the hood, ADR-065) does not snap him back to the ready
+   *  stance. The joints (this rig's) and the noise stream (a closure over its own instance) stay. */
+  adopt(prev) {
+    if (!prev || prev === this) return;
+    for (const k of Object.keys(prev)) {
+      if (k === 'rig' || k === 'player' || k === 'proxies' || k === 'noise' || k === 'onFootstep') continue;
+      this[k] = prev[k];
+    }
+  }
+
   /** Start a clip, cross-fading from the current pose over `blend` seconds. */
   play(key, blend = 0.12, easeOut = false) {
     if (!POSES[key]) key = 'loco';
@@ -2243,6 +2293,8 @@ export class HeroAnimator {
     this.moveW = 0;
     this.sprintW = 0;
     this.swordW = 0;
+    this.readyW = 0;
+    this.readyT = 0;
     this.speed = 0;
     this.speedS = this.speedSV = 0;
     this.backW = 0;
@@ -2373,6 +2425,16 @@ export class HeroAnimator {
     if (sp > 0.2) this.backW = damp(this.backW, 1 - smoothstep(-0.75, -0.15, this.mz), 6, dt);
     this.sprintW = damp(this.sprintW, pl.state === 'sprint' ? 1 : 0, 6, dt);
     this.swordW = damp(this.swordW, this.moveW, 7, dt);
+    // the raised ready guard after a swing (READY): full through the attack, held a beat after it,
+    // then the blade sinks back to the low carry
+    if (pl.state === 'attack') {
+      this.readyW = 1;
+      this.readyT = 0;
+    } else {
+      this.readyT += dt;
+      if (this.readyT > READY.hold) this.readyW = damp(this.readyW, 0, READY.fall, dt);
+      if (this.readyW < 1e-3) this.readyW = 0;
+    }
     // the charge's updraft (0..1): lifts the coat tails and the hair as the thrust charges
     this.updraft = damp(this.updraft, this.key === 'charge' ? clamp(fin(pl.chargeK), 0, 1) : 0, 5, dt);
     // acceleration (model space) for the lean into starts / the sit-back on stops, and the turn rate
@@ -2491,7 +2553,8 @@ export class HeroAnimator {
    *  when he moves, attacks or guards. */
   _idleLife(dt, sp) {
     const F = this.fidget, pl = this.player;
-    const calm = this.key === 'loco' && pl.state === 'idle' && sp < 0.1 && this.moveW < 0.05 && !pl.lockOn && !(fin(pl.guardHold) > 0.001);
+    // (not while the ready guard after a swing is still up: READY)
+    const calm = this.key === 'loco' && pl.state === 'idle' && sp < 0.1 && this.moveW < 0.05 && !pl.lockOn && !(fin(pl.guardHold) > 0.001) && this.readyW < 0.05;
     if (this.key !== 'loco' && F.k >= 0) {
       // another clip took over (its cross-fade starts from this pose)
       F.k = -1;

@@ -4,6 +4,7 @@ import { clamp, damp, lerp } from '../core/math.js';
 import { DEFENSE } from '../combat/rules.js';
 import { ScreenGrade } from './grade.js';
 import { RunStats } from './stats.js';
+import { saveFlag } from '../core/prefs.js';
 
 // Game flow: owns game.state and every transition
 //   title → explore → bossIntro → boss → dead | victory   (+ paused from explore/bossIntro/boss)
@@ -222,6 +223,16 @@ export class GameFlow {
     g.settings.quality = q;
     this._try(() => g.applyQuality?.(), 'applyQuality');
     this._log(`Quality: ${CONFIG.quality[q].name}`, 'system');
+  }
+
+  /** Hood up / down (the pause menu, ADR-065): the hero's head is rebuilt, the choice remembered. */
+  toggleHood() {
+    const g = this.game;
+    if (!g.settings) return;
+    g.settings.hood = g.settings.hood === false;
+    this._try(() => g.player?.setHood?.(g.settings.hood), 'player.setHood');
+    saveFlag('hood', g.settings.hood);
+    this._log(g.settings.hood ? 'Hood up.' : 'Hood down.', 'system');
   }
 
   toggleMute() {

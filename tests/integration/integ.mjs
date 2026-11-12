@@ -183,7 +183,7 @@ function build(opts = {}) {
     events: new Events(), input: opts.realInput ? new Input(canvasEl) : input, cameraRig: new CameraRig(camera), lights: new LightPool(U),
     fx: { alpha: mkParticles({ max: 3000, additive: false }), add: mkParticles({ max: 7000, additive: true }) },
     time: 0, realTime: 0, timeScale: 1, debugTimeScale: 1, hitstopTimer: 0, hitstopScale: 1,
-    mouseGround: new THREE.Vector3(), state: 'title', settings: { quality: CONFIG.defaultQuality, showFps: false },
+    mouseGround: new THREE.Vector3(), state: 'title', settings: { quality: CONFIG.defaultQuality, showFps: false, hood: true },
     hitstop(seconds, scale = 0.04) { this.hitstopTimer = Math.max(this.hitstopTimer, seconds); this.hitstopScale = Math.min(this.hitstopScale, scale); },
     shake(a) { if (!Number.isFinite(a)) throw new Error('NaN shake'); this.cameraRig.addTrauma(a); },
   };
@@ -918,6 +918,7 @@ async function scenarioReach() {
     aimAt(G);
   };
   const fresh = () => { d.hp = d.maxHp; d.posture = 0; run(G, 1.0, { passive: true }); settle(G); };
+  const { LIGHT } = await imp('src/entities/player/combat.js');
   const KINDS = { L1: 'light', L2: 'light', L3: 'light', L4: 'light', slam: 'slam', thrust: 'thrust' };
   const CLICKS = { L1: 1, L2: 2, L3: 3, L4: 4, slam: 5 }; // the 5-hit chain (ADR-041): falling cut, rising cut, whirl, stab, slam
   const CHARGE_HOLD = 1.3; // s: a full charge
@@ -946,7 +947,9 @@ async function scenarioReach() {
         }
         aimAt(G);
         input.click(0);
-        run(G, k < n - 1 ? 0.34 : 1.3, { passive: true });
+        // the next click lands as this hit's cut ends (the chain's timing follows the data: ADR-066
+        // slowed the windups)
+        run(G, k < n - 1 ? LIGHT[k].windup + LIGHT[k].active + 0.02 : 1.3, { passive: true });
       }
     }
     G.watch = null;
@@ -967,7 +970,6 @@ async function scenarioReach() {
   }
   // every look of every hit (combat.js `variants`, Session 16) connects too: forced one by one
   {
-    const { LIGHT } = await imp('src/entities/player/combat.js');
     const names = ['L1', 'L2', 'L3', 'L4', 'slam'];
     const misses = [];
     let n = 0;
@@ -2393,19 +2395,31 @@ async function scenarioHero() {
   assert(r.coat.length === 6 && tails.length === 2 && strips === 12 && r.coat.every((C) => !C.def.flap),
     `coat: 6 panels (2 back tails split by a vent, 2 side, 2 front), ${strips} torn strips`);
   // the Shrouded set (ADR-043): the cloak's sheets ride the streamer springs (heavier than a ribbon:
-  // lag < 1); under the hood none of the body's hair clusters is built (they poked through the cloth
-  // or massed over the face); the hood builds its own gold strands, and the face is in its shadow
-  // (Session 16); the five spring joints stay for the animator
+  // lag < 1); since ADR-064 half a cloak, three sheets, none on the sword arm; under the hood none of
+  // the body's hair clusters is built (they poked through the cloth or massed over the face); the
+  // hood builds its own gold strands; the five spring joints stay for the animator. The face
+  // (ADR-063) is the lit face of features even under the hood: skin, the dark eyes and mouth, the
+  // cyan glints
+  const { SHROUD_SHEETS } = await imp('src/entities/player/gear/shroud.js');
+  const headParts = () => {
+    const n = { strands: 0, skin: 0, eye: 0, glint: 0, bodyHair: 0 };
+    p.rig.head.traverse((o) => {
+      if (!o.isMesh) return;
+      const m = o.material, M = p.rig.materials, hairM = m === M.hair || m === M.hairTip;
+      if (o.userData.slot === 'head' && hairM) n.strands++;
+      if (!o.userData.slot && hairM) n.bodyHair++;
+      if (m === M.skin) n.skin++;
+      if (m === M.eye) n.eye++;
+      if (m === M.bladeTip) n.glint++;
+    });
+    return n;
+  };
   {
     const built = Object.entries(r.hair).filter(([, j]) => j.children.some((o) => o.isMesh)).map(([n]) => n);
-    let strands = 0, skin = 0;
-    r.head.traverse((o) => {
-      if (!o.isMesh) return;
-      if (o.userData.slot === 'head' && (o.material === r.materials.hair || o.material === r.materials.hairTip)) strands++;
-      if (o.material === r.materials.skin) skin++;
-    });
-    assert(r.streamers?.length === 7 && r.streamers.every((S) => S.lag > 0 && S.lag < 1) && Object.keys(r.hair).length === 5 && built.length === 0 && strands >= 2 && skin === 0 && r.slots.head.length > 0,
-      `the cloak: ${r.streamers?.length} sheets on springs; under the hood ${built.length} body hair clusters, ${strands} gold strand meshes of the hood's own, ${skin} skin meshes on the head (the face in shadow)`);
+    const h = headParts();
+    assert(r.streamers?.length === 3 && SHROUD_SHEETS.length === 3 && SHROUD_SHEETS.every((S) => S.on !== 'armR') && r.streamers.every((S) => S.lag > 0 && S.lag < 1)
+      && Object.keys(r.hair).length === 5 && built.length === 0 && h.strands >= 2 && h.skin > 0 && h.eye > 0 && h.glint > 0 && r.slots.head.length > 0,
+      `the cloak: ${r.streamers?.length} sheets on springs, none on the sword arm; under the hood ${built.length} body hair clusters, ${h.strands} gold strand meshes of the hood's own; the lit face: ${h.skin} skin, ${h.eye} eye / mouth, ${h.glint} glint meshes`);
   }
   // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
@@ -2531,7 +2545,24 @@ async function scenarioHero() {
     assert(threw && p.loadout.back === null, 'an unknown item id throws and changes nothing');
     p.setLoadout(DEFAULT_LOADOUT);
     drive();
-    assert(meshes() === n0 && p.rig.coat.length === 6 && p.rig.streamers.length === 7 && p.sweep.sword === p.rig.sword && finite(), `back in the default set: ${meshes()} meshes, 6 coat panels, 7 cloak sheets`);
+    assert(meshes() === n0 && p.rig.coat.length === 6 && p.rig.streamers.length === 3 && p.sweep.sword === p.rig.sword && finite(), `back in the default set: ${meshes()} meshes, 6 coat panels, 3 cloak sheets`);
+    // the hood (ADR-065, the pause menu): down = no head item, all five sculpted hair clusters and
+    // the back locks; his pose and cloth carry on through the swap (HeroAnimator.adopt), mid-swing too
+    {
+      input.click(0);
+      for (let i = 0; i < 9; i++) G.tick(DT);
+      const pose = Float32Array.from(p.anim.cur), key = p.anim.key, sheets = p.rig.streamers.length;
+      game.flow.toggleHood();
+      const hairOn = Object.values(p.rig.hair).filter((j) => j.children.some((o) => o.isMesh)).length, h = headParts();
+      let same = true;
+      for (let i = 0; i < pose.length; i++) if (Math.abs(pose[i] - p.anim.cur[i]) > 1e-6) same = false;
+      assert(game.settings.hood === false && !p.hooded && p.loadout.head === null && p.rig.slots.head.length === 0 && hairOn === 5 && h.bodyHair > 6 && h.skin > 0 && same && p.anim.key === key && p.rig.streamers.length === sheets,
+        `hood down: no head item, ${hairOn} hair clusters and ${h.bodyHair} body hair meshes (the back locks), the pose and the '${key}' clip carried over`);
+      drive();
+      game.flow.toggleHood();
+      drive();
+      assert(game.settings.hood === true && p.hooded && p.loadout.head === DEFAULT_LOADOUT.head && meshes() === n0 && finite(), `hood up again: ${meshes()} meshes, finite`);
+    }
     // the outfit before ADR-043 is still a loadout: bare-headed (the hair is built again), the
     // pauldron, the half-cape
     const { WANDERER_LOADOUT } = await imp('src/entities/player/gear/index.js');
@@ -2605,8 +2636,8 @@ async function scenarioHeroLife() {
       `every light swing was probed in its active frames (${names.join(', ')})`);
     assert(names.every((n) => seen[n].two > 0.95 && seen[n].gap < 0.035 && seen[n].closed),
       'both hands on the grip through every light swing: twoHand > 0.95, the off hand within 3.5 cm of its place and closed round the grip');
-    go(1.0);
-    assert(!r.offHand.grip.visible && r.offHand.open.visible && A.cur[45] < 0.05, 'at rest the free hand lets go and hangs open again');
+    go(2.6);
+    assert(!r.offHand.grip.visible && r.offHand.open.visible && A.cur[45] < 0.05, 'at rest (the ready guard sunk back) the free hand lets go and hangs open again');
   }
 
   // (2) the guard: two hands, the blade raised across the body (> 40° up), the off hand on the grip
@@ -2661,22 +2692,75 @@ async function scenarioHeroLife() {
     assert(frames > 60 && hit <= 2, `held charge: the drawn-back blade stays out of the cloak (${hit} of ${frames} frames within 2 cm of a sheet)`);
   }
 
-  // (4) idle life: standing still he does things (at least three different ones in 25 s), every
+  // (3b) the swings' height (ADR-066, owner: "the arcs sit too low ... the blade ends in the ground"):
+  // every light swing and every variant, forced one by one from the ready stance. Through the hit
+  // frames the grip rides at the chest, not the belt (mean ≥ 1.1 m, model metres; 0.9 before), the
+  // steel's middle stays off the grass, the follow-through holds the point up (≥ 1.0 m at 35 % of the
+  // recovery; the slam's comes up off the ground by 70 %), and a third of a second after the swing he
+  // stands in the raised ready guard (the point ≥ 1.3 m, both hands on the grip). Every grip mean is
+  // ≥ 1.0 m but the roll cut's (≥ 0.85: out of the roll's crouch); the mean over all is ≥ 1.12 m
+  {
+    const { LIGHT, SPRINT_ATK, ROLL_ATK } = await imp('src/entities/player/combat.js');
+    const at = (z) => {
+      p.lean.on = false;
+      p.object3d.updateMatrixWorld(true);
+      v.set(0, 0, z).applyMatrix4(r.sword.matrixWorld);
+      p.lean.on = true;
+      p.object3d.updateMatrixWorld(true);
+      return v.y / HERO_SCALE;
+    };
+    const rows = [], bad = [], grips = [];
+    for (const def of [...LIGHT, SPRINT_ATK, ROLL_ATK]) {
+      for (let vi = 0; vi <= (def.variants?.length ?? 0); vi++) {
+        p._toLoco(0.01);
+        go(1.4);
+        A.forceVariant = vi;
+        p._startAttack(def);
+        const W = def.windup, Ac = def.active, R = def.recovery, slam = def.kind === 'slam';
+        let grip = 0, n = 0, mid = Infinity, fin = null, guardN = 0;
+        while (p.state === 'attack' && p.atk && guardN++ < 400) {
+          const t = p.atk.t;
+          if (t >= W && t <= W + Ac && !slam) {
+            grip += at(0);
+            mid = Math.min(mid, at(0.55));
+            n++;
+          }
+          if (fin === null && t >= W + Ac + R * (slam ? 0.7 : 0.35)) fin = at(HD.steelTip);
+          G.tick(DT / 2);
+        }
+        go(0.33);
+        const ready = at(HD.steelTip), two = A.cur[45];
+        const g = n ? grip / n : NaN;
+        rows.push(`${def.name}#${vi} grip ${n ? g.toFixed(2) : '—'} mid ≥ ${n ? mid.toFixed(2) : '—'} finish ${fin?.toFixed(2)} ready ${ready.toFixed(2)}`);
+        if (n) grips.push(g);
+        const roll = def === ROLL_ATK; // the roll cut rises out of the roll's crouch
+        if ((!slam && !(g >= (roll ? 0.85 : 1.0) && mid > (roll ? 0.4 : 0.6))) || !(fin >= (slam ? 0.35 : 1.0)) || !(ready >= 1.3 && two > 0.9)) bad.push(rows[rows.length - 1]);
+      }
+    }
+    A.forceVariant = null;
+    out(`   swing heights (m): ${rows.join(' · ')}`);
+    const mean = grips.reduce((a, b) => a + b, 0) / grips.length;
+    assert(rows.length >= 15 && !bad.length && mean >= 1.12, `every swing crosses at chest height (grip ≥ 1.0 m but the roll cut's, mean ${mean.toFixed(2)} m), ends with the point up and comes home to the raised ready guard (${rows.length} swings${bad.length ? '; low: ' + bad.join(' · ') : ''})`);
+    go(2.5);
+    assert(A.readyW < 0.05, `the ready guard sinks back to the low carry ~2 s after the last swing (weight ${A.readyW.toFixed(3)})`);
+  }
+
+  // (4) idle life: standing still he does things (at least four, three different, in 30 s: the wait between them is random, 2-4.5 s), every
   // frame finite and the point never in the ground; a step cuts the action within 0.25 s
   {
     go(0.5);
     const c0 = A.fidget.count, names = new Set();
     let tipLow = Infinity, bad = 0;
-    go(25, () => {
+    go(30, () => {
       if (A.fidget.name) names.add(A.fidget.name);
       v.set(0, 0, HD.steelTip).applyMatrix4(r.sword.matrixWorld);
       tipLow = Math.min(tipLow, v.y);
       if (!finite()) bad++;
     });
     const played = A.fidget.count - c0;
-    out(`   idle life: ${played} actions in 25 s (${[...names].join(', ')}); the point's lowest ${tipLow.toFixed(3)} m`);
+    out(`   idle life: ${played} actions in 30 s (${[...names].join(', ')}); the point's lowest ${tipLow.toFixed(3)} m`);
     assert(played >= 4 && names.size >= 3 && bad === 0 && tipLow > -0.03,
-      `standing still he does ${played} things in 25 s, ${names.size} different, every frame finite, the point above the grass`);
+      `standing still he does ${played} things in 30 s, ${names.size} different, every frame finite, the point above the grass`);
     // start one and cut it
     // a freshly started one (the 25 s above can end in an action's last half second)
     let waited = 0;
@@ -2768,7 +2852,7 @@ async function scenarioHeroLook() {
         const pen = f(J.worldToLocal(w.copy(v)));
         if (pen > worst) {
           worst = pen;
-          worstAt = `${name}, ${p.state}${p.atk?.def ? ' ' + p.atk.def.kind + (p.atk.def.combo ?? '') : ''} t ${(p.atk?.t ?? p.stateT ?? 0).toFixed(2)}`;
+          worstAt = `${name}, ${p.state}${p.atk?.def ? ' ' + p.atk.def.kind + (p.atk.def.combo ?? '') : ''} #${p.anim.atkVar} t ${(p.atk?.t ?? p.stateT ?? 0).toFixed(2)} (ready guard ${(p.anim.readyW ?? 0).toFixed(2)})`;
         }
       }
     }

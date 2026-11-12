@@ -61,7 +61,8 @@ export const DEFENSE = Object.freeze({
   // --- Ghostep: reward for a perfect dodge (any tell): slow-mo + the crit window. Against an attacker
   // that offers a plunge (plungePoint / onPlunge: the wyrm) it becomes the plunge below; against any
   // other attacker within its range it blinks `distanceBehind` m behind it (the v0.2 Ghostep)
-  ghostep: { distanceBehind: 3.2, slowmoScale: 0.3, slowmoTime: 0.6, critWindow: 1.6, critMult: 1.8 },
+  // critWindow: 1.6 → 1.9 s with the slower light chain (ADR-066): the same number of swings fit in it
+  ghostep: { distanceBehind: 3.2, slowmoScale: 0.3, slowmoTime: 0.6, critWindow: 1.9, critMult: 1.8 },
   // --- the plunge (contract 2): a perfect dodge of a plungeable attacker within `range` m (the hit
   // may forbid it: takeHit `plunge: false`) → vanish, reappear `appearUp` m above its head
   // (`appearBack` m out toward the landing side), hang, dive, a reverse-grip stab into the head

@@ -17,6 +17,7 @@ import { TouchControls } from './ui/touch.js';
 import { AudioEngine } from './audio/audio.js';
 import { GameFlow } from './game/flow.js';
 import { Lab } from './dev/lab.js';
+import { loadFlag } from './core/prefs.js';
 
 // Boot + main loop. Builds the shared `game` context every module receives (see ARCHITECTURE.md).
 
@@ -61,7 +62,8 @@ async function boot() {
     hitstopScale: 1,
     mouseGround: new THREE.Vector3(),
     state: 'title',
-    settings: { quality: CONFIG.defaultQuality, showFps: false },
+    // hood: the hero's hood up (the pause menu; remembered in localStorage, ADR-065)
+    settings: { quality: CONFIG.defaultQuality, showFps: false, hood: loadFlag('hood', true) },
     /** Freeze-frame on impacts: time runs at `scale` for `seconds` of real time. */
     hitstop(seconds, scale = 0.04) {
       this.hitstopTimer = Math.max(this.hitstopTimer, seconds);

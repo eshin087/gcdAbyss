@@ -44,74 +44,80 @@ import { DIM } from './model.js';
 // `lunge` = m stepped forward through the strike; `reach` = how far ahead of the hero the swing
 // connects without stepping (used by the step-in assist to size the lunge, see REACH.assist).
 
+// Session 20 (ADR-066, owner: the swings looked "unnatural and low": the arcs sat too low, the body
+// did not commit, the blade ended in the ground, and they were too fast to read): every sweep crosses
+// at chest height (the strike's pitch `elev` ≥ about level; the hands ride higher, anim.js slashH),
+// every follow-through ends with the blade raised (`elev2` > 0; the slam's after its impact), the
+// recovery comes home to a raised two-handed ready guard (anim.js READY), and the windups are ~40 %
+// longer (0.14 → 0.2 s on hits 1-2) with a little more time in the cut.
 export const LIGHT = [
   {
     // 1, the falling cut: cocked over the right shoulder (blade up-back-right) → a diagonal down
     // across the front → low at the left hip. (Was a flat sweep at chest height; with hit 2 it read
     // as the same arc twice.)
     name: 'fallingCut', kind: 'light', combo: 1, damage: 30, poise: 12, heavy: false,
-    windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
+    windup: 0.2, active: 0.13, recovery: 0.24, lunge: 0.55, reach: 2.2,
     hitstop: 0.055, shake: 0.12,
-    anim: { kind: 'h', loop: true, a0: -2.0, a1: 1.9, a2: 2.3, elev0: 0.75, elev: -0.3, elev2: -0.45 }, // high right → low left
+    anim: { kind: 'h', loop: true, a0: -2.0, a1: 1.9, a2: 2.3, elev0: 0.95, elev: -0.05, elev2: 0.2 }, // high right → across the chest → raised at the left
     variants: [
-      // a low flat draw cut from the right hip, the body pivoting into it, rising at the finish
-      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.35, elev0: -0.3, elev: -0.05, elev2: 0.35, sink: 0.1, turn: 0.4 },
-      // a leaping cut: a skip in from high over the right shoulder, turning into it, down to the left
-      // foot
-      { kind: 'h', a0: -1.75, a1: 1.75, a2: 2.25, elev0: 1.15, elev: -0.45, elev2: -0.6, hop: 0.12, turn: 0.35 },
+      // a flat draw cut from the right hip at the waist, the body pivoting into it, rising at the finish
+      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.35, elev0: 0.05, elev: 0.12, elev2: 0.5, turn: 0.4 },
+      // a leaping cut: a skip in from high over the right shoulder, turning into it, down across him
+      // and up again at the left
+      { kind: 'h', a0: -1.75, a1: 1.75, a2: 2.25, elev0: 1.2, elev: -0.12, elev2: 0.15, hop: 0.12, turn: 0.35 },
     ],
   },
   {
     // 2, the rising backhand: from low at the left hip up across the front to high right
     name: 'risingCut', kind: 'light', combo: 2, damage: 32, poise: 12, heavy: false,
-    windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
+    windup: 0.2, active: 0.13, recovery: 0.24, lunge: 0.55, reach: 2.2,
     hitstop: 0.055, shake: 0.12,
-    anim: { kind: 'h', a0: 2.2, a1: -1.85, a2: -2.25, elev0: -0.5, elev: 0.45, elev2: 0.85 }, // low left → high right
+    anim: { kind: 'h', a0: 2.2, a1: -1.85, a2: -2.25, elev0: -0.15, elev: 0.5, elev2: 0.9 }, // left hip → high right
     variants: [
       // a level backhand at chest height, the hips pivoting back round with it
-      { kind: 'h', a0: 2.3, a1: -1.8, a2: -2.3, elev0: 0.0, elev: 0.1, elev2: 0.4, turn: -0.4 },
-      // a falling backhand from high left to low right, dropping into it
-      { kind: 'h', a0: 1.9, a1: -1.7, a2: -2.2, elev0: 0.95, elev: -0.35, elev2: -0.5, sink: 0.1 },
+      { kind: 'h', a0: 2.3, a1: -1.8, a2: -2.3, elev0: 0.15, elev: 0.22, elev2: 0.5, turn: -0.4 },
+      // a falling backhand from high left across him, dropping into it, rising at the right
+      { kind: 'h', a0: 1.9, a1: -1.7, a2: -2.2, elev0: 1.05, elev: -0.1, elev2: 0.15, sink: 0.06 },
     ],
   },
   {
     // 3, the whirl: he follows the backhand round to his right, a full turn with the blade held out
     // level; it crosses the front two thirds of the way round, inside the active frames
     name: 'whirl', kind: 'light', combo: 3, damage: 36, poise: 16, heavy: false,
-    windup: 0.16, active: 0.17, recovery: 0.24, lunge: 0.7, reach: 2.2,
+    windup: 0.22, active: 0.19, recovery: 0.26, lunge: 0.7, reach: 2.2,
     hitstop: 0.065, shake: 0.16,
-    anim: { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: 0.3, elev: 0.0, elev2: -0.2 },
+    anim: { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: 0.35, elev: 0.15, elev2: 0.25 },
     variants: [
       // the same turn with the blade rising through it, out of a crouch
-      { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: -0.35, elev: 0.15, elev2: 0.55, sink: 0.08 },
-      // no turn: a skipping cross-cut from high right to low left
-      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.4, elev0: 0.55, elev: -0.15, elev2: -0.35, hop: 0.12, turn: 0.3 },
+      { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: -0.3, elev: 0.25, elev2: 0.65, sink: 0.06 },
+      // no turn: a skipping cross-cut from high right across him, rising at the left
+      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.4, elev0: 0.85, elev: 0.0, elev2: 0.25, hop: 0.12, turn: 0.3 },
     ],
   },
   {
     // 4, the stab: the hand draws back to the right ribs, then drives the point straight out
     name: 'stab', kind: 'light', combo: 4, damage: 30, poise: 14, heavy: false,
-    windup: 0.12, active: 0.09, recovery: 0.22, lunge: 0.8, reach: 2.3,
+    windup: 0.18, active: 0.1, recovery: 0.24, lunge: 0.8, reach: 2.3,
     hitstop: 0.06, shake: 0.14,
     anim: { kind: 'stab' },
     variants: [
       // out of a crouch, the point driving up into the target
-      { kind: 'stab', rise: 0.3, low: 0.12 },
+      { kind: 'stab', rise: 0.25, low: 0.04 },
     ],
   },
   {
     // 5, the combo finisher: raise two-handed overhead, slam down, crystal shards burst from the ground
     name: 'slam', kind: 'slam', combo: 5, damage: 58, poise: 40, heavy: true,
-    windup: 0.4, active: 0.12, recovery: 0.48, lunge: 0.75, reach: 2.1,
+    windup: 0.46, active: 0.12, recovery: 0.48, lunge: 0.75, reach: 2.1,
     hitstop: 0.11, shake: 0.42,
     up: 1.0, // reach band above the blade: lower than the sweeps' so the raise can't tag the neck overhead
     shards: { radius: 1.7, height: 3.2 }, // ground burst at the impact point (hits if the blade missed)
     // windup: blade low ahead (ready) → up-back 33° past the head (raise, mid-windup) → hanging
     // down the back at the apex (a0, the wrists coil); active: over the top into the ground ahead
-    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8 },
+    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.5 },
     variants: [
       // a leap through the raise, landing on the blow
-      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, hop: 0.16 },
+      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.5, hop: 0.16 },
     ],
   },
 ];
@@ -121,18 +127,18 @@ export const LIGHT = [
  *  hit 1 of the combo. */
 export const SPRINT_ATK = {
   name: 'sprintSlash', kind: 'light', combo: 1, damage: 40, poise: 18, heavy: false,
-  windup: 0.14, active: 0.14, recovery: 0.36, lunge: 0, travel: 2.4, keepYaw: true, reach: 2.3,
+  windup: 0.18, active: 0.15, recovery: 0.36, lunge: 0, travel: 2.4, keepYaw: true, reach: 2.3,
   hitstop: 0.07, shake: 0.2,
-  anim: { kind: 'h', a0: -2.5, a1: 1.7, a2: 2.35, elev0: -0.6, elev: 0.4, elev2: 0.9, feet: 'dash' },
+  anim: { kind: 'h', a0: -2.5, a1: 1.7, a2: 2.35, elev0: -0.25, elev: 0.45, elev2: 0.9, feet: 'dash' },
 };
 
 /** LMB out of a forward roll: a low cut that rises out of the crouch, right → left. Counts as hit 1
  *  of the combo. */
 export const ROLL_ATK = {
   name: 'rollCut', kind: 'light', combo: 1, damage: 34, poise: 14, heavy: false,
-  windup: 0.1, active: 0.11, recovery: 0.26, lunge: 0.9, reach: 2.2,
+  windup: 0.14, active: 0.12, recovery: 0.26, lunge: 0.9, reach: 2.2,
   hitstop: 0.06, shake: 0.14,
-  anim: { kind: 'h', a0: -2.3, a1: 1.6, a2: 2.2, elev0: -0.45, elev: -0.05, elev2: 0.6, sink: 0.2 },
+  anim: { kind: 'h', a0: -2.3, a1: 1.6, a2: 2.2, elev0: -0.45, elev: 0.15, elev2: 0.6, sink: 0.2 },
 };
 
 /** Charged lunging thrust (hold LMB, release). The charge itself is the windup, so the release is

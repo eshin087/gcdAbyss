@@ -8,14 +8,16 @@ import {
 // from behind, the sword low in his right hand, the cloak thrown wide to his left; ADR-043). The
 // default outfit since then (gear/index.js DEFAULT_LOADOUT), worn over the Wanderer's boots, coat
 // tails and sword:
-//   head   shroud.hood    a hood worn pushed back, a rounded crown, the face in its shadow; gold
+//   head   shroud.hood    a hood worn pushed back, a rounded crown (the face in its shadow, unless
+//                         the wearer's face is lit: the hero's is, ADR-063; the pause menu takes it
+//                         off, ADR-065); gold
 //                         strands out of it: a spiky fringe, cheek locks, a strand a side onto the
 //                         collarbone (HOOD_HAIR; `hair`: the pieces of the body's hair kept)
 //   chest  shroud.tunic   a closed wrap tunic, a neck scarf, one belt
 //   arms   shroud.arms    cloth sleeves, bound forearms, bare hands
-//   back   shroud.cloak   a mantle over the shoulders and SHROUD_SHEETS: wide ragged sheets on the
-//                         streamer springs (anim.js), round his back and over his LEFT side and arm.
-//                         The sword arm stays clear of the cloth, so the arm and the blade read.
+//   back   shroud.cloak   a mantle over the shoulders and SHROUD_SHEETS: half a tattered cloak on
+//                         the streamer springs (anim.js), down his back and over his LEFT shoulder
+//                         and arm (ADR-064). The sword side is bare, so the arm and the blade read.
 // Built in code from the heroGeo.js sheets (no sculpted parts): `npm run hero-parts` is not needed.
 //
 // Heights in comments are metres in the idle stance.
@@ -33,21 +35,18 @@ const SHROUD_LAG = 0.5;
 /** How far a cloak sheet may swing from hanging (rad): just short of level. */
 const SHROUD_MAX = 1.45;
 export const SHROUD_SHEETS = [
-  // down his back (Session 16, owner: from the side he was "way too skinny" with little depth: the
-  // three back sheets hang from further back, off the mantle's back, and stand off his back more,
-  // so his profile is a wedge; their outward pull points straight back, so he is no wider from
-  // behind)
-  { on: 'chest', at: [0, 0.2, -0.16], ry: Math.PI, w: [0.26, 0.4, 0.56], len: [0.5, 0.5], out: 0.42, wrap: 0.24, strips: [0.22, 0.12, 0.3, 0.16, 0.24], fork: [0, 1, 0, 0, 1], seed: 3 },
-  { on: 'chest', at: [0.11, 0.205, -0.14], ry: Math.PI - 0.62, w: [0.22, 0.38, 0.54], len: [0.5, 0.48], out: 0.45, wrap: 0.22, strips: [0.18, 0.3, 0.12, 0.26], fork: [1, 0, 0, 1], seed: 17 },
-  { on: 'chest', at: [-0.11, 0.205, -0.14], ry: Math.PI + 0.62, w: [0.22, 0.36, 0.5], len: [0.48, 0.46], out: 0.45, wrap: 0.22, strips: [0.26, 0.14, 0.22, 0.1], fork: [0, 1, 0, 0], seed: 29 },
-  // thrown back behind the sword shoulder: short, so the right arm and the blade stay clear
-  { on: 'chest', at: [-0.205, 0.2, -0.055], ry: Math.PI + 1.15, w: [0.16, 0.26, 0.34], len: [0.4, 0.34], out: 0.42, wrap: 0.2, strips: [0.2, 0.1, 0.16], fork: [0, 0, 1], seed: 41 },
-  // his left side: the wide wing
-  { on: 'chest', at: [0.2, 0.2, -0.04], ry: 1.9, w: [0.2, 0.36, 0.52], len: [0.48, 0.46], out: 0.5, wrap: 0.2, strips: [0.14, 0.28, 0.18, 0.32], fork: [0, 0, 1, 0], seed: 53 },
-  // draped over the left arm: it follows the arm, so a raised or reaching arm lifts the wing
-  { on: 'armL', at: [0.05, -0.02, 0.0], ry: 1.35, w: [0.24, 0.38, 0.5], len: [0.42, 0.42], out: 0.3, wrap: 0.16, strips: [0.3, 0.16, 0.24, 0.12], fork: [0, 1, 0, 0], seed: 67 },
-  // a short torn shoulder cape on the sword arm
-  { on: 'armR', at: [-0.05, -0.01, -0.02], ry: -1.9, w: [0.2, 0.26, 0.3], len: [0.2, 0.16], out: 0.3, wrap: 0.13, strips: [0.1, 0.16, 0.08], fork: [0, 0, 0], lag: 0.25, seed: 79 },
+  // Session 20 (ADR-064, owner: "a slimmer tattered cloak to show the character's model more from the
+  // back angle"; picked "Slim B" of two rendered previews): HALF a cloak. Until then seven sheets
+  // fanned 1.3 m wide round his back and both sides, and from behind he was a cone of cloth (beside
+  // the Ash Disciple, built on the same skeleton at the same scale, he read a size bigger). Now a
+  // narrow sheet down his back, one over the back of his left shoulder and one draped over the left
+  // arm; the sword side is bare, his arms, legs and the blade show from behind.
+  // down his back, a little to the left
+  { on: 'chest', at: [0.03, 0.2, -0.15], ry: Math.PI - 0.12, w: [0.17, 0.21, 0.24], len: [0.5, 0.48], out: 0.22, wrap: 0.22, strips: [0.22, 0.32, 0.14], fork: [0, 1, 0], seed: 3 },
+  // behind the left shoulder
+  { on: 'chest', at: [0.14, 0.205, -0.11], ry: Math.PI - 0.85, w: [0.13, 0.18, 0.22], len: [0.48, 0.44], out: 0.3, wrap: 0.2, strips: [0.16, 0.3, 0.2], fork: [1, 0, 0], seed: 17 },
+  // draped over the left arm: it follows the arm, so a raised or reaching arm lifts it
+  { on: 'armL', at: [0.05, -0.02, 0.0], ry: 1.35, w: [0.2, 0.26, 0.3], len: [0.38, 0.36], out: 0.26, wrap: 0.16, strips: [0.28, 0.14, 0.24], fork: [0, 1, 0], seed: 67 },
 ];
 
 // ---------------------------------------------------------------- head: the hood
@@ -206,6 +205,15 @@ function buildArms({ arms, sword, M, DIM, BODY, mesh }) {
 }
 
 // ---------------------------------------------------------------- back: the tattered cloak
+/** The mantle's rings (heights in the idle stance): just over the shoulders, a little deeper behind
+ *  than in front. (Session 20: 0.51 m across and 0.34 m deep at its widest, from 0.54 and 0.4.) */
+const MANTLE = [
+  { y: 1.39, rx: 0.256, rz: 0.168, cz: -0.016, gap: 0.05 },
+  { y: 1.43, rx: 0.24, rz: 0.158, cz: -0.012, gap: 0.045 },
+  { y: 1.47, rx: 0.192, rz: 0.134, cz: -0.006, gap: 0.036 },
+  { y: 1.505, rx: 0.118, rz: 0.1, cz: 0.002, gap: 0.03 },
+];
+
 /** The mantle (a short cape over both shoulders, on the chest joint) and SHROUD_SHEETS. Returns
  *  `streamers`: the two-segment springs the animator drives (anim.js _streamers reads each one's
  *  segs, len and out). */
@@ -214,14 +222,7 @@ function buildCloak({ chest, arms, M, REST, mesh, joint }) {
   // the mantle: from the scarf out over the shoulders to a ragged edge at the top of the arms; open
   // a hand's width at the throat. Sub-id 1: outlined where the sheets leave it
   {
-    // (Session 16: deeper front to back, the extra mostly behind, so the shoulders have some body in
-    // profile; the same width across)
-    const rings = [
-      { y: yCh(1.375), rx: 0.268, rz: 0.2, cz: -0.026, gap: 0.05 },
-      { y: yCh(1.42), rx: 0.252, rz: 0.186, cz: -0.02, gap: 0.045 },
-      { y: yCh(1.468), rx: 0.2, rz: 0.148, cz: -0.01, gap: 0.036 },
-      { y: yCh(1.505), rx: 0.118, rz: 0.102, cz: 0.002, gap: 0.03 },
-    ];
+    const rings = MANTLE.map((r) => ({ ...r, y: yCh(r.y) }));
     const g = sub(shellGeometry(rings, { sub: 2, cols: 30 }), 1);
     // a torn lower edge: every other column of the bottom row drops or lifts a little
     const p = g.attributes.position;

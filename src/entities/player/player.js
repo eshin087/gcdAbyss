@@ -4,8 +4,9 @@ import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep } from '../..
 import { markCaster } from '../../render/pipeline.js';
 import { batchRigid } from '../../render/rigidBatch.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
-import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE } from './model.js';
+import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE, HERO_LOOK } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
+import { DEFAULT_LOADOUT } from './gear/index.js';
 import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
 
@@ -89,7 +90,11 @@ export class Player {
   constructor(game) {
     this.game = game;
     this.name = 'Wanderer';
-    this.rig = buildHero(game.U);
+    /** How his own body is drawn (model.js buildHero `look`, HERO_LOOK: the lit face). */
+    this.look = HERO_LOOK;
+    // the default outfit, the hood down if the pause menu says so (game.settings.hood, ADR-065)
+    const hood = game.settings?.hood !== false;
+    this.rig = buildHero(game.U, hood ? DEFAULT_LOADOUT : { ...DEFAULT_LOADOUT, head: null }, this.look);
     this.object3d = this.rig.root;
     this.position = this.object3d.position;
     this.radius = 0.45;
@@ -470,15 +475,30 @@ export class Player {
     return this.setLoadout({ ...this.rig.loadout, [slot]: id ?? null });
   }
 
+  /** Whether he wears a head item (the hood, unless something else was equipped there). */
+  get hooded() {
+    return this.rig.loadout.head != null;
+  }
+
+  /** Hood up (the default outfit's hood) or down (nothing on his head: all of his hair; the pause
+   *  menu, ADR-065). A no-op when it already is. His pose and cloth carry on (see setLoadout). */
+  setHood(up) {
+    const want = up ? DEFAULT_LOADOUT.head : null;
+    if ((this.rig.loadout.head ?? null) === want) return this.rig.loadout;
+    return this.setLoadout({ ...this.rig.loadout, head: want });
+  }
+
   /**
    * Wear `loadout` (slot → gear item id or null; gear/README.md): the outfit and the weapon are
    * rebuilt from their items and swapped in under the same root, so `object3d` / `position` stay
-   * the objects everything else holds. The animator is rebuilt with the new cloth (its pose restarts
-   * from the ready stance: equip out of combat). Throws on an unknown item id or an item in the
+   * the objects everything else holds. The animator is rebuilt with the new rig; when the cloth is
+   * the same (as many coat panels and cloak sheets: a head or weapon swap) it carries on from the
+   * old one (HeroAnimator.adopt: the pose, the clip, the springs), else its pose restarts from the
+   * ready stance (equip other cloth out of combat). Throws on an unknown item id or an item in the
    * wrong slot, before anything is changed. Build-time cost (allocates): never call it per frame.
    */
   setLoadout(loadout) {
-    const rig = buildHero(this.game.U, loadout);
+    const rig = buildHero(this.game.U, loadout, this.look);
     const root = this.object3d, old = this.rig;
     this.batch?.dispose(); // the old rig's rigid batches (their bone slots are reused below)
     for (const c of [...root.children]) root.remove(c);
@@ -489,9 +509,10 @@ export class Player {
     });
     for (const m of old.mats) m.dispose();
     this.rig = rig;
-    const onFootstep = this.anim.onFootstep;
+    const prev = this.anim;
     this.anim = new HeroAnimator(rig, this);
-    this.anim.onFootstep = onFootstep;
+    this.anim.onFootstep = prev.onFootstep;
+    if (rig.coat.length === old.coat.length && rig.streamers.length === old.streamers.length) this.anim.adopt(prev);
     this.fx.rig = rig;
     this.sweep.sword = rig.sword;
     this.sweep.valid = false;
@@ -1626,7 +1647,9 @@ export class Player {
       const T = W + A;
       if (!a.pending && t <= T) lv = (a.travel / T) * (1.4 - (0.8 * t) / T);
     } else {
-      const l0 = W - 0.08, l1 = W + A;
+      // (the step starts 0.12 s before the cut: ADR-066 lengthened the windups, and the blade crossed his
+      // front before the step had closed the reach band)
+      const l0 = W - 0.12, l1 = W + A;
       if (!a.pending && t >= l0 && t <= l1) {
         if (a.lunge === null) a.lunge = this._lungeFor(d);
         lv = a.lunge / (l1 - l0);

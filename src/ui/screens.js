@@ -134,6 +134,10 @@ export class PauseMenu {
     this.btnMute = button(panel, '', () => game.flow?.toggleMute?.());
     fillKeyText(el('span', '', null, this.btnMute), 'SOUND [M]');
     this.muteVal = el('span', 'v', '', this.btnMute);
+    // the hero's hood (ADR-065): no key, the menu only (H is help)
+    this.btnHood = button(panel, '', () => game.flow?.toggleHood?.());
+    el('span', '', 'HOOD', this.btnHood);
+    this.hoodVal = el('span', 'v', '', this.btnHood);
     // touch devices: fullscreen (hides the browser bars; Android also locks landscape), if supported
     const doc = globalThis.document;
     if (doc?.fullscreenEnabled && typeof doc.documentElement?.requestFullscreen === 'function') {
@@ -148,6 +152,7 @@ export class PauseMenu {
     this.on = false;
     this._q = null;
     this._m = null;
+    this._h = null;
   }
 
   show(on) {
@@ -156,13 +161,18 @@ export class PauseMenu {
     this.refresh();
   }
 
-  /** Cheap: only touches the DOM when quality / mute changed. */
+  /** Cheap: only touches the DOM when quality / mute / the hood changed. */
   refresh() {
     if (!this.on) return;
     const q = this.game.settings?.quality;
     if (q !== this._q) {
       this._q = q;
       this.qualityVal.textContent = CONFIG.quality[q]?.name ?? '—';
+    }
+    const h = this.game.settings?.hood !== false;
+    if (h !== this._h) {
+      this._h = h;
+      this.hoodVal.textContent = h ? 'UP' : 'DOWN';
     }
     const m = !!this.game.audio?.muted;
     if (m !== this._m) {

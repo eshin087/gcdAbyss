@@ -4,6 +4,7 @@ import { ellipsoidGeometry } from '../../render/glyphGeometry.js';
 import { DIM, BODY, REST, HAIR_CLUSTERS } from './heroDims.js';
 import { mergeGeometries, sub, partGeometry, orient, limb } from './heroGeo.js';
 import { SLOTS, DEFAULT_LOADOUT, resolveLoadout } from './gear/index.js';
+import { buildFace, buildHairBack } from './heroFace.js';
 
 // The Wanderer, "Shadow Swordsman" (owner concept sheets; build spec docs/art/hero.md; the lean
 // reference match of 2026-11-09, ADR-034, filled out to an athletic build by ADR-040): a 1.80 m
@@ -123,6 +124,9 @@ export const LEAN = { frac: 0.5, max: (32 * Math.PI) / 180 };
  * (DIM.bladeTip 1.5 + REACH.tipExt 0.4) is covered by the swing crescent.
  */
 export const HERO_SCALE = 1.2;
+
+/** The player's own body look (buildHero's third argument): the lit face of features (ADR-063). */
+export const HERO_LOOK = Object.freeze({ face: 'lit' });
 /** The blade core's unlit colour up close (player.js lifts it with distance). */
 export const BLADE_BASE = [0.05, 0.1, 0.2];
 
@@ -426,7 +430,9 @@ function mergeStatic(root, keep) {
  *   slots    slot → the Object3Ds that slot hung on the skeleton (each with its whole subtree, all
  *            tagged userData.slot), so a slot can be emptied and rebuilt without touching the rest
  */
-export function buildHero(U, loadout = DEFAULT_LOADOUT) {
+export function buildHero(U, loadout = DEFAULT_LOADOUT, look = null) {
+  // `look` (optional): how the body itself is drawn, { face: 'lit' | null } (heroFace.js); the
+  // player's is HERO_LOOK
   const M = createHeroMaterials(U);
 
   // joint / mesh helpers for one owner: a gear slot, or null for the skeleton and the body
@@ -492,12 +498,17 @@ export function buildHero(U, loadout = DEFAULT_LOADOUT) {
   const headItem = worn.find(({ slot }) => slot === 'head')?.item;
   const hairKeep = headItem?.hidesHair ? new Set() : Array.isArray(headItem?.hair) ? new Set(headItem.hair) : null;
   const hairOn = (name) => !hairKeep || hairKeep.has(name);
-  // a deep hood can put the face in shadow (`shadowsFace`): the face takes the near-black of the
-  // shirt and the eyes are left out (at the game camera the ASCII never resolves a face; a pale one
-  // under gold hair read as a gold mask)
+  // the face: with `look.face` 'lit' (the player) the face of features (heroFace.js, ADR-063),
+  // lit even under a hood; else the plain face, which a deep hood can put in shadow
+  // (`shadowsFace`: the near-black of the shirt, no eyes)
   const shade = !!headItem?.shadowsFace;
   const faceMat = shade ? M.shirt : M.skin;
-  {
+  if (look?.face === 'lit') {
+    buildFace(head, M, mesh);
+    if (hairOn('cap')) mesh(head, partGeometry('hair.cap'), M.hair);
+    // all of the hair (no hood): gold locks over the back of the head as well
+    if (!hairKeep) buildHairBack(head, M, mesh);
+  } else {
     const [sx, sy, sz] = DIM.skull;
     mesh(head, limb({ length: 0.12, r0: BODY.neck[0], r1: BODY.neck[1], radial: 8, rings: 2, capSegs: 1 }), faceMat, 0, 0.1, 0.0);
     mesh(head, orient.up(ellipsoidGeometry(0.078, 0.09, 0.1)), faceMat, sx, sy, sz);
