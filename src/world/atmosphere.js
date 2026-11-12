@@ -3,7 +3,7 @@ import { TAU } from '../core/math.js';
 
 // Living night: bonfire flames + embers (and its light), fireflies drifting at the forest edge,
 // leaves falling from the canopy near the camera; skyGlow(k): the sky over the clearing burning
-// orange (Armageddon, ADR-049) by warming the shared ambient and fog colours.
+// orange (Armageddon, ADR-053) by warming the shared ambient and fog colours.
 // (subtle: at the phone's close LOW camera the fog fills most of the frame, and a stronger fog tint
 // washed the whole view brown)
 const GLOW_AMBIENT = [0.085, 0.027, 0.006]; // added to U.uAmbient at full glow

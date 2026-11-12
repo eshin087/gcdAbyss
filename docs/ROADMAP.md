@@ -96,7 +96,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] A real tail thrust for the tail lash (a tail-raise control in the rig)
   - [ ] Widen the wing buffet's band; later string hits whiff a hero who stands still
   - [ ] A readable overhead claw at the game camera; a stronger deflect knock-back
-  - [x] A red windup glow for the meteor cast (Armageddon's rear-up glows red, ADR-049)
+  - [x] A red windup glow for the meteor cast (Armageddon's rear-up glows red, ADR-053)
   - [ ] Teach the probe bot to heal (its death rates are pessimistic)
   - [ ] Capture the phase-3 eruption chase
 

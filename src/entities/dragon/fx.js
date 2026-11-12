@@ -5,7 +5,7 @@ import { TELL_STYLE } from '../../combat/rules.js';
 // Dragon FX: fire breath stream (glyph particles + pooled lights + scorch), fireball projectiles,
 // roar shock rings, dust, nostril embers, eye glints, phase-2 / death embers, and the combat
 // read-outs: timing flashes (red alarm burst for dodge-only tells, a white glint for parryable
-// ones — no colour coding or text for parry), ground warnings as the ground heating up (ADR-048:
+// ones — no colour coding or text for parry), ground warnings as the ground heating up (ADR-052:
 // no red rings, no '!' marks), white/gold parry sparks, posture break. Every light this module creates is tracked so reset() can kill them.
 // Body-linked sizes / distances scale with the wyrm (SCALE); projectile blasts do not.
 
@@ -64,7 +64,7 @@ const SMOKE = [0.045, 0.04, 0.036];
 const ROCK_COL = [0.17, 0.14, 0.12];
 const NO_HIT = Object.freeze({ hitDone: true }); // a volley that never deals damage (visual shells)
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-// ground heat (every ground warning, ADR-048, docs/STYLE.md "Ground warnings"): a sparse, stable
+// ground heat (every ground warning, ADR-052, docs/STYLE.md "Ground warnings"): a sparse, stable
 // fill of small ground glyphs over the footprint, coloured by heat (dark ember -> orange ->
 // white-orange as k runs 0 -> 1), denser and brighter toward impact, sparks from k 0.6, and the
 // true edge drawn only in the last flashLead s ('hot'). The scorch map's heat channel is stamped
@@ -970,7 +970,7 @@ export class DragonFx {
     return this._light({ x, y: 1.2, z, color, intensity, radius, fadeIn: 0.12, fade: 0.35, flicker: 0.45 });
   }
 
-  // ---------------------------------------------------------------- ground heat (ADR-048)
+  // ---------------------------------------------------------------- ground heat (ADR-052)
   /** Fill colour of heat k (0 dark ember .. 0.6 orange .. 1 white-orange) x mul into _c0 / _c1; lava 0..1 tints it molten. */
   _heatCol(k, mul, lava = 0) {
     const c = this._c0, e = this._c1;
@@ -1874,7 +1874,7 @@ export class DragonFx {
   }
 
   /**
-   * One of Armageddon's salvo (visual only, ADR-049): a white-hot '@' bolt with a long orange trail
+   * One of Armageddon's salvo (visual only, ADR-053): a white-hot '@' bolt with a long orange trail
    * shot up out of the jaws; it flies on until it leaves the top of the view.
    */
   launchBolt(x, y, z, vx, vy, vz) {

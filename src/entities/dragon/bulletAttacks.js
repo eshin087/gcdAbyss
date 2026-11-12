@@ -1,4 +1,4 @@
-// The bullet-hell patterns (docs/COMBAT.md "Bullets", ADR-039, ADR-046): four spells built on bullets.js.
+// The bullet-hell patterns (docs/COMBAT.md "Bullets", ADR-039, ADR-050): four spells built on bullets.js.
 //
 //   emberStorm  Ember torrent: the head sweeps a breathed stream of embers across the hero (P2+: red
 //               orbs coughed at the sweep's extremes, P3: a closing pirouette, one spiral arm)
@@ -8,7 +8,7 @@
 //   fireWheel   Scouring breath: a sustained breath strikes the ground before the snout and runs out
 //               as tongues of fire; the wyrm sweeps them round by turning, pausing once and reversing
 //
-// Every bullet is BREATHED (ADR-046): spit() spawns it at rig.pt.mouth along the head's actual aim
+// Every bullet is BREATHED (ADR-050): spit() spawns it at rig.pt.mouth along the head's actual aim
 // (pt.headFwd), from the action's hit() hook, which runs after the rig: the bullet leaves the jaws
 // where they are drawn this frame. The pose aims the head first (aimHead: reach out of the neck
 // base, look down the line, headExact) and the emission follows where it really points. A bullet
@@ -68,7 +68,7 @@ function mouthGeo(d, out) {
 const _geo = { D: 0, th: 0 };
 
 /**
- * One bullet breathed out of the jaws (ADR-046): at rig.pt.mouth, flying along the head's aim + dyaw.
+ * One bullet breathed out of the jaws (ADR-050): at rig.pt.mouth, flying along the head's aim + dyaw.
  * It reaches hit height after a drop scaled to the mouth-to-hero distance (a close hero is not flown
  * over). Returns the record or null.
  */

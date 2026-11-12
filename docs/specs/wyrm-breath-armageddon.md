@@ -1,6 +1,9 @@
 # Spec — Breath-born bullets, perfect-parry returns, Armageddon, diegetic warnings
 
 Status: **approved scope, not started** (2026-11-11). Planner: Fable. Implementer: Opus.
+*Implementation note: PR #14 took ADR-046 to ADR-049 first, so the four ADRs named below are
+ADR-050 (breathed bullets), ADR-051 (perfect parry), ADR-052 (ground warnings) and ADR-053
+(Armageddon) in `docs/DECISIONS.md`.*
 Read `CLAUDE.md`, `docs/COMBAT.md` ("Bullets", "Fire attacks and hazards", the fairness checklist)
 and ADR-029 / 030 / 039 before starting. Numbers below are **starting values**: tune them in the
 Lab, keep them in `tuningBullets.js` / `tuningFire.js` / `rules.js`, never in logic.

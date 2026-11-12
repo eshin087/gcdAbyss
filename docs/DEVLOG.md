@@ -52,7 +52,7 @@ ADR-050 to ADR-053 here.
   frame; the first, stronger tint read as a brown wash (with the hurt vignette of a god-mode hero
   standing in craters on top of it).
 
-**Verification:** `npm test` ALL PASSED (678 checks, 635 before this session; BULLETS and FIRE grew),
+**Verification:** `npm test` ALL PASSED (687 checks on the tree rebased onto #14, 635 before this session; BULLETS and FIRE grew),
 `npm run build` ok (1695 KB). Film strips in the dev server (`__tick` + an overlay canvas): a
 meteor's heat at k 0.2 / 0.6 / hot, a stomp zone, the burning pass, the flame ring and wall; a
 perfect parry's shot flying back and landing (−30 HP); the torrent, the burst and the Scouring breath

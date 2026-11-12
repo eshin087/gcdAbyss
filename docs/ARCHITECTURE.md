@@ -68,7 +68,7 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `viewOverride` | `null` or `{ pos, target, focus? }` — camera override applied by main.js after the rig (see Frame order). Only the Lab model viewer writes it. |
 | `lights` | `add({x,y,z,color:[r,g,b],intensity,radius,life,fade,fadeIn,flicker})` → light (mutable `x,y,z`, `.set()`, `.kill()`) |
 | `fx.add` / `fx.alpha` | glyph particles, additive-HDR / alpha-blended. `spawn({x,y,z,vx,vy,vz,life,size,sizeEnd,glyph,color,colorEnd,alpha,alphaEnd,gravity,drag,spin,rot,flicker,stretch})`. `glyph`: char, string of chars (random pick) or atlas index. |
-| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; `atmosphere.skyGlow(k 0..1)` (the sky over the clearing glows orange: warms the shared ambient and fog colours; call every frame while it should show, it eases in and out and lets go 0.2 s after the last call; Armageddon, ADR-049); Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
+| `world` | `resolve(pos, radius, bound)` circle collision; `setPusher(slot, x, y, z, r)` grass trample (slot 0 = player, 1–9 = dragon; y > 1.5 = airborne, ignored); `clearPushers(from, to)`; `gust(x, z, strength 0..2, radius)`; `scorch.burnCircle(x, z, r, burn 0..1, heat 0..1)`, `scorch.reset()`; `colliders.blocked(ax,az,bx,bz)`; `setGrassQuality(count)` (instanced grass blades drawn; main.js applies the quality preset); `bonfire {x,z}`; `nest {x,z}`; `atmosphere.setBonfireLit(bool)`; `atmosphere.skyGlow(k 0..1)` (the sky over the clearing glows orange: warms the shared ambient and fog colours; call every frame while it should show, it eases in and out and lets go 0.2 s after the last call; Armageddon, ADR-053); Lab only: `debug.setVisible(bool)` hides / restores the environment (ground, grass, forest group = trees, stones, flagstones, nest bones, bonfire; atmosphere paused and in-flight particles in `fx.*` dropped; the exact previous `visible` flags come back; lights, scorch and colliders untouched), `debug.visible` |
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
@@ -418,7 +418,7 @@ the clang); each parry slides him `TUNE.deflectPush` 0.16 m back (×1.6 for blue
 the guard lingers (`guardHold` eases 1 → 0 over `TUNE.guardLinger` [0.32, 0.6] s after the last one).
 `player:parry.chain` is the hero's own rhythm count and can run across two strings; the HUD's
 "DEFLECT ×N" uses the attacker's `combat:deflectChain` (one string).
-**Perfect parry** (ADR-047): a parry whose RMB press came ≤ `DEFENSE.perfectParryWindow` (0.08 s)
+**Perfect parry** (ADR-051): a parry whose RMB press came ≤ `DEFENSE.perfectParryWindow` (0.08 s)
 before the impact is perfect: `_parry(tell, attack, sx, sz, light, perfect)` stores it on
 `deflect.perfect` and adds `perfect` to `player:parry`. It is computed for every parry; only bullets
 consume it today (a light perfect parry: hit-stop `TUNE.returnStop` 0.05 s, a gold burst
@@ -931,7 +931,7 @@ event scratch).
   lead, r, active, linkFirst })` (pillars under the led hero) and `barrage({ waves, perWave,
   waveGap, stagger, first, glowAt, warn, warnLed, ledEvery, ledGap, lead, r, fall, fallY, size,
   damage, burn, knockback, group, crater, tickDamage, tickBurn, safeR, cover, finale })`
-  (Armageddon, ADR-049: waves of meteors over the whole clearing falling from the sky above the
+  (Armageddon, ADR-053: waves of meteors over the whole clearing falling from the sky above the
   wyrm, then `finale` { delay, radius, warn, damage, burn, knockback, fall, size }: one great
   meteor on the hero, outside the hit cap; from `glowAt` it drives `world.atmosphere.skyGlow`).
   The wave placement is pure and exported for the tests: `placeWave(n, r, rng, hx, hz, pts, safeR,
@@ -945,7 +945,7 @@ event scratch).
 - Also: `cutStrip(ref)` (a knocked-out pass stops its front; the burnt part lingers), `timeTo(ref,
   px, pz, vx, vz, pr)` (s until the hazard reaches a moving point: the spawning attack re-times its
   own flash with it), `count(kind?)`, `clear()`.
-- Every hazard heats the ground under it until it goes off (ADR-048: `fx.heatDisc` / `heatBand`,
+- Every hazard heats the ground under it until it goes off (ADR-052: `fx.heatDisc` / `heatBand`,
   no red rings; the edge shows in the last `flashLead` s), then deals its one blow through
   `dragon.hitPlayer({ ..., tell: 'red', parryable: false, blockable: false, plunge })`: i-frames or
   leaving the area avoid it. `plunge` is the spawn option `plunge` (default false: a perfect dodge
@@ -1004,7 +1004,7 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
 - The wheel: `startWheel({ attack, x, z, n, ang, dir, warn, dur, speed, r0, r1, width, damage, burn,
   knockback, max, headline, offs })`, `stopWheel()`, `wheel` (the record: `on`, `lit`, `ang`, `offs`,
   `hits`, ...). Spoke i lies at `ang + offs[i]`. With `offs` (≤ 8 angles) the spokes are the tongues
-  of a breath (the Scouring breath, ADR-046): the attack calls `aimWheel(x, z, ang, om, px, pz)` every
+  of a breath (the Scouring breath, ADR-050): the attack calls `aimWheel(x, z, ang, om, px, pz)` every
   frame after the rig (root = the mouth's ground projection, `ang` = the head's yaw, `om` its turn
   rate, `px / pz` the pivot the root swings round: the wyrm's root). Without it, `n` spokes evenly
   round turn by themselves (`speed`, one reversal). A spoke's cue (`tt`) steps the wheel forward
@@ -1013,7 +1013,7 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
 - Hits go through `dragon.hitPlayer({ ..., bullet: true, perfect, plunge: false })`: the damage is
   final (no `TUNING.damageScale`), `player.takeHit` receives `light: true` and `perfect` (false for
   embers and wisps: a roll is a plain dodge), and a parry does not call `dragon.onParried`.
-- Perfect parry → the return (ADR-047): on `RESULT.PARRIED` the field reads
+- Perfect parry → the return (ADR-051): on `RESULT.PARRIED` the field reads
   `game.player.deflect.perfect`. Normal: the bullet ricochets to `rig.pt.head` (`ricochet` m/s) and
   the kind's `posture` applies at once. Perfect (embers and wisps; orbs are never parried): the bullet
   is `returned`, flies at `returnSpeed` m/s drawn ×`returnSize` (`BFX.drawReturned`) and, on reaching
@@ -1035,7 +1035,7 @@ spread into `ATTACKS` like `FIRE`; the same action shape): `emberStorm` (the Emb
 `fanVolley` (the Cinder burst), `wispSwarm`, `fireWheel` (the Scouring breath); the keys are the
 contract (audio, Lab, tests), the labels are display names. Each emits `dragon:spell {name, x, z}` at
 its cast; the torrent and the Scouring breath also emit `dragon:breathStart` / `dragon:breathEnd`
-(the breath loop). **Every bullet is breathed (ADR-046):** `spit(d, kind, attack, dyaw, speed, grp,
+(the breath loop). **Every bullet is breathed (ADR-050):** `spit(d, kind, attack, dyaw, speed, grp,
 life)` spawns it at `rig.pt.mouth` along the head's actual aim (`pt.headFwd`) + `dyaw`, with a
 `drop` scaled to the mouth-to-hero distance (`TUNING.bullets.dropK / dropMin / dropMax`: a close hero
 is not flown over); patterns emit from their `hit()` hook (after the rig, so from the jaws as drawn)

@@ -126,7 +126,7 @@ const coreCol = (kind) => (kind === 2 ? RED : kind === 1 ? WISP : GOLD);
 const endCol = (kind) => (kind === 2 ? DARK : kind === 1 ? WISP_END : DARK);
 
 /**
- * A perfectly parried bullet on its way back (ADR-047): a white-gold core `size` x a bullet's, a
+ * A perfectly parried bullet on its way back (ADR-051): a white-gold core `size` x a bullet's, a
  * gold halo turning, a long orange trail. Reads apart from the plain deflect (the bullet's own look).
  */
 export function drawReturned(fx, b, dt, size = 1.8) {
@@ -270,7 +270,7 @@ export function muzzle(fx, x, y, z, dx, dz, n = 8, blue = false) {
 // ---------------------------------------------------------------- fire wheel
 /**
  * The warning: the ground heats up along the lines where the spokes / tongues will catch (k 0..1,
- * ADR-048); a breath's tongues grow out from their root as the throat charges.
+ * ADR-052); a breath's tongues grow out from their root as the throat charges.
  */
 export function wheelWarn(fx, w, dt, k) {
   const life = fx._hold(w, 'hold', dt);

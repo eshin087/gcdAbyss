@@ -1608,7 +1608,7 @@ async function scenarioBullets() {
     const def = answer ? makeDefender(G) : null;
     const h0 = G.hits.length, c0 = { ...G.counts };
     let tells = 0, flashes = 0, peak = 0, bad = 0;
-    // ADR-046: every bullet is breathed: born at pt.mouth, along the head's aim (a cone / fork round it)
+    // ADR-050: every bullet is breathed: born at pt.mouth, along the head's aim (a cone / fork round it)
     const born = { n: 0, far: 0, worst: 0, aimWorst: 0, offWorst: 0 };
     const SPREAD = { emberStorm: TUNING.attacks.emberStorm.laneGap + TUNING.attacks.emberStorm.orbSpread * 1.5, fanVolley: TUNING.attacks.fanVolley.spread + 0.06 };
     G.watch = (n, e) => { def?.onEvent(n, e); if (n === 'combat:tell') tells++; if (n === 'combat:flash') flashes++; };
@@ -2071,7 +2071,7 @@ async function scenarioFire() {
   out('   flash timing: ' + timing.join(' · '));
   assert(!badPay.length, `dragon:spell / dragon:hazard payloads ${JSON.stringify(badPay.slice(0, 4))}`);
 
-  // ---- ARMAGEDDON (meteorRain, ADR-049): the wave placement's guarantees (pure, 200 seeded runs),
+  // ---- ARMAGEDDON (meteorRain, ADR-053): the wave placement's guarantees (pure, 200 seeded runs),
   // then the whole move per phase: counts, cues, the cap + finale, a rolling hero, the clear
   {
     const HZ = await imp('src/entities/dragon/hazards.js');

@@ -446,7 +446,7 @@ export class PlayerFx {
   }
 
   /**
-   * A perfect parry of a bullet (ADR-047): a gold star on the blade and a fan of gold sparks thrown
+   * A perfect parry of a bullet (ADR-051): a gold star on the blade and a fan of gold sparks thrown
    * back along the shot's way out (dx, dz = toward the blow), on top of the usual clash.
    */
   perfectParry(x, y, z, dx = 0, dz = 0) {

@@ -11,9 +11,9 @@ import { clamp, smoothstep } from '../../core/math.js';
 // (ignites at r0 and expands to r1), wall (a fire wall sweeping along its normal), line (lava
 // pillars along A + dir * k * step, erupting one after another) and two emitters that spawn
 // circles over time: rain (meteors round the player), chase (pillars under the player) and barrage
-// (Armageddon, ADR-049: waves of meteors over the whole clearing, then one great meteor).
+// (Armageddon, ADR-053: waves of meteors over the whole clearing, then one great meteor).
 //
-// Every hazard heats the ground under it from spawn until it goes off (ADR-048: a glow of small
+// Every hazard heats the ground under it from spawn until it goes off (ADR-052: a glow of small
 // ground glyphs + scorch heat, its edge drawn in the last flashLead s), then hits through
 // dragon.hitPlayer({ ..., tell: TELL.RED, plunge: false }): i-frames dodge it, block / parry fail
 // (a hazard spawned with plunge: true, fire breathed or spat from the air, lets a perfect dodge plunge).
@@ -120,7 +120,7 @@ function separate(pts, i, j, r, R, fixJ) {
 }
 
 /**
- * The impact points of one Armageddon wave (ADR-049) into `pts` [x0, z0, ...]: n spots over the
+ * The impact points of one Armageddon wave (ADR-053) into `pts` [x0, z0, ...]: n spots over the
  * clearing, jittered-stratified (a sunflower turned and jittered by `rng`, so the cover is even), no
  * two overlapping by more than OVERLAP, and kept off the hero: within `safeR` m of (hx, hz) they cover
  * at most `cover` of the ground (the nearest spot moves out past the safe disc, or to the far side of
@@ -445,7 +445,7 @@ export class Hazards {
   }
 
   /**
-   * Armageddon (emitter, ADR-049): `waves` x `perWave` meteors, wave w's j-th landing `first + w x
+   * Armageddon (emitter, ADR-053): `waves` x `perWave` meteors, wave w's j-th landing `first + w x
    * waveGap + j x stagger` s from now over the whole clearing (placeWave: even cover, no two
    * overlapping by more than a third, the hero's safe ground kept), each heating its ground `warn` s
    * (led ones `warnLed` s: every `ledEvery`-th onto the hero's led position, never two led impacts

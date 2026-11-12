@@ -626,7 +626,7 @@ export class Brain {
     }
   }
 
-  /** Red AoE attacks: the ground heats up over the danger area until impact (ADR-048). */
+  /** Red AoE attacks: the ground heats up over the danger area until impact (ADR-052). */
   _warnZone(a, dt) {
     const b = a.cur, def = a.def;
     if (!b || b.tell !== 'red' || typeof def.zone !== 'function') return;

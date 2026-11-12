@@ -12,7 +12,7 @@ import { beat, roarFx, roarPose } from './attacks.js';
 //     hoverBarrage 'Hover barrage' hovers ~8 m, spits 3-5 shells, each landing in a red ring
 //   spells:
 //     meteorRain   Armageddon: a salvo into the sky, then waves of meteors over the whole clearing
-//                  and one great meteor (a background hazard: the wyrm keeps fighting), ADR-049
+//                  and one great meteor (a background hazard: the wyrm keeps fighting), ADR-053
 //     eruptions    lava pillars in a line toward the hero; phase 3 may chase him instead
 //     flameRing    a ring of fire expanding from the wyrm
 //     flameWall    a wall of fire sweeping across the arena
@@ -658,7 +658,7 @@ const hoverBarrage = {
 };
 
 // ------------------------------------------------------------------ armageddon (key meteorRain)
-// ADR-049. Rears onto its hind legs, wings flared, the neck straight up, the throat white-hot, embers
+// ADR-053. Rears onto its hind legs, wings flared, the neck straight up, the throat white-hot, embers
 // streaming up off the jaws (the body glows red: TELL_STYLE.red.warn, d.bodyWarn); fires a salvo of
 // bolts into the sky from the jaws (visual: fx.launchBolt; dragon:hazard stage 'launch' per bolt); the
 // barrage emitter (hazards.barrage) is armed with the salvo, the sky answers and the meteors come
@@ -1156,7 +1156,7 @@ const nova = {
       d.flash = Math.max(d.flash ?? 0, 0.15 + 0.7 * k * k); // white-hot (the hit-flash white)
       const c = pt.chest;
       d.fx.novaCharge(dt, c.x, c.y, c.z, k);
-      // the blast radius: the whole clearing round it heats up toward the blast (ADR-048)
+      // the blast radius: the whole clearing round it heats up toward the blast (ADR-052)
       d.fx.heatDisc(d.fx.holdLife(a, dt), a, dt, a.cx, a.cz, NV.radius, k, k > 1 - TUNING.flashLead / Math.max(0.5, a.dur), 41.7);
       if (a.light) {
         a.light.set(c.x, c.y, c.z);

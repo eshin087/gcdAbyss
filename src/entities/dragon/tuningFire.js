@@ -51,7 +51,7 @@ export const FIRE_ATTACKS = {
     minDist: 0,
     weight: [0, 1.4, 1.2], cooldown: 13,
   },
-  // ARMAGEDDON (key meteorRain, ADR-049; replaced the Meteor rain): rears onto its hind legs and
+  // ARMAGEDDON (key meteorRain, ADR-053; replaced the Meteor rain): rears onto its hind legs and
   // fires a salvo of `missiles` fire bolts into the sky (visual; the punish window: it is committed
   // and rearing for windup + cast), the sky answers (`hush`: an orange glow, a rumble) while it drops
   // to all fours and fights on, then `waves` x `perWave` meteors hammer the whole clearing (each heats

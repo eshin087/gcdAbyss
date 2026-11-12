@@ -11,14 +11,14 @@
 // by one (each deflect sends the bullet back at the wyrm's head and adds `posture`), blocked for
 // chip, rolled through or cut out of the air with a swing; ORBS (red) are dodge-only like every
 // red attack. Bullet damage is NOT scaled by TUNING.damageScale: these are the final numbers.
-// Every bullet is BREATHED (ADR-046): it leaves rig.pt.mouth along the head's aim, so the pattern
+// Every bullet is BREATHED (ADR-050): it leaves rig.pt.mouth along the head's aim, so the pattern
 // shapes are what a head can make (a swept stream, coughed cones, a sustained breath on the ground).
 // "Hard" (2026-11-11): ~1.6-2x the bullets of v0.6, ~20 % faster, shorter cooldowns, higher caps.
 
 import { TELL } from '../../combat/rules.js';
 
 export const BULLETS = {
-  // posture: a parry's deflect; returnDamage / returnPosture: a PERFECT parry's return (ADR-047): HP
+  // posture: a parry's deflect; returnDamage / returnPosture: a PERFECT parry's return (ADR-051): HP
   // damage to the wyrm when the shot lands (an ember about one light hit, a wisp about one heavy hit)
   // and the posture it adds instead of `posture`
   ember: { tell: TELL.NORMAL, r: 0.32, damage: 8, burn: 0, knockback: 0, posture: 5, returnDamage: 30, returnPosture: 14 },

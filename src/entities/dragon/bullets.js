@@ -19,7 +19,7 @@
 //
 // A deflected bullet flies back to the wyrm's head and adds posture; it never interrupts the wyrm
 // (dragon.onParried is for its own blows). A PERFECT parry (player.deflect.perfect: pressed within
-// DEFENSE.perfectParryWindow, ADR-047) returns it instead: a bigger, faster shot that lands on the
+// DEFENSE.perfectParryWindow, ADR-051) returns it instead: a bigger, faster shot that lands on the
 // head for the kind's returnDamage (dragon.takeHit: phase gates and death as for a sword hit) and
 // returnPosture, flinches the head and emits dragon:returned; it never interrupts either. The field
 // is cleared on phase changes, death, reset, and fizzles when the wyrm's posture breaks.
@@ -92,7 +92,7 @@ export class Bullets {
       tt: Infinity, // s until the next spoke reaches the hero (Infinity: none coming)
       headline: false, // the first crossing is announced by the attack's headline beat
       // spoke i lies at ang + offs[i]. follow: the spokes are tongues of a breath (the Scouring
-      // breath, ADR-046): the attack sets origin, ang and the turn rate every frame (aimWheel);
+      // breath, ADR-050): the attack sets origin, ang and the turn rate every frame (aimWheel);
       // otherwise the wheel turns itself (speed, one reversal) with spokes evenly round
       offs: new Float64Array(8), follow: false, om: 0, px: 0, pz: 0, // px / pz: the pivot it turns about
     };

@@ -47,7 +47,7 @@ export const DEFENSE = Object.freeze({
   // --- parry: tap RMB shortly before impact
   parryWindow: 0.22, // s between the RMB press and the impact
   // a parry pressed this close before the impact is PERFECT (player:parry.perfect). Today only
-  // bullets use it: a perfectly parried ember / wisp flies back as a damaging shot (ADR-047)
+  // bullets use it: a perfectly parried ember / wisp flies back as a damaging shot (ADR-051)
   perfectParryWindow: 0.08,
   parryRearm: 0.25, // s RMB must be released before a new press can parry again (anti-mash)
   parryArc: (110 * Math.PI) / 180, // the attacker must be within this cone in front of the defender
