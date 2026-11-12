@@ -147,7 +147,7 @@ function build() {
   const takeHit = game.player.takeHit.bind(game.player);
   game.player.takeHit = (h) => {
     const r = takeHit(h);
-    G.hits.push({ t: game.time, r, attack: h?.attack, tell: h?.tell, damage: h?.damage });
+    G.hits.push({ t: game.time, r, attack: h?.attack, tell: h?.tell, damage: h?.damage, stop: game.hitstopTimer, flash: game.flow?.grade?.flash ?? 0 });
     return r;
   };
   game.cameraRig.snap(game.player.position);
@@ -644,6 +644,176 @@ async function scenarioWin() {
   return G;
 }
 
+// ================================================================== scenario: pressure
+async function scenarioPressure() {
+  out('\n== scenario PRESSURE (he never cuts at air; he runs a kiting hero down; strings stop; a flask is punished) ==');
+  const G = build();
+  duel(G, { dist: 3, ai: true });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.god = true;
+  // (1) a hero who stands his ground and answers every tell: every glint is a blow that reaches him
+  //     (the reds the bot rolls across leave the zone by design: only the others count)
+  G.defend = makeDefender(G);
+  let flashes = 0;
+  const h0 = G.hits.length;
+  G.watch = (n, e) => { if (n === 'combat:flash' && e?.source === 'dragon' && e.tell !== TELL.RED && e.attack !== 'ashCrescent' && !e.hazard) flashes++; };
+  run(G, 40, (GG) => {
+    input.axis = { x: 0, y: 0 };
+    game.mouseGround.set(d.position.x, 0, d.position.z);
+    GG.defend.act();
+  });
+  G.watch = null;
+  G.defend = null;
+  const met = G.hits.slice(h0).filter((h) => h.attack !== 'ashCrescent' && h.tell !== TELL.RED).length;
+  assert(flashes >= 25 && met >= flashes - 1, `standing his ground, every glint is a blow that reaches the hero: ${met} met of ${flashes} non-red flashes`);
+  settle(G);
+  // (2) a kiting hero, sprinting round the courtyard: he runs him down (his sprint beats the hero's)
+  home(G);
+  place(G, 6);
+  run(G, 0.1);
+  let minD = 99, topSpeed = 0, win = null;
+  const k0 = G.hits.length;
+  // his speed over 0.25 s windows of game time (a hit-stop frame's displacement / dt means nothing)
+  const speedWin = () => {
+    if (!win) win = { t: game.time, x: d.position.x, z: d.position.z };
+    else if (game.time - win.t >= 0.25) {
+      topSpeed = Math.max(topSpeed, Math.hypot(d.position.x - win.x, d.position.z - win.z) / (game.time - win.t));
+      win = { t: game.time, x: d.position.x, z: d.position.z };
+    }
+  };
+  input.hold('ShiftLeft');
+  const ktrace = [];
+  run(G, 9, () => {
+    speedWin();
+    if (process.env.ABYSS_TRACE) ktrace.push(`${d.mode === 'act' ? d.brain.act.name : d.mode === 'react' ? d.brain.react.kind : d.mode}`);
+    const R = Math.hypot(p.position.x, p.position.z) || 1;
+    const tx = -p.position.z / R, tz = p.position.x / R; // the tangent of a circle round the middle
+    const rr = (8 - R) * 0.6; // and back toward radius 8
+    const vx = tx + (p.position.x / R) * rr, vz = tz + (p.position.z / R) * rr, l = Math.hypot(vx, vz) || 1;
+    input.axis = { x: vx / l, y: -vz / l };
+    minD = Math.min(minD, Math.hypot(d.position.x - p.position.x, d.position.z - p.position.z));
+  });
+  input.release('ShiftLeft');
+  input.axis = { x: 0, y: 0 };
+  const caught = G.hits.length - k0;
+  if (process.env.ABYSS_TRACE) out('     kite', ktrace.filter((x, i, A) => x !== A[i - 1]).join(' '));
+  // (a hero sprinting sideways at full speed beats a thrust's line now and then: seeds land 1–7 blows)
+  assert(topSpeed > 7.4 && minD < 1.5 && caught >= 1, `a hero sprinting circles is run down: his top speed ${topSpeed.toFixed(1)} m/s (the hero's sprint 7.2), closest ${minD.toFixed(2)} m, ${caught} blows reached him in 9 s`);
+  settle(G);
+  // (3) a string whose next hit can no longer reach: it stops, and he gives chase
+  home(G);
+  place(G, 2.2);
+  d.brain.gapT = 99;
+  run(G, 0.2);
+  let lastFlash = -1, firstImpact = -1;
+  G.watch = (n, e) => {
+    if (n === 'combat:flash' && e?.attack === 'ashRain') {
+      lastFlash = game.time;
+      if (firstImpact < 0) firstImpact = game.time + TUNING.flashLead;
+    }
+  };
+  d.debug.trigger('ashRain');
+  run(G, 2, null, () => firstImpact > 0 && game.time > firstImpact + 0.02);
+  // the hero is suddenly far away (a long roll, a Ghostep elsewhere)
+  const away = Math.atan2(p.position.x - d.position.x, p.position.z - d.position.z);
+  p.debug.teleport(d.position.x + Math.sin(away) * 11, d.position.z + Math.cos(away) * 11);
+  const tAway = game.time;
+  topSpeed = 0;
+  win = null;
+  let next = null;
+  run(G, 1.2, () => {
+    speedWin();
+    if (!next && d.mode === 'act' && d.brain.act?.name !== 'ashRain') next = { name: d.brain.act.name, dist: Math.hypot(d.position.x - p.position.x, d.position.z - p.position.z) };
+  });
+  const sprint = topSpeed;
+  G.watch = null;
+  assert(lastFlash < tAway + 0.05 && d.brain.act?.name !== 'ashRain', `the Rain of Ashes stops when the hero is out of its reach (no flash after; he is ${d.mode}${d.brain.act ? ' ' + d.brain.act.name : ''})`);
+  const reaches = next && MOVES[next.name].band[0] <= next.dist && next.dist <= MOVES[next.name].band[1];
+  assert(sprint > 7.4 || reaches, `and he goes after him: ${next ? `${next.name} from ${next.dist.toFixed(1)} m (its band ${MOVES[next.name].band.join('–')})` : `a sprint at ${sprint.toFixed(1)} m/s`}`);
+  settle(G);
+  // (4) a hero drinking a flask from 7 m: he comes at once (a move that covers ground, or a sprint into one)
+  home(G);
+  place(G, 7);
+  d.brain.gapT = 4;
+  run(G, 0.3);
+  p.hp = 60;
+  input.tap('KeyF');
+  let punished = null;
+  const tF = game.time;
+  run(G, 1.6, null, () => {
+    if (d.mode === 'act' && d.brain.act && !punished) punished = { name: d.brain.act.name, t: game.time - tF };
+    return !!punished;
+  });
+  assert(!!punished && punished.t < 1.4, `a flask drunk 7 m away is punished: ${punished ? `${punished.name} after ${punished.t.toFixed(2)} s` : 'nothing'} (his breather was 4 s)`);
+  return G;
+}
+
+// ================================================================== scenario: impact
+async function scenarioImpact() {
+  out('\n== scenario IMPACT (hit stun both ways, the parry layered) ==');
+  const G = build();
+  duel(G, { dist: 2.4 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.god = true;
+  const strike = (heavy = false) => d.takeHit({ damage: heavy ? 40 : 20, part: 'body', heavy, poise: heavy ? 30 : 10, point: { x: d.position.x, y: 1.2, z: d.position.z } });
+  // (1) a blow landed in his windup: a freeze and a jolt, the move goes on
+  d.debug.trigger('fallingAsh');
+  const A = d.brain.act;
+  run(G, A.beats[0].impact - 0.12);
+  game.hitstopTimer = 0;
+  const r1 = strike(false);
+  assert(r1 > 0 && d.brain.act === A && d.mode === 'act', `a cut that lands in his windup does not cancel it (${r1} damage, still ${d.brain.act?.name})`);
+  assert(game.hitstopTimer >= TUNING.hitStun.light.stop - 1e-6 && d.jolt > 0.5, `it freezes the frame (${game.hitstopTimer.toFixed(3)} s) and jolts him (${d.jolt.toFixed(2)})`);
+  settle(G);
+  // (2) caught in his recovery: knocked out of it (a heavy blow staggers)
+  for (const [heavy, want] of [[false, 'flinch'], [true, 'stagger']]) {
+    home(G);
+    place(G, 2.2);
+    run(G, 0.1);
+    d.debug.trigger('fallingStar');
+    const B = d.brain.act;
+    run(G, 3, null, () => B.t > B.recoveryStart + 0.05 || d.brain.act !== B);
+    strike(heavy);
+    assert(d.brain.react?.kind === want, `a ${heavy ? 'heavy' : 'light'} blow in his recovery: he ${want}s (${d.brain.react?.kind ?? d.mode})`);
+    settle(G);
+  }
+  // (3) his blow lands on the hero: a freeze too
+  home(G);
+  place(G, 2.2);
+  run(G, 0.2);
+  const j0 = G.hits.length;
+  game.hitstopTimer = 0;
+  d.debug.trigger('fallingStar');
+  run(G, 2, null, () => G.hits.slice(j0).some((h) => h.r === RESULT.HIT));
+  const hurtStop = G.hits.slice(j0).find((h) => h.r === RESULT.HIT)?.stop ?? 0;
+  assert(hurtStop >= 0.08, `a blow that lands on the hero freezes the frame (${hurtStop.toFixed(3)} s)`);
+  settle(G);
+  // (4) the parry, layered: a freeze, a flash; a perfect one adds its slow motion
+  for (const perfect of [false, true]) {
+    home(G);
+    place(G, 2.2);
+    run(G, 0.3);
+    const seen = [];
+    const q0 = G.hits.length;
+    G.watch = (n, e) => { if (n === 'game:cinematic') seen.push(e?.kind); };
+    answerMove(G, 'swallow', (left) => {
+      if (left > (perfect ? 0.05 : 0.12)) return false;
+      input.up(2);
+      input.click(2);
+      return true;
+    }, 0.9);
+    G.watch = null;
+    const ph = G.hits.slice(q0).find((h) => h.r === RESULT.PARRIED);
+    const stop = ph?.stop ?? 0, flash = ph?.flash ?? 0;
+    if (perfect) assert(seen.includes('perfectParry') && stop >= 0.14 && flash > 0.6, `a perfect parry: freeze ${stop.toFixed(3)} s, flash ${flash.toFixed(2)}, slow motion (${seen.join(', ')})`);
+    else assert(stop >= 0.095 && flash > 0.2 && !seen.includes('perfectParry'), `a parry: freeze ${stop.toFixed(3)} s, a flash ${flash.toFixed(2)}, no slow motion`);
+    settle(G);
+  }
+  return G;
+}
+
 // ================================================================== scenario: moments
 /** Force `name` and answer each of its hits: onFlash(seconds to impact, flash) every frame from
  *  the hit's flash until it returns true. Keeps any watcher already set (it still sees events). */
@@ -854,7 +1024,7 @@ async function scenarioProbe() {
   return G;
 }
 
-const SCENARIOS = { probe: scenarioProbe, moments: scenarioMoments, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
+const SCENARIOS = { probe: scenarioProbe, moments: scenarioMoments, pressure: scenarioPressure, impact: scenarioImpact, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());

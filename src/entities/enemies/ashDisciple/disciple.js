@@ -91,7 +91,9 @@ export class AshDisciple {
     this._tip = new THREE.Vector3();
     this._tipPrev = new THREE.Vector3();
     this._hilt = new THREE.Vector3();
+    this._hiltPrev = new THREE.Vector3();
     this._clash = new THREE.Vector3();
+    this.jolt = 0; // the hit jolt 0..1 (TUNING.hitStun; the pilot's `recoil`, poses.js jolt)
     this._tipOk = false;
     this._lastParry = -9;
     this._lastHurtPt = new THREE.Vector3();
@@ -206,6 +208,12 @@ export class AshDisciple {
       dz = p ? this.position.z - p.z : 1;
     }
     const l = Math.hypot(dx, dz) || 1;
+    // hit stun: a freeze-frame, his chest and head snapped back (poses.js jolt), a shove along the
+    // blow; it never cancels a windup (only footwork and his recovery: brain.onStruck)
+    const HS = TUNING.hitStun, hs = heavy || crushed ? HS.heavy : HS.light;
+    this.hitstop(crit ? Math.max(hs.stop, HS.critStop) : hs.stop, 0.03);
+    this.jolt = Math.max(this.jolt, hs.jolt);
+    if (this.mode !== 'broken' && this.position.y < 0.2) this.moveBy((dx / l) * hs.push, (dz / l) * hs.push);
     const pt = o.point;
     if (pt && Number.isFinite(pt.x + pt.y + pt.z)) {
       this.fx.hitSpark(pt.x, pt.y, pt.z, dx / l, dz / l, heavy || crit);
@@ -506,8 +514,10 @@ export class AshDisciple {
     if (Number.isFinite(x + y + z)) this.fx.clash(x, y, z, heavy);
     else if (point) this.fx.clash(point.x, point.y, point.z, heavy);
     this.emit('dragon:guard', { heavy });
-    this.hitstop(G.clashStop, 0.06);
-    this.game.shake?.(heavy ? 0.16 : 0.08);
+    // steel on steel: a freeze, a kick, his blade jolted
+    this.hitstop(heavy ? G.clashStop * 1.6 : G.clashStop, 0.03);
+    this.game.shake?.(heavy ? 0.3 : 0.18);
+    this.jolt = Math.max(this.jolt, heavy ? 0.5 : 0.3);
     if (!this.broken) this.brain.onGuarded();
   }
 
@@ -554,6 +564,8 @@ export class AshDisciple {
   // ---------------------------------------------------------------- frame
   _animate(dt) {
     const pl = this.pilot, b = this.brain;
+    this.jolt = Math.max(0, this.jolt - dt * TUNING.hitStun.joltDecay);
+    pl.recoil = this.jolt;
     pl.yaw = this.yaw;
     pl.stateT = b.clipT;
     pl.animT = b.clipT;
@@ -613,11 +625,15 @@ export class AshDisciple {
   _drawnPoints() {
     const s = this.rig.sword;
     this._tipPrev.copy(this._tip);
+    this._hiltPrev.copy(this._hilt);
     const ok = this._tipOk;
     this._hilt.set(0, 0, JIAN.guard).applyMatrix4(s.matrixWorld);
     this._tip.set(0, 0, JIAN.tip).applyMatrix4(s.matrixWorld);
-    this._tipOk = Number.isFinite(this._tip.x + this._tip.y + this._tip.z);
-    if (!ok) this._tipPrev.copy(this._tip);
+    this._tipOk = Number.isFinite(this._tip.x + this._tip.y + this._tip.z) && Number.isFinite(this._hilt.x + this._hilt.y + this._hilt.z);
+    if (!ok) {
+      this._tipPrev.copy(this._tip);
+      this._hiltPrev.copy(this._hilt);
+    }
   }
 
   /** Where a beat's glint pops: the blade's tip (or at his feet for a ring). */

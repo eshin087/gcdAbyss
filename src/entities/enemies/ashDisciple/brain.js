@@ -57,6 +57,7 @@ export class DuelBrain {
   constructor(d) {
     this.d = d;
     this.aiEnabled = true;
+    this._ld = { dx: 0, dz: 0, dist: 0, ang: 0 };
     this.reset();
   }
 
@@ -104,10 +105,28 @@ export class DuelBrain {
   }
 
   _sense() {
-    const d = this.d, p = d.game.player?.position;
+    const d = this.d, pl = d.game.player, p = pl?.position;
     if (!p || !Number.isFinite(p.x + p.z)) return null;
     const dx = p.x - d.position.x, dz = p.z - d.position.z;
-    return { dx, dz, dist: Math.hypot(dx, dz), ang: Math.atan2(dx, dz), p };
+    // the hero's own movement (his intent, not his displacement: steady through a hit-stop), capped
+    let vx = Number.isFinite(pl.vel?.x) ? pl.vel.x : 0, vz = Number.isFinite(pl.vel?.z) ? pl.vel.z : 0;
+    const v = Math.hypot(vx, vz);
+    if (v > 9) {
+      vx *= 9 / v;
+      vz *= 9 / v;
+    }
+    return { dx, dz, dist: Math.hypot(dx, dz), ang: Math.atan2(dx, dz), p, vx, vz };
+  }
+
+  /** Where the hero will be `secs` from now if he keeps moving (relative to him): leads every
+   *  step-in, windup track and dash, so a running hero is met, not chased. */
+  _lead(s, secs, out = this._ld) {
+    const k = clamp(secs, 0, 0.5);
+    out.dx = s.dx + s.vx * k;
+    out.dz = s.dz + s.vz * k;
+    out.dist = Math.hypot(out.dx, out.dz);
+    out.ang = Math.atan2(out.dx, out.dz);
+    return out;
   }
 
   // ---------------------------------------------------------------- frame
@@ -154,8 +173,15 @@ export class DuelBrain {
   afterPose(dt) {
     const d = this.d, a = this.act;
     if (d.mode === 'dead') return;
-    const t0 = d._tipPrev, t1 = d._tip;
-    if (a && a.striking && a.t >= a.striking.impact - 0.05 && a.t <= a.striking.end + 0.06) d.fx.trail(t0.x, t0.y, t0.z, t1.x, t1.y, t1.z, d.phase >= 2, dt);
+    const t1 = d._tip;
+    // the blade's sweep from the snap out of the cock through the follow-through
+    if (a && d._tipOk) {
+      for (const b of a.beats) {
+        if (b.feint || a.t < b.impact - 0.32 * b.W - 0.02 || a.t > b.end + 0.6 * b.A + 0.05) continue;
+        d.fx.sweep(d._hiltPrev, d._tipPrev, d._hilt, d._tip, d.phase >= 2);
+        break;
+      }
+    }
     if (d.kindle > 0.05 && d.mode !== 'dying') d.fx.emberBlade(d._hilt.x, d._hilt.y, d._hilt.z, t1.x, t1.y, t1.z, dt, d.kindle);
     if (d.mode === 'broken') {
       const h = d._hs[0];
@@ -373,54 +399,60 @@ export class DuelBrain {
         return;
       }
     }
+    // a hero drinking a flask is punished: no breather, the moves that close distance favoured
+    const punish = pl?.state === 'heal';
     this.gapT -= dt;
+    if (punish) this.gapT = Math.min(this.gapT, 0);
     if (this.gapT <= 0) {
-      const name = this._choose(s.dist);
+      const name = this._choose(s.dist, punish);
       if (name) {
         this.startAct(name);
         return;
       }
     }
-    // movement
+    // movement: inside striking range he circles (guard up) while the breather runs; outside it he
+    // closes: a run, and past sprintAt a sprint (faster than the hero's): kiting him doesn't work
     let speed = 0, dirX = 0, dirZ = 0;
     const fx = s.dx / (s.dist || 1), fz = s.dz / (s.dist || 1);
-    if (s.dist > M.far) {
+    if (s.dist > M.sprintAt || (punish && s.dist > M.band[1])) {
+      speed = M.sprint;
+      dirX = fx;
+      dirZ = fz;
+    } else if (s.dist > M.band[1]) {
       speed = M.run;
       dirX = fx;
       dirZ = fz;
     } else if (s.dist < M.near && this.backCool <= 0) {
-      this.backCool = 2.2;
-      if (Math.random() < 0.6) {
+      this.backCool = 2.4;
+      if (Math.random() < M.backChance) {
         this.startReact('backstep');
         return;
       }
-    } else if (s.dist > M.band[1]) {
-      speed = M.walk * 1.2;
-      dirX = fx;
-      dirZ = fz;
-    } else if (s.dist < M.band[0]) {
-      speed = M.walk * 0.9;
-      dirX = -fx;
-      dirZ = -fz;
     } else {
       this.strafeT -= dt;
       if (this.strafeT <= 0) {
         this.strafeDir = Math.random() < 0.7 ? -this.strafeDir : this.strafeDir;
         this.strafeT = M.strafeSwitch[0] + (M.strafeSwitch[1] - M.strafeSwitch[0]) * Math.random();
       }
+      // circling, drifting in or out toward the middle of the band
+      const mid = (M.band[0] + M.band[1]) / 2, inward = clamp((s.dist - mid) / 0.8, -1, 1) * 0.6;
       speed = M.walk;
-      dirX = -fz * this.strafeDir;
-      dirZ = fx * this.strafeDir;
+      dirX = -fz * this.strafeDir + fx * inward;
+      dirZ = fx * this.strafeDir + fz * inward;
+      const l = Math.hypot(dirX, dirZ) || 1;
+      dirX /= l;
+      dirZ /= l;
     }
     const x0 = d.position.x, z0 = d.position.z;
     d.moveBy(dirX * speed * dt, dirZ * speed * dt);
     // pressed against a wall while circling: circle the other way
-    if (speed > 0 && Math.hypot(d.position.x - x0, d.position.z - z0) < speed * dt * 0.3) this.strafeDir = -this.strafeDir;
+    if (speed > 0 && speed <= M.walk && Math.hypot(d.position.x - x0, d.position.z - z0) < speed * dt * 0.3) this.strafeDir = -this.strafeDir;
     d.groundVelSet((d.position.x - x0) / dt, (d.position.z - z0) / dt);
   }
 
-  /** A weighted pick of the moves he can use from `dist` (phase, band, cooldown; recent picks damped). */
-  _choose(dist) {
+  /** A weighted pick of the moves he can use from `dist` (phase, band, cooldown; recent picks damped).
+   *  `punish` (the hero drinks): the moves that cover ground (a dash, a leap, the qi) weigh more. */
+  _choose(dist, punish = false) {
     const d = this.d;
     let total = 0;
     const pool = [];
@@ -434,6 +466,7 @@ export class DuelBrain {
       if (!(w > 0)) continue;
       if (this.last[0] === name) w *= 0.3;
       else if (this.last[1] === name) w *= 0.65;
+      if (punish && def.beats.some((b) => b.dash?.max >= 3 || b.leap || b.release)) w *= TUNING.punish.weight;
       pool.push([name, w]);
       total += w;
     }
@@ -490,6 +523,15 @@ export class DuelBrain {
         d.fx.warnRing(c.x, c.z, cur.def.ring, k, dt);
       }
     }
+    // a string's next hit: if the hero is gone out of its reach (it can step in `close` m, dash its
+    // `dash.max`), the string stops there and he gives chase instead of cutting at air
+    if (cur && !cur.checked && cur.hit > 0 && t >= cur.start && s && this.aiEnabled) {
+      cur.checked = true;
+      if (s.dist > this._reach(cur) + 0.5) {
+        this._toFoot(0);
+        return;
+      }
+    }
     if (cur) this._motion(cur, t, dt, s);
     // the hits: the zone through the active frames, one result per beat
     for (const b of a.beats) {
@@ -533,9 +575,22 @@ export class DuelBrain {
   _motion(b, t, dt, s) {
     const d = this.d, D = b.def, u = uAt(b, t);
     const trackUntil = D.track ?? 0.75;
-    if (s && u < trackUntil && !this.leap) d.yaw = turnToward(d.yaw, s.ang, perPhase(TUNING.move.turn, d.phase) * 1.2 * dt);
+    const left = Math.max(b.impact - t, dt);
+    const L = s ? this._lead(s, left) : null;
+    if (L && u < trackUntil && !this.leap) d.yaw = turnToward(d.yaw, L.ang, perPhase(TUNING.move.trackTurn, d.phase) * dt);
     const fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
     const x0 = d.position.x, z0 = d.position.z;
+    // close-in: through the windup he steps in toward the hero (at most b.close m), arriving at the
+    // impact where the zone reaches him: a cut is never thrown at air, and the lunge reads as the tell
+    if (b.close > 0 && L && u >= 0.15 && t < b.impact && !this.leap) {
+      const gap = L.dist - this._ideal(D.zone);
+      const budget = b.close - (b.closed ?? 0);
+      if (gap > 0.02 && budget > 0) {
+        const step = Math.min(Math.min(gap / left, TUNING.close.speed) * dt, budget, gap);
+        b.closed = (b.closed ?? 0) + step;
+        d.moveBy((L.dx / (L.dist || 1)) * step, (L.dz / (L.dist || 1)) * step);
+      }
+    }
     if (D.travel) {
       const prev = b._trav ?? 0, now = track(D.travel, u);
       b._trav = now;
@@ -543,7 +598,7 @@ export class DuelBrain {
     }
     if (D.dash && u >= D.dash.from) {
       if (!b._dash) {
-        const ax = s ? s.dx : fx, az = s ? s.dz : fz, dist = s ? s.dist : 0;
+        const ax = L ? L.dx : fx, az = L ? L.dz : fz, dist = L ? L.dist : 0;
         const l = Math.hypot(ax, az) || 1;
         if (s) d.yaw = Math.atan2(ax, az);
         b._dash = { x: d.position.x, z: d.position.z, dx: ax / l, dz: az / l, len: clamp(dist - D.dash.stop, 0, D.dash.max), done: 0 };
@@ -556,6 +611,19 @@ export class DuelBrain {
     if (D.leap) this._leap(b, u, s);
     else if (D.lift) d.position.y = Math.max(0, track(D.lift, u));
     d.groundVelSet((d.position.x - x0) / Math.max(dt, 1e-4), (d.position.z - z0) / Math.max(dt, 1e-4));
+  }
+
+  /** How far off a zone wants the hero at the impact (its centre of reach). */
+  _ideal(z) {
+    if (!z) return 1.5;
+    if (z.kind === 'ring') return z.r * 0.55;
+    return z.r * (z.kind === 'line' ? 0.72 : 0.66);
+  }
+
+  /** The furthest the hero can be at beat b's windup start and still be hit (zone + step-in + dash). */
+  _reach(b) {
+    const z = b.def.zone, pr = this.d.game.player?.radius ?? 0.45;
+    return (z?.r ?? 2) + pr + (b.close ?? 0) + (b.def.dash?.max ?? 0);
   }
 
   /** Heaven-Splitting Fall: the ring follows the hero until `lock`, he comes down on it at u = 1. */
@@ -676,6 +744,12 @@ export class DuelBrain {
   /** A strike landed on him outside his guard: in footwork he flinches, and breaks off after a few. */
   onStruck(heavy) {
     const d = this.d, S = this.struck, F = TUNING.flinch;
+    // caught in his recovery: knocked out of it (a heavy blow staggers him)
+    const a = this.act;
+    if (d.mode === 'act' && a && !a.def.transition && a.t >= a.recoveryStart) {
+      this.startReact(heavy ? 'stagger' : 'flinch');
+      return;
+    }
     if (d.mode !== 'foot' && !(d.mode === 'react' && (this.react?.kind === 'flinch' || this.react?.kind === 'clash'))) return;
     if (d.time - S.t > F.window) S.n = 0;
     S.t = d.time;

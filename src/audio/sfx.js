@@ -487,6 +487,19 @@ export const SFX = {
       burst(v, t, 'white', 'bandpass', 4200, 1.5, 0.5 * k, 0.05, 0.0006);
       burst(v, t, 'white', 'highpass', 8000, 0.7, 0.2 * k, 0.08, 0.0005);
       thump(v, t, 160, 70, 0.08, 0.5 * k, 0.15);
+      if (o.melee) {
+        // a blade met (not a bullet): the weight of the blow behind it: a deep body, a low ring,
+        // a cracking edge (owner, 2026-11-12: "make the parry effect epic and impactful")
+        thump(v, t, 120, 40, 0.14, 0.85 * k, 0.32);
+        ping(v, t, 'sine', f0 * 0.5, 0.12 * k, 0.9 * len, 0.001);
+        burst(v, t, 'pink', 'lowpass', 1400, 0.8, 0.4 * k, 0.12);
+      }
+      if (o.perfectMelee) {
+        // perfect: a sharper crack and a high bright bell that rings through the slow motion
+        burst(v, t, 'white', 'highpass', 5200, 1.2, 0.45, 0.03, 0.0004);
+        ping(v, t + 0.003, 'sine', f0 * 3, 0.08, 1.3, 0.001);
+        ping(v, t + 0.003, 'triangle', f0 * 4.5, 0.035, 0.9, 0.001);
+      }
       if (ch >= 2) {
         // the chain's ring: a high bell on the clang's pitch, longer and brighter as it climbs
         const a = 0.05 + 0.012 * Math.min(6, ch);

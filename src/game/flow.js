@@ -147,7 +147,11 @@ export class GameFlow {
       this.stats.hits++;
     });
     ev?.on('player:dodge', () => this.stats.dodges++);
-    ev?.on('player:parry', () => this.stats.parries++);
+    ev?.on('player:parry', (d) => {
+      this.stats.parries++;
+      // a blade met: a white flash on the clash (a perfect parry: a bright one); a deflected bullet: none
+      if (!d?.light) this.grade.flashPulse(d?.perfect ? 0.85 : d?.tell === 'blue' ? 0.4 : 0.28);
+    });
     ev?.on('player:block', () => this.stats.blocks++);
     ev?.on('player:guardBreak', () => this.stats.guardBreaks++);
     // a perfect dodge and its Ghostep blink normally arrive together: count / pulse once

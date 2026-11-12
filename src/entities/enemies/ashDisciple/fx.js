@@ -22,6 +22,13 @@ const lightColor = (c) => {
   return [c[0] / m, c[1] / m, c[2] / m];
 };
 
+// his sweep trail (sweep): points along the blade (0 hilt … 1 tip) and the colours (linear HDR)
+const SWEEP_ALONG = [0.5, 0.68, 0.84, 1.0];
+const SWEEP = {
+  steel: { body: [1.5, 1.55, 1.75], core: [2.6, 2.65, 2.9], end: [0.16, 0.16, 0.2] },
+  ember: { body: [2.6, 0.95, 0.28], core: [3.4, 1.9, 0.7], end: [0.45, 0.07, 0.01] },
+};
+
 export class DiscipleFx {
   constructor(d) {
     this.d = d;
@@ -216,19 +223,21 @@ export class DiscipleFx {
   parrySpark(x, y, z, tell = TELL.NORMAL) {
     if (!Number.isFinite(x + y + z)) return;
     const big = tell === TELL.BLUE;
-    this._spawn(this.add, { x, y, z, life: big ? 0.2 : 0.16, size: big ? 1.1 : 0.85, sizeEnd: 0.2, glyph: '*', color: [WHITE[0] * 1.5, WHITE[1] * 1.5, WHITE[2] * 1.5], colorEnd: GOLD, alpha: 1, alphaEnd: 0 });
+    this._spawn(this.add, { x, y, z, life: big ? 0.14 : 0.1, size: big ? 0.7 : 0.55, sizeEnd: 0.15, glyph: '*', color: WHITE, colorEnd: GOLD, alpha: 1, alphaEnd: 0 });
     for (let i = 0; i < (big ? 30 : 22); i++) {
       const a = this.rnd() * Math.PI * 2, sp = this.rand(5, big ? 14 : 12);
+      const vx = Math.cos(a) * sp, vy = this.rand(-1, 6), vz = Math.sin(a) * sp, pre = this.rand(0.02, 0.045); // (mid-burst in the freeze)
       this._spawn(this.add, {
-        x, y, z, vx: Math.cos(a) * sp, vy: this.rand(-1, 6), vz: Math.sin(a) * sp,
+        x: x + vx * pre, y: y + vy * pre, z: z + vz * pre, vx, vy, vz,
         life: this.rand(0.2, 0.45), size: this.rand(0.22, 0.4), sizeEnd: 0.05, glyph: "*+x'`",
         color: this.rnd() < 0.5 ? WHITE : GOLD, colorEnd: SPARK_END, alpha: 1, alphaEnd: 0, drag: 3, gravity: 8, stretch: 0.3,
       });
     }
     for (let i = 0; i < (big ? 14 : 10); i++) {
       const a = this.rnd() * Math.PI * 2, sp = this.rand(2.5, 7);
+      const vx = Math.cos(a) * sp, vy = this.rand(3, 8), vz = Math.sin(a) * sp, pre = this.rand(0.02, 0.045);
       this._spawn(this.add, {
-        x, y, z, vx: Math.cos(a) * sp, vy: this.rand(3, 8), vz: Math.sin(a) * sp,
+        x: x + vx * pre, y: y + vy * pre, z: z + vz * pre, vx, vy, vz,
         life: this.rand(0.5, 0.9), size: this.rand(0.14, 0.24), sizeEnd: 0.04, glyph: ".'`•",
         color: this.rnd() < 0.35 ? WHITE : GOLD, colorEnd: SPARK_END, alpha: 1, alphaEnd: 0, drag: 0.9, gravity: -17, flicker: 0.3,
       });
@@ -278,6 +287,51 @@ export class DiscipleFx {
 
   // ---------------------------------------------------------------- the blade
   /** The swing's trail: glyphs left along the tip's path through the active frames. */
+  /**
+   * His blade's sweep through a strike: a crescent of strokes laid along each blade point's path
+   * between last frame's blade (pa hilt → pb tip) and this frame's (a → b), sub-stepped so a fast
+   * cut reads as one continuous arc; a bright rim at the tip. Pale steel; ember once he is kindled.
+   */
+  sweep(pa, pb, a, b, ember = false) {
+    const add = this.add;
+    if (!add) return;
+    if (!Number.isFinite(pa.x + pa.y + pa.z + pb.x + pb.y + pb.z + a.x + a.y + a.z + b.x + b.y + b.z)) return;
+    const tipStep = Math.hypot(b.x - pb.x, b.y - pb.y, b.z - pb.z);
+    if (tipStep < 0.04 || tipStep > 6) return; // a still blade leaves nothing (a teleport: nothing either)
+    const nSub = Math.min(8, Math.max(2, Math.ceil(tipStep / 0.22)));
+    const U = this.game.U, Rg = U?.uCamRight?.value, Up = U?.uCamUp?.value;
+    const rx = Rg?.x ?? 1, ry = Rg?.y ?? 0, rz = Rg?.z ?? 0, ux = Up?.x ?? 0, uy = Up?.y ?? 1, uz = Up?.z ?? 0;
+    const C = ember ? SWEEP.ember : SWEEP.steel;
+    for (let s = 1; s <= nSub; s++) {
+      const t = s / nSub, t0 = (s - 1) / nSub;
+      for (const f0 of SWEEP_ALONG) {
+        const f = f0 < 0.97 ? f0 + this.rand(-0.04, 0.04) : f0;
+        // this point now and a sub-step earlier (hilt and tip lerped between the frames)
+        const hx = pa.x + (a.x - pa.x) * t, hy = pa.y + (a.y - pa.y) * t, hz = pa.z + (a.z - pa.z) * t;
+        const tx = pb.x + (b.x - pb.x) * t, ty = pb.y + (b.y - pb.y) * t, tz = pb.z + (b.z - pb.z) * t;
+        const qhx = pa.x + (a.x - pa.x) * t0, qhy = pa.y + (a.y - pa.y) * t0, qhz = pa.z + (a.z - pa.z) * t0;
+        const qtx = pb.x + (b.x - pb.x) * t0, qty = pb.y + (b.y - pb.y) * t0, qtz = pb.z + (b.z - pb.z) * t0;
+        const x = hx + (tx - hx) * f, y = hy + (ty - hy) * f, z = hz + (tz - hz) * f;
+        const dx = x - (qhx + (qtx - qhx) * f), dy = y - (qhy + (qty - qhy) * f), dz = z - (qhz + (qtz - qhz) * f);
+        const step = Math.hypot(dx, dy, dz);
+        const outer = f > 0.97;
+        if (outer && (s & 1) && nSub > 3) continue; // a dotted bright rim
+        const sx = dx * rx + dy * ry + dz * rz, sy = dx * ux + dy * uy + dz * uz;
+        const rot = sx * sx + sy * sy > 1e-10 ? Math.atan2(sy, sx) - Math.PI / 2 : 0;
+        const size = 0.21 * (0.65 + 0.35 * f);
+        const o = this._rec(x, y, z, outer ? this.rand(0.1, 0.14) : this.rand(0.13, 0.21), size, size * 0.4, outer ? '+*' : ')|', outer ? C.core : C.body, C.end);
+        o.vx = this.rand(-0.1, 0.1);
+        o.vy = this.rand(0, 0.15);
+        o.vz = this.rand(-0.1, 0.1);
+        o.rot = rot;
+        o.stretch = step > 0.02 && !outer ? Math.min(3, (step / size) * 1.1) : 0;
+        o.alpha = outer ? 1 : 0.78 + 0.18 * f;
+        o.drag = 2.5;
+        add.spawn(o);
+      }
+    }
+  }
+
   trail(ax, ay, az, bx, by, bz, ember, dt) {
     if (!Number.isFinite(ax + ay + az + bx + by + bz)) return;
     const len = Math.hypot(bx - ax, by - ay, bz - az);

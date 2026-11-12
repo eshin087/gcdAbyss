@@ -74,6 +74,14 @@ export const TUNE = {
   mikiriToward: 0.55, // the roll's direction · against the attacker's facing (his thrust's line) must be at least this
   mikiriDur: 0.55,
   mikiriCancel: 0.18,
+  // impact (owner, 2026-11-12: "epic sword clashes", "more impactful hit stun, not weightless"): a
+  // blade's parry freezes the frame (normal / blue / perfect, s at ×0.02), throws a shockwave ring and
+  // kicks the camera; a PERFECT one adds a short slow motion (flow.cinematic) and a white flash. A
+  // blow that lands on the hero freezes it too (hurtStop / hurtStopBig).
+  parryStop: [0.1, 0.12, 0.15],
+  perfectParry: { slowmo: 0.35, dur: 0.36, zoom: -2.5, weight: 0.25 },
+  hurtStop: 0.085,
+  hurtStopBig: 0.13,
   plungeFade: 7, // 1/s: the plunge's reappear above the head resolves faster (it hangs only briefly)
   rollCoatKick: 0.7, // the coat tails fly out as the dodge starts
   gemGlintEvery: 1.8, // s between idle glints of the violet gem (± 40 %)
@@ -345,8 +353,8 @@ export class Player {
       this._hitstop(0.12);
       return RESULT.HIT;
     }
-    g.shake?.(guarded ? 0.06 : clamp(0.25 + dmg * 0.006, 0.25, 0.5));
-    if (big) this._hitstop(0.08);
+    g.shake?.(guarded ? 0.06 : clamp(0.3 + dmg * 0.008, 0.3, 0.6));
+    if (!guarded) this._hitstop(big ? TUNE.hurtStopBig : TUNE.hurtStop, 0.02);
 
     if (knockdown) {
       if (this.state !== 'knockdown') {
@@ -959,8 +967,21 @@ export class Player {
     this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE, D.n, -nx, -nz);
     const ret = light && !!perfect; // a bullet sent back (bullets.js reads deflect.perfect)
     if (ret) this.fx.perfectParry?.(this._v.x, this._v.y, this._v.z, -nx, -nz);
-    this._hitstop(light ? (ret ? TUNE.returnStop : 0.03) : 0.08);
-    g.shake?.(light ? (ret ? 0.16 : 0.1) : Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
+    if (light) {
+      this._hitstop(ret ? TUNE.returnStop : 0.03);
+      g.shake?.(ret ? 0.16 : 0.1);
+    } else {
+      // a blade met: a freeze-frame, a shockwave ring through the clash, a camera kick; perfect: a
+      // beat of slow motion on top (the blade lock's own moment replaces it when he locks)
+      const S = TUNE.parryStop, big = tell === TELL.BLUE;
+      this._hitstop(perfect ? S[2] : big ? S[1] : S[0], 0.02);
+      g.shake?.(Math.min(0.5, (perfect ? 0.42 : big ? 0.36 : 0.3) + 0.03 * (D.n - 1)));
+      this.fx.shockwave?.(this._v.x, this._v.y, this._v.z, big || perfect, perfect);
+      if (perfect) {
+        const P = TUNE.perfectParry;
+        g.flow?.cinematic?.({ x: this._v.x, z: this._v.z, slowmo: P.slowmo, dur: P.dur, zoom: P.zoom, weight: P.weight, kind: 'perfectParry' });
+      }
+    }
     this._emit('player:parry', { tell, attack, chain: D.n, light, perfect: !!perfect });
   }
 
