@@ -2097,11 +2097,12 @@ async function scenarioHero() {
   assert(r.coat.length === 6 && tails.length === 2 && strips === 12 && r.coat.every((C) => !C.def.flap),
     `coat: 6 panels (2 back tails split by a vent, 2 side, 2 front), ${strips} torn strips`);
   // the Shrouded set (ADR-043): the cloak's sheets ride the streamer springs (heavier than a ribbon:
-  // lag < 1), and the hood leaves the hair out (its five spring joints stay for the animator)
+  // lag < 1); under the hood only the gold fringe is built (Session 14: the other clusters poke
+  // through the cloth); the five spring joints stay for the animator
   {
-    const hairMeshes = Object.values(r.hair).reduce((n, j) => n + j.children.filter((o) => o.isMesh).length, 0);
-    assert(r.streamers?.length === 7 && r.streamers.every((S) => S.lag > 0 && S.lag < 1) && Object.keys(r.hair).length === 5 && hairMeshes === 0 && r.slots.head.length > 0,
-      `the cloak: ${r.streamers?.length} sheets on springs; the hood is on and the hair is not built (${hairMeshes} hair meshes, 5 hair joints)`);
+    const built = Object.entries(r.hair).filter(([, j]) => j.children.some((o) => o.isMesh)).map(([n]) => n);
+    assert(r.streamers?.length === 7 && r.streamers.every((S) => S.lag > 0 && S.lag < 1) && Object.keys(r.hair).length === 5 && built.join() === 'fringe' && r.slots.head.length > 0,
+      `the cloak: ${r.streamers?.length} sheets on springs; under the hood the hair clusters built are [${built.join(', ')}] of 5 joints`);
   }
   // clear of the wyrm (AI off): run, sprint, roll, light / backhand / slam, charge + thrust
   p.debug.teleport(d.position.x + 14, d.position.z + 14);
@@ -2239,6 +2240,157 @@ async function scenarioHero() {
     p.setLoadout(DEFAULT_LOADOUT);
     drive();
     assert(meshes() === n0 && finite(), `and back to the Shrouded set (${meshes()} meshes)`);
+  }
+  return G;
+}
+
+// ================================================================== scenario: two hands, the guard, the cloak, idle life
+async function scenarioHeroLife() {
+  out('\n== scenario HEROLIFE (two hands on every swing, the raised guard, the cloak vs the charged blade, idle actions) ==');
+  const { HERO_SCALE, DIM: HD } = await imp('src/entities/player/model.js');
+  const { SHROUD_SHEETS } = await imp('src/entities/player/gear/shroud.js');
+  const G = build();
+  const { game, input } = G;
+  fightSetup(G);
+  const p = game.player, d = game.dragon, r = p.rig, A = p.anim;
+  p.debug.god = true;
+  p.debug.teleport(d.position.x + 14, d.position.z + 14);
+  const v = new THREE.Vector3(), w = new THREE.Vector3(), q = new THREE.Vector3();
+  const finite = () => { let ok = true; p.object3d.traverse((o) => { const e = o.matrixWorld.elements; for (let i = 0; i < 16; i++) if (!Number.isFinite(e[i])) ok = false; }); return ok; };
+  // the off hand's wrist and its place on the grip (model metres)
+  const offGap = () => {
+    v.set(0, -HD.foreArm, 0).applyMatrix4(r.arms.L.fore.matrixWorld);
+    w.set(0, 0, -HD.offGrip).applyMatrix4(r.sword.matrixWorld);
+    return v.distanceTo(w) / HERO_SCALE;
+  };
+  const go = (s, each) => { for (let i = 0, n = Math.round(s / DT); i < n; i++) { G.tick(DT); each?.(); } };
+  go(0.5);
+
+  // (1) two hands on every swing: through each hit's active frames both hands are on the grip, the
+  // off hand within 3.5 cm of its place, closed round the grip (rig.offHand)
+  {
+    const seen = {};
+    const probe = () => {
+      const a = p.atk, def = a?.def;
+      if (p.state !== 'attack' || !def || def.kind !== 'light') return;
+      if (a.t < def.windup || a.t > def.windup + def.active) return;
+      const S = seen[def.name] ?? (seen[def.name] = { n: 0, two: 1, gap: 0, closed: true });
+      S.n++;
+      S.two = Math.min(S.two, A.cur[45]);
+      S.gap = Math.max(S.gap, offGap());
+      S.closed &&= !!r.offHand && r.offHand.grip.visible && !r.offHand.open.visible;
+    };
+    for (let k = 0; k < 5; k++) { input.click(0); go(k === 4 ? 0.7 : 0.4, probe); }
+    go(1.0);
+    input.axis = { x: 0, y: 1 };
+    input.hold('ShiftLeft');
+    go(0.9);
+    input.click(0);
+    input.release('ShiftLeft');
+    input.axis = { x: 0, y: 0 };
+    go(0.9, probe);
+    input.axis = { x: 0, y: 1 };
+    go(0.3);
+    input.tap('Space');
+    go(0.35);
+    input.axis = { x: 0, y: 0 };
+    input.click(0);
+    go(0.9, probe);
+    const names = Object.keys(seen);
+    out(`   ${names.map((n) => `${n} two ${seen[n].two.toFixed(2)} gap ${(seen[n].gap * 100).toFixed(1)} cm`).join(' · ')}`);
+    assert(['fallingCut', 'risingCut', 'whirl', 'stab', 'sprintSlash', 'rollCut'].every((n) => seen[n]?.n > 0),
+      `every light swing was probed in its active frames (${names.join(', ')})`);
+    assert(names.every((n) => seen[n].two > 0.95 && seen[n].gap < 0.035 && seen[n].closed),
+      'both hands on the grip through every light swing: twoHand > 0.95, the off hand within 3.5 cm of its place and closed round the grip');
+    go(1.0);
+    assert(!r.offHand.grip.visible && r.offHand.open.visible && A.cur[45] < 0.05, 'at rest the free hand lets go and hangs open again');
+  }
+
+  // (2) the guard: two hands, the blade raised across the body (> 40° up), the off hand on the grip
+  {
+    input.press(2);
+    go(0.35);
+    // the blade's direction from two of its points (the hero's matrices carry the drawn scale and the
+    // camera lean, so a decomposed world rotation would not be the blade's)
+    p.lean.on = false;
+    p.object3d.updateMatrixWorld(true);
+    v.set(0, 0, 0).applyMatrix4(r.sword.matrixWorld);
+    q.set(0, 0, 1).applyMatrix4(r.sword.matrixWorld).sub(v).normalize();
+    p.lean.on = true;
+    p.object3d.updateMatrixWorld(true);
+    const elev = Math.asin(Math.min(1, Math.max(-1, q.y))) * 57.3;
+    out(`   block: blade ${elev.toFixed(0)}° up, twoHand ${A.cur[45].toFixed(2)}, off hand ${(offGap() * 100).toFixed(1)} cm from its place`);
+    assert(p.state === 'block' && A.cur[45] > 0.95 && elev > 40 && offGap() < 0.035, `the guard: both hands, the blade raised ${elev.toFixed(0)}° (> 40°)`);
+    input.up(2);
+    go(0.8);
+  }
+
+  // (3) the charge: the drawn-back blade never passes through a cloak sheet (the streamer bound)
+  {
+    const m = new THREE.Matrix4();
+    let frames = 0, hit = 0;
+    const clip = () => {
+      frames++;
+      let any = false;
+      r.streamers.forEach((S, si) => {
+        const D = SHROUD_SHEETS[si];
+        if (!D) return;
+        for (let k = 0; k < 2; k++) {
+          m.copy(S.segs[k].matrixWorld).invert();
+          const L = D.len[k], R0 = k ? D.wrap + 0.25 * D.len[0] : D.wrap;
+          for (let i = 0; i <= 8; i++) {
+            v.set(0, 0, 0.35 + (0.75 * i) / 8).applyMatrix4(r.sword.matrixWorld).applyMatrix4(m);
+            const t = -v.y / L;
+            if (t < 0 || t > 1) continue;
+            const wd = D.w[k] + (D.w[k + 1] - D.w[k]) * t, R2 = R0 + 0.25 * t * L;
+            if (Math.abs(v.x) > wd / 2) continue;
+            if (Math.abs(v.z - (Math.cos(v.x / R2) - 1) * R2) < 0.02) any = true;
+          }
+        }
+      });
+      if (any) hit++;
+    };
+    input.press(0);
+    go(1.6, clip);
+    input.up(0);
+    go(1.0);
+    out(`   charge: the blade touched a cloak sheet in ${hit} of ${frames} frames`);
+    assert(frames > 60 && hit <= 2, `held charge: the drawn-back blade stays out of the cloak (${hit} of ${frames} frames within 2 cm of a sheet)`);
+  }
+
+  // (4) idle life: standing still he does things (at least three different ones in 25 s), every
+  // frame finite and the point never in the ground; a step cuts the action within 0.25 s
+  {
+    go(0.5);
+    const c0 = A.fidget.count, names = new Set();
+    let tipLow = Infinity, bad = 0;
+    go(25, () => {
+      if (A.fidget.name) names.add(A.fidget.name);
+      v.set(0, 0, HD.steelTip).applyMatrix4(r.sword.matrixWorld);
+      tipLow = Math.min(tipLow, v.y);
+      if (!finite()) bad++;
+    });
+    const played = A.fidget.count - c0;
+    out(`   idle life: ${played} actions in 25 s (${[...names].join(', ')}); the point's lowest ${tipLow.toFixed(3)} m`);
+    assert(played >= 4 && names.size >= 3 && bad === 0 && tipLow > -0.03,
+      `standing still he does ${played} things in 25 s, ${names.size} different, every frame finite, the point above the grass`);
+    // start one and cut it
+    let waited = 0;
+    while (A.fidget.k < 0 && waited < 10) { go(0.1); waited += 0.1; }
+    go(0.6);
+    const before = A.fidget.w;
+    input.axis = { x: 0, y: 1 };
+    go(0.25);
+    input.axis = { x: 0, y: 0 };
+    assert(before > 0.5 && A.fidget.w === 0, `a step cuts the action: weight ${before.toFixed(2)} → ${A.fidget.w.toFixed(2)} within 0.25 s`);
+    // locked on (a fight), he stays on guard: no idle action starts
+    p.debug.teleport(d.position.x + 6, d.position.z + 6);
+    go(0.5);
+    p.lockOn = true;
+    const c1 = A.fidget.count;
+    go(8);
+    assert(A.fidget.count === c1, 'locked on, no idle action starts');
+    p.lockOn = false;
   }
   return G;
 }
@@ -3129,7 +3281,7 @@ async function scenarioBatch() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, batch: scenarioBatch, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, probe: scenarioProbe };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, batch: scenarioBatch, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, herolife: scenarioHeroLife, probe: scenarioProbe };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());
