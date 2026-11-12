@@ -43,6 +43,9 @@ export const TUNING = {
 
   // ---- the execution (a broken disciple, player.js _tryExecution → onExecute)
   execRange: 3.2,
+  // ---- the Ghostep behind him (player.js _ghostep reads attacker.ghostepBehind; the wyrm's 3.2 m
+  // is out of sword reach of a man's back)
+  ghostepBehind: 1.5,
   execution: { damage: 260 },
 
   // ---- footwork
@@ -56,7 +59,10 @@ export const TUNING = {
     backstep: { dist: 2.4, time: 0.42 },
     strafeSwitch: [1.4, 3.0], // s between changes of circling direction
   },
-  idleGap: [[0.55, 1.1], [0.3, 0.75]], // s of footwork between moves [min, max] per phase
+  idleGap: [[0.45, 0.95], [0.25, 0.65]], // s of footwork between moves [min, max] per phase
+  // every blow he deals (moves.js damage, the Ash Crescents) × this: the probe bots set it (a bot reading
+  // 70 % of the tells should be on the edge, one reading 85 % should win)
+  damageScale: 1.35,
 
   // ---- the phase-2 transition (the kindling)
   transition: { ringRadius: 6, damage: 10, knockback: 6 },

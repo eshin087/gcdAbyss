@@ -1011,7 +1011,9 @@ export class Player {
       // behind = attacker.position − attacker forward × distance (forward from its yaw, else away from us)
       let fwd = fin(attacker.yaw, NaN);
       if (!Number.isFinite(fwd)) fwd = Math.atan2(ox - ap.x, oz - ap.z);
-      const D = DEFENSE.ghostep.distanceBehind;
+      // an attacker may ask for its own distance (`ghostepBehind`: a human duelist wants the hero
+      // within sword reach of his back; the default suits a giant)
+      const D = fin(attacker.ghostepBehind, DEFENSE.ghostep.distanceBehind);
       p.x = ap.x - Math.sin(fwd) * D;
       p.z = ap.z - Math.cos(fwd) * D;
       this._collide();

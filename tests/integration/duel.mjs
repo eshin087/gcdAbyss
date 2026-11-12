@@ -500,14 +500,17 @@ async function scenarioGhostep() {
   G.watch = null;
   const behind = -((p.position.x - d.position.x) * Math.sin(d.yaw) + (p.position.z - d.position.z) * Math.cos(d.yaw));
   assert((G.counts['player:ghostep'] ?? 0) === 1 && p.state !== 'plunge', 'a perfect dodge of his thrust is the Ghostep (he offers no plunge)');
-  assert(behind > DEFENSE.ghostep.distanceBehind - 0.6 && p.critTimer > 0, `the hero reappears behind him (${behind.toFixed(2)} m behind his facing) with the crit window`);
+  assert(Math.abs(behind - TUNING.ghostepBehind) < 0.5 && p.critTimer > 0, `the hero reappears ${behind.toFixed(2)} m behind him (his ghostepBehind ${TUNING.ghostepBehind}: within sword reach) with the crit window`);
   // the back is open: his guard never covers it
   run(G, 0.2);
   d.brain.raiseT = 0;
   const hp0 = d.hp;
+  const back0 = -((p.position.x - d.position.x) * Math.sin(d.yaw) + (p.position.z - d.position.z) * Math.cos(d.yaw));
+  const trace = [];
   input.click(0);
-  run(G, 0.5);
-  assert(d.hp < hp0, `a cut at his back after the Ghostep lands (hp ${hp0} → ${d.hp})`);
+  run(G, 0.5, () => trace.push(`${p.state}${p.atk?.hit ? '!' : ''}`));
+  if (process.env.ABYSS_TRACE) out('     trace', back0.toFixed(2), d.mode, d.brain.act?.name ?? '-', trace.filter((s, i, a) => s !== a[i - 1]).join(' '));
+  assert(d.hp < hp0, `a cut at his back after the Ghostep lands (hp ${hp0} → ${d.hp}; ${back0.toFixed(2)} m behind him, ${d.mode})`);
   return G;
 }
 

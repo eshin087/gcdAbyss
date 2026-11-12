@@ -74,6 +74,8 @@ export class AshDisciple {
     this.warn = 0; // red windup glow 0..1.6
     this.kindle = 0; // phase 2's ember blade 0..1
     this.execRange = TUNING.execRange;
+    // the Ghostep (player.js) puts the hero this far behind him: within sword reach of his back
+    this.ghostepBehind = TUNING.ghostepBehind;
     this.hurtSpheres = [];
     this.bodyCircles = [];
     this._hs = [
@@ -448,7 +450,7 @@ export class AshDisciple {
     let r;
     try {
       r = p.takeHit({
-        damage: o.damage,
+        damage: o.damage * (TUNING.damageScale ?? 1),
         from: o.from ?? { x: this.position.x, z: this.position.z },
         knockback: o.knockback ?? 0,
         knockdown: !!o.knockdown,
