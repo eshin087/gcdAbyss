@@ -1,6 +1,7 @@
 import { CONFIG } from '../core/config.js';
 import { el } from './dom.js';
 import { injectTouchStyle } from './touchStyle.js';
+import { SLOT_KEYS, getTechnique } from '../entities/player/techniques/index.js';
 
 // Touch controls for phones / tablets (contract: docs/ARCHITECTURE.md → Touch controls).
 // A thin layer ON TOP of core/input.js: the left-thumb stick feeds input.setVirtualAxis(), the
@@ -9,6 +10,8 @@ import { injectTouchStyle } from './touchStyle.js';
 // the real device's:
 //   stick → move (analog; pushed to the rim = Shift sprint)   ATTACK → Mouse0 (tap light, hold thrust)
 //   BLOCK → Mouse2 (hold block, tap parry)   DODGE → Space   FLASK → KeyF   LOCK → Tab   || → Escape
+//   the technique slots (ADR-054) → KeyQ / KeyR: one button per filled slot, above BLOCK, with an
+//   ASCII Qi meter; lit when the meter pays for it
 // Aim: in a fight with the dragon targetable (and within CONFIG.touch.autoAimRange) game.mouseGround
 // is put on its lock point (auto-aim); otherwise it sits CONFIG.touch.aimDistance m ahead of the hero
 // along the last stick direction. Taps on the bare screen dismiss "press any key" screens (title,
@@ -23,6 +26,7 @@ const RING = 12; // glyphs around the stick: an ASCII-drawn circle, arrows at th
 const RING_R = 62; // px
 const TAU = Math.PI * 2;
 const CHARGE_CELLS = 6;
+const QI_CELLS = 6;
 const SPRINT_OFF = 0.08; // hysteresis below sprintAt before the sprint drops
 
 const BUTTONS = [
@@ -32,6 +36,9 @@ const BUTTONS = [
   { id: 'flask', code: 'KeyF', glyph: '◆', label: 'FLASK' },
   { id: 'lock', code: 'Tab', glyph: '◎', label: 'LOCK' },
   { id: 'pause', code: 'Escape', glyph: '||', label: '' },
+  // the technique slots: glyph and label come from the technique in the slot; hidden while empty
+  { id: 'tech0', code: SLOT_KEYS[0], glyph: '·', label: 'TECH', sub: ' ', slot: 0 },
+  { id: 'tech1', code: SLOT_KEYS[1], glyph: '·', label: 'TECH', sub: ' ', slot: 1 },
 ];
 
 // a phone in portrait, drawn in ASCII (the overlay turns it to landscape); '@' is the hero
@@ -97,7 +104,7 @@ export class TouchControls {
     this._h = -1;
     this._qualitySet = false;
     this._v = game.THREE ? new game.THREE.Vector3() : { x: 0, y: 0, z: 0, copy() { return this; }, set() { return this; } };
-    this._keys = { charge: -1, flask: -1, lock: null };
+    this._keys = { charge: -1, flask: -1, lock: null, tech: [null, null] };
     this._errors = 0;
 
     const on = (target, name, fn, opts) => target?.addEventListener?.(name, (e) => this._guard(name, fn, e), opts);
@@ -285,8 +292,8 @@ export class TouchControls {
     b.tabIndex = -1;
     const g = el('span', 'g', def.glyph, b);
     const t = def.label ? el('span', 't', def.label, b) : null;
-    if (def.sub) el('span', 's', def.sub, b);
-    const rec = { def, el: b, g, t, ids: new Set() };
+    const s = def.sub ? el('span', 's', def.sub, b) : null;
+    const rec = { def, el: b, g, t, s, ids: new Set() };
     const down = (e) => {
       e.preventDefault?.(); // no compatibility mouse events, no focus, no text selection
       if (!this._live() || rec.ids.has(e.pointerId)) return;
@@ -453,6 +460,23 @@ export class TouchControls {
     if (lock !== K.lock) {
       K.lock = lock;
       B.lock.el.classList.toggle('lit', lock);
+    }
+    // the technique slots: shown while filled; an ASCII Qi meter, READY (lit) when it pays
+    for (let i = 0; i < 2; i++) {
+      const b = B[`tech${i}`];
+      if (!b) continue;
+      const T = getTechnique(p.techniques?.slots?.[i] ?? null);
+      const ready = !!T && !!p.techReady?.(i);
+      const cells = T ? Math.max(0, Math.min(QI_CELLS, Math.floor((fin(p.qi) / Math.max(1, fin(T.cost, 100))) * QI_CELLS))) : 0;
+      const sig = T ? `${T.id}|${ready ? 'R' : cells}` : '';
+      if (sig === K.tech[i]) continue;
+      K.tech[i] = sig;
+      b.el.classList.toggle('hide', !T);
+      b.el.classList.toggle('ready', ready);
+      if (!T) continue;
+      b.g.textContent = T.icon;
+      if (b.t) b.t.textContent = T.short;
+      if (b.s) b.s.textContent = ready ? 'READY' : `[${'#'.repeat(cells)}${'.'.repeat(QI_CELLS - cells)}]`;
     }
   }
 

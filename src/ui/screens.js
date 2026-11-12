@@ -1,5 +1,6 @@
 import { CONFIG } from '../core/config.js';
 import { button, controlsGrid, el, fillKeyText, tellLegend, touchGrid } from './dom.js';
+import { TechniquePanel } from './techniques.js';
 
 // Full-screen / panel UI: title, pause menu, help panel, victory record.
 
@@ -24,6 +25,7 @@ const TITLE_KEYS = [
   '[Space] dodge',
   '[Shift] sprint',
   '[F] flask',
+  '[Q] [R] techniques',
   '[Tab] lock-on',
   '[E] rest',
   '[Esc] pause',
@@ -39,6 +41,7 @@ const TITLE_TOUCH = [
   '[BLOCK] hold · tap: parry',
   '[DODGE] roll',
   '[FLASK] heal',
+  '[TECH] technique',
   '[LOCK] lock-on',
   '[||] pause',
   '[PINCH] zoom',
@@ -140,6 +143,11 @@ export class PauseMenu {
     el('div', 'ab-pause-title', 'PAUSED', panel);
     const resume = button(panel, 'primary', () => game.flow?.resume?.());
     fillKeyText(resume, 'RESUME  [Esc]');
+    // the equip panel (ui/techniques.js): it takes the pause menu's place while open
+    this.btnTech = button(panel, '', () => this.showTechniques(true));
+    el('span', '', 'TECHNIQUES', this.btnTech);
+    this.techVal = el('span', 'v', '', this.btnTech);
+    this.techs = new TechniquePanel(game, this.root, () => this.showTechniques(false));
     this.btnQuality = button(panel, '', () => game.flow?.cycleQuality?.());
     fillKeyText(el('span', '', null, this.btnQuality), 'QUALITY [F2]');
     this.qualityVal = el('span', 'v', '', this.btnQuality);
@@ -159,18 +167,33 @@ export class PauseMenu {
     tellLegend(panel);
     this.on = false;
     this._q = null;
+    this._t = -1;
     this._m = null;
   }
 
   show(on) {
     this.on = !!on;
     this.root.classList.toggle('on', this.on);
+    if (!this.on) this.showTechniques(false); // the next pause opens on the menu
     this.refresh();
   }
 
-  /** Cheap: only touches the DOM when quality / mute changed. */
+  /** Open / close the TECHNIQUES equip panel (in place of the menu). */
+  showTechniques(on) {
+    on = !!on && this.on;
+    this.root.classList.toggle('techs', on);
+    this.techs.show(on);
+  }
+
+  /** Cheap: only touches the DOM when quality / mute / the learned count changed. */
   refresh() {
     if (!this.on) return;
+    const book = this.game.player?.techniques;
+    const n = book ? book.list().length : 0;
+    if (n !== this._t) {
+      this._t = n;
+      this.techVal.textContent = n ? `${n} LEARNED` : 'NONE YET';
+    }
     const q = this.game.settings?.quality;
     if (q !== this._q) {
       this._q = q;

@@ -218,6 +218,17 @@ html.abyss-touch #game { cursor: default; image-rendering: pixelated; }
 .tc-flask .g, .tc-lock .g, .tc-pause .g { font-size: 16px; }
 .tc-flask .t, .tc-lock .t { font-size: 7px; letter-spacing: 0.12em; padding-left: 0.12em; }
 .tc-flask .g { color: var(--tc-gold); text-shadow: 0 0 6px rgba(216, 184, 106, 0.45); }
+/* the technique slots (ADR-054): above BLOCK; an ASCII Qi meter under the name, lit when ready */
+.tc-tech0 { right: 38px; bottom: 194px; width: 56px; height: 54px; }
+.tc-tech1 { right: 104px; bottom: 222px; width: 52px; height: 52px; }
+.tc-btn.hide { display: none; }
+.tc-tech0 .g, .tc-tech1 .g { font-size: 18px; color: #a59d90; }
+.tc-tech0 .t, .tc-tech1 .t { font-size: 7px; letter-spacing: 0.12em; padding-left: 0.12em; }
+.tc-tech0 .s, .tc-tech1 .s { font-size: 7px; letter-spacing: 0; color: rgba(216, 184, 106, 0.7); }
+.tc-btn.ready { border-color: rgba(255, 138, 61, 0.7); background: rgba(255, 138, 61, 0.1); }
+.tc-btn.ready::before { background: ${corners(EMBER, 8)}; }
+.tc-btn.ready .g { color: #ffe2cc; text-shadow: 0 0 10px rgba(255, 138, 61, 0.95), 0 1px 2px #000; }
+.tc-btn.ready .s { color: #ffd2a4; letter-spacing: 0.16em; }
 
 /* taller phones / tablets: a little more room */
 @media (min-height: 561px) {
@@ -227,6 +238,8 @@ html.abyss-touch #game { cursor: default; image-rendering: pixelated; }
   .tc-flask { right: 148px; bottom: 122px; }
   .tc-lock { right: 136px; bottom: 196px; }
   .tc-pause { right: 218px; top: 12px; }
+  .tc-tech0 { right: 54px; bottom: 232px; width: 60px; height: 60px; }
+  .tc-tech1 { right: 132px; bottom: 254px; width: 54px; height: 54px; }
 }
 
 /* ---------- portrait: rotate your phone ---------- */

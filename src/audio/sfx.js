@@ -1075,6 +1075,54 @@ export const SFX = {
     },
   },
 
+  // --- techniques (ADR-054) ---------------------------------------------------------------
+  /** player:technique {phase: 'stance'}: the blade comes up — a drawn breath of air and a low,
+   *  held steel note under it. */
+  techStance: {
+    prio: 5, rev: 0.35, gap: 0.2,
+    play(v, t) {
+      const bp = swish(v, t, 'pink', 'bandpass', 900, 1.4, [[0, 0], [0.12, 0.22], [0.5, 0.06], [0.75, 0]]);
+      glide(bp.frequency, t, 900, 2600, 0.5);
+      for (const [f, a] of [[294, 0.05], [441, 0.03], [588.6, 0.025]]) {
+        const s = v.osc('sine', f, t + 0.04, t + 0.9);
+        const g = v.gain(0);
+        env(g.gain, t + 0.04, [[0, 0], [0.1, a], [0.7, a * 0.6], [0.86, 0]]);
+        s.connect(g).connect(v.out);
+      }
+      ping(v, t + 0.02, 'triangle', 1760, 0.04, 0.25, 0.002);
+    },
+  },
+
+  /** player:technique {phase: 'counter'}: the answer — a deep temple bell under the clang and a
+   *  falling rush of ash. */
+  techCounter: {
+    prio: 7, rev: 0.6, gap: 0.15, bus: 'cue',
+    play(v, t) {
+      bell(v, t, 196, 0.16, 2.4);
+      thump(v, t, 120, 45, 0.18, 0.7, 0.35);
+      const bp = swish(v, t, 'white', 'bandpass', 5200, 1.2, [[0, 0], [0.02, 0.3], [0.35, 0]]);
+      glide(bp.frequency, t, 5200, 900, 0.35);
+    },
+  },
+
+  /** player:qiFull: the meter pays for a technique — a soft two-note chime. */
+  qiFull: {
+    prio: 2, rev: 0.3, gap: 0.5, bus: 'ui',
+    play(v, t) {
+      ping(v, t, 'sine', 1175, 0.06, 0.5, 0.004);
+      ping(v, t + 0.07, 'sine', 1568, 0.05, 0.7, 0.004);
+    },
+  },
+
+  /** player:techniqueDenied: not enough Qi — a dull, short knock. */
+  techDenied: {
+    prio: 1, rev: 0.05, gap: 0.25, bus: 'ui',
+    play(v, t) {
+      ping(v, t, 'triangle', 233, 0.08, 0.09, 0.002);
+      ping(v, t + 0.05, 'triangle', 208, 0.06, 0.1, 0.002);
+    },
+  },
+
   /** UI blips. opts.kind: 'select' | 'start' | 'pause' | 'resume' | 'error'. */
   blip: {
     prio: 1, rev: 0.1, gap: 0.04, bus: 'ui',

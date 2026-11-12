@@ -27,6 +27,8 @@ const KINDS = {
   lockWon: { text: 'BREAKTHROUGH', life: 1.3, rise: 30, pop: 1.6, cls: 'deflect' },
   mikiri: { text: 'MIKIRI', life: 1.3, rise: 30, pop: 1.7, cls: 'deflect', streak: true },
   fullDeflect: { text: 'PERFECT DEFLECT', life: 1.5, rise: 32, pop: 1.7, cls: 'deflect', streak: true },
+  // a technique's counter (player:technique {phase: 'counter'}): the text is the technique's name
+  tech: { text: 'RIPOSTE', life: 1.3, rise: 30, pop: 1.6 },
 };
 const NUM = { life: 0.95, rise: 34 };
 const CALL_POOL = 6;
@@ -97,8 +99,8 @@ export class Callouts {
     game.events?.on?.('dragon:deflected', () => this.call('fullDeflect'));
   }
 
-  /** Pop a call-out over the player's head. kind ∈ KINDS. */
-  call(kind) {
+  /** Pop a call-out over the player's head. kind ∈ KINDS; `text` replaces the kind's own. */
+  call(kind, text = null) {
     const k = KINDS[kind];
     if (!k) return;
     // blocks come in bursts (multi-hit attacks): refresh the live one instead of stacking
@@ -119,7 +121,7 @@ export class Callouts {
     it.lift = Math.min(lift, STACK_PX * 3);
     it.jx = 0;
     it.head = true;
-    it.span.textContent = k.text;
+    it.span.textContent = text ? String(text) : k.text;
     it.node.className = `ab-call on k-${k.cls ?? kind}`;
     it.streak.style.display = k.streak ? '' : 'none';
     this._start(it);
