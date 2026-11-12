@@ -1121,13 +1121,56 @@ export class Player {
     return null;
   }
 
-  /** Posture-broken wyrm, attack pressed within DEFENSE.plunge.execRange of its head: execution. */
+  /** Posture-broken wyrm, attack pressed within DEFENSE.plunge.execRange of its head: execution.
+   *  A broken duelist (the Ash Disciple: `onExecute`, no plunge) within its `execRange`: the lunging
+   *  execution thrust (_startExecuteThrust). */
   _tryExecution() {
     const d = this.game.dragon;
-    if (!d?.broken || !this._plungeable(d)) return false;
+    if (!d?.broken) return false;
+    if (!this._plungeable(d)) return this._startExecuteThrust(d);
     if (!this._startPlunge(d, true)) return false;
     this.lmb.held = false; // the press is spent: no charge waiting after the landing
     return true;
+  }
+
+  /**
+   * The execution against a duelist: a full thrust that lunges to him and, on its first active frame,
+   * runs him through: `d.onExecute({ damage })` instead of the sweep test (DEFENSE.plunge.execDamage;
+   * the EXECUTION call-out through player:plungeHit {execution}). False when he is out of range.
+   */
+  _startExecuteThrust(d) {
+    if (typeof d?.onExecute !== 'function' || d.state === 'dying' || d.state === 'dead') return false;
+    const p = this.position, dp = d.position;
+    if (!dp) return false;
+    const dist = Math.hypot(dp.x - p.x, dp.z - p.z);
+    if (!(dist <= fin(d.execRange, 3.2))) return false;
+    this._releaseThrust(CHARGE.full);
+    this.yaw = Math.atan2(dp.x - p.x, dp.z - p.z);
+    this.object3d.rotation.y = this.yaw;
+    this.atk.exec = d;
+    this.atk.travel = clamp(dist - 1.0, 0, 3);
+    this.lmb.held = false;
+    this._emit('player:plunge', { execution: true });
+    return true;
+  }
+
+  /** The execution thrust reaches him (see _startExecuteThrust). */
+  _executeHit(a) {
+    const d = a.exec;
+    a.hit = true;
+    let dealt = 0;
+    try {
+      dealt = fin(d.onExecute({ damage: DEFENSE.plunge.execDamage }), 0);
+    } catch (err) {
+      console.error('[player] onExecute failed', err);
+    }
+    const pt = d.lockPoint?.(this._v) ?? this._v.set(d.position.x, 1.2, d.position.z);
+    const dir = { x: Math.sin(this.yaw), z: Math.cos(this.yaw) };
+    if (dealt > 0) this._emit('player:hitDragon', { damage: dealt, part: 'body', point: { x: pt.x, y: pt.y, z: pt.z }, heavy: true, crit: true, kind: 'execute' });
+    this._emit('player:plungeHit', { damage: dealt, execution: true });
+    this._hitstop(0.16);
+    this.game.shake?.(0.5);
+    this.fx.sparks(pt.x, pt.y, pt.z, dir.x, dir.z, true, true);
   }
 
   /**
@@ -1975,6 +2018,10 @@ export class Player {
   }
 
   _tryHit(a) {
+    if (a.exec) {
+      this._executeHit(a);
+      return;
+    }
     const dr = this.game.dragon;
     if (!dr || typeof dr.takeHit !== 'function') return;
     if (dr.state === 'dead' || dr.state === 'dying') return;
