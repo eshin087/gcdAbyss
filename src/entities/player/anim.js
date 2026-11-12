@@ -1997,20 +1997,24 @@ const STREAM_A = 2.6, STREAM_B = 1.3;
 const ARM_SOFT = [0.78, 0.955];
 const TWO_HAND_GRIP = DIM.offGrip; // m down the grip from the sword hand to the off hand (two-handed)
 // the cloak in the charge's updraft: extra outward flare (tan) at full charge of a sheet on his
-// right, the sword side, where the drawn-back blade and arms are; [1] of it for one on his left
-const UPDRAFT_STREAM = [0.5, 0.2];
-// Streamer sheets vs the steel and the arms (Session 14, owner: "when he's charging the sword, the
-// sword and arm are clipping through the cape"; measured: the blade inside a cloak sheet in 94 of
-// 150 charge frames, the sword arm in nearly all of them). Spheres along the blade and both arms
-// (body-model metres). Each sheet segment remembers, for every sphere that comes within its width
+// right, the sword side, where the drawn-back blade and arms are; [1] of it for one on his left.
+// Off (Session 14 follow-up, owner: "the back cape is too floaty now and makes the character look
+// wider from the back view"): the blade's own collision keeps the cloth off the steel
+const UPDRAFT_STREAM = [0, 0];
+// Streamer sheets vs the steel (Session 14, owner: "when he's charging the sword, the sword and arm
+// are clipping through the cape"; measured: the blade inside a cloak sheet in 94 of 150 charge
+// frames). Spheres along the blade (body-model metres); the arms take none (COL_FORE / COL_UPPER
+// are empty): a cloak drapes over its wearer's arms, and holding every sheet out round them made
+// him wider from behind and the cloak float (owner, the same session). The charge pose keeps the
+// arm out of the cloak instead. Each sheet segment remembers, for every sphere that comes within its width
 // and length, which side of it the sphere arrived on, and keeps it there by its radius: one that
 // came in from the body side (the arms, a sword drawn back from inside the cloak) holds the cloth
 // OUT, so it drapes over them; one that came from outside (a blade swung round behind him) holds it
 // IN. Where the two disagree the cloth goes out. A sheet hung on an arm ignores that arm.
 // [sword-joint z or limb y, radius]
 const COL_BLADE = [[0.35, 0.05], [0.6, 0.05], [0.85, 0.05], [1.1, 0.045]];
-const COL_FORE = [[-0.1, 0.065], [-0.24, 0.06]];
-const COL_UPPER = [[-0.14, 0.075], [-0.26, 0.07]];
+const COL_FORE = [];
+const COL_UPPER = [];
 const COL_N = COL_BLADE.length + 2 * (COL_FORE.length + COL_UPPER.length);
 const COL_P = Array.from({ length: COL_N }, () => new THREE.Vector3());
 const COL_R = new Float32Array(COL_N);

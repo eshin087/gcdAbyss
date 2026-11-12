@@ -37,10 +37,8 @@ export const SHROUD_SHEETS = [
   { on: 'chest', at: [0, 0.2, -0.128], ry: Math.PI, w: [0.26, 0.4, 0.56], len: [0.5, 0.5], out: 0.16, wrap: 0.24, strips: [0.22, 0.12, 0.3, 0.16, 0.24], fork: [0, 1, 0, 0, 1], seed: 3 },
   { on: 'chest', at: [0.12, 0.205, -0.108], ry: Math.PI - 0.62, w: [0.22, 0.38, 0.54], len: [0.5, 0.48], out: 0.3, wrap: 0.22, strips: [0.18, 0.3, 0.12, 0.26], fork: [1, 0, 0, 1], seed: 17 },
   { on: 'chest', at: [-0.12, 0.205, -0.108], ry: Math.PI + 0.62, w: [0.22, 0.36, 0.5], len: [0.48, 0.46], out: 0.3, wrap: 0.22, strips: [0.26, 0.14, 0.22, 0.1], fork: [0, 1, 0, 0], seed: 29 },
-  // thrown back behind the sword shoulder: short, so the right arm and the blade stay clear (Session
-  // 14: rooted on the shoulder blade, not on the shoulder, where the arm drawn back for the charge
-  // went through its root)
-  { on: 'chest', at: [-0.15, 0.2, -0.1], ry: Math.PI + 0.85, w: [0.16, 0.26, 0.34], len: [0.4, 0.34], out: 0.42, wrap: 0.2, strips: [0.2, 0.1, 0.16], fork: [0, 0, 1], seed: 41 },
+  // thrown back behind the sword shoulder: short, so the right arm and the blade stay clear
+  { on: 'chest', at: [-0.205, 0.2, -0.055], ry: Math.PI + 1.15, w: [0.16, 0.26, 0.34], len: [0.4, 0.34], out: 0.42, wrap: 0.2, strips: [0.2, 0.1, 0.16], fork: [0, 0, 1], seed: 41 },
   // his left side: the wide wing
   { on: 'chest', at: [0.2, 0.2, -0.04], ry: 1.9, w: [0.2, 0.36, 0.52], len: [0.48, 0.46], out: 0.5, wrap: 0.2, strips: [0.14, 0.28, 0.18, 0.32], fork: [0, 0, 1, 0], seed: 53 },
   // draped over the left arm: it follows the arm, so a raised or reaching arm lifts the wing
