@@ -8,6 +8,9 @@ import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE, BLADE_BASE
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
 import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
+import { QI, SLOT_COUNT, SLOT_KEYS, qiForParry } from './techniques/index.js';
+import { TechniqueBook } from './techniques/book.js';
+import { TECH_POSES } from './techniques/poses.js';
 
 // The Wanderer. Owns input → state machine → movement/collision → animation → sword hits → FX.
 // Contract: docs/ARCHITECTURE.md (Player). Combat rules: docs/COMBAT.md + src/combat/rules.js.
@@ -16,6 +19,9 @@ import { PlayerFx } from './fx.js';
 // slam (finisher, ground shards); LMB out of a sprint = the sprint slash, out of a forward roll = the
 // roll cut; hold LMB = crouched charge, release = lunging thrust. Swings hit giant targets through
 // a vertical reach band and step in toward a hurt surface ahead (REACH).
+// Techniques (ADR-054, techniques/): Q / R fire slot 1 / 2, paid from the Qi meter (`qi`) that
+// parries, perfect dodges and landed strikes fill; the Ash Riposte is a counter stance (state
+// 'technique') whose turned blow is answered with a piercing thrust (state 'heavy', atk.tech).
 
 export const TUNE = {
   runSpeed: 4.6,
@@ -164,19 +170,26 @@ export class Player {
     this.plungeAnim = { phase: PL.VANISH, u: 0, t: 0, exec: false, h: 0 }; // read by anim.js
     this.deflect = { n: 0, t: -Infinity, side: 1 }; // the parry chain (TUNE.deflectChainGap)
     this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
+    // techniques (techniques/): the book (learned + slots, saved), the Qi meter, the running one
+    this.techniques = new TechniqueBook(game);
+    this.qiMax = QI.max;
+    this.qi = 0;
+    this.tech = null; // { def, slot } while the stance (state 'technique') runs
 
     // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, heal(), teleport(x, z) })
     this.debug = {
       god: false,
       infiniteFlasks: false,
+      infiniteQi: false, // techniques cost nothing
       heal: () => this._debugHeal(),
       teleport: (x, z) => this._teleport(x, z),
       kill: () => this._debugKill(), // used by flow.debug.toState('dead') when present
       // Lab / captures: start the plunge on the dragon now (any range; also in the air)
       plunge: (execution = false) => this._debugPlunge(execution),
+      qiFull: () => this.gainQi(this.qiMax),
     };
 
-    this.anim = new HeroAnimator(this.rig, this);
+    this.anim = new HeroAnimator(this.rig, this, TECH_POSES);
     this.anim.onFootstep = (side, dust) => this._footstep(side, dust);
     this.fx = new PlayerFx(game, this.rig);
     // camera lean (model.js LEAN): visual only; hits and the dragon's aim use unleaned positions
@@ -287,6 +300,12 @@ export class Player {
       }
     }
 
+    // (d0) a technique's counter stance (the Ash Riposte): a parryable blow from its front cone is
+    // turned aside (the attacker is parried) and answered at once; red blows fall through to (g)
+    if (this.state === 'technique' && this.tech && parryable) {
+      const r = this._techIncoming(tell, attack, attacker, !!hit.light, hasFrom, fx, fz, hasAtk ? ap : null, sx, sz);
+      if (r) return r;
+    }
     // (d) parry: RMB pressed shortly before impact, attacker in the front arc
     if (
       parryable &&
@@ -437,6 +456,8 @@ export class Player {
     this.deflect.n = 0;
     this.deflect.t = -Infinity;
     this.guardHold = 0;
+    this.qi = 0; // the Qi meter starts empty on every (re)spawn: death and retries empty it
+    this.tech = null;
     this.flash = 0;
     this.burnGlow = 0;
     this.chipGuard = 0;
@@ -485,7 +506,7 @@ export class Player {
     for (const m of old.mats) m.dispose();
     this.rig = rig;
     const onFootstep = this.anim.onFootstep;
-    this.anim = new HeroAnimator(rig, this);
+    this.anim = new HeroAnimator(rig, this, TECH_POSES);
     this.anim.onFootstep = onFootstep;
     this.fx.rig = rig;
     this.sweep.sword = rig.sword;
@@ -589,6 +610,7 @@ export class Player {
     I.sprint = inp.down('ShiftLeft') || inp.down('ShiftRight');
     if (inp.pressed('Space')) this._buffer('roll');
     if (inp.pressed('KeyF')) this._buffer('heal');
+    for (let i = 0; i < SLOT_COUNT; i++) if (inp.pressed(SLOT_KEYS[i])) this._buffer(`tech${i}`);
     if (inp.pressed('Tab') || inp.mousePressed(1)) this._toggleLock();
 
     // LMB: a press starts a light attack at once; holding past CHARGE.hold turns it into a charge
@@ -737,12 +759,14 @@ export class Player {
 
   _toLoco(blend = 0.16) {
     this.atk = null;
+    this.tech = null;
     this._enter('idle', 'loco', blend);
   }
 
   /** Drop the current action (hit reactions). */
   _interrupt() {
     this.atk = null;
+    this.tech = null; // a blow that lands breaks a technique's stance (the Qi stays spent)
     this.buf.action = null; // inputs mashed before the hit don't fire after the flinch
     this.chargeK = 0;
     this.blockStunT = 0;
@@ -782,6 +806,9 @@ export class Player {
         break;
       case 'ghostep':
         this._tickGhostep();
+        break;
+      case 'technique':
+        this._tickTechnique(dt);
         break;
       case 'plunge':
         this._tickPlunge(dt);
@@ -829,7 +856,18 @@ export class Player {
       this.buf.action = null;
       return this._startHeal();
     }
+    if (allowAttack && this._techSlot(a) >= 0) {
+      this.buf.action = null;
+      return this._startTechnique(this._techSlot(a));
+    }
     return false;
+  }
+
+  /** Buffered action 'tech0' / 'tech1' → its slot index, else -1. */
+  _techSlot(a) {
+    if (typeof a !== 'string' || !a.startsWith('tech')) return -1;
+    const i = Number(a.slice(4));
+    return Number.isInteger(i) && i >= 0 && i < SLOT_COUNT ? i : -1;
   }
 
   _tickLoco(dt) {
@@ -922,6 +960,7 @@ export class Player {
     this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE, D.n, -nx, -nz);
     this._hitstop(light ? 0.03 : 0.08);
     g.shake?.(light ? 0.1 : Math.min(0.32, 0.2 + 0.03 * (D.n - 1)));
+    this.gainQi(qiForParry(tell, D.n, light));
     this._emit('player:parry', { tell, attack, chain: D.n, light });
   }
 
@@ -990,6 +1029,7 @@ export class Player {
    * the hero dodged (no teleport). Any other attacker: the v0.2 Ghostep (a blink behind it).
    */
   _perfectDodge(attacker, attack, tell, allowPlunge = true) {
+    this.gainQi(QI.perfectDodge);
     if (this._plungeable(attacker)) {
       if (allowPlunge && this._startPlunge(attacker, false, attack, tell)) return;
       this._ghostep(attacker, attack, tell, false);
@@ -1095,6 +1135,161 @@ export class Player {
       }
     }
     if (t >= TUNE.ghostepDur) this._toLoco(0.14);
+  }
+
+  // --- techniques (ADR-054; data: techniques/, numbers: COMBAT.md "Techniques") ----------
+  /**
+   * Add `n` Qi (clamped to qiMax). Parries, perfect dodges and landed strikes call it; the Lab's
+   * "Qi full" too. Emits 'player:qiFull' once as the meter fills while a technique is equipped.
+   */
+  gainQi(n) {
+    n = fin(n, 0);
+    if (!(n > 0) || !this.alive) return this.qi;
+    const before = this.qi;
+    this.qi = Math.min(this.qiMax, before + n);
+    if (before < this.qiMax && this.qi >= this.qiMax && this.techniques.equippedAny) this._emit('player:qiFull', { qi: this.qi });
+    return this.qi;
+  }
+
+  /** Can slot `i` fire now: a technique in it and the Qi to pay for it? (HUD, touch.) */
+  techReady(i) {
+    const T = this.techniques.inSlot(i);
+    return !!T && (this.qi >= T.cost || !!this.debug.infiniteQi);
+  }
+
+  /** Start the technique in slot `i` (Q / R). False: an empty slot, or too little Qi
+   *  ('player:techniqueDenied'). The Qi is spent as it starts. */
+  _startTechnique(i) {
+    const T = this.techniques.inSlot(i);
+    if (!T || T.kind !== 'counter') return false; // ('counter' is the only kind so far)
+    if (!(this.qi >= T.cost) && !this.debug.infiniteQi) {
+      this._emit('player:techniqueDenied', { slot: i, id: T.id, qi: this.qi, cost: T.cost });
+      return false;
+    }
+    if (!this.debug.infiniteQi) this.qi = Math.max(0, this.qi - T.cost);
+    this.atk = null;
+    this.chargeK = 0;
+    this.blockStunT = 0;
+    this.tech = { def: T, slot: i };
+    this.yaw = this._aimYaw(this.yaw);
+    this._enter('technique', 'technique', 0.07);
+    this.anim.kickCoat(0.35, this.anim.noise);
+    this._bladePoint(0.8, this._v);
+    this.fx.techRaise?.(this._v.x, this._v.y, this._v.z, this.position.x, this.position.z);
+    this._emit('player:technique', { id: T.id, slot: i, phase: 'stance' });
+    return true;
+  }
+
+  /** The counter stance (state 'technique'): rooted, turning to the aim; a roll may cancel it after
+   *  `stance.rollAfter`; at `stance.dur` with nothing turned it ends in the lunge. */
+  _tickTechnique(dt) {
+    const tc = this.tech, T = tc?.def;
+    if (!T) {
+      this._toLoco(0.12);
+      return;
+    }
+    const S = T.stance, t = this.stateT;
+    this.want.x = this.want.z = 0;
+    this.yaw = dampAngle(this.yaw, this._aimYaw(this.yaw), S.turn, dt);
+    if (t >= S.rollAfter && this.buf.action === 'roll') {
+      this.buf.action = null;
+      this.tech = null;
+      this._startRoll();
+      return;
+    }
+    if (t >= S.dur) this._techStrike(T.lunge, null);
+  }
+
+  /**
+   * A parryable blow reaches the stance (takeHit). Inside its cone once raised it is turned aside
+   * (RESULT.PARRIED: the attacker runs its parry reaction). From an attacker whose nearest hurt
+   * surface is within `stance.counterRange` it is answered by the counter; a thrown blow (`light`:
+   * bullets, sword qi) or one from afar is only turned and the stance holds. Null: not turned.
+   */
+  _techIncoming(tell, attack, attacker, light, hasFrom, fx, fz, ap, sx, sz) {
+    const T = this.tech.def, S = T.stance, p = this.position;
+    if (this.stateT < S.open || !this._inArc(S.arc, hasFrom, fx, fz, ap)) return null;
+    let dx = Math.sin(this.yaw), dz = Math.cos(this.yaw); // toward the blow
+    if (Number.isFinite(sx) && Number.isFinite(sz)) {
+      const l = Math.hypot(sx - p.x, sz - p.z);
+      if (l > 1e-2) {
+        dx = (sx - p.x) / l;
+        dz = (sz - p.z) / l;
+      }
+    }
+    const blue = tell === TELL.BLUE;
+    const gap = this._nearestHurt(attacker, this._v2);
+    this._bladePoint(0.62, this._v);
+    if (light || !(gap <= S.counterRange)) {
+      this.fx.parry(this._v.x, this._v.y, this._v.z, blue, 1, dx, dz);
+      this.recoil = Math.max(this.recoil, 0.6);
+      this._hitstop(0.03);
+      this._emit('player:parry', { tell, attack, chain: 1, light: true, technique: T.id });
+      return RESULT.PARRIED;
+    }
+    this.fx.parry(this._v.x, this._v.y, this._v.z, blue, 3, dx, dz);
+    this.fx.techTurn?.(this._v.x, this._v.y, this._v.z, dx, dz);
+    this.game.shake?.(0.3);
+    this._emit('player:parry', { tell, attack, chain: 1, light: false, technique: T.id });
+    this._techStrike(T.counter, this._v2, gap);
+    this._hitstop(0.1);
+    return RESULT.PARRIED;
+  }
+
+  /**
+   * The technique's strike: `C` = def.counter (toward `target`, `gap` m to its surface: it lunges to
+   * stop `C.stopShort` short, within C.travel; i-frames C.iframes) or def.lunge (along the aim).
+   * Runs as a thrust (state 'heavy'); atk.tech carries its posture / pierce / assist into _applyHit.
+   */
+  _techStrike(C, target, gap = 0) {
+    const tc = this.tech, T = tc?.def;
+    if (!T || !C) {
+      this._toLoco(0.12);
+      return;
+    }
+    const counter = C === T.counter, p = this.position;
+    if (target) {
+      const dx = target.x - p.x, dz = target.z - p.z;
+      if (dx * dx + dz * dz > 1e-4) this.yaw = Math.atan2(dx, dz);
+    } else this.yaw = this._aimYaw(this.yaw);
+    this.object3d.rotation.y = this.yaw;
+    const travel = Array.isArray(C.travel) ? clamp(fin(gap) - fin(C.stopShort, 1.4), C.travel[0], C.travel[1]) : fin(C.travel, 0);
+    this.atk = {
+      def: C, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, pending: false,
+      lunge: 0, travel, damage: fin(C.damage, 70), poise: fin(C.poise, 30), charge: 1,
+      tech: { id: T.id, counter, posture: C.posture, pierce: !!C.pierce, assist: !!C.assist },
+    };
+    this.tech = null;
+    this.releaseK = 1;
+    this.chargeK = 0;
+    if (C.iframes > 0) this.iframeT = Math.max(this.iframeT, C.iframes);
+    this._enter('heavy', 'attack', Math.max(0.03, C.windup * 0.9), true);
+    this._swingStarted(C, 1);
+    this._emit('player:technique', { id: T.id, slot: tc.slot, phase: counter ? 'counter' : 'lunge' });
+  }
+
+  /** Ground distance (m) from the hero to `att`'s nearest hurt surface; its centre into `out`.
+   *  Falls back to its position; Infinity without either. */
+  _nearestHurt(att, out) {
+    const p = this.position;
+    let best = Infinity;
+    const hs = att?.hurtSpheres;
+    if (Array.isArray(hs)) {
+      for (const h of hs) {
+        if (!h || !(h.r > 0) || !Number.isFinite(h.x + h.y + h.z)) continue;
+        const g = Math.hypot(h.x - p.x, h.z - p.z) - h.r;
+        if (g < best) {
+          best = g;
+          out.set(h.x, h.y, h.z);
+        }
+      }
+    }
+    const ap = att?.position;
+    if (best === Infinity && ap && Number.isFinite(ap.x + ap.z)) {
+      best = Math.hypot(ap.x - p.x, ap.z - p.z);
+      out.set(ap.x, 1.2, ap.z);
+    }
+    return Math.max(0, best);
   }
 
   // --- the plunge (contract 2; numbers: DEFENSE.plunge) ----------------------
@@ -1580,6 +1775,15 @@ export class Player {
       this._startRoll();
       return;
     }
+    const ts = this._techSlot(this.buf.action);
+    if (ts >= 0) {
+      // a technique cancels the charge (the held press is spent)
+      this.buf.action = null;
+      if (this._startTechnique(ts)) {
+        L.held = false;
+        return;
+      }
+    }
     const I = this.intent;
     const sp = TUNE.runSpeed * CHARGE.move;
     this.want.x = I.x * sp;
@@ -1684,6 +1888,9 @@ export class Player {
       } else if (b === 'heal' && r >= TUNE.rollCancel) {
         this.buf.action = null;
         if (this._startHeal()) return;
+      } else if (this._techSlot(b) >= 0 && r >= TUNE.rollCancel) {
+        this.buf.action = null;
+        if (this._startTechnique(this._techSlot(b))) return;
       }
       if (this.lmb.held && this.lmb.t >= CHARGE.hold) {
         this._startCharge();
@@ -1758,6 +1965,7 @@ export class Player {
     if (this.state === 'dead') return;
     this.hp = 0;
     this.atk = null;
+    this.tech = null;
     this.buf.action = null;
     this.burnT = 0;
     this.burnAcc = 0;
@@ -2030,8 +2238,17 @@ export class Player {
     const spheres = dr.hurtSpheres;
     if (!Array.isArray(spheres) || !spheres.length) return;
     const h = this._hit;
-    if (!this.sweep.test(spheres, h, fin(a.def.up, REACH.up))) return;
-    this._applyHit(a, h);
+    if (this.sweep.test(spheres, h, fin(a.def.up, REACH.up))) {
+      this._applyHit(a, h);
+      return;
+    }
+    // a technique's counter that the sweep missed still lands on a hurt surface in reach along the
+    // facing, from mid-active (the turned blow already chose the target)
+    const d = a.def;
+    if (a.tech?.assist && a.t >= d.windup + d.active * 0.5) {
+      const p = this.position, fx = Math.sin(this.yaw), fz = Math.cos(this.yaw), L = fin(d.reach, 2.3) + 0.4;
+      if (bandHit(spheres, p.x, 1.0, p.z, p.x + fx * L, 1.25, p.z + fz * L, 0.45, REACH.up, REACH.down, h) > 0) this._applyHit(a, h);
+    }
   }
 
   /** Deal one swing's damage at contact h {sphere, x, y, z}. */
@@ -2045,14 +2262,23 @@ export class Player {
     const damage = a.damage * (crit ? DEFENSE.ghostep.critMult : 1); // raw: the dragon applies part multipliers
     const dir = { x: Math.sin(this.yaw), z: Math.cos(this.yaw) };
     const point = { x: h.x, y: h.y, z: h.z };
+    const o = { damage, part, point, dir, poise: a.poise, heavy, crit };
+    const T = a.tech; // a technique's strike: its own posture, and `pierce` goes through a guard
+    if (T) {
+      if (Number.isFinite(T.posture)) o.posture = T.posture;
+      if (T.pierce) o.pierce = true;
+      o.technique = T.id;
+    }
     let dealt = damage;
     try {
-      const r = dr.takeHit({ damage, part, point, dir, poise: a.poise, heavy, crit });
+      const r = dr.takeHit(o);
       if (Number.isFinite(r)) dealt = r;
     } catch (err) {
       console.error('[player] dragon.takeHit failed', err);
     }
-    this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit, kind: d.kind });
+    if (!T && dealt > 0) this.gainQi(heavy ? QI.hit.heavy : QI.hit.light);
+    if (T?.counter && dealt > 0) this.fx.techCounterHit?.(h.x, h.y, h.z, dir.x, dir.z);
+    this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit, kind: d.kind, technique: T ? T.id : null });
     this._hitstop(d.hitstop * (crit ? 1.4 : 1));
     this.game.shake?.(d.shake * (crit ? 1.3 : 1));
     this.fx.sparks(h.x, h.y, h.z, dir.x, dir.z, heavy, crit);
@@ -2114,6 +2340,7 @@ export class Player {
     }
     if (sw.valid) {
       if (this.state === 'charge') this.fx.chargeTick(dt, sw.a, sw.b, this.chargeK);
+      else if (this.state === 'technique') this.fx.techStance?.(dt, sw.a, sw.b, p.x, p.z, this.stateT);
       else if (this.critTimer > 0 && this.alive) this.fx.critTick(dt, sw.a, sw.b);
       // the blade's dot halo: dim at idle, brighter while it glows (strikes, charge, crit)
       if (this.alive && this.object3d.visible !== false && !hidden && armed) {
@@ -2189,6 +2416,10 @@ export class Player {
       const k = this.chargeK;
       ink = 1.0 + 1.6 * k + (this.chargeFull ? 0.3 * Math.sin(this.time * 18) : 0);
       glow = 1.0 + 0.8 * k;
+    } else if (st === 'technique') {
+      // the counter stance: the blade held hot and quivering, waiting
+      ink = 1.9 + 0.3 * Math.sin(this.time * 16);
+      glow = 1.4;
     } else if (a && (st === 'attack' || st === 'heavy') && !a.pending) {
       const d = a.def, t = a.t;
       if (t >= d.windup - 0.06 && t <= d.windup + d.active + 0.12) {

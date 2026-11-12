@@ -23,6 +23,8 @@ export const ASHFALL = Object.freeze({
   }),
   buildSet: createCourtyard,
   createBoss: (game) => new AshDisciple(game),
+  // beating him teaches his counter (player/techniques/book.js learns it on 'game:victory')
+  reward: Object.freeze({ technique: 'ashRiposte' }),
   text: Object.freeze({
     arrive: ['Ash falls without end on the ruined sect. Above the steps, someone kneels in the courtyard.', 'Rest at the bonfire to restore your flasks.'],
     stir: 'The kneeling figure lifts his head…',

@@ -183,9 +183,12 @@ export class AshDisciple {
     if (this.mode === 'sleep') this.startIntro();
     const G = TUNING.guard;
     const heavy = !!o.heavy;
+    // a technique's piercing strike (the Ash Riposte's counter) goes through his guard and staggers
+    // him, his guard up or not
+    const pierce = !!o.pierce;
     let crushed = false;
     if (!o.exact && this.guarding && !this.broken && this._fromFront()) {
-      if (heavy && fin(o.poise) >= G.crushPoise) crushed = true;
+      if (pierce || (heavy && fin(o.poise) >= G.crushPoise)) crushed = true;
       else {
         this._guardClash(heavy, o.point);
         return 0;
@@ -226,7 +229,7 @@ export class AshDisciple {
       }
     }
     if (this.mode === 'broken' || this.broken) return dmg;
-    if (crushed) {
+    if (crushed || pierce) {
       this.emit('dragon:stagger');
       this.fx.clash(this._hilt.x, this._hilt.y, this._hilt.z, true);
       this.brain.startReact('stagger');
