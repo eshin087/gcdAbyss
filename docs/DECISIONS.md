@@ -895,3 +895,81 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   - World matrices must be final before `pipeline.render()`.
   - Whether this restores the frame rate on the owner's iPhone is not known until it is tried
     there.
+
+## ADR-046 — Both hands on every swing; a raised two-handed guard (2026-11-12)
+- **Context:** the owner: "make the character use both hands when he's swinging. it looks awkward
+  when he's just using 1 hand", and "when he guards, make him hold the sword up in a higher angle".
+  Asked, the owner chose both hands on every swing with the one-handed low carry kept at rest, and a
+  two-handed guard with the blade raised across the body. Until now only the slam, the charge and the
+  thrust were two-handed.
+- **Decision:**
+  - The light sweeps (all five chain hits, the sprint slash, the roll cut) and the stab set
+    `twoHand` 1. The cross-fade brings the off hand onto the grip during the windup; the recovery's
+    blend home lets it go.
+  - `slashH(…, two)`: with two hands the grip travels round the chest's centre line in front of it
+    (`TWO_R` 0.17–0.3 m across, at least `TWO_Z[0]` 0.13 m in front), a little higher, elbows down
+    and out. A chest turned far left pulled the left shoulder out of reach of a grip at the left hip
+    (the left arm locked straight, up to 8 cm short): the left turn is now 0.14 of the blade's
+    azimuth instead of 0.36. The blade's own direction is unchanged, so the hit arcs are the data's.
+  - The off hand sits `DIM.offGrip` 0.08 m below the sword hand (fist against fist; was 0.11).
+  - `rig.offHand { open, grip }`: the Shrouded arms build the free hand twice and the animator shows
+    the closed one on the grip while `twoHand` > 0.6.
+  - The block: grip before the chest, blade ~50° up across the body, flat to the enemy, both hands.
+- **Consequences:**
+  - The off hand reaches the grip within 2.5 cm in every swing (the HEROLIFE test: 3.5 cm).
+  - REACH passes at every distance for all five hits; one bot `win` run took 139 s (144–154 s
+    before), so the swings did not get worse at landing. Damage numbers are unchanged.
+  - In the two-handed stab and the slam the left arm still straightens fully at the end of its reach.
+  - The parry flicks inherit the two-handed block.
+
+## ADR-047 — Idle life: random actions while standing still (2026-11-12)
+- **Context:** the owner: "add some idle animations of the character doing random stuff while not
+  moving to make it look like the character is alive instead of him just being static". Chose all
+  four kinds offered: look around / stretch, inspect the blade, twirl it, rest it.
+- **Decision:** six layered actions in `anim.js` (`FIDGETS`: look, stretch, inspect, twirl,
+  shoulder, lean), started by `HeroAnimator._idleLife` after 2.5 s standing still and 2–4.5 s after
+  the last one, picked with the animator's own noise, never the same twice in a row; cut within
+  0.16 s by any move, lock-on, guard or other clip. Not while locked on.
+- **Consequences:**
+  - Purely visual; no gameplay state reads it. The game's `Math.random` stream is untouched (the
+    integration sims seed it).
+  - In 25 s of standing still the test saw 4 actions, 3 different.
+  - The twirl's blade passes behind his right side through the cloak's region for about 0.3 s.
+
+## ADR-048 — Cloak sheets keep out of the blade and the arms (2026-11-12)
+- **Context:** the owner: "when he's charging the sword, the sword and arm are clipping through the
+  cape". Measured with a probe (blade and arm points within 3–4 cm of a sheet's surface): the blade
+  was inside a cloak sheet in 94 of 150 charge frames and the sword arm in nearly all of them; the
+  streamer springs had no collision at all.
+- **Decision:**
+  - Spheres along the blade (4) and both arms (4 each) every frame (`_colliders`). Each streamer
+    segment records which side of it each sphere came in from (`streamState[i].side`) and is bounded
+    to stay on that side by the sphere's radius (`_sheetBound`): from the body side the sphere holds
+    the cloth out, from outside it holds it in; the inside wins a conflict. The bound limits both the
+    spring's target and its state.
+  - Streamer records gain `w` (widths) and `arm` (the arm a sheet hangs on, which it ignores).
+  - The charge pose: hands before the right hip (were 0.28 m behind it), the blade out to his right
+    and low; the sheet behind the sword shoulder is rooted on the shoulder blade instead of on the
+    shoulder (the drawn-back arm went through its root); the charge's updraft lifts the sheets, most on
+    his right.
+- **Consequences:**
+  - Held charge: the blade within 2 cm of a cloak sheet in 0 of 96 frames (the HEROLIFE test).
+  - Arm contacts remain where an arm passes a sheet's root under the mantle (the probe still flags
+    them in about half the charge frames); not visible at the game camera.
+  - From straight behind, the cloak now drapes over the blade's first half in the charge; its outer
+    part shows past the cloak's right edge.
+  - The coat panels keep their own steel rules (`_coat`); hair has no collision.
+
+## ADR-049 — Gold hair under a pushed-back hood (2026-11-12)
+- **Context:** the owner liked the hood but "the front details and visuals makes him look like
+  death. have his hair show a bit and make his hair colored gold to stand out. also his hood is too
+  pointy at the top". Chose "hood back a little" with the fringe and strands showing.
+- **Decision:**
+  - The hood's rings: a rounded crown with a short soft peak; the rim runs behind the hairline and the
+    opening is wider.
+  - A head item lists the hair pieces kept under it (`hair: ['cap', 'fringe']` for the hood); the
+    side, crown and nape clusters poked through the cloth. The hood builds two gold locks per cheek.
+  - The hair is gold for the body (both loadouts): warm gold letters, brighter tips, lines under the
+    bloom threshold. The face is warmer and less pale (skin fill gain 3.0 → 2.2), the eyes smaller and
+    brown instead of large dark violet-rimmed almonds.
+- **Consequences:** the Wanderer's set is gold-haired too. The face is still the same mesh.

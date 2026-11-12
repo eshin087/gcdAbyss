@@ -146,6 +146,17 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.15 — Two hands, a raised guard, idle life, gold hair (2026-11-12, `player/two-hands-idle-life`)
+- [x] Both hands on every swing and the stab; the off hand closes round the grip (ADR-046)
+- [x] A two-handed guard, the blade raised ~50° across the body
+- [x] Idle actions: look, stretch, inspect, twirl, shoulder rest, lean on the sword (ADR-047)
+- [x] Cloak sheets keep out of the blade and the arms; the charge's blade clears the cloak (ADR-048)
+- [x] A rounder hood worn back, gold hair, a warmer face (ADR-049)
+- [ ] Follow-ups:
+  - [ ] The owner's phone test of the look and the motion
+  - [ ] Arm contacts at the sheets' roots under the mantle; the twirl through the cloak
+  - [ ] The left arm locks at the end of the two-handed stab and the slam
+
 ## M1.14 — A hooded cloak, arms that bend, fewer draw calls (2026-11-11, `player/natural-arms-mobile-perf`)
 - [x] The Shrouded set as the default outfit: hood, wrap tunic, bound sleeves, tattered cloak (ADR-043)
 - [x] Swings with a bent elbow and a trailing blade; no pose locks an arm straight (ADR-044)
