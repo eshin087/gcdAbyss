@@ -72,7 +72,7 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `player`, `dragon`, `hud`, `audio`, `flow`, `lab` | the modules below |
 | `state` | owned by flow: `'title' | 'explore' | 'bossIntro' | 'boss' | 'dead' | 'victory' | 'paused'` |
 | `time`, `realTime`, `dt`, `realDt`, `timeScale`, `fps` | clocks |
-| `settings` | `{ quality: 0..2, showFps: bool }`; `applyQuality()` re-applies. A preset (`CONFIG.quality[i]`) is `{ name, grass, dpr, shadow }`: grass blades drawn, max device pixel ratio, moon shadow map size in texels (LOW 1024, MEDIUM / HIGH 2048; `CONFIG.render.shadowSize` 2048 is only the size before the first `applyQuality`). Touch devices start on `CONFIG.defaultQualityTouch` (LOW) unless the player picked one. |
+| `settings` | `{ quality: 0..2, showFps: bool, hood: bool }`; `applyQuality()` re-applies. `hood` (the hero's hood up, ADR-065) is read at load from `localStorage` (`core/prefs.js` `loadFlag` / `saveFlag`, key `abyss.hood`; every access in try/catch, so a missing or blocked storage means the default, true) and flipped by `flow.toggleHood()`. A preset (`CONFIG.quality[i]`) is `{ name, grass, dpr, shadow }`: grass blades drawn, max device pixel ratio, moon shadow map size in texels (LOW 1024, MEDIUM / HIGH 2048; `CONFIG.render.shadowSize` 2048 is only the size before the first `applyQuality`). Touch devices start on `CONFIG.defaultQualityTouch` (LOW) unless the player picked one. |
 
 Shared combat rules: `src/combat/rules.js` — `TELL`, `RESULT`, `TELL_STYLE`, `DEFENSE`, `POSTURE`,
 `tellDefaults(tell)`, `facingDelta(...)`. Never hard-code these windows in actor code. `DEFENSE.plunge`
@@ -471,7 +471,8 @@ The animator (`player/anim.js`) drives: `coat` = 6 panels (`COAT_PANELS`, above)
 segments (the lower one is two meshes: `coat` above, the lavender torn zone `hem` over its last
 60 %) plus `strips` (12 torn strips, one spring each, kept above the grass; per-panel `BREEZE` /
 `IDLE_FLARE` follow the panel order); `streamers` (two-segment spring sheets: the Shrouded set's
-cloak, seven sheets on the chest and the upper arms, `SHROUD_SHEETS` in `gear/shroud.js`, ADR-043;
+cloak, `SHROUD_SHEETS` in `gear/shroud.js`, ADR-043: three sheets since ADR-064, two on the chest and
+one over the left upper arm;
 or the Wanderer's torn cape, four sheets behind the right shoulder, `CAPE_SHEETS`, ADR-037; each
 record `{ segs, len, out, lag?, max?, w?, arm? }`, `out` = its own outward flare, `lag` = how much
 it trails the motion (default 1 = a light ribbon, the cloak 0.5), `max` = how far it may swing from
@@ -511,18 +512,28 @@ item); `WANDERER_LOADOUT` is the outfit before it. A head item may keep only par
 `hair: [...]` lists the pieces built under it (`'cap'` and `HAIR_CLUSTERS` names; the hood keeps
 only the cap and builds its own gold strands, `HOOD_HAIR` in `gear/shroud.js`: a spiky fringe, cheek
 locks and a strand a side onto the collarbone), `hidesHair: true` builds none; the five hair joints
-stay either way. `shadowsFace: true` on a head item (the hood, ADR-056) builds the face, ears and neck
-in the shirt's near-black and leaves the eyes out. The hair is gold (ADR-049). `buildHero(U, loadout = DEFAULT_LOADOUT)`
-builds each slot's item (an empty chest / arms /
+stay either way. `shadowsFace: true` on a head item (the hood, ADR-056) builds the plain face, ears
+and neck in the shirt's near-black and leaves the eyes out. The hair is gold (ADR-049).
+`buildHero(U, loadout = DEFAULT_LOADOUT, look = null)`: `look.face === 'lit'` (`HERO_LOOK`, the
+player's; ADR-063) builds the face of features from `player/heroFace.js` instead (gold brows, dark
+eyes with cyan glints in the `bladeTip` material, the nose's ridge and the jaw on their own sub-id, a
+mouth), lit even under a `shadowsFace` hood, and with all of the hair kept (no head item) also
+`HAIR_BACK`, gold locks over the back of the head. Without `look` the plain face is built (the Ash
+Disciple). `buildHero` builds each slot's item (an empty chest / arms /
 legs slot gets the `base.*` undersuit), merges static meshes per joint + material + slot, and
 returns the usual rig plus `rig.loadout` (slot → id or null) and `rig.slots` (slot → the objects it
 hung on the skeleton). Geometry builders live in `player/heroGeo.js`, the body's measurements in
 `player/heroDims.js` (`model.js` re-exports them). `player.loadout`, `player.equip(slot, id | null)`
 and `player.setLoadout(loadout)` swap gear at runtime: the rig is rebuilt under the same root
-(`object3d` and `position` stay the same objects), the animator is recreated (the pose restarts from
-the ready stance), old geometries and materials are disposed, and the rig's rigid batches
+(`object3d` and `position` stay the same objects), the animator is recreated (when the new rig has
+as many coat panels and streamers as the old, `HeroAnimator.adopt(prev)` carries on the old one's
+pose, clip, cross-fade, springs, foot planner and idle life: a head or weapon swap does not snap
+him; otherwise the pose restarts from the ready stance), old geometries and materials are disposed, and the rig's rigid batches
 (`player.batch`, `render/rigidBatch.js`) are disposed and rebuilt, reusing their bone slots; an
-unknown id throws before anything changes. No event is emitted. Limits: the animator, `combat.js` and `fx.js` read the sword's
+unknown id throws before anything changes. No event is emitted. `player.setHood(up)` (ADR-065)
+puts `DEFAULT_LOADOUT.head` on or takes the head item off (a no-op when it already is);
+`player.hooded` says whether a head item is worn; the player is built bare-headed when
+`game.settings.hood === false`. Limits: the animator, `combat.js` and `fx.js` read the sword's
 numbers from `DIM`, not from the weapon item's `dims`; `IDLE_FLARE` has six per-panel values; the
 pauldron joint is the right shoulder only.
 **Hands** (ADR-041, `heroGeo.js`): the sword hand is `gripFist`, four finger rolls, a thumb and a
@@ -567,6 +578,14 @@ looking ahead. An attack's recovery brings a blade that finished
 over his left shoulder home round the front (`HOME_WAY` in `attackPose`). Blade blending (`dirLerp`): besides the back-left rule (ADR-023), a near half-turn
 (`DIR_FLIP` 2.75 rad, below `DIR_FLIP_HIGH` 0.9 rad of elevation) goes round the front, never behind
 the shoulders (the light combo's finish → this idle).
+**Ready guard** (ADR-066, `READY` in `anim.js`): `anim.readyW` is 1 through an attack and for
+`READY.hold` (0.9 s) after it, then sinks to 0 at `READY.fall` (3 /s); `guard()` blends toward a
+raised two-handed guard by it (both hands before the belt, the blade ~37° up along his line), so
+a swing's recovery comes home to it and the blade drops to the idle carry only after the pause.
+Idle actions wait for it (`readyW` < 0.05). The light sweeps lift the grip `SLASH_LIFT` (0.3 m)
+while the blade is in front of him (none with the blade behind his right side: there a higher
+grip ran the steel through the sword arm); `FLOW` adds a wind of the hips against the cut and a
+load of the legs in the windup.
 **Glyph scale** (`model.js` exports `setHeroGlyphScale(mats, dist) → k` and `GLYPH_SCALE`): every
 frame `Player._updateMaterials` measures the camera → hero distance (`player.viewDist`) and rescales
 the hero materials' glyph cells, k = clamp(dist / 12, 0.15, 1): in-game cells at the 36 m camera
@@ -1105,7 +1124,8 @@ debug: { toState(name) }               // Lab: 'explore'|'boss'|'dead'|'victory'
 ```
 Owns `game.state`, title → explore → bossIntro → boss → dead/victory, pause (Esc), bonfire rest (E),
 retry after death (respawn at bonfire, `dragon.reset()`, `world.scorch.reset()`), F2 quality,
-M mute, H help, F3 fps. Boss framing (`boss` state, `TUNE.bossCam`): the override focuses on the
+M mute, H help, F3 fps. `toggleHood()` (the pause menu's HOOD line, no key; ADR-065) flips
+`game.settings.hood`, calls `player.setHood(up)`, stores the choice and logs it. Boss framing (`boss` state, `TUNE.bossCam`): the override focuses on the
 box of the hero + `dragon.hurtSpheres` (tall parts leaned up-screen) and adds at most 5 m of zoom
 (`maxZoom`; kept small so the hero stays readable, which is the owner's priority). The hero is
 always kept inside the view, and the far end of the wyrm crops first. It fades out when the hero is > 16–36 m from the body or has wheel-zoomed in

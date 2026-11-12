@@ -1141,3 +1141,98 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Consequences:** measured at the hems over 60 idle / 90 run frames: depth behind 0.55 m at rest
   (0.44 on `main`), 0.89 m running (0.81); width 1.28 m at rest, 1.17 m running (1.23 / 1.15 on
   `main`).
+
+## ADR-063 — The hero's face drawn as features, lit even under the hood (2026-11-12)
+- **Context:** the owner, after playing the Shen Hui duel: "the front of the face also needs to be
+  more ascii art as it looks bad. make the hair and shade face more distinct and cooler looking."
+  Under the hood the face was the shirt's near-black (ADR-056): from the front a black oval with a
+  thin outline; bare-headed it was a smooth pale oval with two dots. Three rendered previews (a
+  shadowed face with glowing slit eyes, a lit face of features, a scarf mask); the owner picked the
+  lit face ("B").
+- **Decision:**
+  - `heroFace.js` builds the face from FEATURES, each a piece whose outline the ink-line art pass
+    draws: gold brows angled down toward the nose, dark almond eyes with a cyan glint (the blade's
+    `bladeTip` material), the nose's ridge and the jaw on their own sub-id (a line down the nose, a
+    jaw line), a closed mouth. The skin keeps its warm fill, so the face prints as lit letters.
+  - `buildHero(U, loadout, look)`: `look.face === 'lit'` builds it, under the hood too (the hood's
+    `shadowsFace` then has no effect); `HERO_LOOK` is the player's. Without a `look` the plain face
+    of before is built, so other actors on the hero's skeleton (the Ash Disciple, PR #16) keep theirs.
+  - Bare-headed (ADR-065) all of the sculpted hair is built, plus `HAIR_BACK`: twelve gold locks
+    over the back of the head (from behind the scalp cap read bald), the tips flicking out.
+- **Consequences:** the brows, the eyes and the glints are three more merged meshes on the head
+  joint; the phone preset draws 58 calls a frame standing in the Cinderwood, hood up or down (the
+  rigid batches group by material). At the game camera the face is still a few letters; the
+  features show in close-ups, the Lab and the phone's closer camera.
+
+## ADR-064 — Half a cloak, trimmed coat tails: the hero at Shen Hui's size (2026-11-12)
+- **Context:** the owner: "make the main character similar size and scale to shen hui as i think the
+  main character is too big ... i want it to be more a slimmer tattered cloak to show the character's
+  model more from the back angle." The Ash Disciple is built on the hero's own skeleton at the same
+  `HERO_SCALE`; the hero read bigger because of his outline: seven cloak sheets fanned 1.28 m wide,
+  a deep mantle, long flared coat tails. Asked, the owner chose to match Shen Hui (the same height,
+  less bulk), picked "Slim B" of two rendered cloaks (a narrow back cloak with two strips; half a
+  cloak) and asked to trim the coat tails a little.
+- **Decision:**
+  - `SHROUD_SHEETS` is three sheets: a narrow one down his back, one behind the left shoulder, one
+    draped over the left arm. The sword side is bare (the right-shoulder pieces and the wide left
+    wing are gone).
+  - The mantle sits just over the shoulders: 0.51 m across, 0.34 m deep at its widest (0.54 / 0.4).
+  - `COAT_PANELS` (the Wanderer's coat tails, worn under the cloak): ~10 % shorter, the hems ~20 %
+    narrower, the side and back panels flaring less (0.4 / 0.22, were 0.55 / 0.3).
+  - `HERO_SCALE` is unchanged: the hero and Shen Hui stand the same height.
+- **Consequences:** from behind his arms, legs and sword show; beside Shen Hui at the same camera
+  the two read the same size. The charge test (the drawn-back blade vs the cloak sheets) checks the
+  three sheets. The Wanderer's set keeps its own cape and shares the trimmed coat tails.
+
+## ADR-065 — Hood up / down from the pause menu (2026-11-12)
+- **Context:** the owner: "add an option to hide the hood so also make the hair look cool". Chose a
+  pause-menu line only (H is the help key), the hood up by default.
+- **Decision:**
+  - `game.settings.hood` (default true) is read at load from `localStorage` (`abyss.hood`,
+    `core/prefs.js`, every access in try/catch); `flow.toggleHood()` flips it, calls
+    `player.setHood(up)`, stores it and logs "Hood up." / "Hood down.". The pause menu has a HOOD
+    line (UP / DOWN) for mouse and touch alike.
+  - `player.setHood(up)` equips `DEFAULT_LOADOUT.head` or nothing on the head; `player.hooded` says
+    which. The player is built with the hood off when the setting says so.
+  - `player.setLoadout` keeps his motion through a swap when the cloth is the same (as many coat
+    panels and streamers): `HeroAnimator.adopt(prev)` carries over the pose, the clip, the
+    cross-fade, the springs, the foot planner and the idle life (not the joints, not the noise
+    closure). A swap that changes the cloth still restarts from the ready stance.
+- **Consequences:** toggling mid-fight (the game is paused) costs one rig rebuild and no snap. The
+  setting is per browser.
+
+## ADR-066 — Higher swings, a raised ready guard, slower windups (2026-11-12)
+- **Context:** the owner: "the attack animations also seems a bit unnatural and low so improve
+  that". Asked what felt off, the owner picked all four: the arcs sit too low, the body doesn't
+  commit, the blade ends in the ground, the swings are too fast to read. Measured on `main`: through
+  the hit frames the grip averaged ~0.86 m off the ground (the belt), most follow-throughs ended
+  with the point 0.3–0.7 m up, and every recovery came home to the idle carry, the point on the
+  grass.
+- **Decision:**
+  - The light sweeps lift the grip `SLASH_LIFT` (0.3 m) while the blade is in front of him, eased
+    out as the blade's azimuth passes ~1.5 rad: with the blade behind his right side (the coils, the
+    finishes) a higher grip ran the steel through the sword arm, so there the grip keeps its old
+    height. The chest leans less through the cut (9°, was 15°); the stab drives out at the chest.
+  - The data: every strike's pitch is about level or above and every follow-through ends with the
+    point up (`elev2` > 0); the slam's follow-through comes up off the ground (`a2` −0.5).
+  - A raised two-handed ready guard (`READY`, anim.js): through the attack and 0.9 s after it the
+    idle pose holds both hands before the belt with the blade raised ~37° on his line, then it sinks
+    back to the low carry (~1/3 s); idle actions wait for it.
+  - The body commits: `FLOW` hips 0.3 (was 0.14), chest 0.1 (0.05), weight 0.07 (0.035), lean 0.09
+    (0.05), and the hips wind against the cut while the legs load through the windup (`coil`,
+    `load`), both let go into the strike.
+  - The windups are ~40 % longer (hits 1–2 0.14 → 0.2 s, whirl 0.16 → 0.22, stab 0.12 → 0.18, slam
+    0.4 → 0.46, sprint slash 0.14 → 0.18, roll cut 0.1 → 0.14), with a little more time in the cut.
+    The step-in starts 0.12 s before the cut (0.08): with the longer windups the blade crossed his
+    front before the step had closed the reach band (the leaping cut missed at 3.5 m); the leaping
+    cut's skip also carries him forward.
+  - `DEFENSE.ghostep.critWindow` 1.6 → 1.9 s: about the same number of the slower swings fit into
+    the crit window after a Ghostep or a plunge.
+- **Consequences:** the light chain is slower (hits 1–4 land within ~1.35 s, ~1.05 s on `main`):
+  less damage per second for the same damage per hit, not rebalanced against the wyrm or Shen Hui
+  (the `win` bot was not re-run). Measured over every swing and variant (the HEROLIFE test): the
+  grip's mean height through the hit frames 1.14 m (~0.86 before), every follow-through's point at
+  1.0 m or higher (the slam's 0.85), the ready guard's point ~1.4 m up. The duel branch (PR #16)
+  drives Shen Hui with this animator, his own clips built on `guard()` and `loco()` (not the swing
+  helpers); his `readyW` stays 0 (he never enters the hero's `attack` state), so his poses should
+  be unchanged: to confirm when PR #16 is rebased onto this.

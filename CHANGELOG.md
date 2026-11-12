@@ -4,7 +4,16 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Twelve pieces of work since 0.4.0:
+Thirteen pieces of work since 0.4.0:
+- **A slimmer hero, a face of features, the hood off, higher swings** (2026-11-12, ADR-063 to
+  ADR-066): the hero now reads the same size as Shen Hui: half a tattered cloak down his back and
+  over his left shoulder (his arms, legs and sword show from behind), a slimmer mantle and shorter
+  coat tails. His face is drawn in ASCII lines (gold brows, dark eyes with a cyan glint, nose, mouth,
+  jaw) instead of a black or blank oval. The pause menu has a HOOD UP / DOWN switch, remembered by
+  the browser; with the hood down his full gold hair shows, back included. His swings cross at chest
+  height, end with the blade raised and settle into a two-handed ready guard; the body winds up and
+  drives through each cut, and the windups are a little slower so each swing reads (the crit window
+  after a Ghostep or a plunge is 1.9 s instead of 1.6 s to make up for it).
 - **Attack variants, hair that reads, a fuller cloak** (2026-11-12, ADR-055 to ADR-057): every hit
   of the left-click chain has two or three different looks (a draw cut, a leaping cut, a level or
   falling backhand, a rising whirl, a skipping cross-cut, a low rising stab, a leaping slam), picked

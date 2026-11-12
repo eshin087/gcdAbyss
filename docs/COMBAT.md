@@ -41,7 +41,7 @@ each actor's `tuning`.
    - out of range, or against a hit that forbids it (`plunge: false`: the fire spells' hazards —
      meteors, pillars, rings, walls; fire breathed or spat from the air, the burning pass's stream
      and the hover barrage's shells, does allow it: the hero lands on the flying wyrm, which crashes) →
-     **slow-mo + crits in place**: time slows (×0.3 for 0.6 s) and for 1.6 s your hits crit (×1.8),
+     **slow-mo + crits in place**: time slows (×0.3 for 0.6 s) and for 1.9 s your hits crit (×1.8),
      with no teleport;
    - against an attacker with no head to plunge into (future enemies) → the v0.2 **Ghostep**: a
      blink 3.2 m behind it (within 12 m), the same slow-mo and crits. The blink behind the wyrm is
@@ -143,21 +143,27 @@ Numbers live in `src/entities/player/combat.js` (`LIGHT`, `SPRINT_ATK`, `ROLL_AT
 
 | Move | Input | Timing (windup / active / recovery) | Damage | Posture | Notes |
 |---|---|---|---|---|---|
-| 1 — falling cut | LMB tap | 0.14 / 0.11 / 0.22 s (0.47 s) | 30 | 5 | cocked over the right shoulder (blade up-back-right), a diagonal down across the front, ending low at the left hip; cyan crescent |
-| 2 — rising backhand | LMB tap in the recovery | 0.14 / 0.11 / 0.22 s | 32 | 5 | from low at the left hip up across the front to high right |
-| 3 — whirl | 3rd tap | 0.16 / 0.17 / 0.24 s (0.57 s) | 36 | 5 | he follows the backhand round to his right: one full turn with the blade held out level; it crosses the front about two thirds of the way round, inside the active frames |
-| 4 — stab | 4th tap | 0.12 / 0.09 / 0.22 s (0.43 s) | 30 | 5 | one-handed: the hand draws back to the right ribs, then drives the level blade straight out, the free arm thrown back |
-| 5 — slam (finisher) | 5th tap | 0.40 / 0.12 / 0.48 s (1.0 s) | 58 | 16 | two-handed: the blade rises past the head and hangs down the back at the apex (torso arched), then slams into the ground; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
-| Sprint slash | LMB while sprinting (faster than a run) | 0.14 / 0.14 / 0.36 s | 40 | 5 | a bounding rising slash, low right → high left; carries 2.4 m along the RUN direction (it does not snap to the aim); counts as hit 1 (the next tap is the rising backhand) |
-| Roll cut | LMB out of a forward roll | 0.10 / 0.11 / 0.26 s | 34 | 5 | a low cut rising out of the crouch, right → left; counts as hit 1. A backstep (Space with no direction) starts the plain chain |
+| 1 — falling cut | LMB tap | 0.20 / 0.13 / 0.24 s (0.57 s) | 30 | 5 | cocked over the right shoulder (blade up-back-right), a diagonal down across the chest, rising again at the left; cyan crescent |
+| 2 — rising backhand | LMB tap in the recovery | 0.20 / 0.13 / 0.24 s | 32 | 5 | from the left hip up across the front to high right |
+| 3 — whirl | 3rd tap | 0.22 / 0.19 / 0.26 s (0.67 s) | 36 | 5 | he follows the backhand round to his right: one full turn with the blade held out at chest height; it crosses the front about two thirds of the way round, inside the active frames |
+| 4 — stab | 4th tap | 0.18 / 0.10 / 0.24 s (0.52 s) | 30 | 5 | both hands draw back to the right ribs, then drive the level blade straight out at the chest, the free arm thrown back |
+| 5 — slam (finisher) | 5th tap | 0.46 / 0.12 / 0.48 s (1.06 s) | 58 | 16 | two-handed: the blade rises past the head and hangs down the back at the apex (torso arched), then slams into the ground and comes up off it; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
+| Sprint slash | LMB while sprinting (faster than a run) | 0.18 / 0.15 / 0.36 s | 40 | 5 | a bounding rising slash, right → high left; carries 2.4 m along the RUN direction (it does not snap to the aim); counts as hit 1 (the next tap is the rising backhand) |
+| Roll cut | LMB out of a forward roll | 0.14 / 0.12 / 0.26 s | 34 | 5 | a low cut rising out of the crouch, right → left; counts as hit 1. A backstep (Space with no direction) starts the plain chain |
 | Thrust — charged | hold LMB ≥ 0.3 s, release | 0.07 / 0.20 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | deep crouched charge, sword two-handed at the right hip pointing back-down (moves at ×0.4; lightning crawls on the blade past half charge); the release lunges 2.2–3.6 m along the facing with both arms driven out; a thin straight cyan beam |
 
 - **Variants** (ADR-055): hits 1–5 each have 2–3 looks, picked at random as the hit starts (never
-  the same one twice in a row): 1 falling cut / low draw cut / leaping cut; 2 rising backhand /
+  the same one twice in a row): 1 falling cut / draw cut / leaping cut; 2 rising backhand /
   level backhand / falling backhand; 3 whirl / rising whirl / skipping cross-cut; 4 stab / low rising
   stab; 5 slam / leaping slam. A variant changes only the look: the timing, damage, posture, reach
   and lunge in the table are the hit's, and every variant connects from the front at contact, 2 m
   and 3.5 m (the REACH test). The sprint slash, the roll cut and the thrust have one look each.
+- **Height and the ready guard** (ADR-066): the sweeps cross his front at chest height (the grip
+  ~1.15 m off the ground on average through the hit frames, ~0.86 m before), every follow-through
+  ends with the point up, and after a swing he holds a raised two-handed guard for 0.9 s before the
+  blade sinks back to the low carry. The step-in starts 0.12 s before the cut. Slower windups (the
+  table) mean the chain deals less damage per second than before for the same damage per hit; the
+  crit window was widened to keep the same number of swings in it.
 - Poses follow the owner's key-pose sheets (`docs/art/hero.md` §4); the timings above are unchanged
   by them. The dodge roll stays 0.6 s (the sheet draws 0.55 s; shortening it is a tuning decision
   that would move the i-frames, so it was not taken). The light sweeps keep an eased arc whose
@@ -195,7 +201,7 @@ A perfect dodge of the wyrm (any tell, except a fire hazard) with its head withi
 5. **Ride** (0.42 s): he holds his place on the skull as it is slammed down.
 6. **Flip** (0.5–0.85 s, apex +1.7 m): a backflip to a landing you can see, 4.5–12 m in front of
    the head toward where you came from (≥ 0.8 m clear of the body, inside the arena).
-7. **Land** (0.34 s, free to act after 0.12 s): the crit window (1.6 s, ×1.8) opens with 0.2 s of
+7. **Land** (0.34 s, free to act after 0.12 s): the crit window (1.9 s, ×1.8) opens with 0.2 s of
    i-frames.
 
 The whole move is invulnerable (every hit is ignored) and takes ~1.6–1.9 s of game time (~2.2 s
@@ -359,7 +365,7 @@ S = `SCALE` 1.875 (model units → metres).
 
 **Player:** HP 160, 5 flasks (+70 HP, 0.85 s), roll 0.6 s (i-frames 0.04–0.4 s), backstep 0.4 s
 (0.03–0.22 s), the moveset above. Parry window 0.22 s (perfect within 0.08 s: a bullet returns),
-re-arm 0.25 s (skipped right after a deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.6 s at ×1.8.
+re-arm 0.25 s (skipped right after a deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 1.9 s at ×1.8 (1.6 s before ADR-066 slowed the light chain).
 
 **The wyrm:**
 - HP 4500. Phase gates at 66 % (2970 HP) and 33 % (1485 HP).

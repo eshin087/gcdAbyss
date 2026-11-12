@@ -5,6 +5,74 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-12 — Session 20: a hero at Shen Hui's size, half a cloak, a face of features, the hood off, higher swings
+
+**Owner** (after playing the Shen Hui duel, PR #16's preview): "make the main character similar size
+and scale to shen hui as i think the main character is too big ... a slimmer tattered cloak to show
+the character's model more from the back angle. the attack animations also seems a bit unnatural
+and low so improve that. the front of the face also needs to be more ascii art as it looks bad. make
+the hair and shade face more distinct and cooler looking. add an option to hide the hood". Answers:
+match Shen Hui (same height, less bulk); all four attack complaints (too low, no body weight, the
+blade ends in the ground, too fast to read); previews of three faces (picked "B", the lit face) and
+two cloaks (picked "Slim B", half a cloak); trim the coat tails a little; the hood toggle in the
+pause menu only (H is help). Branch `player/slim-cloak-ascii-face` off `main` (#17); sessions 16,
+18, 19 and ADRs up to 062 are taken by the open PRs #16 / #18, so this is Session 20, ADR-063 to 066.
+
+**Found:** Shen Hui is built on the hero's skeleton at the same `HERO_SCALE`; at the same camera the
+two stand the same height. The hero read bigger by his outline: a 1.28 m fan of seven cloak sheets,
+a deep mantle, long flared coat tails.
+
+**Done:**
+- **Face (ADR-063):** `heroFace.js`, the face as features the ink-line pass draws (gold brows, dark
+  eyes with cyan glints, nose ridge, jaw line, mouth), lit under the hood; `buildHero(U, loadout,
+  look)` with `HERO_LOOK` for the player (Shen Hui keeps the plain face). Hood down: all the sculpted
+  hair plus `HAIR_BACK`, twelve gold locks over the back of the head (it read bald from behind).
+- **Size, cloak, tails (ADR-064):** `SHROUD_SHEETS` three sheets (down his back, behind the left
+  shoulder, over the left arm); a slimmer mantle; `COAT_PANELS` ~10 % shorter, ~20 % narrower hems,
+  less flare. `HERO_SCALE` unchanged.
+- **Hood toggle (ADR-065):** the pause menu's HOOD UP / DOWN, `flow.toggleHood`, `player.setHood` /
+  `hooded`, `game.settings.hood` remembered in `localStorage` (`core/prefs.js`);
+  `HeroAnimator.adopt` keeps his pose and cloth through a same-cloth swap.
+- **Swings (ADR-066):** the grip lifted `SLASH_LIFT` 0.3 m while the blade is in front of him, a
+  more upright chest, every strike about level or above, every follow-through point-up, a raised
+  two-handed ready guard for 0.9 s after a swing, a stronger `FLOW` with a wind-up coil and leg load,
+  ~40 % longer windups. Knock-ons: the step-in starts 0.12 s before the cut (the leaping cut missed
+  at 3.5 m), the crit window 1.6 → 1.9 s (the click-spam after a plunge no longer reached the wyrm
+  in time), the roll cut and the rising whirl keep low coils (higher ones ran the blade through the
+  sword arm), idle actions wait for the ready guard.
+- **Tests:** HERO checks the three sheets (none on the sword arm), the lit face's meshes under the
+  hood, the hood toggle (no head item, all hair, the pose carried over mid-swing) and back; HEROLIFE
+  measures every swing and variant (grip height through the hit frames, the follow-through's point,
+  the ready guard) and waits out the guard before checking the free hand; the idle-life window is
+  30 s (random gaps); REACH clicks the chain on each hit's own timing; the blade-in-body label names
+  the variant.
+
+**Verification:** `npm test` ALL PASSED (693 checks), glyph check clean. In the dev server: three
+face and two cloak previews sent to the owner and picked; the finished hero front / side / back
+next to Shen Hui at the same Lab camera (PR #16's branch served beside this one); hood up / down
+close up, at the game camera and the phone preset (852 x 393, LOW: 58 draw calls standing in the
+Cinderwood either way); the pause menu's HOOD line clicked, the choice surviving a reload; a 5 x 5
+film strip of the chain (windup, coil, mid-cut, finish, the ready guard).
+
+**Measured (model metres, every swing and variant):** the grip's mean height through the hit frames
+1.14 m (~0.86 on `main`); follow-through points 1.0–2.1 m (0.3–0.7 m on most before); the ready
+guard's point ~1.4 m (the idle carry's 0.15). The cloak's sheets at rest (bounding box, the same
+measure on PR #16's branch, which carries #17's cloak): 0.71 m across and 0.45 m behind his back
+(1.44 m and 0.69 m).
+
+**Not checked / open:**
+- Not played by a human, not tried on the phone: the feel of the slower chain (less damage per
+  second for the same hits) and the 1.9 s crit window are the owner's to judge; the `win` bot and
+  the duel's balance were not re-run.
+- PR #16 (Shen Hui) and PR #18 (techniques) also edit `anim.js` / `player.js`; whoever merges second
+  rebases. Shen Hui's clips build on `guard()` / `loco()`, whose ready guard only acts on the hero's
+  attack state, so he should look the same: check after the rebase.
+- The phone camera sees his back: the new face shows in close-ups and the Lab, barely in play.
+
+**Next:** the owner's look at the preview (hood up and down, the swings); tune the windups from play.
+
+---
+
 ## 2026-11-12 — Session 17: attack variants, a flowing chain, hair that reads, a fuller cloak
 
 **Owner** (with a phone screenshot): "i can't tell the yellow color in front of his face is his

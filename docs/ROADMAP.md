@@ -146,6 +146,19 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.20 — A hero at Shen Hui's size, a face of features, the hood off, higher swings (2026-11-12, `player/slim-cloak-ascii-face`)
+- [x] The face drawn as features, lit under the hood; hair over the back of the head with the hood
+      down (three previews; the owner picked the lit face) (ADR-063)
+- [x] Half a cloak, a slimmer mantle, trimmed coat tails: the same size as Shen Hui (two previews;
+      the owner picked "Slim B") (ADR-064)
+- [x] Hood up / down from the pause menu, remembered; a head swap keeps his motion (ADR-065)
+- [x] Swings at chest height, raised follow-throughs, a two-handed ready guard, the body driving the
+      cut, slower windups (ADR-066)
+- [ ] Follow-ups:
+  - [ ] The owner's phone check of the preview (hood up / down, the swings, the size next to Shen Hui)
+  - [ ] A feel test of the slower chain and the 1.9 s crit window; re-run the `win` bot
+  - [ ] After PR #16 / #18 land: rebase, check Shen Hui's poses on the shared animator
+
 ## M1.18 — Attack variants, hair that reads, a fuller cloak (2026-11-12, `player/hair-depth-attack-variety`)
 - [x] 2–3 looks per chain hit, picked at random; hips lead, weight shifts through every sweep (ADR-055)
 - [x] Gold strands out of the hood, the face in its shadow (three previews; the owner picked one) (ADR-056)
