@@ -34,6 +34,9 @@ const COL = {
   halo: [0.2, 0.6, 1.0], haloEnd: [0.02, 0.1, 0.25], // the blade's dot halo
   tipStreak: [0.4, 1.1, 1.9], // the edge-wave past the point
   gemGlow: [0.6, 0.15, 1.4], // the gem's always-on glow point
+  // techniques: the Ash Riposte's pale ash and embers
+  ashLight: [1.35, 1.28, 1.2], ash2: [0.42, 0.4, 0.38], ash2End: [0.12, 0.11, 0.1],
+  ember: [3.2, 1.25, 0.32], emberEnd: [0.7, 0.08, 0.02],
 };
 
 // points along the hit segment (0 = hilt … 1 = the edge-wave tip past the steel) that leave a trail
@@ -115,6 +118,7 @@ export class PlayerFx {
     this.skidAcc = [0, 0]; // per sliding contact (skid)
     this.scrapeAcc = 0;
     this.plAcc = 0; // the plunge's hang motes / ride embers
+    this.techAcc = 0; // the counter stance's ash
   }
 
   get add() {
@@ -924,6 +928,105 @@ export class PlayerFx {
     }
   }
 
+  // --- techniques (the Ash Riposte; player.js) ------------------------------------------
+  /** The counter stance is raised: a puff of ash off the blade (x, y, z) and a ring of ash dots
+   *  settling round the feet (fx0, fz0). */
+  techRaise(x, y, z, fx0, fz0) {
+    const fx = this.add, fa = this.alpha;
+    if (fx && Number.isFinite(x + y + z)) {
+      fx.spawn({ x, y, z, life: 0.16, size: 0.7, sizeEnd: 0.15, glyph: '+', color: COL.ashLight, colorEnd: COL.ember, alpha: 1, alphaEnd: 0, spin: 5 });
+      for (let i = 0; i < 10; i++) {
+        fx.spawn({
+          x: x + R(-0.15, 0.15), y: y + R(-0.1, 0.1), z: z + R(-0.15, 0.15),
+          vx: R(-0.6, 0.6), vy: R(0.4, 1.4), vz: R(-0.6, 0.6),
+          life: R(0.3, 0.6), size: R(0.09, 0.15), sizeEnd: 0.03,
+          glyph: "·'.", color: COL.ember, colorEnd: COL.emberEnd, alpha: 1, alphaEnd: 0, drag: 2, flicker: 0.5,
+        });
+      }
+    }
+    if (fa && Number.isFinite(fx0 + fz0)) {
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2;
+        fa.spawn({
+          x: fx0 + Math.cos(a) * 0.5, y: 0.06, z: fz0 + Math.sin(a) * 0.5,
+          vx: Math.cos(a) * 1.1, vy: R(0.05, 0.25), vz: Math.sin(a) * 1.1,
+          life: R(0.45, 0.7), size: R(0.12, 0.18), sizeEnd: 0.24,
+          glyph: '.,·', color: COL.ash2, colorEnd: COL.ash2End, alpha: 0.85, alphaEnd: 0, drag: 2.5,
+        });
+      }
+    }
+  }
+
+  /** While the stance is held: pale ash rising off the blade (a → b, the hilt → the point) and
+   *  embers crawling along it; `t` = seconds held. */
+  techStance(dt, a, b, px, pz, t) {
+    const fx = this.add;
+    if (!fx || !(dt > 0)) return;
+    this.techAcc += dt * 34;
+    while (this.techAcc >= 1) {
+      this.techAcc -= 1;
+      const f = R(0.25, 1);
+      const x = a.x + (b.x - a.x) * f, y = a.y + (b.y - a.y) * f, z = a.z + (b.z - a.z) * f;
+      const ember = Math.random() < 0.3;
+      fx.spawn({
+        x: x + R(-0.05, 0.05), y: y + R(-0.04, 0.04), z: z + R(-0.05, 0.05),
+        vx: R(-0.25, 0.25), vy: ember ? R(0.6, 1.4) : R(0.25, 0.7), vz: R(-0.25, 0.25),
+        life: R(0.3, 0.6), size: R(0.08, 0.14), sizeEnd: 0.03,
+        glyph: ember ? "·'" : '.·,', color: ember ? COL.ember : COL.ashLight, colorEnd: ember ? COL.emberEnd : COL.ash2End,
+        alpha: 0.9, alphaEnd: 0, drag: 1.2, flicker: ember ? 0.5 : 0.15,
+      });
+    }
+    // a faint ring of ash drifting round the feet while it waits
+    if (Number.isFinite(px + pz) && Math.random() < dt * 14) {
+      const fa = this.alpha;
+      const ang = R(0, Math.PI * 2), r = R(0.6, 0.9);
+      fa?.spawn({
+        x: px + Math.cos(ang) * r, y: 0.08, z: pz + Math.sin(ang) * r,
+        vx: -Math.sin(ang) * 0.8, vy: R(0.05, 0.2), vz: Math.cos(ang) * 0.8,
+        life: R(0.4, 0.7), size: R(0.1, 0.16), sizeEnd: 0.05,
+        glyph: '.,', color: COL.ash2, colorEnd: COL.ash2End, alpha: 0.7, alphaEnd: 0, drag: 1.5,
+      });
+    }
+  }
+
+  /** The stance turns a blow and the counter starts: a burst of ash and embers thrown back along
+   *  (dx, dz) (toward the blow) from the clash at (x, y, z). */
+  techTurn(x, y, z, dx, dz) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    const fdx = Number.isFinite(dx) ? dx : 0, fdz = Number.isFinite(dz) ? dz : 0;
+    for (let i = 0; i < 26; i++) {
+      const a = R(0, Math.PI * 2), sp = R(1.5, 5.5);
+      const ember = i % 3 === 0;
+      fx.spawn({
+        x, y, z,
+        vx: Math.cos(a) * sp + fdx * 3, vy: R(0.5, 4), vz: Math.sin(a) * sp + fdz * 3,
+        life: R(0.3, 0.7), size: R(0.1, 0.2), sizeEnd: 0.03,
+        glyph: ember ? "·'`" : '.,·', color: ember ? COL.ember : COL.ashLight, colorEnd: ember ? COL.emberEnd : COL.ash2End,
+        alpha: 1, alphaEnd: 0, gravity: ember ? -2 : -5, drag: 2.2, flicker: 0.3,
+      });
+    }
+    this._light({ x, y, z, color: [1.4, 0.8, 0.45], intensity: 3.2, radius: 6, life: 0.25, fade: 0.2 });
+  }
+
+  /** The counter's point lands: a hot ember spray out of the wound along the thrust (dx, dz). */
+  techCounterHit(x, y, z, dx, dz) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    const fdx = Number.isFinite(dx) ? dx : 0, fdz = Number.isFinite(dz) ? dz : 1;
+    for (let i = 0; i < 22; i++) {
+      const sp = R(3, 9);
+      fx.spawn({
+        x, y, z,
+        vx: fdx * sp + R(-1.6, 1.6), vy: R(-0.5, 2.5), vz: fdz * sp + R(-1.6, 1.6),
+        life: R(0.18, 0.45), size: R(0.12, 0.22), sizeEnd: 0.03, stretch: 1.6,
+        glyph: "-'·", color: COL.ember, colorEnd: COL.emberEnd, alpha: 1, alphaEnd: 0, gravity: -6, drag: 2.5,
+      });
+    }
+    fx.spawn({ x, y, z, life: 0.12, size: 1.2, sizeEnd: 0.3, glyph: '*', color: COL.flash, colorEnd: COL.ember, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
+    this._light({ x, y, z, color: [1.6, 0.7, 0.3], intensity: 4, radius: 6, life: 0.3, fade: 0.25 });
+  }
+
   /** Spray away from the attacker when the hero is hit. (nx, nz) = push direction. */
   hurt(x, y, z, nx, nz, big) {
     const fa = this.alpha, fx = this.add;
@@ -1059,5 +1162,6 @@ export class PlayerFx {
     this.skidAcc[0] = this.skidAcc[1] = 0;
     this.scrapeAcc = 0;
     this.plAcc = 0;
+    this.techAcc = 0;
   }
 }

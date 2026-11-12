@@ -12,6 +12,8 @@ import { ASHFALL } from './ashfall.js';
 //   createBoss(game)   the boss that fills the boss slot (game.dragon === game.boss)
 //   text               the flow's lines: arrive[], stir, phase2, phase3, victory, fallen, restReset,
 //                      again, rise (GameFlow falls back to Cinderwood's)
+//   reward (optional)  what beating the boss gives: { technique: id } (player/techniques/book.js
+//                      learns it on 'game:victory'; ADR-054)
 
 export const LEVELS = Object.freeze([CINDERWOOD, ASHFALL]);
 export const DEFAULT_LEVEL = CINDERWOOD;
