@@ -358,7 +358,8 @@ debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill(), 
 ```
 Module-private state the animator reads (anim.js): `plungeAnim { phase, u, t, exec, h }` (the plunge
 phase from the exported `PL` enum `{ VANISH, HANG, DIVE, RIDE, FLIP, LAND }`, progress through it,
-the lift), `deflect { n, t, side }` (the parry chain), `guardHold` 0..1 (the guard lingering between
+the lift), `deflect { n, t, side, perfect }` (the parry chain; `perfect` = the last parry was pressed
+within `DEFENSE.perfectParryWindow`, read by an attacker that answers a perfect parry: bullets.js), `guardHold` 0..1 (the guard lingering between
 parries), `rmb { held, upT, parryT, edge, chain }`.
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
 light chain of five (falling cut → rising backhand → whirl → stab → two-handed slam finisher; ADR-041),
@@ -417,6 +418,11 @@ the clang); each parry slides him `TUNE.deflectPush` 0.16 m back (×1.6 for blue
 the guard lingers (`guardHold` eases 1 → 0 over `TUNE.guardLinger` [0.32, 0.6] s after the last one).
 `player:parry.chain` is the hero's own rhythm count and can run across two strings; the HUD's
 "DEFLECT ×N" uses the attacker's `combat:deflectChain` (one string).
+**Perfect parry** (ADR-047): a parry whose RMB press came ≤ `DEFENSE.perfectParryWindow` (0.08 s)
+before the impact is perfect: `_parry(tell, attack, sx, sz, light, perfect)` stores it on
+`deflect.perfect` and adds `perfect` to `player:parry`. It is computed for every parry; only bullets
+consume it today (a light perfect parry: hit-stop `TUNE.returnStop` 0.05 s, a gold burst
+`fx.perfectParry`, the RETURN call-out, a brighter clang). Melee perfect parries change nothing yet.
 RMB cancels a charge (the LMB press is consumed); an RMB press during one's own swing is queued and
 raises the guard when recovery starts. Streams (breath) only count as a perfect dodge when the roll
 starts into them.
@@ -981,10 +987,19 @@ on every phase change, when dying / dead, and fizzled by a posture break. No per
 - Hits go through `dragon.hitPlayer({ ..., bullet: true, perfect, plunge: false })`: the damage is
   final (no `TUNING.damageScale`), `player.takeHit` receives `light: true` and `perfect` (false for
   embers and wisps: a roll is a plain dodge), and a parry does not call `dragon.onParried`.
+- Perfect parry → the return (ADR-047): on `RESULT.PARRIED` the field reads
+  `game.player.deflect.perfect`. Normal: the bullet ricochets to `rig.pt.head` (`ricochet` m/s) and
+  the kind's `posture` applies at once. Perfect (embers and wisps; orbs are never parried): the bullet
+  is `returned`, flies at `returnSpeed` m/s drawn ×`returnSize` (`BFX.drawReturned`) and, on reaching
+  the head, deals the kind's `returnDamage` through `dragon.takeHit({ part: 'head', exact: true,
+  posture: returnPosture })` (the phase gate holds, it may kill; the action is never interrupted;
+  posture breaks are allowed), flinches the head and emits `dragon:returned {kind, damage, x, y,
+  z}`. Only the struck bullet returns (the clump it pops does not); returned shots in flight die
+  silently on a clear and fizzle on a posture break like any bullet.
 - Tells: a bullet (or an approaching wheel spoke) emits a paired `combat:tell` + `combat:flash` with
   `hazard: true, bullet: true` `flashLead` before impact (`cue()`; `cover()` lets impacts within
   `cueGap` ride on it). A deflect emits `dragon:parried {attack, tell, hit: 0, last: false, bullet:
-  true}` and adds the kind's `posture`.
+  true, perfect}` and adds the kind's `posture` (a perfect one: its `returnPosture` when it lands).
 - Reads the hero through `game.player`: `isSwinging()` + `sweep` (cutting), `radius`, the sensed
   velocity (`dragon.sense.vel`).
 - Look: `bulletFx.js` (glyph particles through `DragonFx`'s pools; STYLE.md "Bullets").
@@ -1192,8 +1207,9 @@ Player → hud/audio/fx/flow:
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
   `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust / plunge; kind 'plunge' = the
   head-stab, crit on an execution), `player:hurt {damage, kind, hp}`,
-  `player:block {damage, tell}`, `player:parry {tell, attack, chain, light}` (chain = the hero's parries in rhythm, ≤ 1.1 s
-  apart, 1 = single; it can run across two strings; light = a deflected bullet: a lighter clash), `player:guardBreak {attack}`,
+  `player:block {damage, tell}`, `player:parry {tell, attack, chain, light, perfect}` (chain = the hero's parries in rhythm, ≤ 1.1 s
+  apart, 1 = single; it can run across two strings; light = a deflected bullet: a lighter clash; perfect = pressed within
+  `DEFENSE.perfectParryWindow`: with light, the bullet is returned), `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}` (every perfect dodge:
   plunge, in place or Ghostep; not on an execution),
   `player:ghostep {x, z}` (with every perfect dodge; for the plunge x/z = the hang point above the head),
@@ -1214,9 +1230,11 @@ Dragon (any attacker) → hud/audio/flow:
   every flight, and the crash of a plunged flier),
   `dragon:breathStart`, `dragon:breathEnd` (the breath and the sky strafe's pass), `dragon:fireball {x, y, z}`,
   `dragon:explosion {x, z, radius}`,
-  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last, bullet}` (hit = 0-based
+  `dragon:bite`, `dragon:hurt {damage, part, hp, crit}`, `dragon:parried {attack, tell, hit, last, bullet, perfect}` (hit = 0-based
   index in its string, last = the string's last hit or a single attack: only then a recoil; bullet: true = a
-  deflected bullet, hit 0, last false: posture only, the wyrm is not interrupted and audio stays silent),
+  deflected bullet, hit 0, last false: posture only, the wyrm is not interrupted and audio stays silent; perfect:
+  true = the bullet is returned), `dragon:returned {kind, damage, x, y, z}` (a perfectly parried bullet's return
+  lands on the head: kind 0 ember / 1 wisp, damage dealt, x/y/z the head; audio plays its hit, the HUD its number),
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
   `dragon:phase3`, `dragon:phase {n}` (with each of the two above, on the transition roar), `dragon:plunged {execution}`
   (contract 2: every plunge that lands, even during a transition or the killing one),

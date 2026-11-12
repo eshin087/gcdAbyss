@@ -28,6 +28,7 @@ const WARN_MARK = '!';
 const FLAME_TALL = '^*#%&';
 const BEAM_CORE = '#';
 const PUFF = '*^~';
+const RETURN_HALO = 'O';
 
 const RED = TELL_STYLE.red.color;
 const GOLD = [4.4, 2.5, 0.6];
@@ -123,6 +124,64 @@ function sparks(fx, x, y, z, n, c0, c1, speed, size, glyph, up = 3) {
 
 const coreCol = (kind) => (kind === 2 ? RED : kind === 1 ? WISP : GOLD);
 const endCol = (kind) => (kind === 2 ? DARK : kind === 1 ? WISP_END : DARK);
+
+/**
+ * A perfectly parried bullet on its way back (ADR-047): a white-gold core `size` x a bullet's, a
+ * gold halo turning, a long orange trail. Reads apart from the plain deflect (the bullet's own look).
+ */
+export function drawReturned(fx, b, dt, size = 1.8) {
+  const life = fx._hold(b, 'hold', dt);
+  const s = b.kind === 1 ? 1.1 * size : size;
+  if (life > 0) {
+    fx._col(WHITE, 1.25, WHITE, 1.25);
+    let o = fx._rec(b.x, b.y, b.z, life, 0.62 * s, 0.62 * s, EMBER_CORE);
+    o.alphaEnd = 1;
+    o.rot = b.t * 9 + b.seed;
+    fx._spawn(fx.add, o);
+    fx._col(GOLD, 0.7, GOLD, 0.7);
+    o = fx._rec(b.x, b.y, b.z, life, 1.0 * s, 1.0 * s, RETURN_HALO);
+    o.alphaEnd = 1;
+    o.rot = -b.t * 6 + b.seed;
+    fx._spawn(fx.add, o);
+  }
+  b.acc += dt * 34;
+  while (b.acc >= 1) {
+    b.acc -= 1;
+    fx._col(ORANGE, 1.1, DARK, 1);
+    const o = fx._rec(b.x + rand(-0.12, 0.12), b.y + rand(-0.12, 0.12), b.z + rand(-0.12, 0.12), rand(0.28, 0.45), 0.5, 0.08, EMBER_TAIL);
+    o.vx = -b.vx * 0.08;
+    o.vz = -b.vz * 0.08;
+    o.vy = rand(0, 0.8);
+    o.drag = 2;
+    o.flicker = 0.3;
+    fx._spawn(fx.add, o);
+  }
+}
+
+/** The shot leaving the blade: a gold flare on top of the deflect clash. */
+export function returnLaunch(fx, x, y, z) {
+  if (!Number.isFinite(x + y + z)) return;
+  fx._col(HOT, 1.2, GOLD, 0.4);
+  const o = fx._rec(x, y, z, 0.18, 1.6, 0.4, GLINT_STAR);
+  o.rot = rand(0, 1.5);
+  fx._spawn(fx.add, o);
+  sparks(fx, x, y, z, 10, GOLD, DARK, 8, 0.4, SPARKS, 4);
+}
+
+/** A returned shot bursting on the wyrm's head: a white-gold star, a ring of fire sparks, a warm light. */
+export function returnBurst(fx, x, y, z, kind) {
+  if (!Number.isFinite(x + y + z)) return;
+  const k = kind === 1 ? 1.3 : 1;
+  fx._col(WHITE, 1.4, GOLD, 0.5);
+  let o = fx._rec(x, y, z, 0.24, 2.6 * k, 0.6, GLINT_STAR);
+  fx._spawn(fx.add, o);
+  fx._col(GOLD, 0.9, ORANGE, 0.4);
+  o = fx._rec(x, y, z, 0.2, 1.2, 3.2 * k, RETURN_HALO);
+  fx._spawn(fx.add, o);
+  sparks(fx, x, y, z, Math.round(18 * k), GOLD, DARK, 11, 0.5, SPARKS, 5);
+  sparks(fx, x, y, z, Math.round(10 * k), ORANGE, DARK, 6, 0.6, EMBER_TAIL, 3);
+  fx._light({ x, y, z, color: FIRE_LIGHT, intensity: 6 * k, radius: 10, life: 0.3, fade: 0.25 });
+}
 
 /** A bullet bursting on the hero / his guard / the wyrm's head. */
 export function burst(fx, x, y, z, kind) {

@@ -18,8 +18,11 @@
 // has ended (holdFlash).
 //
 // A deflected bullet flies back to the wyrm's head and adds posture; it never interrupts the wyrm
-// (dragon.onParried is for its own blows). The field is cleared on phase changes, death, reset, and
-// fizzles when the wyrm's posture breaks.
+// (dragon.onParried is for its own blows). A PERFECT parry (player.deflect.perfect: pressed within
+// DEFENSE.perfectParryWindow, ADR-047) returns it instead: a bigger, faster shot that lands on the
+// head for the kind's returnDamage (dragon.takeHit: phase gates and death as for a sword hit) and
+// returnPosture, flinches the head and emits dragon:returned; it never interrupts either. The field
+// is cleared on phase changes, death, reset, and fizzles when the wyrm's posture breaks.
 //
 // No per-frame allocations (pooled records, reused hit record; event payloads only when a cue
 // fires); never throws out of update(): a failure logs once and clears the field.
@@ -48,7 +51,7 @@ function record(slot) {
     cruise: 0, turn: 0, homeAt: 0, homing: false,
     wait: 0, launch: 0, launched: true, born: 0,
     r: 0.3, t: 0, life: 4, arm: 0, group: -1,
-    cued: false, lead: false, dud: false, deflected: false, defT: 0,
+    cued: false, lead: false, dud: false, deflected: false, returned: false, defT: 0,
     cueAt: Infinity, // bullet time (b.t) of the impact its cue announced; Infinity: none announced
     hold: 0, acc: 0, seed: 0,
   };
@@ -79,6 +82,8 @@ export class Bullets {
       damage: 0, burn: 0, knockback: 0, kind: 'fire', tell: TELL.NORMAL, parryable: true, blockable: true,
       plunge: false, perfect: false, bullet: true, attack: '', from: { x: 0, z: 0 }, point: { x: 0, y: 0, z: 0 },
     };
+    // a returned shot's blow on the wyrm (dragon.takeHit copies what it keeps)
+    this._ret = { damage: 0, part: 'head', point: { x: 0, y: 0, z: 0 }, dir: { x: 0, z: 1 }, heavy: false, exact: true, posture: 0 };
     this.wheel = {
       on: false, lit: false, attack: 'fireWheel', x: 0, z: 0, n: 4, ang: 0, dir: 1, u: 0, t: 0, fade: 1,
       warn: 0, warn0: 1, dur: 4, speed: 1, r0: 3, r1: 26, width: 1, damage: 0, burn: 0, knockback: 0,
@@ -133,7 +138,7 @@ export class Bullets {
     b.life = life > 0 ? life : spec.life ?? 4;
     b.arm = K.arm;
     b.group = group;
-    b.cued = b.lead = b.dud = b.deflected = false;
+    b.cued = b.lead = b.dud = b.deflected = b.returned = false;
     b.cueAt = Infinity;
     b.defT = 0;
     b.hold = 0;
@@ -536,7 +541,10 @@ export class Bullets {
       b.pz = b.z;
       if (b.deflected) {
         this._ricochet(b, dt);
-        if (b.alive) BFX.drawBullet(fx, b, dt);
+        if (b.alive) {
+          if (b.returned) BFX.drawReturned(fx, b, dt, K.returnSize);
+          else BFX.drawBullet(fx, b, dt);
+        }
         continue;
       }
       if (!b.launched) {
@@ -663,18 +671,53 @@ export class Bullets {
     }
     const dx = head.x - b.x, dy = head.y - b.y, dz = head.z - b.z;
     const l = Math.hypot(dx, dy, dz);
-    const step = K.ricochet * dt;
+    const sp = b.returned ? K.returnSpeed : K.ricochet;
+    const step = sp * dt;
     if (l <= step + 1) {
-      BFX.burst(d.fx, head.x, head.y, head.z, b.kind);
-      d.flash = Math.max(d.flash || 0, 0.3);
+      if (b.returned) this._land(b, head);
+      else {
+        BFX.burst(d.fx, head.x, head.y, head.z, b.kind);
+        d.flash = Math.max(d.flash || 0, 0.3);
+      }
       this._kill(b);
       return;
     }
-    b.vx = (dx / l) * K.ricochet;
-    b.vz = (dz / l) * K.ricochet;
+    b.vx = (dx / l) * sp;
+    b.vz = (dz / l) * sp;
     b.x += (dx / l) * step;
     b.y += (dy / l) * step;
     b.z += (dz / l) * step;
+  }
+
+  /**
+   * A returned shot reaches the head: the kind's returnDamage through dragon.takeHit (final, part
+   * head: the phase gate holds, it may kill) with returnPosture instead of the weapon gain, a head
+   * flinch (visual), a burst, a small shake; 'dragon:returned' { kind, damage, x, y, z }. The wyrm's
+   * action goes on (takeHit never interrupts it).
+   */
+  _land(b, head) {
+    const d = this.d, K = this.K, spec = K[KEYS[b.kind]];
+    BFX.returnBurst(d.fx, head.x, head.y, head.z, b.kind);
+    const o = this._ret;
+    o.damage = spec?.returnDamage ?? 0;
+    o.posture = spec?.returnPosture ?? 0;
+    o.heavy = b.kind === BULLET.WISP;
+    o.point.x = head.x;
+    o.point.y = head.y;
+    o.point.z = head.z;
+    const sp = Math.hypot(b.vx, b.vz) || 1;
+    o.dir.x = b.vx / sp;
+    o.dir.z = b.vz / sp;
+    let dmg = 0;
+    try {
+      dmg = d.takeHit?.(o) ?? 0;
+    } catch (err) {
+      console.error('[dragon] returned shot takeHit failed', err);
+    }
+    d.flinchHead = true;
+    d.flash = Math.max(d.flash || 0, 0.7);
+    d.game.shake?.(b.kind === BULLET.WISP ? 0.18 : 0.12);
+    if (dmg > 0) d.emit('dragon:returned', { kind: b.kind, damage: dmg, x: head.x, y: head.y, z: head.z });
   }
 
   _touch(b, p) {
@@ -709,7 +752,7 @@ export class Bullets {
     h.point.y = b.y;
     h.point.z = b.z;
     const r = d.hitPlayer(h, null);
-    if (r === RESULT.PARRIED) this._deflect(b, spec, p);
+    if (r === RESULT.PARRIED) this._deflect(b, spec, p, !!d.game.player?.deflect?.perfect);
     else if (r === RESULT.HIT) {
       BFX.burst(fx, b.x, b.y, b.z, b.kind);
       if (grp) grp.hits++;
@@ -725,15 +768,23 @@ export class Bullets {
     } else b.arm = b.t + 0.3;
   }
 
-  _deflect(b, spec, p) {
+  /**
+   * A parried bullet flies back to the head. Normal: the kind's posture now, no damage. `perfect`
+   * (an ember / wisp parried within DEFENSE.perfectParryWindow): it is RETURNED, and its damage and
+   * returnPosture land with it (_land). Only the struck bullet comes back: the clump it opens the
+   * shield for is popped as usual.
+   */
+  _deflect(b, spec, p, perfect = false) {
     const d = this.d, fx = d.fx, K = this.K;
     b.deflected = true;
+    b.returned = !!perfect && spec.returnDamage > 0;
     b.defT = 0;
     b.lead = false;
     b.y0 = b.yH = b.y;
-    d.addPosture?.(spec.posture ?? 0);
+    if (!b.returned) d.addPosture?.(spec.posture ?? 0);
     BFX.deflectSpark(fx, b.x, b.y, b.z, b.kind);
-    d.emit('dragon:parried', { attack: b.attack, tell: b.tell, hit: 0, last: false, bullet: true });
+    if (b.returned) BFX.returnLaunch(fx, b.x, b.y, b.z);
+    d.emit('dragon:parried', { attack: b.attack, tell: b.tell, hit: 0, last: false, bullet: true, perfect: !!perfect });
     this._shield = K.cueGap;
     // the clash bursts the small bullets round the hero and the ones about to land
     const pop2 = K.pop * K.pop;

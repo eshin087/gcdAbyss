@@ -445,6 +445,27 @@ export class PlayerFx {
     this._light({ x, y, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5 * (1 + 0.05 * (n - 1)), radius: 7, life: 0.2, fade: 0.18 });
   }
 
+  /**
+   * A perfect parry of a bullet (ADR-047): a gold star on the blade and a fan of gold sparks thrown
+   * back along the shot's way out (dx, dz = toward the blow), on top of the usual clash.
+   */
+  perfectParry(x, y, z, dx = 0, dz = 0) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    const fdx = Number.isFinite(dx) ? dx : 0, fdz = Number.isFinite(dz) ? dz : 0;
+    fx.spawn({ x, y, z, life: 0.16, size: 1.5, sizeEnd: 0.3, glyph: '*', color: [4.6, 3.4, 1.2], colorEnd: [2.0, 0.9, 0.2], alpha: 1, alphaEnd: 0, rot: R(0, 3), spin: 3 });
+    for (let i = 0; i < 16; i++) {
+      const a = Math.atan2(fdz, fdx) + R(-0.7, 0.7), sp = R(6, 12);
+      fx.spawn({
+        x, y, z,
+        vx: Math.cos(a) * sp, vy: R(0.5, 4), vz: Math.sin(a) * sp,
+        life: R(0.18, 0.32), size: R(0.2, 0.32), sizeEnd: 0.04,
+        glyph: "*+'", color: [4.2, 2.9, 0.9], colorEnd: [1.4, 0.5, 0.1], alpha: 1, alphaEnd: 0, drag: 3, gravity: -5,
+      });
+    }
+    this._light({ x, y, z, color: [1.3, 0.95, 0.45], intensity: 5, radius: 7, life: 0.22, fade: 0.2 });
+  }
+
   /** Blocked blow: '#' sparks thrown off the guard, away from the attacker (nx, nz). */
   block(x, y, z, nx, nz, heavy) {
     const fx = this.add;

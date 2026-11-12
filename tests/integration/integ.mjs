@@ -68,7 +68,7 @@ const PAYLOAD = {
   'player:slam': { x: 'n', z: 'n' },
   'player:hurt': { damage: 'n', kind: 's', hp: 'n' },
   'player:block': { damage: 'n', tell: 't' },
-  'player:parry': { tell: 't', attack: 's', chain: 'n' },
+  'player:parry': { tell: 't', attack: 's', chain: 'n', perfect: 'b' },
   'player:guardBreak': { attack: 's' },
   'player:dodge': { kind: 's' },
   'player:perfectDodge': { attack: 's', tell: 't' },
@@ -89,6 +89,7 @@ const PAYLOAD = {
   'dragon:explosion': { x: 'n', z: 'n', radius: 'n' },
   'dragon:hurt': { damage: 'n', part: 's', hp: 'n', crit: 'b' },
   'dragon:parried': { attack: 's', tell: 't', hit: 'n', last: 'b' },
+  'dragon:returned': { kind: 'n', damage: 'n', x: 'n', y: 'n', z: 'n' },
   'combat:deflectChain': { count: 'n' },
   'dragon:phase': { n: 'n' },
   'dragon:plunged': { execution: 'b' },
@@ -1372,13 +1373,14 @@ async function scenarioBullets() {
     run(G, 0.8, { passive: true });
     place(G, 7);
     d.posture = 0;
-    const c0 = { ...G.counts }, h0 = G.hits.length, hp0 = p.hp;
-    const rec = { cues: [], flashAt: [], light: null, parried: [], postureAtHit: null, state: [] };
+    const c0 = { ...G.counts }, h0 = G.hits.length, hp0 = p.hp, dhp0 = d.hp;
+    const rec = { cues: [], flashAt: [], light: null, perfect: null, parried: [], returned: [], postureAtHit: null, state: [], pressAt: [] };
     G.watch = (n, e) => {
       if (n === 'combat:tell' && e?.bullet) rec.cues.push({ t: game.time, impactIn: e.impactIn, tell: e.tell, hazard: e.hazard });
       if (n === 'combat:flash' && e?.bullet) rec.flashAt.push(game.time);
-      if (n === 'player:parry') rec.light = e.light;
+      if (n === 'player:parry') { rec.light = e.light; rec.perfect = e.perfect; }
       if (n === 'dragon:parried') rec.parried.push(e);
+      if (n === 'dragon:returned') rec.returned.push({ ...e, t: game.time });
     };
     const from = o.from ?? 6, speed = o.speed ?? 9, n = o.n ?? 1;
     const dx = d.position.x - p.position.x, dz = d.position.z - p.position.z, l = Math.hypot(dx, dz) || 1;
@@ -1398,7 +1400,7 @@ async function scenarioBullets() {
       input.axis = { x: 0, y: 0 };
       if (answered < rec.flashAt.length) {
         const left = rec.flashAt[answered] + lead - game.time - DT;
-        if (o.answer === 'parry' && left <= 0.12) { answered++; input.click(2); }
+        if (o.answer === 'parry' && left <= (o.parryLead ?? 0.12)) { answered++; input.click(2); rec.pressAt.push(game.time + DT); }
         else if (o.answer === 'roll' && left <= 0.1) { answered++; input.axis = { x: ux, y: -uz }; input.tap('Space'); }
         else if (o.answer === 'swing' && left <= (o.swingLead ?? 0.3)) { answered++; input.click(0); }
         else if (!o.answer || o.answer === 'none') answered++;
@@ -1416,6 +1418,9 @@ async function scenarioBullets() {
     rec.ev = {};
     for (const k in G.counts) rec.ev[k] = G.counts[k] - (c0[k] || 0);
     rec.live = B.live;
+    rec.dmg = dhp0 - d.hp; // the wyrm's HP lost during the shot (a returned bullet)
+    rec.postureEnd = d.posture;
+    rec.gap = rec.hits[0] && rec.pressAt[0] !== undefined ? rec.hits[0].t - rec.pressAt[0] : NaN; // RMB press -> impact
     return rec;
   };
   const cnt = (r, what) => r.res.filter((x) => x === what).length;
@@ -1439,6 +1444,73 @@ async function scenarioBullets() {
   const wi = shot(KIND.wisp, { answer: 'parry' });
   out(`   wisp, parried: ${wi.res.join(' ')} · posture ${wi.postureAtHit} · cue ${wi.cues[0]?.tell}`);
   assert(wi.res[0] === RESULT.PARRIED && near(wi.postureAtHit, K.wisp.posture, 0.5) && wi.cues[0]?.tell === TELL.BLUE, 'a wisp is a blue tell: deflected for K.wisp.posture');
+
+  // --- a PERFECT parry (RMB within DEFENSE.perfectParryWindow of the impact) returns the bullet:
+  // HP damage + returnPosture on the head when the shot lands, dragon:returned; the wyrm goes on
+  const PW = DEFENSE.perfectParryWindow;
+  assert(PW > 0 && PW < DEFENSE.parryWindow, `DEFENSE.perfectParryWindow ${PW} s sits inside the parry window`);
+  const actBefore = d.brain.action;
+  const pf = shot(KIND.ember, { answer: 'parry', parryLead: 0.05 });
+  out(`   ember, RMB ${pf.gap.toFixed(3)} s before impact: ${pf.res.join(' ')} · perfect ${pf.perfect} · dragon:parried.perfect ${pf.parried[0]?.perfect} · returned ${JSON.stringify(pf.returned.map((r) => r.damage))} · wyrm −${pf.dmg} HP · posture ${pf.postureEnd.toFixed(1)} · live ${pf.live}`);
+  assert(pf.res[0] === RESULT.PARRIED && pf.hp === 0 && pf.gap <= PW + 1e-6, `a parry ${pf.gap.toFixed(3)} s before impact parries the ember`);
+  assert(pf.perfect === true && pf.parried[0]?.perfect === true && pf.parried[0]?.bullet === true, 'player:parry { perfect: true } and dragon:parried { bullet, perfect: true }');
+  assert(pf.returned.length === 1 && pf.returned[0].damage === K.ember.returnDamage && pf.dmg === K.ember.returnDamage, `the returned ember lands on the head for returnDamage (${pf.dmg} / ${K.ember.returnDamage}), dragon:returned once`);
+  assert(near(pf.postureEnd, K.ember.returnPosture, 0.5), `the return adds returnPosture instead of the deflect's posture (${pf.postureEnd.toFixed(1)} / ${K.ember.returnPosture})`);
+  assert(pf.live === 0 && d.brain.action === actBefore, 'the shot burst on the head; the wyrm was not interrupted');
+  const pw = shot(KIND.wisp, { answer: 'parry', parryLead: 0.05 });
+  out(`   wisp, RMB ${pw.gap.toFixed(3)} s before impact: perfect ${pw.perfect} · wyrm −${pw.dmg} HP · posture ${pw.postureEnd.toFixed(1)}`);
+  assert(pw.perfect === true && pw.dmg === K.wisp.returnDamage && near(pw.postureEnd, K.wisp.returnPosture, 0.5), `a perfectly parried wisp returns for ${K.wisp.returnDamage} HP + ${K.wisp.returnPosture} posture (${pw.dmg}, ${pw.postureEnd.toFixed(1)})`);
+  const pn = shot(KIND.ember, { answer: 'parry', parryLead: 0.18 });
+  out(`   ember, RMB ${pn.gap.toFixed(3)} s before impact: ${pn.res.join(' ')} · perfect ${pn.perfect} · wyrm −${pn.dmg} HP · posture ${pn.postureEnd.toFixed(1)}`);
+  assert(pn.res[0] === RESULT.PARRIED && pn.perfect === false && pn.gap > PW, `a parry ${pn.gap.toFixed(3)} s before impact is a normal deflect`);
+  assert(pn.dmg === 0 && pn.returned.length === 0 && near(pn.postureEnd, K.ember.posture, 0.5), 'a normal deflect: no HP damage, the kind\'s posture only');
+  const po = shot(KIND.orb, { answer: 'parry', parryLead: 0.05 });
+  out(`   orb, RMB on the perfect timing: ${po.res.join(' ')} · wyrm −${po.dmg} HP`);
+  assert(cnt(po, RESULT.PARRIED) === 0 && po.dmg === 0 && po.returned.length === 0, 'an orb cannot be parried, even on the perfect timing');
+  // a return goes through the wyrm's own damage entry: the phase gate holds as for a sword hit, and
+  // during a transition roar it deals what a sword hit deals there
+  {
+    settle(G);
+    d.debug.setAI(true);
+    const gate = d.nextPhaseHp;
+    d.hp = gate + 10;
+    const gt = shot(KIND.ember, { answer: 'parry', parryLead: 0.05, T: 1.6 });
+    const gateHeld = d.hp, pend = Math.max(d.brain.pendingPhase, d.brain.action?.name === 'phase2' ? 2 : 0, d.phase);
+    d.debug.setAI(false);
+    d.brain.pendingPhase = 0;
+    if (d.brain.action) d.brain.stopAction?.(true);
+    out(`   return at gate + 10 HP (AI on): perfect ${gt.perfect} · HP ${gate + 10} → ${gateHeld} (gate ${gate}) · next phase pending / started: ${pend}`);
+    assert(gt.perfect === true && gt.returned.length === 1 && gateHeld === gate && pend === 2, 'a return cannot push the wyrm past the phase gate (it waits for the transition, like a sword hit)');
+    d.hp = d.maxHp;
+    settle(G);
+    d.debug.phase2();
+    run(G, 0.9, { passive: true });
+    const roar = d.brain.action?.name;
+    const hpA = d.hp;
+    B.clear();
+    place(G, 7);
+    const dx = d.position.x - p.position.x, dz = d.position.z - p.position.z, l = Math.hypot(dx, dz) || 1;
+    const b = B.spawn(KIND.ember, 'emberStorm', p.position.x + (dx / l) * 3, 1.0, p.position.z + (dz / l) * 3, Math.atan2(-dx, -dz), 9);
+    b.cued = true;
+    d.posture = 0;
+    let fired = false;
+    const rr = [];
+    G.watch = (n, e) => { if (n === 'dragon:returned') rr.push(e.damage); };
+    for (let i = 0; i < Math.round(1.2 / DT); i++) {
+      aimAt(G);
+      if (!fired && b.alive && B.tti(b) <= 0.05) { fired = true; input.click(2); }
+      G.tick(DT);
+    }
+    G.watch = null;
+    const lost = hpA - d.hp;
+    const sword = d.takeHit({ damage: K.ember.returnDamage, part: 'head', exact: true, posture: 0 });
+    out(`   return during the ${roar} roar: returned ${JSON.stringify(rr)} · wyrm −${lost} HP · the same blow as a sword hit there: −${sword}`);
+    assert(roar === 'phase2' && rr.length === 1 && lost === sword, `a return during a transition roar deals what a sword hit deals there (${lost} / ${sword})`);
+    run(G, 4, { passive: true }, () => !d.brain.action);
+    d.enterPhase(1);
+    d.hp = d.maxHp;
+    settle(G, 12);
+  }
 
   // --- block (chip) and roll (i-frames, no Ghostep off a small bullet)
   const bl = shot(KIND.ember, { hold: true });

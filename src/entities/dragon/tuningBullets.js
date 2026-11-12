@@ -15,9 +15,12 @@
 import { TELL } from '../../combat/rules.js';
 
 export const BULLETS = {
-  ember: { tell: TELL.NORMAL, r: 0.32, damage: 8, burn: 0, knockback: 0, posture: 5 },
+  // posture: a parry's deflect; returnDamage / returnPosture: a PERFECT parry's return (ADR-047): HP
+  // damage to the wyrm when the shot lands (an ember about one light hit, a wisp about one heavy hit)
+  // and the posture it adds instead of `posture`
+  ember: { tell: TELL.NORMAL, r: 0.32, damage: 8, burn: 0, knockback: 0, posture: 5, returnDamage: 30, returnPosture: 14 },
   // turn rad/s (x (1 + 0.25 age)), cruise m/s, burst: the outward speed decays to this fraction / s
-  wisp: { tell: TELL.BLUE, r: 0.4, damage: 13, burn: 0.8, knockback: 0, posture: 12, turn: 1.9, cruise: 5.2, life: 6.5 },
+  wisp: { tell: TELL.BLUE, r: 0.4, damage: 13, burn: 0.8, knockback: 0, posture: 12, returnDamage: 70, returnPosture: 30, turn: 1.9, cruise: 5.2, life: 6.5 },
   orb: { tell: TELL.RED, r: 0.62, damage: 20, burn: 1.5, knockback: 3 },
   height: 1.0, // flight height (m): chest height of the hero
   arm: 0.05, // a bullet cannot hit in its first `arm` s
@@ -31,6 +34,8 @@ export const BULLETS = {
   // homing wisp still flying `recue` s after the impact its cue announced is announced again
   cueGap: 0.3, cueMin: 0.24, young: 0.6, recue: 0.12,
   ricochet: 24, // a deflected bullet's speed back to the wyrm's head (m/s)
+  returnSpeed: 34, // a perfectly parried bullet's speed back to the head (m/s; drawn x returnSize)
+  returnSize: 1.8,
   bound: 33, // bullets die silently this far from the wyrm
 };
 

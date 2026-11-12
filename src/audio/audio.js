@@ -649,7 +649,7 @@ export class AudioEngine {
     on('player:parry', (d) => {
       this.charge?.stop(0.05);
       // a deflect chain (parries in rhythm) rings higher with every blow met
-      this.play('parry', { tell: d.tell, chain: d.chain });
+      this.play('parry', { tell: d.tell, chain: d.chain, perfect: !!(d.light && d.perfect) });
     });
     on('player:guardBreak', () => {
       this.charge?.stop(0.05);
@@ -715,6 +715,7 @@ export class AudioEngine {
       this.breath?.stop(0.2);
       this._staggerPending = true; // played in update() unless a posture break claims it
     });
+    on('dragon:returned', (d) => this.play('returnHit', { x: d.x, z: d.z, kind: d.kind }));
     on('dragon:parried', (d) => {
       if (d.bullet) return; // a deflected bullet: the clash rings (player:parry), the wyrm does not yelp
       this._painPending = false;
