@@ -6,8 +6,8 @@ import { TAU } from '../core/math.js';
 // orange (Armageddon, ADR-049) by warming the shared ambient and fog colours.
 // (subtle: at the phone's close LOW camera the fog fills most of the frame, and a stronger fog tint
 // washed the whole view brown)
-const GLOW_AMBIENT = [0.055, 0.018, 0.004]; // added to U.uAmbient at full glow
-const GLOW_FOG = [0.007, 0.002, 0.0004]; // added to U.uFogColor
+const GLOW_AMBIENT = [0.085, 0.027, 0.006]; // added to U.uAmbient at full glow
+const GLOW_FOG = [0.011, 0.0032, 0.0007]; // added to U.uFogColor
 export class Atmosphere {
   constructor(game, forest) {
     this.game = game;
