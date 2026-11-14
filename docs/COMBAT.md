@@ -157,12 +157,17 @@ hit. The slam and the charged cleave are two-handed.
 
 - **Variants** (ADR-055, ADR-071): hits 1–5 each have 2–3 looks, picked at random as the hit starts
   (never the same one twice in a row, and never along the line the swing before it cut, so two hits
-  in a row are never in the same plane): 1 falling cut / low draw cut / leaping cut straight down;
+  in a row are never in the same plane): 1 falling cut / low draw cut / rising slash with a skip;
   2 rising backhand / flat backhand with a pivot / falling backhand; 3 whirl / rising whirl / a
-  crouching low sweep; 4 lunge / rising thrust out of a crouch; 5 slam / leaping slam. A variant
+  crouching low sweep; 4 lunge / rising thrust out of a crouch; 5 slam / leaping slam (both come down from over the right shoulder: a diagonal). A variant
   changes only the look: the timing, damage, posture, reach and lunge in the table are the hit's,
   and every variant connects from the front at contact, 2 m and 3.5 m (the REACH test). The sprint
   slash, the roll cut and the cleave have one look each.
+- **Diagonals** (ADR-071): no cut runs straight up and down. The blade stays under ~45° of
+  elevation through a cut and crosses his front near chest height, so a "falling" cut runs from a
+  high shoulder across the chest to the far hip. The camera looks down from behind him: a cut in an
+  upright plane is drawn as one straight bar up the screen. The blade whips: the hand runs ahead
+  through the first half of a cut, and the blade comes through and passes it as the cut ends.
 - Poses follow the owner's key-pose sheets (`docs/art/hero.md` §4); the timings above are unchanged
   by them. The dodge roll stays 0.6 s (the sheet draws 0.55 s; shortening it is a tuning decision
   that would move the i-frames, so it was not taken). The light swings' blades cross his front at

@@ -5,11 +5,11 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 Seventeen pieces of work since 0.4.0:
-- **Wuxia-flow swings, a dashing cleave, a deeper guard, a narrower cloak** (2026-11-13, ADR-071 –
-  ADR-073): the hero's attack chain is new. Every swing is now a one-handed cut driven by the whole
+- **Wuxia-flow swings, a dashing cleave, a deeper guard, a narrower cloak, a new sword arc**
+  (2026-11-13, ADR-071 – ADR-074): the hero's attack chain is new. Every swing is now a one-handed cut driven by the whole
   body: the hips turn through it, the sword arm opens to full reach as the blade crosses his front,
   and he walks through the chain, the lead foot changing with every hit. Each hit has two or three
-  looks (falling, flat and leaping cuts; rising, flat and falling backhands; a whirl, a rising
+  looks (falling, flat and rising cuts; rising, flat and falling backhands; a whirl, a rising
   whirl and a crouching low sweep; a long lunge and a rising thrust), picked at random, and two
   hits in a row are never in the same plane. The chain is slower and each hit heavier: a hit every
   ~0.42 s instead of 0.25 s, each light dealing ×1.4, so you can see the swings; the crit window
@@ -20,6 +20,10 @@ Seventeen pieces of work since 0.4.0:
   deeper, side-on stance with the hands before the chest and the blade slanted across his whole
   body, so it reads from behind as well as from the front. The **cloak** is a narrow cape down the
   middle of his back: his arms, waist and legs show beside it. The **sword** is 12 % shorter.
+  Every cut is a **diagonal** now (none straight up and down: the finisher comes down from over
+  the right shoulder) and the blade whips through after the hand. The **sword arc** is one bright
+  line along the point's path with a faint veil of streaks inside it, instead of a glowing band;
+  it tapers with the cut and hangs in the air for a moment.
 - **The Starless Lord, a third level** (2026-11-13, ADR-068 – ADR-070; `?level=starless`, or pick
   The Obsidian Throne on the title screen): a black hall lit red, and on its throne a dark lord from
   the stars with a blade of red light. He fights in four forms, each with its own health bar: one
@@ -226,6 +230,11 @@ Seventeen pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **The sword arc** (ADR-074): `PlayerFx.trail` draws an edge line, a faint veil and motes, gated
+  by how far the blade turned in the frame (was 4–5 rows of bright strokes under `A` / `8` letters
+  with a `+` halftone, drawn for any blade movement); `arcGlint` once a swing.
+- **Diagonal cuts** (ADR-071): every clip's blade stays under ~45° of elevation and crosses his
+  front near chest height, and hangs back behind the hand until mid-cut; the slam takes `tilt`.
 - **The light chain is one-handed** (ADR-071; it was two hands on every swing, ADR-046): the hips
   lead each cut, the sword arm opens to full reach across his front, the free hand moves against it.
   Hit 4 is a long lunge (was a two-handed stab); the low sweep replaces hit 3's cross-cut. Reach and
@@ -366,6 +375,8 @@ Seventeen pieces of work since 0.4.0:
   feet, the blade's glow sitting short of its point.
 
 ### Removed
+- The leaping cut straight down the middle (a rising slash takes its place); the arc's letter rim
+  and halftone lattice.
 - The lunging thrust as the charged attack (it stays as the execution against a broken duelist).
 - The old swing model: `slashH`, `stabPose`, light 1's windup loop, `FLOW`, the `h` and `stab` kinds.
 - The cloak's wing over his left side and the sheet behind the sword shoulder.

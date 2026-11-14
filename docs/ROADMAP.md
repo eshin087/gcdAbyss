@@ -150,13 +150,14 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
-## M1.24 — Wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape (2026-11-13, `player/wuxia-flow-swings`, ADR-071 – ADR-073)
+## M1.24 — Wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape (2026-11-13, `player/wuxia-flow-swings`, ADR-071 – ADR-074)
 - [x] Swings as keyframed clips (`swings.js`): a one-handed chain, 13 looks, no two hits in a row in the same plane (ADR-071)
 - [x] The charged attack: a two-handed charge beside the head, the dashing cleave, a heavier hit (ADR-072)
 - [x] The guard: a deeper, side-on cross ward, the hands before the chest; the cloak: a narrow cape (kept by the owner); the sword 12 % shorter (ADR-073)
 - [x] After the first preview: a slower chain (a hit every ~0.42 s), he walks through it (the lead foot alternates), no elbow snaps, a composed free hand, no stop between hits (ADR-071)
+- [x] After the second preview: every cut a diagonal, the blade whipping after the hand; the sword arc a line and a veil (ADR-071, ADR-074)
 - [ ] Follow-ups:
-  - [ ] The owner's second look at the chain on the preview (the pace, the footwork, the arms)
+  - [ ] The owner's third look at the preview (the diagonals, the arc)
   - [ ] The finisher (the slam) on the clip system, with looks of its own
   - [ ] The whirl: its feet turn on the ground with the spin (a pivot on one foot instead)
   - [ ] Cross-steps and retreating steps; the lunge's elbow still turns 42° in a frame

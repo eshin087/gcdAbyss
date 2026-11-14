@@ -5,7 +5,7 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
-## 2026-11-13 — Session 25: wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape, a shorter sword
+## 2026-11-13 — Session 25: wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape, a shorter sword, a new sword arc
 
 **Owner:** "we need to improve the characters animations. something about the way he swings the
 sword looks unnatural and not good. focus on making his animations look natural, fluid, awesome,
@@ -86,12 +86,34 @@ the body looks stiff / the arms look wrong / the hits don't flow), the owner tic
   noise is shared with the variant picks, so more picks earlier moved it to two in 25 s. It watches
   45 s now.
 
-**Verification:** `npm test` ALL PASSED (859 checks; the DUEL suite too), glyph check clean, `npm run build` ok. In the dev server (a scratch film
+**Round 3, the owner on the second preview:** "this is looking better but i want the angles not to
+be so perfectly like top to bottom and more diagonals and more natural fluid. also make the sword
+arc glow effect be more subtle and way more epic cooler looking". Rebased onto `main` first (#24,
+the Starless Lord, took ADR-068 – 070 and Session 24: this branch is ADR-071 – 074 and Session 25).
+- **Found (the chain and the cleave filmed at the game camera, from behind him):** the "falling"
+  cuts, the leaping cut, the cleave and the slam ran in upright planes, the blade passing over the
+  top of his head at 66–78° of elevation; from a camera looking down behind him an upright plane is
+  one straight bar up the screen. The cleave's arc was a wall of light as tall as the sword through
+  the whole dash, because the arc was drawn wherever the blade MOVED, turning or not.
+- **Diagonals (ADR-071):** every cut's keys keep the blade under ~45° of elevation and cross his
+  front near chest height. The leaping cut is replaced by a rising slash (the falling cut's other
+  diagonal, with the skip); the slam takes `tilt` 0.42 rad (`slamTilt`): it comes down from over the
+  right shoulder to the ground ahead and a little left.
+- **The whip (ADR-071):** in every cut the hand runs ahead through the first half and the blade
+  hangs back (still ~30° short of pointing ahead at mid-cut), then comes through.
+- **The sword arc (ADR-074):** `PlayerFx.trail` rewritten: an edge line (stretched `•` strokes along
+  the point's path, thinning as it fades), a veil of 4–5 rows of faint `|` streaks, a mote or two,
+  and `arcGlint` once a swing. All of it scaled by how far the blade turned in the frame, so it
+  tapers with the cut and the dash leaves nothing. The letter rim (`A` / `8`) and the `+` halftone
+  are gone.
+
+**Verification:** `npm test` ALL PASSED (941 checks; the DUEL and LORD suites too), glyph check clean, `npm run build` ok. In the dev server (a scratch film
 helper saving frame strips): every clip every frame from the front three-quarter (solid look), the
 chain's flow with each look and with the animator's own picks, the charge and the guard from four
 sides close up and four at the game camera, the cleave front and back, the cloak from behind; at
 the phone preset (852 x 393, LOW, touch) the chain, the cleave and the guard at the real game
-camera (round 1's build).
+camera (round 1's build). Round 3: the chain and the cleave at the game camera before and after
+(the planes, the arc), the chain close up, the tilted slam from the front and at the game camera.
 
 **Measured (round 2's build):** an arm segment turns at most 42° in a frame through any light swing
 (the lunge; 20–34° for the others; before the limiter up to 135°); the lead foot changed on 12 of 12
@@ -104,7 +126,8 @@ the charge's first frames against the sword arm); the guard's blade 38° up and 
 a frame. The duel's fencing bot wins in 46 s (41 s with round 1's faster chain).
 
 **Not checked / open:**
-- No human has played round 2; nothing ran on a phone. I judged poses from stills and motion from
+- No human has played round 3; nothing ran on a phone (the arc's line is ~2 px wide at the desktop
+  camera's distance: whether it reads on the phone is the owner's to say). I judged poses from stills and motion from
   numbers, not from watching it move.
 - The pace changed the balance on purpose: a mashed chain deals ~15 % less per second than before
   (each light ×1.4, ~1.7× later). The wyrm `win` bot and the duel's bots still win; fight lengths
@@ -116,7 +139,7 @@ a frame. The duel's fencing bot wins in 46 s (41 s with round 1's faster chain).
   crosses his path early in the dash is not cut (the thrust's point was out the whole way).
 - `docs/art/hero.md` still describes the two-handed swings and the thrust.
 
-**Next:** the owner's second look at the preview; then the finisher and the whirl's footwork.
+**Next:** the owner's third look at the preview; then the finisher and the whirl's footwork.
 ## 2026-11-13 — Session 24: the Starless Lord, a third level
 
 **Owner:** "lets do a new level but this time its a master sith jedi with a red lightsaber and evil

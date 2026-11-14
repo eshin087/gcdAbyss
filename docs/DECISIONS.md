@@ -1450,7 +1450,7 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
     the last one's follow-through instead of cross-fading to a stop.
   - The chain is one-handed (it reverses ADR-046 for the chain): the free hand reaches for the
     target in the coil and is thrown against the cut. The slam and the cleave stay two-handed.
-  - 13 clips: three looks each for hits 1–3 (falling cut / draw cut / leaping cut; rising / flat /
+  - 13 clips: three looks each for hits 1–3 (falling cut / draw cut / rising slash; rising / flat /
     falling backhand; whirl / rising whirl / low sweep), two for hit 4 (lunge / rising thrust), the
     sprint slash and the roll cut. Each has a `line`; the animator never follows a swing with one
     along the same line, so two hits in a row are never in the same plane (before, hit 2 retraced
@@ -1474,6 +1474,16 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
       moving when it gets there; `swingPhase` maps time to phase with a monotone cubic (the straight
       map halved the motion's rate in one frame as the cut ended); the cut carries through before
       the next windup starts from it.
+  - **After the second preview** ("looking better but i want the angles not to be so perfectly like
+    top to bottom and more diagonals and more natural fluid"): filmed from the game camera, the
+    "falling" cuts, the leaping cut, the cleave and the slam all ran in upright planes (the blade
+    passing over the top of his head at 66-78° of elevation), and the camera, looking down from
+    behind him, draws an upright plane as one straight bar up the screen.
+    - Every cut's plane is a diagonal: the blade stays under ~45° of elevation and crosses his front
+      near chest height. The leaping cut (straight down the middle) is replaced by a rising slash;
+      the slam takes a `tilt` (0.42 rad: it comes down from over the right shoulder).
+    - The blade whips: at mid-cut the hand is at full reach in front of him and the blade still
+      ~30° short of pointing ahead; it comes through and passes the hand as the cut ends.
 - **Consequences:** a new swing is a few lines of data and can be filmed and tuned on its own. The
   keys are authored by hand: a bad key shows as a bad pose, so HEROLIFE measures every look (the
   sword hand ≥ 0.40 m from its shoulder at some active frame, the free hand off the grip, no arm
@@ -1543,3 +1553,25 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   means a coat kick draws fewer random numbers, which moved the seeded meteor layout in one wyrm
   test and showed that test assumed a standing hero is always hittable on a blast's first frame; it
   now allows a blow chained within 0.3 s of another to land inside the blast's 0.12 s.
+
+## ADR-074 — The sword arc is a line and a veil, drawn only where the blade turns (2026-11-13)
+- **Context:** the owner, on the second preview: "make the sword arc glow effect be more subtle and
+  way more epic cooler looking". The arc was four or five rows of bright strokes under a rim of `A` /
+  `8` letters with a halftone of `+` behind: a solid glowing band as wide as half the blade. During
+  the cleave's dash it drew a wall of light as tall as the sword, because it filled the space
+  between two frames of the blade whether the blade turned or was merely carried along.
+- **Decision:** `PlayerFx.trail` draws
+  - an **edge**: one bright line along the point's path (round `•` strokes stretched end to end),
+    which thins and cools as it fades over ~0.25 s, so the cut hangs in the air as a drawn line;
+  - a **veil**: 3–5 rows of faint `|` streaks inside it, each fainter toward the hilt (opacity 0.7
+    → 0.15) and gone in ~0.1 s;
+  - **motes**: a speck or two of light off the point, carried on along the cut;
+  - and `arcGlint`: a small star and a pinch of sparks on the point, once a swing, as it comes through.
+  Its strength follows how far the blade TURNED in the frame (nothing under 0.03 rad, the full arc
+  from 0.2 rad): the arc tapers in and out with the cut, and a dash or a lunge leaves none. The
+  slam's is wider and longer-lived; the cleave's hangs twice as long.
+- **Consequences:** far fewer bright pixels (the bloom no longer swallows him through a chain), and
+  the arc's shape is the cut's own: with ADR-071's diagonal planes a chain draws curved sweeps round
+  him instead of bars. The letters and the halftone lattice are gone from the hero's arc. The
+  plunge's dive passes `gate: false` (its blade is carried, not turned, and keeps its band). The
+  Ash Disciple's and the Starless Lord's sweep trails are their own code and unchanged.

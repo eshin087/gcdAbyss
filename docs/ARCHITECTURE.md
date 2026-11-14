@@ -633,9 +633,14 @@ FX helpers that changed shape: `PlayerFx.gemTick(dt, x, y, z, k, vx, vz, vy)` an
 `gemGlint(x, y, z, s, vx, vz, vy)` take the gem's own velocity (`player.gemVel`, measured from the
 gem joint each frame) so glints ride the hilt; `gemTick` also keeps an always-on 0.22–0.26 m violet
 glow point at the gem; `bladeHalo(dt, k, far)` grows its dots with distance and lays a short bright
-`|` streak 0.06–0.26 m past the drawn point. `trail(pa, pb, a, b, kind, crit)` keeps its signature
-but sub-steps by the outer point's travel (one per 0.24 m, up to 8) and slerps the blade round the
-hilt between frames, so a sweep reads as one curved crescent. New: `skid(dt, slot, x, z, dx, dz, sp,
+`|` streak 0.06–0.26 m past the drawn point. `trail(pa, pb, a, b, kind, crit, gate = true)`
+sub-steps by the outer point's travel (one per 0.24 m, up to 8) and slerps the blade round the hilt
+between frames, so a sweep reads as one curved arc. Since ADR-074 the arc is an EDGE (one bright
+line of stretched `•` strokes along the point's path, which thins as it fades), a VEIL (3–5 rows of
+faint `|` streaks inside it, fainter toward the hilt) and a mote or two; its strength follows how
+far the blade TURNED this frame, so a blade only carried along (a dash) leaves none (`gate: false`
+for the plunge's dive). `arcGlint(x, y, z, dx, dy, dz, heavy, crit)`: a small star and sparks on the
+point, once a swing as the cut comes through (`player.js` `_combat`). New: `skid(dt, slot, x, z, dx, dz, sp,
 k)` (dust and torn grass off a sliding contact; `slot` 0 / 1 keeps a rate accumulator each) and
 `scrape(dt, x, y, z, dx, dz, sp)` (cold sparks off the dragging point). 2026-11-09: `parry(x, y, z,
 blue, chain = 1, dx = 0, dz = 0)` (the clash grows with the deflect chain, crossed streaks from the
