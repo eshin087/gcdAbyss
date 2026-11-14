@@ -150,6 +150,19 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.24 — Wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape (2026-11-13, `player/wuxia-flow-swings`, ADR-071 – ADR-074)
+- [x] Swings as keyframed clips (`swings.js`): a one-handed chain, 13 looks, no two hits in a row in the same plane (ADR-071)
+- [x] The charged attack: a two-handed charge beside the head, the dashing cleave, a heavier hit (ADR-072)
+- [x] The guard: a deeper, side-on cross ward, the hands before the chest; the cloak: a narrow cape (kept by the owner); the sword 12 % shorter (ADR-073)
+- [x] After the first preview: a slower chain (a hit every ~0.42 s), he walks through it (the lead foot alternates), no elbow snaps, a composed free hand, no stop between hits (ADR-071)
+- [x] After the second preview: every cut a diagonal, the blade whipping after the hand; the sword arc a line and a veil (ADR-071, ADR-074)
+- [ ] Follow-ups:
+  - [ ] The owner's third look at the preview (the diagonals, the arc)
+  - [ ] The finisher (the slam) on the clip system, with looks of its own
+  - [ ] The whirl: its feet turn on the ground with the spin (a pivot on one foot instead)
+  - [ ] Cross-steps and retreating steps; the lunge's elbow still turns 42° in a frame
+  - [ ] The cloak's arm drapes flick up when the arm whips home out of a swing
+  - [ ] docs/art/hero.md still describes the two-handed swings and the thrust
 ## M1.23 — The Starless Lord: a third level (2026-11-13, `level/starless-lord`, ADR-068 – ADR-070)
 - [x] Three arenas prototyped and rendered for the owner's pick; the Obsidian Throne Hall built
 - [x] A shared duelist engine (`enemies/duelist/`); the Ash Disciple moved onto it, tests unchanged
@@ -224,7 +237,7 @@ Spec: `docs/specs/ash-disciple.md`.
 - [x] The cloak stands off his back: depth in profile, the same width from behind (ADR-057)
 - [ ] Follow-ups:
   - [ ] The owner's phone check of the chain and the look
-  - [ ] Variants for the sprint slash, the roll cut and the thrust
+  - [ ] Variants for the sprint slash, the roll cut and the charged attack (now the cleave, ADR-072)
 
 ## M1.16 — Breath-born bullets, perfect-parry returns, Armageddon (2026-11-11, `dragon/breath-armageddon`)
 - [x] Ground warnings heat the ground (glyph glow + scorch heat, the edge late): no red rings,

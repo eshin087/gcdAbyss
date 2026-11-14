@@ -41,7 +41,7 @@ Portrait shows a "rotate your phone" screen and pauses.
 | | |
 |---|---|
 | **Left thumb: stick** | move (floats under your thumb) · push to the rim = sprint |
-| **ATTACK** (big) | tap = light combo · **hold & release** = charged thrust |
+| **ATTACK** (big) | tap = light combo · **hold & release** = charged cleave (a dashing slash) |
 | **BLOCK** | **hold** = block · **tap just before impact** = parry |
 | **DODGE** | dodge roll · just before impact = Ghostep |
 | **FLASK · LOCK · \|\|** | drink flask · lock on · pause |

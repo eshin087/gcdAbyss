@@ -18,7 +18,7 @@ buildHero(U, {});                                         // the plain undersuit
 | File | What it holds |
 | --- | --- |
 | `index.js` | `SLOTS`, the `GEAR` registry, `registerItem`, `getItem`, `DEFAULT_LOADOUT`, `WANDERER_LOADOUT`, `BASE_LOADOUT`, `resolveLoadout` |
-| `shroud.js` | the Shrouded set (the default since ADR-043): hood, wrap tunic, bound sleeves, the tattered cloak (`SHROUD_SHEETS`). Built from `heroGeo.js` sheets only, no sculpted parts |
+| `shroud.js` | the Shrouded set (the default since ADR-043): hood, wrap tunic, bound sleeves, the tattered cloak (`SHROUD_SHEETS`: a narrow cape down his back and a drape on each arm, ADR-073). Built from `heroGeo.js` sheets only, no sculpted parts |
 | `wanderer.js` | the Wanderer's set, one item per slot, plus its data (`COAT_PANELS`, `CAPE_SHEETS`). Its legs, coat tails and sword are part of the default loadout |
 | `base.js` | the undersuit: fallback items for `chest`, `arms`, `legs` |
 | `../heroGeo.js` | the geometry builders every item is made of |

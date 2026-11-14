@@ -14,8 +14,8 @@ import {
 //   chest  shroud.tunic   a closed wrap tunic, a neck scarf, one belt
 //   arms   shroud.arms    cloth sleeves, bound forearms, bare hands
 //   back   shroud.cloak   a mantle over the shoulders and SHROUD_SHEETS: ragged sheets on the
-//                         streamer springs (anim.js), round his back and over his LEFT side and arm
-//                         (trimmed in ADR-065: his back and legs show between them).
+//                         streamer springs (anim.js): a narrow cape down the middle of his back and
+//                         a drape on each arm (ADR-073: his arms, waist and legs show beside it).
 //                         The sword arm stays clear of the cloth, so the arm and the blade read.
 // Built in code from the heroGeo.js sheets (no sculpted parts): `npm run hero-parts` is not needed.
 //
@@ -34,22 +34,19 @@ const SHROUD_LAG = 0.5;
 /** How far a cloak sheet may swing from hanging (rad): just short of level. */
 const SHROUD_MAX = 1.45;
 export const SHROUD_SHEETS = [
-  // (Session 21, ADR-065, owner: "reduce the back cloak from covering too much"; picked "A trimmed" of
-  // three rendered previews (trimmed, back only, short): the same seven sheets, ~30 % narrower and
-  // 15 % shorter (the torn points too), standing off his back less. Before: widths [0.26, 0.4, 0.56]
-  // down the middle, out 0.42-0.5; the cloak fanned 1.44 m across at rest and hid his back and legs.)
-  // down his back (Session 16, owner: from the side he was "way too skinny" with little depth: the
-  // three back sheets hang from further back, off the mantle's back, and stand off his back; their
-  // outward pull points straight back, so he is no wider from behind)
-  { on: 'chest', at: [0, 0.2, -0.16], ry: Math.PI, w: [0.177, 0.272, 0.381], len: [0.425, 0.425], out: 0.3, wrap: 0.24, strips: [0.187, 0.102, 0.255, 0.136, 0.204], fork: [0, 1, 0, 0, 1], seed: 3 },
-  { on: 'chest', at: [0.11, 0.205, -0.14], ry: Math.PI - 0.62, w: [0.15, 0.258, 0.367], len: [0.425, 0.408], out: 0.36, wrap: 0.22, strips: [0.153, 0.255, 0.102, 0.221], fork: [1, 0, 0, 1], seed: 17 },
-  { on: 'chest', at: [-0.11, 0.205, -0.14], ry: Math.PI + 0.62, w: [0.15, 0.245, 0.34], len: [0.408, 0.391], out: 0.3, wrap: 0.22, strips: [0.221, 0.119, 0.187, 0.085], fork: [0, 1, 0, 0], seed: 29 },
-  // thrown back behind the sword shoulder: short, so the right arm and the blade stay clear
-  { on: 'chest', at: [-0.205, 0.2, -0.055], ry: Math.PI + 1.15, w: [0.109, 0.177, 0.231], len: [0.34, 0.289], out: 0.3, wrap: 0.2, strips: [0.17, 0.085, 0.136], fork: [0, 0, 1], seed: 41 },
-  // his left side: the wing
-  { on: 'chest', at: [0.2, 0.2, -0.04], ry: 1.9, w: [0.136, 0.245, 0.354], len: [0.408, 0.391], out: 0.4, wrap: 0.2, strips: [0.119, 0.238, 0.153, 0.272], fork: [0, 0, 1, 0], seed: 53 },
-  // draped over the left arm: it follows the arm, so a raised or reaching arm lifts the wing
-  { on: 'armL', at: [0.05, -0.02, 0.0], ry: 1.35, w: [0.163, 0.258, 0.34], len: [0.357, 0.357], out: 0.24, wrap: 0.16, strips: [0.255, 0.136, 0.204, 0.102], fork: [0, 1, 0, 0], seed: 67 },
+  // (Session 25, owner: "i want his cloak to be thinner in the back", "narrower from behind"; the
+  // pick of three rendered widths: a NARROW CAPE. Three sheets down the middle of his back, about as
+  // wide as his hips at the hem (0.24 m in the middle, the two beside it turned only 0.3 rad out), and
+  // the drapes on the arms; the wing over his left side and the sheet behind the sword shoulder are
+  // gone, so his arms, waist and legs show from the game camera behind him.
+  // Before (Session 21, ADR-065, "A trimmed"): seven sheets, the back three [0.18, 0.27, 0.38] wide
+  // and 0.62 rad apart, fanning ~1 m across at the hem. Session 16 hung the back sheets off the
+  // mantle's back so he has some depth in profile: kept.)
+  { on: 'chest', at: [0, 0.2, -0.16], ry: Math.PI, w: [0.16, 0.2, 0.24], len: [0.425, 0.425], out: 0.22, wrap: 0.24, strips: [0.187, 0.102, 0.255, 0.136], fork: [0, 1, 0, 0], seed: 3 },
+  { on: 'chest', at: [0.07, 0.205, -0.15], ry: Math.PI - 0.3, w: [0.11, 0.14, 0.17], len: [0.425, 0.408], out: 0.24, wrap: 0.22, strips: [0.153, 0.255, 0.102], fork: [1, 0, 0], seed: 17 },
+  { on: 'chest', at: [-0.07, 0.205, -0.15], ry: Math.PI + 0.3, w: [0.11, 0.14, 0.16], len: [0.408, 0.391], out: 0.22, wrap: 0.22, strips: [0.221, 0.119, 0.187], fork: [0, 1, 0], seed: 29 },
+  // draped over the left arm: it follows the arm, so a raised or reaching arm lifts it
+  { on: 'armL', at: [0.05, -0.02, 0.0], ry: 1.35, w: [0.098, 0.155, 0.204], len: [0.357, 0.357], out: 0.16, wrap: 0.16, strips: [0.255, 0.136, 0.204], fork: [0, 1, 0], seed: 67 },
   // a short torn shoulder cape on the sword arm
   { on: 'armR', at: [-0.05, -0.01, -0.02], ry: -1.9, w: [0.136, 0.177, 0.204], len: [0.17, 0.136], out: 0.24, wrap: 0.13, strips: [0.085, 0.136, 0.068], fork: [0, 0, 0], lag: 0.25, seed: 79 },
 ];

@@ -595,9 +595,9 @@ export class AudioEngine {
 
     // player
     on('player:attack', (d) => {
-      // releasing the charged thrust (or any swing) ends the charge hum; the slam and the thrust
-      // swing heavy, the thrust as a long rising hiss
-      const heavy = d.kind === 'thrust' || d.kind === 'slam' || d.kind === 'heavy';
+      // releasing the charged cleave (or any swing) ends the charge hum; the slam, the cleave and the
+      // execution's thrust swing heavy, the thrust as a long rising hiss
+      const heavy = d.kind === 'thrust' || d.kind === 'cleave' || d.kind === 'slam' || d.kind === 'heavy';
       if (this.charge?.active) this.charge.stop(heavy ? 0.05 : 0.08);
       this.play('swing', { heavy, combo: d.combo, thrust: d.kind === 'thrust' });
     });

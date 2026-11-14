@@ -8,7 +8,7 @@ import { aimWithoutCursor } from './aim.js';
 // right-thumb buttons feed input.setVirtual(code, down) with the actions' virtual codes ('@attack',
 // core/bindings.js: a keyboard remap never moves a touch button), so the player and flow keep
 // reading the same actions and every edge (tap / hold / release) is the real device's:
-//   stick → move (analog; pushed to the rim = @sprint)   ATTACK → @attack (tap light, hold thrust)
+//   stick → move (analog; pushed to the rim = @sprint)   ATTACK → @attack (tap light, hold the charged cleave)
 //   BLOCK → @block (hold block, tap parry)   DODGE → @dodge   FLASK → @flask   LOCK → @lockOn   || → @pause
 // Aim: in a fight with the dragon targetable (and within CONFIG.touch.autoAimRange) game.mouseGround
 // is put on its lock point (auto-aim); otherwise it sits CONFIG.touch.aimDistance m ahead of the hero
@@ -410,7 +410,7 @@ export class TouchControls {
   _syncButtons() {
     const p = this.game.player, B = this.btn, K = this._keys;
     if (!p || !B) return;
-    // ATTACK: ASCII charge meter while the thrust charges
+    // ATTACK: ASCII charge meter while the cleave charges
     const charging = p.state === 'charge';
     const cells = charging ? Math.max(0, Math.min(CHARGE_CELLS, Math.round(fin(p.chargeK) * CHARGE_CELLS))) : -1;
     if (cells !== K.charge) {

@@ -4,99 +4,97 @@ import { DIM } from './model.js';
 
 // Attack data + the blade sweep used for hit detection. No stamina: pacing comes from windup /
 // recovery only (docs/COMBAT.md). Moveset (ADR-041; owner concept sheet "Combat key poses"):
-//   LMB tap ×5  falling cut → rising backhand → whirl (a full turn) → stab → two-handed overhead
-//               SLAM (combo finisher: ground shard burst, more damage + posture)
+//   LMB tap ×5  a cut from the right → a backhand → a whirl (a full turn) → a lunge, all one-handed
+//               (ADR-071), → the two-handed overhead SLAM (combo finisher: ground shard burst, more
+//               damage + posture)
 //   LMB while sprinting      SPRINT_ATK: a bounding rising slash that keeps the run's momentum
 //   LMB out of a forward roll ROLL_ATK: a low cut rising out of the crouch
 //               (both count as hit 1: the next tap is the rising backhand)
-//   LMB hold    low crouched charge, blade drawn back and glowing; release = lunging THRUST (the
-//               root travels forward, farther with more charge)
+//   LMB hold    a deep coiled charge, the blade held up behind the right shoulder and glowing;
+//               release = the dashing CLEAVE (the root travels forward, farther with more charge, and
+//               the blade carves one diagonal through the target as the dash arrives)
 //
 // Swing shapes (`anim`) are read by anim.js:
-//   kind 'h'      — a sweep round the body; a0/a1/a2 = blade azimuth in body space (0 = ahead, + =
-//                   the hero's left) at coil / end of active frames / follow-through; elev0 → elev →
-//                   elev2 = blade pitch at the coil, the strike and the end of the follow-through
-//                   (a big elev0 → elev change makes it a diagonal cut). Options: `loop` (the windup
-//                   loop over the right shoulder + the free hand's reach: hit 1), `spin` (±1: the
-//                   whole body turns once, − = to his right, while the blade is held out), `sink`
-//                   (m the hips drop through the cut), `feet: 'dash'` (bounding steps for a long
-//                   root travel instead of one lunge step).
-//   kind 'stab'   — a one-handed thrust: the hand draws back to the right ribs, then drives the
-//                   level blade straight out along the facing line.
+//   kind 'clip'   — a keyframed clip from swings.js (`clip`: its name): the light swings and the
+//                   cleave. The clip's keys run over this attack's windup / active frames / recovery,
+//                   and its blade crosses the front of the hero inside the active frames, exactly
+//                   while it can hit. Options: `spin` (±1: the whole body turns once through the
+//                   active frames, − = to his right), `turn` (rad, + = to his left: a partial body
+//                   pivot through the cut that turns back in the recovery), `hop` (m: a skip off the
+//                   ground through the windup into the cut), `feet: 'dash'` (bounding steps for a
+//                   long root travel instead of one lunge step; `dashW`: the dash starts at the
+//                   windup's end).
 //   kind 'slam'   — two-handed vertical slam; a0/a1/a2 = blade elevation (π/2 = straight up,
 //                   0 = ahead, − = into the ground, > π/2 = back over the head) at the overhead
-//                   coil / impact / follow-through; ready → raise = the windup's path to a0.
-//   kind 'thrust' — the charged lunge: blade level along the facing line, hand driven forward.
-// The arc travels a0 → a1 during the active frames, so the blade crosses the front of the hero
-// exactly while it can hit.
-//   Swing extras (any kind 'h'): `turn` (rad, + = to his left) a partial body pivot through the cut
-//   that turns back in the recovery; `hop` (m) a skip off the ground through the windup into the cut.
-//   kind 'stab' takes `rise` (rad: the point drives upward) and `low` (m: from a crouch); kind 'slam'
-//   takes `hop` (a leap through the raise, landing on the impact).
+//                   coil / impact / follow-through; ready → raise = the windup's path to a0. Takes
+//                   `hop` (a leap through the raise, landing on the impact) and `tilt` (rad: the
+//                   swing's plane leans toward his right).
+//   kind 'thrust' — the execution's lunge: blade level along the facing line, hands driven forward.
 //
 // `variants` (Session 16, owner: "I don't want him to show the same pattern over and over"): other
 // looks for the same hit. The animator picks `anim` or one of them at random when the hit starts
-// (its own noise, never the game's RNG; never the same one twice in a row). Every variant keeps the
-// hit's timing, damage, reach and lunge, starts where the previous hit's finish leaves the blade and
-// sweeps it across his front inside the active frames, so the chain still flows and still connects
-// (the REACH test swings each one).
+// (its own noise, never the game's RNG; never the same one twice in a row, and never a clip along
+// the line the swing before it cut: swings.js `line`). Every variant keeps the hit's timing, damage,
+// reach and lunge and sweeps the blade across his front inside the active frames, so the chain
+// still connects (the REACH test swings each one).
 //
 // `lunge` = m stepped forward through the strike; `reach` = how far ahead of the hero the swing
 // connects without stepping (used by the step-in assist to size the lunge, see REACH.assist).
+// `chain` = the fraction of the recovery after which the next light may start: the cut carries
+// through before the next one winds up (it was 0: a mashed chain cut each swing off as its active
+// frames ended, 4 hits a second).
+//
+// Pace (Session 25, owner: the swings were "too fast to follow"): a light's windup and active
+// frames are 0.16 / 0.18 s (they were 0.14 / 0.11) and a mashed chain lands a hit every ~0.42 s (it
+// was 0.25 s); the lights' damage and posture went up x1.4 with it, so a chain's damage per second
+// is about what it was.
 
 export const LIGHT = [
   {
-    // 1, the falling cut: cocked over the right shoulder (blade up-back-right) → a diagonal down
-    // across the front → low at the left hip. (Was a flat sweep at chest height; with hit 2 it read
-    // as the same arc twice.)
-    name: 'fallingCut', kind: 'light', combo: 1, damage: 30, poise: 12, heavy: false,
-    windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
-    hitstop: 0.055, shake: 0.12,
-    anim: { kind: 'h', loop: true, a0: -2.0, a1: 1.9, a2: 2.3, elev0: 0.75, elev: -0.3, elev2: -0.45 }, // high right → low left
+    // 1, a cut from the right. The falling cut: cocked beside the head (blade up-back-right) → a
+    // diagonal down across the front → low past the left hip
+    name: 'fallingCut', kind: 'light', combo: 1, damage: 42, poise: 17, heavy: false,
+    windup: 0.16, active: 0.18, recovery: 0.26, chain: 0.3, lunge: 0.55, reach: 2.2,
+    hitstop: 0.06, shake: 0.12,
+    anim: { kind: 'clip', clip: 'fallingCut' }, // high right → low left
     variants: [
-      // a low flat draw cut from the right hip, the body pivoting into it, rising at the finish
-      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.35, elev0: -0.3, elev: -0.05, elev2: 0.35, sink: 0.1, turn: 0.4 },
-      // a leaping cut: a skip in from high over the right shoulder, turning into it, down to the left
-      // foot
-      { kind: 'h', a0: -1.75, a1: 1.75, a2: 2.25, elev0: 1.15, elev: -0.45, elev2: -0.6, hop: 0.12, turn: 0.35 },
+      { kind: 'clip', clip: 'drawCut', turn: 0.3 }, // low and flat from the right hip, pivoting into it
+      { kind: 'clip', clip: 'risingSlash', hop: 0.12 }, // a skip in, from the right knee up to high left
     ],
   },
   {
-    // 2, the rising backhand: from low at the left hip up across the front to high right
-    name: 'risingCut', kind: 'light', combo: 2, damage: 32, poise: 12, heavy: false,
-    windup: 0.14, active: 0.11, recovery: 0.22, lunge: 0.55, reach: 2.2,
-    hitstop: 0.055, shake: 0.12,
-    anim: { kind: 'h', a0: 2.2, a1: -1.85, a2: -2.25, elev0: -0.5, elev: 0.45, elev2: 0.85 }, // low left → high right
+    // 2, a backhand from the left. The rising backhand: from low at the left hip up across the front
+    // to high right
+    name: 'risingCut', kind: 'light', combo: 2, damage: 45, poise: 17, heavy: false,
+    windup: 0.16, active: 0.18, recovery: 0.26, chain: 0.3, lunge: 0.55, reach: 2.2,
+    hitstop: 0.06, shake: 0.12,
+    anim: { kind: 'clip', clip: 'risingBackhand' }, // low left → high right
     variants: [
-      // a level backhand at chest height, the hips pivoting back round with it
-      { kind: 'h', a0: 2.3, a1: -1.8, a2: -2.3, elev0: 0.0, elev: 0.1, elev2: 0.4, turn: -0.4 },
-      // a falling backhand from high left to low right, dropping into it
-      { kind: 'h', a0: 1.9, a1: -1.7, a2: -2.2, elev0: 0.95, elev: -0.35, elev2: -0.5, sink: 0.1 },
+      { kind: 'clip', clip: 'flatBackhand', turn: -0.4 }, // level at chest height, pivoting round with it
+      { kind: 'clip', clip: 'fallingBackhand' }, // from over the left shoulder down to the right hip
     ],
   },
   {
-    // 3, the whirl: he follows the backhand round to his right, a full turn with the blade held out
-    // level; it crosses the front two thirds of the way round, inside the active frames
-    name: 'whirl', kind: 'light', combo: 3, damage: 36, poise: 16, heavy: false,
-    windup: 0.16, active: 0.17, recovery: 0.24, lunge: 0.7, reach: 2.2,
-    hitstop: 0.065, shake: 0.16,
-    anim: { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: 0.3, elev: 0.0, elev2: -0.2 },
+    // 3, the whirl: he follows the backhand round to his right, a full turn with the sword arm thrown
+    // out level; the blade crosses the front two thirds of the way round, inside the active frames
+    name: 'whirl', kind: 'light', combo: 3, damage: 50, poise: 22, heavy: false,
+    windup: 0.18, active: 0.2, recovery: 0.28, chain: 0.3, lunge: 0.7, reach: 2.2,
+    hitstop: 0.07, shake: 0.16,
+    anim: { kind: 'clip', clip: 'whirl', spin: -1 },
     variants: [
-      // the same turn with the blade rising through it, out of a crouch
-      { kind: 'h', spin: -1, a0: -2.2, a1: -1.0, a2: -0.35, elev0: -0.35, elev: 0.15, elev2: 0.55, sink: 0.08 },
-      // no turn: a skipping cross-cut from high right to low left
-      { kind: 'h', a0: -2.3, a1: 1.8, a2: 2.4, elev0: 0.55, elev: -0.15, elev2: -0.35, hop: 0.12, turn: 0.3 },
+      { kind: 'clip', clip: 'risingWhirl', spin: -1 }, // the same turn out of a crouch, the blade spiralling up
+      { kind: 'clip', clip: 'lowSweep' }, // no turn: a crouching sweep along the grass
     ],
   },
   {
-    // 4, the stab: the hand draws back to the right ribs, then drives the point straight out
-    name: 'stab', kind: 'light', combo: 4, damage: 30, poise: 14, heavy: false,
-    windup: 0.12, active: 0.09, recovery: 0.22, lunge: 0.8, reach: 2.3,
-    hitstop: 0.06, shake: 0.14,
-    anim: { kind: 'stab' },
+    // 4, the lunge (def name `stab`): the hand draws back to the right ribs, then one long line from
+    // the rear heel to the point
+    name: 'stab', kind: 'light', combo: 4, damage: 42, poise: 19, heavy: false,
+    windup: 0.15, active: 0.12, recovery: 0.26, chain: 0.3, lunge: 0.8, reach: 2.3,
+    hitstop: 0.065, shake: 0.14,
+    anim: { kind: 'clip', clip: 'lunge' },
     variants: [
-      // out of a crouch, the point driving up into the target
-      { kind: 'stab', rise: 0.3, low: 0.12 },
+      { kind: 'clip', clip: 'risingThrust' }, // out of a crouch, the point driving up into the target
     ],
   },
   {
@@ -108,10 +106,12 @@ export const LIGHT = [
     shards: { radius: 1.7, height: 3.2 }, // ground burst at the impact point (hits if the blade missed)
     // windup: blade low ahead (ready) → up-back 33° past the head (raise, mid-windup) → hanging
     // down the back at the apex (a0, the wrists coil); active: over the top into the ground ahead
-    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8 },
+    // `tilt` (rad): the whole swing leans toward his right, so the blow comes down from over the
+    // right shoulder to the ground ahead and a little left: a diagonal, not straight down the middle
+    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, tilt: 0.42 },
     variants: [
       // a leap through the raise, landing on the blow
-      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, hop: 0.16 },
+      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, tilt: 0.42, hop: 0.16 },
     ],
   },
 ];
@@ -121,25 +121,41 @@ export const LIGHT = [
  *  hit 1 of the combo. */
 export const SPRINT_ATK = {
   name: 'sprintSlash', kind: 'light', combo: 1, damage: 40, poise: 18, heavy: false,
-  windup: 0.14, active: 0.14, recovery: 0.36, lunge: 0, travel: 2.4, keepYaw: true, reach: 2.3,
+  windup: 0.14, active: 0.16, recovery: 0.36, chain: 0.25, lunge: 0, travel: 2.4, keepYaw: true, reach: 2.3,
   hitstop: 0.07, shake: 0.2,
-  anim: { kind: 'h', a0: -2.5, a1: 1.7, a2: 2.35, elev0: -0.6, elev: 0.4, elev2: 0.9, feet: 'dash' },
+  anim: { kind: 'clip', clip: 'sprintSlash', feet: 'dash' },
 };
 
 /** LMB out of a forward roll: a low cut that rises out of the crouch, right → left. Counts as hit 1
  *  of the combo. */
 export const ROLL_ATK = {
   name: 'rollCut', kind: 'light', combo: 1, damage: 34, poise: 14, heavy: false,
-  windup: 0.1, active: 0.11, recovery: 0.26, lunge: 0.9, reach: 2.2,
+  windup: 0.12, active: 0.14, recovery: 0.28, chain: 0.3, lunge: 0.9, reach: 2.2,
   hitstop: 0.06, shake: 0.14,
-  anim: { kind: 'h', a0: -2.3, a1: 1.6, a2: 2.2, elev0: -0.45, elev: -0.05, elev2: 0.6, sink: 0.2 },
+  anim: { kind: 'clip', clip: 'rollCut' },
 };
 
-/** Charged lunging thrust (hold LMB, release). The charge itself is the windup, so the release is
- *  quick; the hero travels `travel` m (lerped by charge) during the active frames. */
+/** The charged attack (hold LMB, release): the DASHING CLEAVE. The charge itself is the windup, so
+ *  the release is quick: he bursts `travel` m forward (lerped by charge; `dash`: the root's travel
+ *  runs through the active frames, front-loaded) with the blade cocked behind the right shoulder,
+ *  and carves one two-handed diagonal through whatever the dash reaches as it dies out (the blade
+ *  crosses his front over the last 40 % of the active frames), ending low in a long lunge.
+ *  (Was a lunging thrust: the owner, session 25: "an impactful slash with a cool weightful hit
+ *  instead of a poke".) */
+export const CLEAVE = {
+  name: 'cleave', kind: 'cleave', combo: 1, heavy: true, dash: true,
+  damage: [70, 110], poise: [30, 50], // lerped by charge (see chargeStats)
+  travel: [2.2, 3.6],
+  windup: 0.08, active: 0.24, recovery: 0.45, lunge: 0, reach: 2.3,
+  hitstop: 0.15, shake: 0.45,
+  anim: { kind: 'clip', clip: 'cleave', feet: 'dash', dashW: true },
+};
+
+/** The lunging thrust: the execution against a broken duelist (player.js _startExecuteThrust). The
+ *  root travels forward through the active frames (`dash`). */
 export const THRUST = {
-  kind: 'thrust', combo: 1, heavy: true,
-  damage: [70, 110], poise: [30, 50], // lerped by charge (see thrustStats)
+  name: 'thrust', kind: 'thrust', combo: 1, heavy: true, dash: true,
+  damage: [70, 110], poise: [30, 50],
   travel: [2.2, 3.6],
   windup: 0.07, active: 0.2, recovery: 0.45, lunge: 0, reach: 2.3,
   hitstop: 0.1, shake: 0.3,
@@ -170,14 +186,15 @@ export const REACH = {
   assist: { range: 4.8, arc: 0.8, max: 1.3 },
 };
 
-/** Charge fraction 0..1 and the thrust's damage / poise / travel for a hold of `holdT` seconds. */
-export function thrustStats(holdT) {
+/** Charge fraction 0..1 and the charged attack's damage / poise / travel for a hold of `holdT`
+ *  seconds (`def`: CLEAVE, or THRUST for the execution). */
+export function chargeStats(holdT, def = CLEAVE) {
   const k = clamp((Number.isFinite(holdT) ? holdT - CHARGE.hold : 0) / (CHARGE.full - CHARGE.hold), 0, 1);
   return {
     k,
-    damage: lerp(THRUST.damage[0], THRUST.damage[1], k),
-    poise: lerp(THRUST.poise[0], THRUST.poise[1], k),
-    travel: lerp(THRUST.travel[0], THRUST.travel[1], k),
+    damage: lerp(def.damage[0], def.damage[1], k),
+    poise: lerp(def.poise[0], def.poise[1], k),
+    travel: lerp(def.travel[0], def.travel[1], k),
   };
 }
 
