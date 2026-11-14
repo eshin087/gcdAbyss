@@ -15,6 +15,15 @@ export class Atmosphere {
     this.game = game;
     this.forest = forest;
     this.ash = !!forest.ash;
+    // a set's own weather (`ambience: { setup(game), update(dt, game) }`): it replaces the fireflies,
+    // mist and leaves (and the ash); the bonfire's flames stay
+    this.ambience = forest.ambience && typeof forest.ambience.update === 'function' ? forest.ambience : null;
+    try {
+      this.ambience?.setup?.(game);
+    } catch (err) {
+      console.error('[atmosphere] ambience.setup', err);
+      this.ambience = null;
+    }
     this.bonfire = forest.bonfire;
     this.bonfireLit = true;
     this.glow = 0; // the sky glow shown (eases toward the asked one)
@@ -107,6 +116,10 @@ export class Atmosphere {
       }
     }
 
+    if (this.ambience) {
+      this.ambience.update(dt, this.game);
+      return;
+    }
     if (this.ash) {
       this._ashFall(dt, fxA, fxB);
       return;
