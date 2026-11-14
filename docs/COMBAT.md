@@ -675,11 +675,12 @@ form, faster form by form), TIMING (53 move × form runs: every contact within 2
 0.26 s, every move's first hit lands), FORMS (the whole four-bar flow through the hero's own attack
 press), SPELLS (every answer in the table above, and the glide), BOUNDS (never off the floor; 32
 blows reach a cornered hero in 45 s), FLOW (the door, the throne intro, a death and the reset), WIN.
-**Difficulty (measured, seed 4242, god-mode fencing bots; 2026-11-14, with the moves above and the
-hero's faster chain of ADR-075):** a bot that answers every tell wins in 95 s with 66 parries (forms
-at 0 / 20 / 42 / 67 s); answering 85 % it takes 16 hits for 262 damage in 101 s (the hero has 160 HP
-and five flasks of 70: he would live); answering 70 % it takes 43 hits for 825 damage in 129 s (he
-would not). At his first release (31 moves, the hero's old swings): 75 s, 18 hits / 325, 44 hits / 740.
+**Difficulty (measured, seed 4242, god-mode fencing bots; 2026-11-14, with the moves above, the
+hero's faster chain of ADR-075 and the guard of ADR-080):** a bot that answers every tell wins in
+91 s with 68 parries (forms at 0 / 18 / 41 / 66 s); answering 85 % it takes 19 hits for 315 damage in
+101 s (the hero has 160 HP and five flasks of 70: he would live); answering 70 % it takes 37 hits for
+658 damage in 120 s (he would not). At his first release (31 moves, the hero's old swings): 75 s, 18
+hits / 325, 44 hits / 740.
 Shen Hui's 85 % bot takes 7 – 8 hits. Target: 3 – 5 min for a player who knows him. No human has
 played him yet, and the bots never use the blade lock or the mikiri and stand inside his reach the
 whole fight.

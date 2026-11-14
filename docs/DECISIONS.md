@@ -1933,6 +1933,8 @@ playing; whether "attack into his attack" is found without being told.
   brain's and went back to the walking clip): both bosses now wait in their clip (he sits, Shen Hui
   kneels).
 - **Consequences:** the grip is the pin, not the "lifted and held, mash to break free" grab the
-  roadmap sketched: that needs a hero state of its own. 37 moves (was 31); with the hero's faster
-  chain (ADR-075) the 85 % bot takes 262 damage (was 325 at his release) and the 70 % bot 825 (was
-  740): about as hard, not re-tuned against a human. No sounds of their own for any of it yet.
+  roadmap sketched: that needs a hero state of its own. 37 moves (was 31); on main's faster chain
+  and guard (ADR-075, ADR-080) the 85 % bot takes 315 damage (was 325 at his release) and the 70 %
+  bot 658 (was 740): about as hard, not re-tuned against a human. No sounds of their own for any of
+  it yet. A flourish is the first half of its recovery only: past `guard.recoverOpen` (ADR-080) his
+  guard is up again and he may ward or step out of the rest.

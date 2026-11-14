@@ -10,7 +10,7 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 **Owner:** "improve the new bosses animation, movesets, spell effects, force effects, character detail
 and motion. make him look like a darth vader look alike". Branch `enemies/starless-lord-armour` from
 `main` (PR #24 merged the day before; rebased over PR #23 and PR #25, the hero's new swings and his
-faster chain).
+faster chain, then main's clash rework, PR #26, merged in).
 
 **Done:**
 - **His look** (ADR-083): a harness of his own in gear.js (a hood over a faceplate, cuirass and
@@ -49,11 +49,22 @@ the backflip, the pinwheel, the gale, the grip, the Rift, the Dark Star, lightni
 glide, the intro from the door, him seated, Shen Hui kneeling; 88 s of the AI across the four forms
 against an idle hero: no console errors, 1879 particles at most. After the pick: the hood from six
 sides close up (ASCII and solid), a turnaround, him seated, the backflip and the grip with it on.
-Bots (seed 4242, on main's faster chain): every tell answered 95 s; 85 % 16 hits / 262 damage; 70 %
-43 hits / 825.
+Bots (seed 4242, on main's faster chain and guard): every tell answered 91 s; 85 % 19 hits / 315
+damage; 70 % 37 hits / 658.
+
+**Fitted to the clash rework (PR #26, merged into main while this was open):** the code merged
+without a conflict. His new effects that are re-drawn every frame (the aura's wheel, the pull's
+line, the grip's talons and crush, the marks, the Dark Star) take their one-frame life from the
+effects clock (`game.fxDt`) as the engine's now do: on the game's dt a frame longer than the 0.02 s
+floor (a hit-stop or slow motion under ~50 fps) outlived them, and they would blink.
+Checked in the browser on the merged tree: the hero cutting at his raised guard in each of the four
+forms (the ward stands across the new guards, the sparks sit on his blade), a parried Crimson Litany
+(the contact frames), 10 s of the AI per form with the hero mashing: no console errors.
 
 **Not checked / open:** no human has fought him; not tried on a phone. The hood was checked in the
-model view and in strips, not in a whole fight at the game camera. The glide, the cartwheel and the
+model view and in strips, not in a whole fight at the game camera. His new moves were not looked at
+one by one under the clash rework (the blade lock, the trade clash and the deflect against the
+cartwheel, the hop spins and the staff). The glide, the cartwheel and the
 flourishes were reviewed as strips, not in motion at
 60 fps. The hop spin's legs are hidden by the war-skirt and the cape: not checked bare. The numbers
 were not re-tuned for the six new moves. No sounds of their own. His drawn body is now 32 % larger
