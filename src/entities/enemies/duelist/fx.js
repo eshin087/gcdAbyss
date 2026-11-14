@@ -1,11 +1,12 @@
 import { TELL, TELL_STYLE, RESULT } from '../../../combat/rules.js';
-import { TUNING } from './tuning.js';
+import { perPhase } from './realise.js';
 
-// The Ash Disciple's glyph FX (STYLE.md: everything is glyph particles from the world atlas + pooled
-// lights). The tells look exactly like the wyrm's (COMBAT.md "Tell presentation": a white glint for
-// parryable hits, a red flash for dodge-only ones, a red ground ring for areas), so every boss reads
-// the same way. His own: the clash when his guard turns a strike, ash-grey swing trails (ember in
-// phase 2), the Ash Crescent's sword qi, and the ash he dissolves into.
+// A duelist's glyph FX (STYLE.md: everything is glyph particles from the world atlas + pooled lights),
+// shared by every boss on duelist.js. The tells look exactly like the wyrm's (COMBAT.md "Tell
+// presentation": a white glint for parryable hits, a red flash for dodge-only ones, a red ground ring
+// for areas), so every boss reads the same way. Also here: the clash when a guard turns a strike,
+// parry and hit sparks, swing trails (steel, or ember), the Ash Crescent's sword qi, and the ash a
+// fallen duelist dissolves into. A boss with more (the Starless Lord's spells) extends this class.
 // Cosmetic randomness uses its own stream: the seeded sims replay the AI's Math.random draws.
 
 const GLINT_CORE = '*';
@@ -27,9 +28,10 @@ const SWEEP_ALONG = [0.5, 0.68, 0.84, 1.0];
 const SWEEP = {
   steel: { body: [1.5, 1.55, 1.75], core: [2.6, 2.65, 2.9], end: [0.16, 0.16, 0.2] },
   ember: { body: [2.6, 0.95, 0.28], core: [3.4, 1.9, 0.7], end: [0.45, 0.07, 0.01] },
+  red: { body: [3.0, 0.3, 0.16], core: [3.8, 1.7, 1.2], end: [0.5, 0.03, 0.02] },
 };
 
-export class DiscipleFx {
+export class DuelFx {
   constructor(d) {
     this.d = d;
     this.game = d.game;
@@ -301,7 +303,7 @@ export class DiscipleFx {
     const nSub = Math.min(8, Math.max(2, Math.ceil(tipStep / 0.22)));
     const U = this.game.U, Rg = U?.uCamRight?.value, Up = U?.uCamUp?.value;
     const rx = Rg?.x ?? 1, ry = Rg?.y ?? 0, rz = Rg?.z ?? 0, ux = Up?.x ?? 0, uy = Up?.y ?? 1, uz = Up?.z ?? 0;
-    const C = ember ? SWEEP.ember : SWEEP.steel;
+    const C = typeof ember === 'string' ? SWEEP[ember] ?? SWEEP.steel : ember ? SWEEP.ember : SWEEP.steel;
     for (let s = 1; s <= nSub; s++) {
       const t = s / nSub, t0 = (s - 1) / nSub;
       for (const f0 of SWEEP_ALONG) {
@@ -394,8 +396,13 @@ export class DiscipleFx {
     const c = this.crescents.find((p) => !p.alive);
     if (!c) return null;
     const l = Math.hypot(dx, dz) || 1;
-    Object.assign(c, { alive: true, x, z, dx: dx / l, dz: dz / l, age: 0, flashed: -1, done: false, tell: o.tell ?? TELL.NORMAL, damage: o.damage ?? 14, kb: o.knockback ?? 0.8, attack: o.attack ?? 'ashCrescent' });
+    Object.assign(c, { alive: true, x, z, dx: dx / l, dz: dz / l, age: 0, flashed: -1, done: false, speed: undefined, radius: undefined, half: undefined, life: undefined, style: undefined, tell: o.tell ?? TELL.NORMAL, damage: o.damage ?? 14, kb: o.knockback ?? 0.8, attack: o.attack ?? 'ashCrescent' });
     return c;
+  }
+
+  /** Per frame (duelist.update): everything in flight. */
+  update(dt, d) {
+    this.updateCrescents(dt, d);
   }
 
   get crescentsAlive() {
@@ -408,13 +415,16 @@ export class DiscipleFx {
    * as the wyrm's bullets). A parry or a dodge spends it; a block chips.
    */
   updateCrescents(dt, d) {
-    const C = TUNING.crescent, p = this.game.player;
+    const T = d.T, C = T.crescent, p = this.game.player;
+    if (!C) return;
     for (const c of this.crescents) {
       if (!c.alive) continue;
+      // (a thrown thing may carry its own speed, size and life: the Starless Lord's push)
+      const speed = c.speed ?? C.speed, radius = c.radius ?? C.radius, half = c.half ?? 1.0;
       c.age += dt;
-      c.x += c.dx * C.speed * dt;
-      c.z += c.dz * C.speed * dt;
-      if (c.age > C.life || Math.hypot(c.x, c.z) > 60) {
+      c.x += c.dx * speed * dt;
+      c.z += c.dz * speed * dt;
+      if (c.age > (c.life ?? C.life) || Math.hypot(c.x, c.z) > 60) {
         c.alive = false;
         continue;
       }
@@ -424,17 +434,17 @@ export class DiscipleFx {
       // along / across the crescent's path
       const rx = pp.x - c.x, rz = pp.z - c.z;
       const along = rx * c.dx + rz * c.dz, across = Math.abs(-rx * c.dz + rz * c.dx);
-      const reach = C.radius + (p.radius ?? 0.45);
-      if (across < 1.0 && along > 0 && c.flashed < 0) {
-        const tti = (along - reach) / C.speed;
-        if (tti <= TUNING.flashLead) {
+      const reach = radius + (p.radius ?? 0.45);
+      if (across < half && along > 0 && c.flashed < 0) {
+        const tti = (along - reach) / speed;
+        if (tti <= perPhase(T.flashLead, d.phase)) {
           c.flashed = c.age;
           const fy = 0.7;
           d.emit('combat:flash', { source: 'dragon', attack: c.attack, tell: c.tell, x: c.x, y: fy, z: c.z });
           this.tellFlash(c.tell, c.x, fy, c.z);
         }
       }
-      if (across < 1.0 && Math.abs(along) <= reach) {
+      if (across < half && Math.abs(along) <= reach) {
         c.done = true;
         // fairness: a crescent announced too late (the hero ran into it point-blank) only fizzles
         const lead = c.flashed >= 0 ? c.age - c.flashed : 0;
@@ -484,3 +494,6 @@ export class DiscipleFx {
     }
   }
 }
+
+/** (the name the Ash Disciple's tools knew it by) */
+export { DuelFx as DiscipleFx };
