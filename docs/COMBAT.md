@@ -125,6 +125,11 @@ hazard the ground heats up from its spawn     its edge shows, the heat flares, a
   parryable, blockable, attack, attacker, plunge, steel, last })` returns a `RESULT` (`hit` / `blocked` / `clashed` /
   `parried` / `dodged` / `perfectDodge` / `ignored`). `plunge: false` keeps a perfect dodge of that
   hit from becoming the plunge (fire hazards).
+- How the hero takes a hit he does not answer (ADR-083): a **flinch** (0.4 s) gives the way the
+  blow drives him (back, forward over a blow from behind, to the side); a **knockdown** (1.3 s, the
+  last 0.5 s invulnerable) falls away from the blow, onto his back from the front or a side and
+  onto his front from behind, his facing easing square to it as he falls; killed while down he
+  dies where he lies, otherwise he drops to a knee on his sword and falls forward.
 - On `parried` the attacker calls its own parry reaction: a deflect for a string's non-final hit
   (posture + a knock-back; `dragon:parried {hit, last}`, `combat:deflectChain {count}`), a recoil
   (posture + the punish window) for its last hit or a single melee attack.
