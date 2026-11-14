@@ -1887,3 +1887,66 @@ not be stopped by a light.
 window of ~0.19 s (the parry's is 0.22 s) for a smaller reward and no opening. An invisible timer
 (the re-arm), like the parry's. Checked by `duel.mjs` TRADE (16 checks). Not checked: a human
 playing; whether "attack into his attack" is found without being told.
+
+## ADR-083 — Hit reactions fall the way the blow drives them; he dies where he lies; knees and elbows stay above the grass (2026-11-14)
+
+**Context.** ADR-078's audit left out the hit reactions and the death fall; the owner: "Yes, audit
+them". The flinch, the block, the parry, the guard break, the knockdown and the death were each
+entered from 20–30 states (standing, running, every hit of the chain, the charge, a roll, the heal,
+from each side, lying down) with the joints, the ground, the blade against the body and the most
+abrupt frames measured, and then filmed. Found:
+- **Killed while knocked down** he stood up first: the death clip starts upright, so a man lying on
+  his back was lifted to his feet in a tenth of a second (his head from 0.3 m to 1.4 m), knelt and
+  fell a second time.
+- **The death's collapse** pushed both knees 14–16 cm under the grass: the feet were carried from
+  the kneel to "legs laid out along the body" while the hips dropped, and nothing kept a knee above
+  the ground (hands and ankles had floors; knees and elbows did not).
+- **A knockdown from behind** turned him 180° in ONE frame to face the blow, to fall on his back:
+  his hands and feet moved 0.5–0.7 m in that frame.
+- **Every flinch snapped him BACK**, also one from a blow between the shoulder blades.
+- **Struck in the middle of a swing** the reaction faded in over 3 frames: the blade was thrown
+  1.2–1.8 m in one of them (a cut's own fastest frame is 0.9 m), and in the whirl the whole body
+  whipped square, the hands 0.57 m in a frame.
+- **He fell like a board** (both legs straight, arms at his sides) and lay like one; the corpse too.
+- **On the corpse** the left elbow stood up in the air (its pole pointed "behind him", which is up
+  once he lies on his front) and the sleeve's cloth sheet stood 0.45 m straight up with it.
+- In range: the guard break, the block and the parry (a guard blown open is meant to be violent),
+  and every joint angle through all of it (ADR-078's limits held).
+
+**Decision.**
+- **A knee and an elbow have a floor** (`KNEE_FLOOR`, `ELBOW_FLOOR`; `_hingeFloor` in `_leg` /
+  `_arm`): a joint solved under the grass is swung round its limb's line up to the grass, the short
+  way. In the solver, so for every pose and blend, like ADR-078's limits.
+- **The knockdown falls away from the blow** (`player.kdProne`, `_fallFrom`): from the front or a
+  side onto his back, from behind onto his FRONT (hands thrown out, lies face down, pushes himself
+  up, a foot under him, stands). His facing eases square to the blow over the fall
+  (`TUNE.knockdownTurn`, 11 rad/s, at most a quarter turn) instead of being set in one frame.
+  Timings, i-frames and the slide are unchanged.
+- **The fall itself:** the feet stay where they stood as the hips drop, so the knees buckle; the
+  hands are left behind out ahead as the chest goes; lying, one knee stays up with its foot flat,
+  the other leg long, the sword arm flung wide and the free hand on his belly.
+- **Killed in the knockdown he dies where he lies** (`deadDown` clip; `player.deadDown`,
+  `downFrom`): the fall carries on to the grass, one arch runs through him and he goes limp. No
+  kneel, no second landing (its dust and shake are skipped).
+- **The flinch gives the way the blow drives it** (`player.hitPush`, the push in his own axes):
+  arched back, folded forward over a blow from behind, bent to the side, with the foot on that
+  side catching him.
+- **A reaction entered from the middle of a move** fades in over 0.1 s (0.05 from standing or
+  running), and one entered mid-turn (the whirl) finishes the turn over 0.3 s (`A.yaw0`,
+  `carryYaw`) instead of snapping square. The guard break's fade is 0.07 s (was 0.04).
+- **The corpse:** one knee fallen out to the side, his face turned to one side, both elbows flat on
+  the grass. Lying on the ground the cloth sheets obey gravity (`_layFlat`: a sheet's far end no
+  higher than its root), where "wrapped along the body" stood them up with a raised arm.
+
+**Rejected.** Easing the old turn-to-face (a half pirouette while falling backwards is no more
+natural than the snap). A ragdoll (no physics in this game; fixed clips are readable and cheap).
+Lengthening the reactions to hide the fades (they are gameplay timings).
+
+**Consequences.** A hero knocked down from behind keeps his back to the attacker when he gets up.
+The fastest frames after the change: the blade 0.2–0.75 m entering a reaction from a swing (was
+0.9–1.8), the guard break 1.1 m (meant), a knockdown from behind 0.26 m (was 1.8). Tests (HEROLIFE
+7): the flinch's direction, the whirl's interrupt, the knockdown from the front, behind and a side
+(which way he lands, how far and how fast his facing turns), both deaths, and no knee or elbow
+more than 2 cm under the grass through all of it. Not covered: the plunge's and the blade lock's
+poses were not part of this audit (the lock was reposed in ADR-081); the off hand's wrist in two-handed cuts and the free arm's
+elbow in two backhands' recoveries (ADR-078) still stand.

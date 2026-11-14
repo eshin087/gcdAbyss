@@ -150,6 +150,16 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.27 — Hit reactions and the death fall, audited (2026-11-14, `player/natural-reactions`, ADR-083)
+- [x] A knee / elbow floor in the solver (the death's collapse sank both knees 15 cm)
+- [x] The knockdown falls away from the blow: onto his front from behind, his facing eased (it spun him 180° in a frame)
+- [x] Killed while knocked down he dies where he lies (`deadDown`; he stood up to die again)
+- [x] The flinch follows the blow; reactions from mid-swing fade in, an interrupted whirl finishes its turn
+- [x] The fall and the corpse: knees buckle, a knee up, a knee out; the cloth lies flat on a lying body
+- [ ] Follow-ups:
+  - [ ] The owner's look at the preview
+  - [ ] Not audited: the plunge's poses
+
 ## M1.26 — Steel on steel: blades that meet, a guard you can read, cancels (2026-11-14, `combat/epic-clash`, ADR-079 – ADR-082)
 - [x] The clash: one effect of lines on the crossing of the blades; sparks fly through the freeze; a camera punch (ADR-079)
 - [x] A parried blow is held where it met the guard and rebounds; the hero's deflect goes to its side and height (ADR-079)
@@ -174,7 +184,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Anatomy: joint limits in the solver (elbows, knees, the sword wrist, hands outside the chest); the charge held out from the body (ADR-078)
 - [ ] Follow-ups:
   - [ ] The owner's look at the preview: the pace (a number from the Lab's slider if it is still off)
-  - [ ] Anatomy not yet covered: the off hand's wrist in two-handed cuts, the free arm's elbow behind the back in two backhands' recoveries, hit reactions and the death fall
+  - [ ] Anatomy not yet covered: the off hand's wrist in two-handed cuts, the free arm's elbow behind the back in two backhands' recoveries (hit reactions and the death fall: M1.27)
   - [ ] Ideas not built (the owner's pick): an afterimage on the sprint slash and the cleave's dash; a strafing guard-up stance while locked on; a second finisher (a spinning smash); a flick of the blade as a chain ends
   - [ ] The roll out of a swing and the guard's raise move the point 0.4–0.8 m in a frame (left: both must be instant)
 

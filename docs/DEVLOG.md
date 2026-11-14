@@ -5,6 +5,33 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-14 — Session 28: hit reactions and the death fall, audited
+
+**Owner** (after Session 26's anatomy round, asked whether to audit these too): "Yes, audit them".
+Branch `player/natural-reactions`, from `main` after PR #25 and PR #26 (ADR-083).
+- A scratch audit: the flinch, the block, the parry, the guard break, the knockdown and the death,
+  each entered from 20–30 states, measuring joints, body parts under the ground, the blade in the
+  body, and the fastest frames in the WORLD (measured in his own frame, a 180° snap of his facing
+  is invisible).
+- Found and fixed: killed while lying he stood up to die again (now the `deadDown` clip); the
+  death's collapse sank the knees 15 cm (a knee / elbow floor in the solver); a knockdown from
+  behind spun him round in one frame (now he falls onto his front, his facing eased); every flinch
+  went backwards (it follows the blow); struck mid-swing the blade jumped up to 1.8 m in a frame
+  (longer fades, the whirl's turn carried on); he fell and lay like a board (knees buckle, a knee
+  up, arms flung); a cloth sheet stood 0.45 m up off the corpse (elbows laid flat; cloth obeys
+  gravity while he lies).
+- In range and left alone: the guard break, the block and the parry; every joint angle.
+- Process: the two commits were first made on `player/faster-flow`, which had been MERGED and
+  deleted an hour before (PR #25): the push re-created the branch and `gh pr edit` rewrote the
+  merged PR's title. Both undone; the work was moved here. Check `gh pr view` before pushing to a
+  branch a PR was opened from.
+- The Browser pane lost WebGL on `localhost` and `127.0.0.1` ("Web page caused context loss and
+  was blocked"); the same server under another host name (`film.localhost:5191`) rendered again.
+- Verified: `npm test` ALL PASSED (995 checks, DUEL and LORD too), build ok; the reactions filmed from the side and at the game camera.
+- Not covered: the plunge's poses. Nobody has played it; nothing ran on a phone.
+
+**Next:** the owner's look at the preview.
+
 ## 2026-11-14 — Session 27: steel on steel (the clash, his guard, cancels, the blade lock)
 
 **Owner:** "improve the combat mechanics of enemy guarding, being able to animation cancel from a

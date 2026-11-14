@@ -345,6 +345,9 @@ state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block
                 //   'ghostep' = a perfect dodge without the plunge, 'plunge' = the head-stab, contract 2,
                 //   'lock' = blades crossed with a duelist, 'mikiri' = stepping on a perilous thrust)
 blocking: boolean                      // RMB held and able to block
+hitPush: { x, z }                      // the way the last blow drove him, in his own axes (z − = back, x + = his left): the flinch
+kdProne: boolean                       // the knockdown fell him on his FRONT (the blow came from behind; ADR-083)
+deadDown: boolean; downFrom: number    // killed in the knockdown, `downFrom` s into it: he dies where he lies (clip 'deadDown')
 critTimer: number                      // > 0 while the crit window is open (after a perfect dodge / the plunge's landing)
 lockOn: boolean                        // toggled by Tab / middle mouse; facing tracks dragon.lockPoint
 get alive(): boolean
@@ -613,7 +616,13 @@ the hand still reaches its target), for every clip. **Joint limits** (ADR-078), 
 and so for every pose and every cross-fade: `_arm` / `_leg` hold a hand / a foot at least
 `ARM_NEAR` / `LEG_NEAR` from its shoulder / hip (an elbow never closes past 40°, a knee past 32°)
 and move a hand out of the ribs' outline (`TORSO_R`); `_wristLimit` keeps the blade within
-`WRIST_BACK` (128°) of the sword forearm's line. The off hand on the grip keeps the grip. A light def's `chain` (0..1) is the fraction of
+`WRIST_BACK` (128°) of the sword forearm's line. The off hand on the grip keeps the grip.
+`_hingeFloor` (ADR-083) keeps a knee / an elbow above the grass (`KNEE_FLOOR`, `ELBOW_FLOOR`): one
+solved under it is swung round its limb's line up to it. **Hit reactions** (ADR-083) read three
+things off the player: `hitPush` (the flinch gives that way), `kdProne` (the knockdown clip's
+on-his-front variant) and `downFrom` (the `deadDown` clip: killed in the knockdown he dies where
+he lies); a reaction entered mid-turn unwinds the turn (`yaw0`, `carryYaw`), and while a lying
+clip plays (`LYING_KEYS`) the cloth sheets obey gravity (`_layFlat`). A light def's `chain` (0..1) is the fraction of
 its recovery after which the next light may start (`player.js` `_tickAttack`). Options on the
 anim block: `spin` (±1, a full turn through the active frames: `spinTurn`), `turn` (rad, a partial
 pivot from mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`),

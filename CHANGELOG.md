@@ -4,7 +4,15 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Nineteen pieces of work since 0.4.0:
+Twenty pieces of work since 0.4.0:
+- **Hit reactions and the death, made natural** (2026-11-14, ADR-083): a blow from behind now
+  knocks him forward onto his hands (he used to spin round in one frame to fall on his back) and a
+  flinch folds him the way the blow drives him. He no longer falls like a board: the knees buckle,
+  the arms fling, he lies with a knee up. Killed while knocked down he dies where he lies (he used
+  to stand up first to kneel and fall again). The death's collapse no longer sinks his knees into
+  the ground, and the corpse lies sprawled with its cloak flat instead of a sheet standing in the
+  air. Getting hit in the middle of a swing no longer teleports the blade. Timings and i-frames
+  are unchanged.
 - **Steel on steel** (2026-11-14, ADR-079 – ADR-082; both duelists):
   - **Parries where the blades meet.** A parried blow is now shown stopped on your guard, your blade
     snapped to the side and height it came from, the two edges crossed, and it is that picture the
