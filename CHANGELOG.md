@@ -4,7 +4,17 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Fifteen pieces of work since 0.4.0:
+Sixteen pieces of work since 0.4.0:
+- **The Starless Lord, a third level** (2026-11-13, ADR-068 – ADR-070; `?level=starless`, or pick
+  The Obsidian Throne on the title screen): a black hall lit red, and on its throne a dark lord from
+  the stars with a blade of red light. He fights in four forms, each with its own health bar: one
+  blade, twin blades, the two joined into a long staff, and a cross-hilted blade wreathed in the
+  Void. Empty a bar (or break his posture) and he drops to one knee: strike then for the DEATHBLOW
+  that ends the form. He is faster than Shen Hui and gets faster with each form, somersaults and
+  leaps into his cuts, and works the Void in between: lightning you can deflect (a perfect parry
+  sends it back at him), a wall of force to cut or roll through, a pull that drags you onto his
+  blade, a thrown blade that comes back, stones torn out of the floor, lightning called down on
+  marked ground, and in the last form he vanishes and is behind you.
 - **Controller support** (2026-11-13, ADR-066): play with a gamepad (Xbox, PlayStation or any
   "standard" pad in the browser). Left stick moves (analog), right stick aims (let go and attacks
   aim at the boss), RB / RT attack (hold to charge), LB / LT block (tap to parry), A dodges, B or
@@ -118,6 +128,11 @@ Fifteen pieces of work since 0.4.0:
   That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **The Obsidian Throne** (`?level=starless`, ADR-069, ADR-070): the throne hall set
+  (`world/throneHall.js`), the Starless Lord (`enemies/starlessLord/`: 31 moves across four forms, eight
+  Void spells, four stances), four health bars with pips on the boss bar, the DEATHBLOW call-out,
+  `dragon:phase4`, a Phase 4 button in the Lab, `tests/integration/lord.mjs` in `npm test`.
+- **Sets with their own night and weather** (ADR-070): a level's set may return `sky` and `ambience`.
 - **Perfect parry → return** (ADR-051): RMB ≤ 0.08 s before a bullet lands returns an ember (30 HP,
   14 posture) or a wisp (70 HP, 30 posture) to the wyrm's head; RETURN call-out, gold burst, a
   brighter clang; `player:parry.perfect`, `dragon:parried.perfect`, `dragon:returned`. At most 120 HP
@@ -186,6 +201,8 @@ Fifteen pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **One duelist engine** (ADR-068): `enemies/duelist/` (`Duelist`, `DuelBrain`, `createDuelPoses`,
+  `makeRealise`, `DuelFx`); the Ash Disciple is a kit on it and plays exactly as before.
 - **Bullets are breathed** (ADR-050): every bullet spawns at the wyrm's mouth along its head's aim
   (`spit()`); Ember storm → Ember torrent (a swept stream, orbs at the extremes, a P3 pirouette),
   Cinder fan → Cinder burst (coughed cones, P3 double taps, a P3 chain into a torrent), a denser

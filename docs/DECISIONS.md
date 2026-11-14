@@ -1372,3 +1372,61 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Consequences:** remapped keys are shown everywhere a key is named. Test mocks get the same action
   API (`installActions`). One binding per action after a remap (defaults can have two, e.g. W and ↑);
   no "secondary key" column yet. Mouse buttons 3+ (side buttons) cannot be bound.
+
+## ADR-068 — One duelist engine for every human boss (2026-11-13)
+- **Context:** the Ash Disciple's body, mind, clip format and FX lived in his own folder and read his
+  data through module imports. A second human boss would have copied about 2500 lines, and every fix
+  to the guard, the deflect chain or the tells would have had to be made twice.
+- **Decision:** `src/entities/enemies/duelist/` holds the engine: `duelist.js` (`Duelist`: the boss
+  slot, guard, posture, break, execution, the duel's moments), `brain.js` (`DuelBrain`), `realise.js`
+  (move timing), `poses.js` (`createDuelPoses(guard)`), `fx.js` (`DuelFx`). A boss is a KIT (plain data:
+  tuning, moves, clips, gear, poses, the blade's ends, its transitions) and a subclass with a few
+  hooks. The Ash Disciple became `class AshDisciple extends Duelist` with `ASH_KIT`; his files keep
+  their exports. The engine gained only what a second boss needs and data can ask for: any number of
+  phases (`kit.transitions`, `dragon:phase<n>`), drawn alternatives in a string (`pick`), unscaled
+  windups (`fixed`), `cast` beats and per-beat hooks, an off-hand blade channel, thrown things with
+  their own speed and size.
+- **Consequences:** the Ash Disciple's whole suite (`duel.mjs`) passes unchanged, the seeded WIN run
+  included (the refactor keeps the order of the AI's random draws). `brain.js`, `fx.js` and the old
+  `disciple.js` moved (git history follows them). New bosses are mostly data.
+
+## ADR-069 — The Starless Lord: four blade forms, four bars, a deathblow each (2026-11-13)
+- **Context:** the owner asked for a new level: a master dark-side duelist with a red blade of light
+  and "evil force powers", in phases: one blade, dual wield, a combined long blade, then one
+  cross-hilted blade with an aura; very fast, acrobatic, strings of six with variations, spells
+  between the cuts, effects to dodge and to parry or deflect. Asked, the owner picked: a dark lord
+  from the stars (not a wuxia figure), four health bars with a deathblow each, faster than Shen Hui
+  and ramping up. The game is public, so he ships under his own names: Varr Nihil, the Starless Lord;
+  blades of red light; the Void.
+- **Decision:**
+  - Four forms = the duelist's phases 1 – 4, each with its own stance, moveset (weights per form), reach
+    and pace. Each form has a full bar; an empty bar BREAKS him instead of killing him, and the hero's
+    execution is the deathblow that ends the form (Sekiro's structure). `lives` tells the HUD.
+  - Posture scales with the bar (hard to move when full): a posture break is a deathblow, so without
+    this a parry-perfect player would skip his health entirely and a form would last ~13 s.
+  - The spells are beats in the same data as the cuts, answered by the same three answers: lightning
+    is a blue hit (deflect; a perfect parry returns it), the push a thrown thing (parry cuts it), the
+    pull a red line (roll), the thrown blade and stones cue themselves like bullets, called lightning
+    marks its ground. No new input, no new rule.
+  - Acrobatics are root motion in the data: a somersault (`lift` + the body pitched through a full
+    turn, the feet carried round with it), leaps, dashes, the blink (form 4).
+  - His look reuses the Wanderer's coat, pauldron, boots, tails and cape in black and crimson, with a
+    helm, gauntlets and sabers of his own. The blades draw on the `flask` part, whose ink lines are
+    tinted red for this page load (one level per page load).
+- **Consequences:** the hardest boss so far (a bot answering 85 % of his tells takes 18 hits; Shen
+  Hui's takes 7 – 8). Not played by a human yet. His sounds are the existing cues (no blade hum, no
+  thunder of his own). The grip (a choke the hero mashes out of) was designed and left out.
+
+## ADR-070 — The Obsidian Throne Hall; a set's own sky and weather (2026-11-13)
+- **Context:** the owner asked to see the arenas before choosing. Three were prototyped as real sets
+  and rendered in game: a black throne hall lit red, a storm peak over a cloud sea, a fallen-star
+  crater. The owner picked the hall. The sets needed their own light and air, which world.js and
+  atmosphere.js hard-coded for the forest and the courtyard.
+- **Decision:** a set may return `sky` (moon, ambient and fog, written into the shared uniforms once)
+  and `ambience: { setup, update }` (run instead of the fireflies / mist / leaves / ash). The hall
+  (`world/throneHall.js`) is centred on its floor seal (the origin); its inlay, pillar slits and
+  windows are glyphs in one additive batch of their own (`GlyphParticles` registered with the
+  pipeline), which the boss can flare. The lord keeps to the hall's rectangle, not a circle.
+- **Consequences:** the two losing prototypes were deleted. Six brazier lights compete with combat
+  lights for the eight visible slots (the pool keeps the ones nearest the camera focus). The hall's
+  frame cost on a phone is not measured.
