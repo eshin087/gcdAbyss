@@ -4,7 +4,17 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Seventeen pieces of work since 0.4.0:
+Eighteen pieces of work since 0.4.0:
+- **A faster chain, a new finisher, swings that flow home** (2026-11-14, ADR-075, ADR-076): the
+  attack chain is quicker: a hit every ~0.32 s when you mash (it was 0.42 s), each cut over in 0.12
+  s. The light hits deal 30 / 32 / 36 / 30 again (the ×1.4 that paid for the slow chain is gone),
+  so the damage per second is about what it was. The **finisher** is new: he gathers at the hip,
+  leaps as the blade sweeps up his right side, and brings it down two-handed in one diagonal into
+  the ground, landing folded over the planted blade; mashing no longer cuts that landing off, and
+  the blow deals 66 (was 58). After every cut the blade now carries on round and eases home (it
+  used to stop dead for a moment and then snap back as fast as it had cut). The whirl drops into
+  its turn and his head stays on the target through it. For tuning: the Lab (`?lab`, the LAB
+  button) has an **atk** slider that runs the hero's swings at ×0.6 to ×1.6 of this pace.
 - **Wuxia-flow swings, a dashing cleave, a deeper guard, a narrower cloak, a new sword arc**
   (2026-11-13, ADR-071 – ADR-074): the hero's attack chain is new. Every swing is now a one-handed cut driven by the whole
   body: the hips turn through it, the sword arm opens to full reach as the blade crosses his front,

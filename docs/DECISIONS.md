@@ -1575,3 +1575,84 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   him instead of bars. The letters and the halftone lattice are gone from the hero's arc. The
   plunge's dive passes `gate: false` (its blade is carried, not turned, and keeps its band). The
   Ash Disciple's and the Starless Lord's sweep trails are their own code and unchanged.
+
+## ADR-075 — The chain's pace: a quick cut between two held ends, a hit every ~0.32 s (2026-11-14)
+
+**Context.** Session 25 slowed the light chain from a hit every 0.25 s to one every 0.42 s (windup
+0.16 s, a 0.18 s cut) because the owner found the swings "too fast to follow", and raised the
+lights' damage ×1.4 to pay for it. On the merged build the owner wrote: "speed up the attack speed
+on the character. its too slow right now". So 0.25 s was too fast to read and 0.42 s too slow to
+play. The swings of Session 25's first build were also stiff and had no arc worth the name: what
+was hard to follow then was not only the speed.
+
+**Decision.**
+- **A light is a short gather, a quick cut and a held finish:** windup 0.11 s, active 0.12 s
+  (the lunge 0.10, the whirl 0.13 / 0.15), recovery 0.24 s with `chain` 0.3. A mashed chain lands a
+  hit every ~0.32 s (measured 0.32, 0.32, 0.37). The cut itself is as quick as before Session 25;
+  readability comes from the poses at its two ends and from the arc that hangs behind the blade
+  (ADR-074), not from a slow blade.
+- **Damage follows the pace:** the lights are 30 / 32 / 36 / 30 again (posture 12 / 12 / 16 / 14).
+  The slam is 66 (was 58) and has a `chain` of its own (0.3): a mashed button used to cut its
+  landing off the frame the blade met the ground. Mashed, the chain deals ~104 a second (109 on the
+  slow chain, 120 before Session 25). The crit window stays 2.2 s.
+- **The sprint slash and the roll cut** speed up with them (0.11 / 0.13 / 0.32 and 0.10 / 0.11 /
+  0.26 s); the slam's windup is 0.28 s (was 0.4), its blow 0.13 s. The cleave is unchanged: its
+  charge is its windup.
+- **`player.debug.attackSpeed`** (the Lab's "atk" slider, ×0.6 – ×1.6): a multiplier on the attack
+  clock, so the owner can try other paces on the preview (the Lab's button works on a phone) and
+  name a number instead of "faster" or "slower". 1 in play; the root's speeds are scaled back so a
+  swing's step covers the same ground at any pace.
+
+**Rejected.** Going back to 0.25 s (the owner called that too fast, twice). Keeping the 0.18 s cut
+and only shortening the windup and the wait between hits (the slow blade is what reads as slow).
+Scaling every timing by one factor in code (the timings are data, per hit: combat.js).
+
+**Consequences.** The fastest frame of an arm in a cut is larger (the upper arm's throw into the
+falling cut and the lunge: ~55° in a frame, was 42°): the test's limit is 60° (it was 45°; the
+elbow flips it guards against were 50–135° on swings half as fast). Tests that walk the chain click
+every 0.36 s (`CHAIN_EVERY`).
+
+## ADR-076 — The finisher is a clip; a recovery flows into the way home; the whirl drops and spots (2026-11-14)
+
+**Context.** The owner, with the pace: "think of ways to make the character, animation, and motion
+better". Session 25's lesson was to measure motion before tuning it, so the hero was run through
+every state (idle, run, sprint, the chain in each look, single hits, roll and sprint attacks,
+block, charge and cleave, heal) with nine points tracked in his own frame, and the frames where a
+point's motion changed most abruptly were listed. Three things stood out:
+- **The slam**, the last swing still on its own code (`slamSwing`): its hands covered 0.54 m in
+  one frame of the blow, the point reversed in a single frame at the top, and the blade went over
+  the top of his head (an upright plane leaned 24°).
+- **Every recovery:** the clip's last key is at ~40 % of the recovery and the way home started at
+  50 %, so the blade stood still for two frames and then came home in 0.12 s at 60 cm a frame at the
+  point, as fast as it had cut: cut, freeze, snap.
+- The roll out of a swing and the guard's raise are also abrupt (the point moves 0.4–0.8 m in a
+  frame), but both are reactions that must be instant; they are left alone.
+Filmed close up, the whirl turned bolt upright, like a figure on a turntable.
+
+**Decision.**
+- **The slam is a swings.js clip** (`slam`, line `down`, two-handed) like every other swing: a
+  gather (he dips and coils right, the blade drawn down-back past the right hip), a leap (`hop`
+  0.26 m with `tuck` 1.2: the knees draw up) as the blade sweeps up his right side, where the camera
+  behind him sees it, and cocks over the right shoulder (46° up), then one diagonal down across his
+  front into the ground ahead and a little left, the hands leading and the steel whipping after
+  them. He lands folded over the planted blade and holds it (`home` 0.55). The second look is the
+  same clip nearly grounded (`hop` 0.09). The shards, the reach band, the hit test and the events
+  are the def's and unchanged. `slamPose`, `slamWindup`, `slamSwing`, `slamTilt` and the path
+  splines they used are removed (about 190 lines).
+- **The way home starts while the follow-through is still moving:** a clip's `home` defaults to 0.3
+  of the recovery (`SW_HOME`; it was 0.5). The blade turns round without standing still and comes
+  home over 0.17 s at about half the cut's speed.
+- **The whirl** drops 7 cm into its turn and leans to the inside of it, and his head spots: it stays
+  on the target while the body turns away, comes round ahead of the body and finds the target again
+  before the shoulders do (`spinTurn`, `SPIN_SPOT`).
+
+**Rejected.** Smoothing the old slam's easing (its plane and its own windup code would have stayed
+a second system). Letting the way home finish after the attack state ends, in the cross-fade to the
+ready stance (the cross-fade routes the blade by the carry's rules, not the recovery's: a finish
+over the left shoulder could come home behind his head). A slower raise of the guard (a block must
+read as instant).
+
+**Consequences.** Every swing of the hero is clip data now; the only attack pose still in code is
+the execution's thrust. Tests: the finisher's hands move < 36 cm in a frame (33); a cut's
+follow-through runs into the way home (no two still frames, the point home at < 0.62 of the cut's
+speed); a mashed button leaves the slam's landing ≥ 0.1 s.

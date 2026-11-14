@@ -5,6 +5,61 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-14 — Session 26: a faster chain, the finisher as a clip, a recovery that flows
+
+**Owner (on the merged build of Session 25):** "speed up the attack speed on the character. its too
+slow right now. think of ways to make the character, animation, and motion better".
+
+**The pace (ADR-075).** 0.25 s a hit was "too fast to follow" (Session 25), 0.42 s is "too slow". A
+light is now a 0.11 s gather, a 0.12 s cut and a held finish; mashed, a hit every ~0.32 s (measured
+0.32, 0.32, 0.37). The cut is as quick as the old one: the pose at each end and the arc behind the
+blade carry the readability. The lights' damage is 30 / 32 / 36 / 30 again (the ×1.4 of the slow
+chain is gone), the slam 66. The sprint slash and the roll cut speed up with them. For the next
+round of "faster / slower" there is a number to give: the Lab's **atk** slider
+(`player.debug.attackSpeed`, ×0.6 – ×1.6; it works on the phone through the LAB button).
+
+**Ways to make the motion better: measured first.** A scratch scenario ran the hero through every
+state with nine points tracked in his own frame and listed the most abrupt frames (the second
+difference of each point's position). What it found, and what was done (ADR-076):
+- **The slam** was the worst motion in the set: hands 0.54 m in one frame of the blow, the point
+  reversing in a single frame at the top, the last swing still on its own code. It is a swings.js
+  clip now: a gather at the right hip, a leap (the knees drawn up) as the blade sweeps up his right
+  side and cocks over the shoulder, one two-handed diagonal into the ground ahead, a landing folded
+  over the planted blade that he holds. Hands at most 0.33 m a frame. A mashed button used to cut
+  the landing off the frame the blade met the ground (the slam had no `chain`); it has one now.
+  `slamPose` / `slamWindup` / `slamSwing` / `slamTilt` and their splines are deleted (~190 lines):
+  every swing of the hero is clip data.
+- **Every recovery** went cut → two frames standing still → home in 0.12 s at 60 cm a frame at the
+  point (as fast as the cut). The way home now starts 30 % into the recovery, while the
+  follow-through is still moving: the blade turns round without stopping and comes home at 43 cm a
+  frame.
+- **The whirl**, filmed close up, turned bolt upright like a figure on a turntable: it drops 7 cm
+  into the turn and leans to the inside of it, and the head spots (stays on the target, then comes
+  round ahead of the body).
+- Left alone on purpose: the roll out of a swing and the guard's raise (the point moves 0.4–0.8 m
+  in a frame, but both must be instant). Run, sprint, stops, turns, heal and idle measured smooth.
+
+**Verification:** `npm test` ALL PASSED (945 checks; the DUEL and LORD suites too), glyph check
+clean, `npm run build` ok. New checks (HEROLIFE 1f): one cut's follow-through runs into the way
+home (no two still frames; the point home at under 0.62 of the cut's speed), the finisher's hands
+under 36 cm a frame and its landing left ≥ 0.1 s by a mashed button, `debug.attackSpeed` 1.5 makes
+a swing take 1/1.5 as long over the same ground. Changed: the mashed pace 0.26–0.40 s (was
+0.36–0.52), the arm-step limit 60° a frame (was 45°: a 0.12 s cut throws the upper arm ~55° in its
+fastest frame; the flips it guards against were 50–135°), `CHAIN_EVERY` 0.36 s. REACH: all five
+hits, the cleave and 24 variant trials connect from contact to 3.5 m. In the dev server: the chain
+at the game camera (every second frame), the slam from behind, the front, the side and the game
+camera, the whirl from the front; the Lab slider set to ×1.25 (label, `debug.attackSpeed` and the
+badge follow) and back.
+
+**Not checked / open:**
+- No human has played it; nothing ran on a phone. Whether ~0.32 s is the right pace is the owner's
+  to say (the slider is there for that).
+- Ideas not built, for the owner to pick from: an afterimage on the sprint slash and the cleave's
+  dash; a strafing guard-up stance while locked on; a second finisher (a spinning smash); a flick
+  of the blade as a chain ends. The whirl's feet still turn on the ground with the spin.
+
+**Next:** the owner's look at the preview.
+
 ## 2026-11-13 — Session 25: wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape, a shorter sword, a new sword arc
 
 **Owner:** "we need to improve the characters animations. something about the way he swings the

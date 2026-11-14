@@ -368,6 +368,8 @@ respawn(x, z)                          // full restore, idle, facing north, clea
 restAtBonfire()                        // refill hp/flasks (no teleport)
 update(dt)
 debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill(),   // used by the Lab
+         attackSpeed: number,          // × the attack clock (1 in play): every swing's windup, cut and recovery run this
+                                       //   much faster, its step covering the same ground (the Lab's "atk" slider)
          plunge(execution = false) }   // Lab / captures: start the plunge on the dragon now (any range, in the air too)
 ```
 Module-private state the animator reads (anim.js): `plungeAnim { phase, u, t, exec, h }` (the plunge
@@ -579,8 +581,14 @@ the hand still reaches its target), for every clip. A light def's `chain` (0..1)
 its recovery after which the next light may start (`player.js` `_tickAttack`). Options on the
 anim block: `spin` (±1, a full turn through the active frames: `spinTurn`), `turn` (rad, a partial
 pivot from mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`),
-`hop` (m, a skip off the ground from the windup into the strike). The other kinds are `slam` (the
-finisher: `slamSwing`, which takes `hop`) and `thrust` (the execution's lunge).
+`hop` (m, a skip off the ground from the windup into the strike; `tuck`: how far the feet lift
+with it, × the hop: over 1 the knees draw up, a leap). The finisher (def kind `slam`) is a clip too
+(`slam`, ADR-076: a gather, a leap, one two-handed diagonal into the ground); the only other anim
+kind is `thrust` (the execution's lunge). **The way home:** from a clip's `home` (default
+`SW_HOME` 0.3 of the recovery; the slam and the cleave 0.55, they hold their finish) `attackPose`
+blends the pose toward the ready stance while the clip's last keys are still moving, so the
+follow-through runs into the return without a stop. `spinTurn` (the whirl) also drops and leans
+him into the turn and turns his head back toward the target, then ahead of the body (`SPIN_SPOT`).
 **Attack variants** (ADR-055): a `LIGHT` def may carry `variants` (more `anim` blocks for the same
 hit: same timing, damage, reach and lunge). `HeroAnimator.play('attack')` calls `_pickVariant()`:
 `anim` or one of `variants` at random with the animator's own noise, never the same one twice in a
@@ -678,7 +686,7 @@ Animator ↔ player hooks (`anim.js` is private to the player module):
   come from `BODY`. The build is not bit-identical on active frames (ADR-024): the hit segment moved
   by ≤ 2.5 cm on some of them (light 1 on 57 of 73 frames, light 2 on 9 of 29, the slam on 15 of 36;
   the thrust is identical), and the REACH table is unchanged. (ADR-071 / ADR-072 replaced the light
-  swings and the charged attack outright; of these clips only the slam's remains.)
+  swings and the charged attack outright, ADR-076 the slam: none of these clips remains.)
 - **Coat vs blade** (round 3): every frame the grip and 12 points along the drawn blade are tested
   against each coat panel segment in that segment's frame. With the sword hand outside the cloth the
   panel hangs inside the hand and the blade (they cap its flare; the legs still win); with the hand
