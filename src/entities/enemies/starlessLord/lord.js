@@ -7,7 +7,7 @@ import { Duelist } from '../duelist/duelist.js';
 import { DuelBrain } from '../duelist/brain.js';
 import { perPhase } from '../duelist/realise.js';
 import { LORD_LOADOUT, SABER, buildOffSaber } from './gear.js';
-import { formPoses } from './poses.js';
+import { formPoses, glidePose } from './poses.js';
 import { MOVES, MOVE_NAMES, CLIP, CLIPS_BY_FORM, TRANSITIONS, COUNTERS, realise } from './moves.js';
 import { TUNING } from './tuning.js';
 import { LordFx } from './fx.js';
@@ -24,14 +24,21 @@ import { LordFx } from './fx.js';
 //   - the blades of red light: which meshes each form ignites, the off-hand blade's joint, the glow,
 //     the red light on the main blade
 //   - the Void: lightning (a parry deflects it, a perfect parry sends it back), the push, the pull,
-//     the thrown blade, torn stone, called lightning, the blink
+//     the Crushing Dark, the thrown blade, torn stone, the Rift, called lightning, the Dark Star,
+//     the blink
+//   - the glide: past a walk he does not run, the Void carries him (the root lifted, his own pose)
 //   - the throne: he sits until the hero comes through the door, rises, and leaps down to the seal.
 
 const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const POSES = Object.freeze({
   loco: (p, A) => formPoses(A.player?.form ?? 1).duelLoco(p, A),
   duel: (p, A) => formPoses(A.player?.form ?? 1).duelClip(p, A),
+  glide: glidePose,
 });
+/** The beat a move is in at its time t (its windup or its active frames), or null. */
+const beatNow = (a) => (a ? a.beats.find((b) => a.t < b.end + 1e-6) ?? null : null);
+/** A beat that works the Void (a spell, not steel): the cape lifts through it. */
+const isCast = (D) => !!(D && (D.cast || D.bolt || D.pull || D.grip || D.release?.style === 'push' || D.release?.style === 'rift'));
 
 /** Everything the shared duelist needs to be him (duelist.js: kit). */
 export const LORD_KIT = Object.freeze({
@@ -43,6 +50,7 @@ export const LORD_KIT = Object.freeze({
   loadout: LORD_LOADOUT,
   poses: POSES,
   blade: Object.freeze({ guard: SABER.guard, tip: SABER.tip }),
+  scale: TUNING.scale,
 });
 
 /** His mind: the duelist's, with each form's own reaction clips. */
@@ -76,20 +84,20 @@ export class StarlessLord extends Duelist {
   /** His colours: the hero's material set, recoloured on HIS instances (gear.js says which is which). */
   _tint(M) {
     const fill = (m, r, g, b) => m?.uniforms?.uArtFill?.value.setRGB(r, g, b);
-    fill(M.coat, 0.06, 0.055, 0.065); // black cloth
+    fill(M.coat, 0.055, 0.05, 0.06); // black cloth: the cape, the war-skirt, the sleeves
     fill(M.collar, 0.07, 0.06, 0.07);
-    fill(M.lining, 0.4, 0.035, 0.03); // crimson inside the coat tails and the cape
+    fill(M.lining, 0.42, 0.035, 0.03); // crimson inside the cape and the skirt
     fill(M.collarIn, 0.42, 0.04, 0.035);
     fill(M.facing, 0.34, 0.03, 0.03);
-    fill(M.piping, 0.4, 0.06, 0.05);
-    fill(M.hem, 0.2, 0.05, 0.06); // the torn edges: dark blood-red
-    fill(M.shirt, 0.03, 0.03, 0.036); // gauntlets, the helm's shadowed face
-    fill(M.pants, 0.045, 0.045, 0.055);
+    fill(M.piping, 0.42, 0.06, 0.05);
+    fill(M.hem, 0.26, 0.045, 0.05); // the cloth's lower edge: ember-red
+    fill(M.shirt, 0.028, 0.028, 0.034); // the undersuit, the breather's slots, the grip
+    fill(M.pants, 0.04, 0.04, 0.05);
     fill(M.leather, 0.07, 0.06, 0.065);
-    fill(M.armor, 0.1, 0.1, 0.125); // black plate
-    fill(M.spike, 0.13, 0.12, 0.15);
-    fill(M.bevel, 0.26, 0.2, 0.22);
-    fill(M.trim, 0.2, 0.19, 0.22); // dark gunmetal: the hilt, buckles
+    fill(M.armor, 0.09, 0.09, 0.112); // black plate
+    fill(M.spike, 0.12, 0.115, 0.14);
+    fill(M.bevel, 0.3, 0.26, 0.29); // the plates' edges
+    fill(M.trim, 0.21, 0.2, 0.23); // dark gunmetal: the hilt, the clasps
     fill(M.welt, 0.2, 0.08, 0.08);
     fill(M.flask, 1.0, 0.07, 0.04); // the blades and the visor: red light
     // the `flask` part's ink lines are amber for every rig (a shared per-part tint): in this level
@@ -139,6 +147,9 @@ export class StarlessLord extends Duelist {
     this._hand = new THREE.Vector3();
     this._ptsOk = false;
     this._introLanded = false;
+    this._hover = 0; // the glide 0..1 (the root lifted off the floor)
+    this._grip = { x: 0, z: 0 }; // where the Crushing Dark is closing
+    this._ghost = new Float32Array(16 * 6);
     const d = this;
     this.debug.phase4 = () => this.brain.forcePhase(4);
     /** Lab: straight to form n (1..4), blades lit, bar full. */
@@ -171,6 +182,8 @@ export class StarlessLord extends Duelist {
       this._storm.left = 0;
       this._introLanded = false;
       this._ptsOk = false;
+      this._hover = 0;
+      this.pilot.updraft = 0;
     }
     super.reset();
     // enthroned: the root sits at the seat (the pose's hips are lowered to it)
@@ -398,6 +411,15 @@ export class StarlessLord extends Duelist {
     if (this.litWant < 1 && !this._changing && (m === 'foot' || m === 'react' || m === 'broken' || (m === 'act' && act && !act.def.transition))) this.litWant = 1;
     this._showForm();
     if (this.mode === 'intro') this._intro(dt);
+    this._glide(dt);
+    // the Void's wind under his cape: through a cast, a little always in form 4, a gust at an ignition
+    {
+      const cur = beatNow(act);
+      let up = this.phase >= 4 && this.lit > 0.5 && m !== 'dying' ? 0.3 : 0;
+      if (m === 'act' && cur && !cur.feint && isCast(cur.def)) up = Math.max(up, 0.35 + 0.65 * clamp((act.t - cur.start) / Math.max(0.05, cur.impact - cur.start), 0, 1));
+      if (m === 'act' && act?.def.transition && cur && act.t >= cur.impact - 0.5) up = 1;
+      this.pilot.updraft = up;
+    }
     // The Starless Sky: one mark every `gap` s, led onto where the hero is going
     const St = this._storm;
     if (St.left > 0 && this.mode !== 'dying' && this.mode !== 'dead') {
@@ -416,6 +438,33 @@ export class StarlessLord extends Duelist {
         }
       }
     }
+  }
+
+  /**
+   * The glide. In footwork, past TUNING.glide.on m/s he stops walking: the animator takes his glide
+   * pose, the root lifts off the floor and a wake streams off under him; below .off he comes down
+   * and walks. Stepping back or aside (the backstep, the sidestep) he is carried the same way.
+   */
+  _glide(dt) {
+    const G = TUNING.glide, m = this.mode, b = this.brain;
+    const vx = this.pilot.groundVel.x, vz = this.pilot.groundVel.z, sp = Math.hypot(vx, vz);
+    if (m === 'foot') {
+      if (this.anim.key !== 'glide' && sp > G.on) this.anim.play('glide', 0.24);
+      else if (this.anim.key === 'glide' && sp < G.off) this.anim.play('loco', 0.28);
+    }
+    const gliding = m === 'foot' && this.anim.key === 'glide';
+    this._hover = damp(this._hover, gliding ? 1 : 0, gliding ? 7 : 12, dt);
+    if (!(this._hover > 0.002)) this._hover = 0;
+    const R = b.react;
+    const carried = m === 'react' && R && (R.kind === 'backstep' || R.kind === 'sidestep');
+    if (m === 'foot') this.position.y = G.hover * this._hover;
+    else if (carried) this.position.y = G.back * Math.sin(Math.PI * clamp(R.t / Math.max(0.05, R.clip.dur), 0, 1));
+    else if (m === 'act') {
+      // (a beat with its own flight owns the height: a flip, a leap)
+      const cur = beatNow(b.act);
+      if (!b.leap && !cur?.def.lift && !cur?.def.leap) this.position.y = G.hover * this._hover;
+    }
+    if ((gliding || carried) && sp > 1) this.fx.glideWake(this.position.x, this.position.z, vx, vz, dt, carried ? 1 : this._hover);
   }
 
   /** The intro's root motion: off the throne onto the dais, the blade lit, the leap down to the seal. */
@@ -464,14 +513,14 @@ export class StarlessLord extends Duelist {
     fx.bladeLight(this._hilt, this._tip, this.mode === 'dying' ? 0 : main ? lit : f === 2 ? lit * 0.6 : 0, hot);
     if (f >= 4 && this.mode !== 'dying' && this.mode !== 'sleep' && lit > 0.5) {
       const c = this._hs[1];
-      fx.aura(c.x, c.y, c.z, dt, 1);
+      fx.aura(c.x, c.y, c.z, dt, 1, this.position.x, this.position.z);
     }
     if (a) {
       // the sweep trail of whichever blade is cutting, from the snap out of the cock on
       for (const b of a.beats) {
         if (b.feint || a.t < b.impact - 0.32 * b.W - 0.02 || a.t > b.end + 0.6 * b.A + 0.05) continue;
         const D = b.def;
-        if (D.cast || D.release?.style === 'push' || D.bolt || D.pull) break;
+        if (isCast(D)) break;
         if (D.left) fx.sweep(this._offHiltPrev, this._offTipPrev, this._offHilt, this._offTip, 'red');
         else if (main) {
           fx.sweep(this._hiltPrev, this._tipPrev, this._hilt, this._tip, 'red');
@@ -492,7 +541,17 @@ export class StarlessLord extends Duelist {
             p.getChestPos(_v, true);
             fx.pullStream(h.x, h.y, h.z, _v.x, _v.y, _v.z, k, dt);
           }
-        } else if (D.release?.style === 'push' || D.cast?.kind === 'debris' || D.cast?.kind === 'storm') fx.crackle(h.x, h.y, h.z, k * 0.7, dt, [2.4, 1.6, 2.0]);
+        } else if (D.grip) {
+          // the Crushing Dark closes where his hand is aimed: on the hero while it still tracks him
+          fx.crackle(h.x, h.y, h.z, k, dt, [2.8, 0.2, 0.3]);
+          const p = this.game.player?.position;
+          const dist = clamp(p ? Math.hypot(p.x - this.position.x, p.z - this.position.z) : 4, 1.5, TUNING.grip.range);
+          this._grip.x = this.position.x + Math.sin(this.yaw) * dist;
+          this._grip.z = this.position.z + Math.cos(this.yaw) * dist;
+          fx.gripClaw(this._grip.x, 1.15, this._grip.z, k);
+        } else if (D.cast?.kind === 'star') fx.crackle(h.x, h.y, h.z, k, dt, [2.2, 0.4, 3.0]);
+        else if (D.release?.style === 'rift') fx.crackle(this._tip.x, this._tip.y, this._tip.z, k, dt, [3.0, 0.3, 0.2]);
+        else if (D.release?.style === 'push' || D.cast?.kind === 'debris' || D.cast?.kind === 'storm') fx.crackle(h.x, h.y, h.z, k * 0.7, dt, [2.4, 1.6, 2.0]);
       }
     }
     if (this.mode === 'broken') fx.stunStars(this._hs[0]);
@@ -511,6 +570,7 @@ export class StarlessLord extends Duelist {
       this.game.world?.forest?.ambience?.flare?.(1);
       return;
     }
+    if (D.grip) this.fx.gripSnap(this._grip.x, 1.15, this._grip.z); // (on him: hitPlayer adds the crush)
     if (D.bolt) {
       // the bolt: from his hand to the hero (in its line) or out along his facing
       const h = this._hand, p = this.game.player;
@@ -534,7 +594,13 @@ export class StarlessLord extends Duelist {
       const px = p.position.x, pz = p.position.z;
       o = { ...o, from: { x: px + (px - this.position.x), z: pz + (pz - this.position.z) }, kind: 'pull' };
     } else if (D?.bolt) o = { ...o, kind: 'lightning' };
+    else if (D?.grip) o = { ...o, kind: 'grip', extra: { plunge: false } };
     const r = super.hitPlayer(o);
+    if (D?.grip && r === RESULT.HIT && p?.position) {
+      // caught: thrown to the floor, and the Void presses down on him
+      this.fx.gripCrush(p.position.x, p.position.z, TUNING.grip.crush);
+      this.game.shake?.(0.3);
+    }
     if (D?.bolt && r === RESULT.PARRIED && p?.deflect?.perfect && this.mode !== 'dying' && this.mode !== 'dead') {
       // thrown back: it strikes him
       const B = TUNING.bolt, c = this._hs[1];
@@ -555,14 +621,30 @@ export class StarlessLord extends Duelist {
       const P = TUNING.push;
       const sx = this.position.x + Math.sin(base) * 1.1, sz = this.position.z + Math.cos(base) * 1.1;
       this.fx.throwCrescent(sx, sz, Math.sin(base), Math.cos(base), { tell: b.def.tell, damage: b.def.damage, knockback: b.def.knockback, attack: act?.name ?? 'voidPush', style: 'push', speed: P.speed, radius: P.radius, half: P.half, life: P.life });
+      this.fx.pushBurst(this._hand.x, this._hand.y, this._hand.z, Math.sin(base), Math.cos(base));
       this.game.shake?.(0.15);
       this.game.world?.gust?.(sx, sz, 1.4, 6);
+      return;
+    }
+    if (R.style === 'rift') {
+      // fissures from where the staff's point went in, fanned across his front
+      const n = perPhase(R.count ?? 3, this.phase), F = TUNING.rift;
+      const ox = this.position.x + Math.sin(base) * 1.2, oz = this.position.z + Math.cos(base) * 1.2;
+      for (let i = 0; i < n; i++) {
+        const a = base + (i - (n - 1) / 2) * (R.spread ?? 0.36);
+        this.fx.throwCrescent(ox, oz, Math.sin(a), Math.cos(a), { tell: b.def.tell, damage: b.def.damage, knockback: b.def.knockback, attack: act?.name ?? 'rift', style: 'rift', speed: F.speed, radius: F.radius, life: F.life });
+      }
+      this.fx.igniteBurst(this._hilt, this._tip, 0.8);
+      this.fx.dust(ox, oz, 1.6);
+      this.game.shake?.(0.3);
+      this.game.world?.forest?.ambience?.flare?.(0.6);
       return;
     }
     const n = perPhase(R.count ?? 1, this.phase), C = TUNING.crescent;
     for (let i = 0; i < n; i++) {
       const a = base + (i - (n - 1) / 2) * (R.spread ?? 0.34);
-      this.fx.throwCrescent(this.position.x + Math.sin(a), this.position.z + Math.cos(a), Math.sin(a), Math.cos(a), { tell: b.def.tell, damage: b.def.damage, knockback: b.def.knockback, attack: act?.name ?? 'tide', style: 'crescent', speed: C.speed, radius: C.radius, life: C.life });
+      const off = R.from ?? 1;
+      this.fx.throwCrescent(this.position.x + Math.sin(a) * off, this.position.z + Math.cos(a) * off, Math.sin(a), Math.cos(a), { tell: b.def.tell, damage: b.def.damage, knockback: b.def.knockback, attack: act?.name ?? 'tide', style: 'crescent', speed: R.speed ?? C.speed, radius: C.radius, life: C.life });
     }
   }
 
@@ -579,9 +661,12 @@ export class StarlessLord extends Duelist {
       for (let i = 0; i < n + (C.big ? 1 : 0); i++) {
         const big = i >= n;
         const a = ang + (i - (n - 1) / 2) * 0.9 + Math.PI * 0.5 * (i & 1 ? 1 : -1) * 0.4;
-        const x = this.position.x + Math.sin(a) * (big ? 2.2 : 1.7), z = this.position.z + Math.cos(a) * (big ? 2.2 : 1.7);
+        const r = big ? 2.2 : 1.7;
+        const x = this.position.x + Math.sin(a) * r, z = this.position.z + Math.cos(a) * r;
         this.fx.tearUp(x, z);
         this.fx.throwShot({
+          // (it hangs turning round him in the Void's grip until its turn: fx.js `orbit`, angle from +x)
+          orbit: { r, a: Math.atan2(z - this.position.z, x - this.position.x), w: i & 1 ? -1.6 : 1.6 },
           kind: 'stone', x, y: 0.2, z, dx, dz, speed: T.speed * (big ? 0.85 : 1), radius: big ? 1.25 : T.radius, life: T.life, delay: 0.4 + i * T.gap + (big ? 0.25 : 0), rise: T.rise + (big ? 0.5 : 0) + 0.2 * (i & 1),
           tell: big ? TELL.RED : D.tell, damage: big ? D.damage * 1.9 : D.damage, knockback: big ? 4 : D.knockback, attack: name, big,
         });
@@ -593,6 +678,14 @@ export class StarlessLord extends Duelist {
       this._storm.damage = D.damage;
       this._storm.kb = D.knockback;
       this.fx.lightning(this._tip.x, this._tip.y, this._tip.z, this._tip.x + this.fx.rand(-2, 2), 24, this._tip.z + this.fx.rand(-2, 2), 1.6, true);
+    } else if (C.kind === 'star') {
+      // the Dark Star leaves his hand: it gathers a few steps before him and goes after the hero
+      const S = TUNING.star, h = this._hand;
+      const star = { x: this.position.x + dx * 2.6, z: this.position.z + dz * 2.6 };
+      this.clampTarget(star);
+      this.fx.callStrike(star.x, star.z, S.radius, S.warn, { damage: D.damage, knockback: D.knockback, attack: name, style: 'star', drift: S.drift });
+      this.fx.arc(h.x, h.y, h.z, star.x, 1.25, star.z, 0.3, [2.6, 0.5, 3.4], [0.35, 0.05, 0.6], 7);
+      this.game.shake?.(0.15);
     }
   }
 
@@ -603,11 +696,33 @@ export class StarlessLord extends Duelist {
     this.fx.igniteBurst(this._hilt, this._tip, 0.6);
   }
 
+  /** His bones as drawn this frame (world), for the shape a blink leaves: fills this._ghost, returns
+   *  how many segments. */
+  _sampleGhost() {
+    const out = this._ghost;
+    let n = 0;
+    for (const chain of this.rig.ghostChains) {
+      for (let i = 0; i + 1 < chain.length && n < 15; i++) {
+        chain[i].getWorldPosition(_v);
+        chain[i + 1].getWorldPosition(_w);
+        if (!Number.isFinite(_v.x + _v.y + _v.z + _w.x + _w.y + _w.z)) continue;
+        out.set([_v.x, _v.y, _v.z, _w.x, _w.y, _w.z], n * 6);
+        n++;
+      }
+    }
+    if (this._tipOk && n < 16) {
+      out.set([this._hilt.x, this._hilt.y, this._hilt.z, this._tip.x, this._tip.y, this._tip.z], n * 6);
+      n++;
+    }
+    return n;
+  }
+
   /** A beat's own root motion: the blink (he is gone, and behind the hero). */
   beatMotion(b, u, s) {
     const K = b.def.blink;
     if (!K || b._blinked || u < 0.1 || !s) return;
     b._blinked = true;
+    this.fx.afterimage(this._ghost, this._sampleGhost());
     const pl = this.game.player, yaw = fin(pl?.yaw, wrapAngle(s.ang + Math.PI));
     const x0 = this.position.x, z0 = this.position.z;
     let tx = s.p.x - Math.sin(yaw) * K.behind, tz = s.p.z - Math.cos(yaw) * K.behind;

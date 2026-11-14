@@ -4,6 +4,7 @@
 // real Colliders, filled by the real throne-hall set. A bot drives the input.
 // usage: node lord.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI)
 //   scenario: level | data | timing | forms | spells | bounds | flow | win | all
+// (the spells scenario also covers the Crushing Dark, the Rift, the Dark Star, Parting Light and the glide)
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ui, AUDIO, resetWindow } from './shim.mjs';
@@ -27,6 +28,8 @@ const { StarlessLord } = await imp('src/entities/enemies/starlessLord/lord.js');
 const { Duelist } = await imp('src/entities/enemies/duelist/duelist.js');
 const { MOVES, MOVE_NAMES, CLIPS_BY_FORM, COUNTERS, TRANSITIONS, realise } = await imp('src/entities/enemies/starlessLord/moves.js');
 const { TUNING } = await imp('src/entities/enemies/starlessLord/tuning.js');
+const { LORD_LOOKS, LORD_CAPE, LORD_PANELS, lordLoadout } = await imp('src/entities/enemies/starlessLord/gear.js');
+const { buildHero } = await imp('src/entities/player/model.js');
 const { Hud } = await imp('src/ui/hud.js');
 const { Bindings, installActions } = await imp('src/core/bindings.js');
 const { TouchControls } = await imp('src/ui/touch.js');
@@ -334,7 +337,28 @@ async function scenarioLevel() {
   const d = G.game.dragon;
   assert(d instanceof StarlessLord && d instanceof Duelist && G.game.boss === d && d.state === 'sleeping' && d.mode === 'sleep', 'the boss slot holds the Starless Lord, enthroned');
   assert(Math.hypot(d.position.x - CONFIG.world.dragonSleep.x, d.position.z - CONFIG.world.dragonSleep.z) < 1e-6 && Math.abs(d.position.y - TUNING.intro.seatY) < 1e-6, 'he sits on the throne (the root at the seat)');
+  // seated, not standing in his guard on the seat: the animator plays the throne clip (the hips low)
+  {
+    const v = new THREE.Vector3();
+    d.rig.pelvis.getWorldPosition(v);
+    assert(d.anim.key === 'duel' && d.brain.clip?.name === 'meditate' && v.y - d.position.y < 0.85, `he waits in the throne clip, seated (hips ${(v.y - d.position.y).toFixed(2)} m over the root)`);
+  }
   assert(d.lives.total === 4 && d.lives.left === 4 && d.hp === TUNING.hp && d.phase === 1, 'four forms, a full bar each');
+  // the harness: black plate, a helm, the yoke, the war-skirt and the cape, drawn a head taller
+  {
+    const L = d.rig.loadout;
+    assert(L.head === `lord.helm.${LORD_LOOKS[0]}` && L.chest === 'lord.plate' && L.shoulders === 'lord.yoke' && L.arms === 'lord.arms' && L.legs === 'lord.legs' && L.waist === 'lord.skirt' && L.back === 'lord.cape' && L.weapon === 'lord.saber', `he wears his own harness (${Object.values(L).join(', ')})`);
+    assert(d.rig.streamers.length === LORD_CAPE.length && d.rig.coat.length === LORD_PANELS.length && d.rig.offHand?.open && d.rig.offHand?.grip, `the cape hangs on ${d.rig.streamers.length} springs, the war-skirt on ${d.rig.coat.length}`);
+    assert(d.drawScale === TUNING.scale && d.anim.drawScale === TUNING.scale && TUNING.scale > 1.2, `he is drawn at ${TUNING.scale} (the animator's gait with it)`);
+    // every helm offered builds clean
+    let nan = 0;
+    for (const look of LORD_LOOKS) {
+      const rig = buildHero(createSharedUniforms(), lordLoadout(look));
+      rig.root.traverse((m) => { const pos = m.geometry?.attributes?.position; if (pos) for (const x of pos.array) if (!Number.isFinite(x)) nan++; });
+      if (rig.loadout.head !== `lord.helm.${look}`) nan++;
+    }
+    assert(nan === 0, `every helm builds (${LORD_LOOKS.join(', ')})`);
+  }
   bad = 0;
   d.object3d.traverse((m) => { const pos = m.geometry?.attributes?.position; if (pos) for (const v of pos.array) if (!Number.isFinite(v)) bad++; });
   assert(bad === 0, `his gear has no NaN vertices (${bad})`);
@@ -609,6 +633,86 @@ async function scenarioSpells() {
     const rel = (d.position.x - p.position.x) * fx + (d.position.z - p.position.z) * fz;
     assert(Math.hypot(d.position.x - before.x, d.position.z - before.z) > 3 && rel < -1 && dist2(G) < 2.8, `he is gone and behind the hero (${rel.toFixed(1)} m along the hero's facing, ${dist2(G).toFixed(1)} m off)`);
   }
+  // ---- the Crushing Dark
+  {
+    const G = stage(1, 6);
+    const d = G.game.dragon, p = G.game.player, hp0 = p.hp;
+    let down = false, crush = false;
+    const ok = d.debug.trigger('grip');
+    run(G, 3.5, () => { down = down || p.state === 'knockdown'; crush = crush || d.fx.crushes.some((c) => c.alive); });
+    const hit = G.hits.find((h) => h.kind === 'grip');
+    assert(ok && hit?.r === RESULT.HIT && hit.tell === TELL.RED && down && crush && p.hp < hp0, `unanswered, the grip closes: the hero is thrown down and crushed (${(hp0 - p.hp).toFixed(1)} damage)`);
+    const G2 = stage(1, 6);
+    G2.defend = makeDefender(G2);
+    const r2 = cast(G2, 'grip', 5, () => G2.defend.act());
+    assert(!r2.hits.some((h) => h.kind === 'grip' && h.r === RESULT.HIT) && G2.game.player.state !== 'knockdown', `a roll slips it (${r2.hits.filter((h) => h.kind === 'grip').map((h) => h.r).join(', ') || 'out of its line'})`);
+  }
+  // ---- the Rift
+  {
+    const G = stage(3, 8, { god: true });
+    const styles = [];
+    const fx = G.game.dragon.fx, thrown = fx.throwCrescent.bind(fx);
+    fx.throwCrescent = (...a) => { styles.push(a[4]?.style); return thrown(...a); };
+    const r = cast(G, 'rift', 6);
+    assert(styles.length === 3 && styles.every((s) => s === 'rift') && r.hits.filter((h) => h.attack === 'rift' && h.r === RESULT.HIT).length === 1, `the Rift throws three fissures; the one at the hero lands (${styles.length})`);
+    const G2 = stage(3, 8);
+    G2.defend = makeDefender(G2);
+    const r2 = cast(G2, 'rift', 6, () => G2.defend.act());
+    assert(r2.hits.some((h) => h.attack === 'rift' && h.r === RESULT.PARRIED) && !r2.hits.some((h) => h.attack === 'rift' && h.r === RESULT.HIT), 'a parry breaks the fissure');
+  }
+  // ---- the Dark Star
+  {
+    const G = stage(4, 6, { god: true });
+    let marks = 0;
+    G.watch = (n, e) => { if (n === 'combat:flash' && e?.attack === 'star' && e.hazard) marks++; };
+    const d = G.game.dragon, p = G.game.player;
+    let follow = 0;
+    d.debug.trigger('star');
+    // (the hero walks off: the star goes after him until its cue)
+    run(G, 0.9);
+    const star = () => d.fx.strikes.find((s) => s.alive && s.style === 'star');
+    const s0 = star();
+    const at0 = s0 ? Math.hypot(s0.x - p.position.x, s0.z - p.position.z) : 99;
+    run(G, 1.0);
+    const s1 = star();
+    follow = s1 ? at0 - Math.hypot(s1.x - p.position.x, s1.z - p.position.z) : 0;
+    run(G, 3, null, () => d.mode === 'foot' && !d.fx.strikesAlive);
+    const hit = G.hits.find((h) => h.attack === 'star');
+    assert(!!s0 && follow > 1 && marks === 1 && hit?.r === RESULT.HIT && hit.kind === 'void', `the Dark Star drifts onto the hero (${follow.toFixed(1)} m closer), cues once and bursts on him`);
+    const G2 = stage(4, 6);
+    G2.defend = makeDefender(G2);
+    G2.game.dragon.debug.trigger('star');
+    run(G2, 5, () => G2.defend.act());
+    assert(!G2.hits.some((h) => h.attack === 'star' && h.r === RESULT.HIT), 'a roll at its cue slips the burst');
+  }
+  // ---- Parting Light
+  {
+    const G = stage(2, 2, { god: true });
+    const d = G.game.dragon, d0 = dist2(G);
+    let n = 0, top = 0;
+    const fx = d.fx, thrown = fx.throwCrescent.bind(fx);
+    fx.throwCrescent = (...a) => { n++; return thrown(...a); };
+    const r = cast(G, 'parting', 6, () => { top = Math.max(top, d.position.y); });
+    assert(r.ok && n === 2 && top > 1 && dist2(G) > d0 + 3 && r.hits.some((h) => h.attack === 'parting' && h.r === RESULT.HIT), `a backflip out of reach (${d0.toFixed(1)} → ${dist2(G).toFixed(1)} m, ${top.toFixed(1)} m up) and two crescents, cued and landing`);
+  }
+  // ---- the glide
+  {
+    const G = stage(1, 15, { god: true });
+    const d = G.game.dragon;
+    d.debug.setAI(true);
+    let glided = false, top = 0, fast = 0;
+    const hold = () => { d.brain.gapT = 5; };
+    run(G, 4, () => {
+      hold();
+      if (d.anim.key === 'glide') {
+        glided = true;
+        top = Math.max(top, d.position.y);
+        fast = Math.max(fast, Math.hypot(d.pilot.groundVel.x, d.pilot.groundVel.z));
+      }
+    }, () => dist2(G) < 3.2);
+    run(G, 1.5, hold);
+    assert(glided && top > TUNING.glide.hover * 0.8 && fast > TUNING.glide.on && d.position.y < 0.02 && d.anim.key === 'loco' && d.mode === 'foot', `across the hall he is carried (${top.toFixed(2)} m off the floor at ${fast.toFixed(1)} m/s); in reach he comes down and walks`);
+  }
   // ---- the red tide
   {
     const G = stage(4, 9, { god: true });
@@ -673,7 +777,8 @@ async function scenarioFlow() {
   run(G, 0.2);
   assert(G.counts['dragon:introDone'] === 1 && game.state === 'boss', `the intro ends in the duel (${game.state})`);
   assert(lit && air && top > TUNING.intro.apex * 0.9 && G.counts['dragon:land'] >= 1, `the blade ignites and he leaps from the dais (apex ${top.toFixed(1)} m)`);
-  assert(Math.abs(d.position.y) < 1e-6 && Math.hypot(d.position.x - TUNING.intro.land.x, d.position.z - TUNING.intro.land.z) < 6 && d.position.z > TUNING.hall.zN - 1e-6, `he lands on the hall's floor by the seal (${d.position.x.toFixed(1)}, ${d.position.z.toFixed(1)})`);
+  // (on the floor, or carried a hand's breadth over it: he glides after a hero who keeps his distance)
+  assert(d.position.y >= 0 && d.position.y <= TUNING.glide.hover + 1e-6 && Math.hypot(d.position.x - TUNING.intro.land.x, d.position.z - TUNING.intro.land.z) < 6 && d.position.z > TUNING.hall.zN - 1e-6, `he lands on the hall's floor by the seal (${d.position.x.toFixed(1)}, ${d.position.z.toFixed(1)})`);
   // the hero dies; resting resets him to the throne
   p.debug.god = false;
   p.hp = 1;

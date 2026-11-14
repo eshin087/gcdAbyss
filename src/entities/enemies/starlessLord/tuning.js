@@ -12,6 +12,9 @@ export const TUNING = {
   hp: 1400, // each form's bar
   phaseAt: [1], // no gates inside a bar (the boss bar draws no ticks)
   radius: 0.42, // body circle (the hero is pushed out of it)
+  // his drawn size (model metres → world): a head taller than Shen Hui (1.2) and the hero (1.08).
+  // Visual only, as theirs: the body circle, the hurt spheres and every reach are in gameplay metres
+  scale: 1.32,
   bound: 20, // (a circle round the seal that holds the whole hall: the real limit is `hall`)
   // he stays on the hall's floor: between the walls, off the dais, inside the door (world/throneHall.js
   // HALL: halfX 14.3, the dais from z -13.5, the south wall at z 16). A rectangle, not the duelist's
@@ -104,6 +107,11 @@ export const TUNING = {
   glaive: { speed: 15, back: 17, range: 12.5, radius: 0.9, life: 3.2 }, // the thrown blade: out, then back to his hand
   debris: { speed: 16, radius: 0.8, life: 2.4, gap: 0.42, rise: 1.9 }, // hurled stones, `gap` s apart
   storm: { radius: 2.3, warn: 0.95, gap: 0.5, lead: 0.5 }, // called lightning: marked ground, then the strike
+  grip: { range: 9.5, width: 2.2, crush: 0.55 }, // the Crushing Dark: a line from his hand; `crush` s of the seal closing
+  rift: { speed: 13.5, radius: 0.75, life: 1.9 }, // fissures of red light along the floor
+  star: { radius: 3.0, warn: 1.7, drift: 2.3 }, // the Dark Star: it follows the hero at `drift` m/s, then bursts
+  // ---- the glide: past this speed he is carried, not running (lord.js; the root lifts `hover` m)
+  glide: { on: 3.4, off: 2.8, hover: 0.22, back: 0.26 },
 
   // ---- the intro: he rises from the throne and leaps down to the seal
   wakeRadius: 10,
