@@ -5,8 +5,10 @@
 //   u  0 … 1  the windup      (0 = the pose he was in when the swing started: the clip always
 //                               starts from there, whatever it was)
 //      1 … 2  the active frames (the hit test reads the drawn blade: it must cross his front here)
-//      2 … 3  the recovery     (from `home`, default 0.5 of it, anim.js eases him back to the ready
-//                               stance: keys past that are not needed)
+//      2 … 3  the recovery     (from `home`, default 0.3 of it, anim.js eases him back to the ready
+//                               stance while the last keys are still moving, so the follow-through
+//                               runs into the way home without a stop; a clip that HOLDS its finish
+//                               gives a later `home` and keys up to it)
 // A held attack button freezes the clip at u = 1 (the coil), so that key is a pose worth holding.
 //
 // Key fields (body axes: +x his LEFT, +y up, +z forward; metres, radians). A field missing from a
@@ -191,6 +193,34 @@ export const SWINGS = {
       { u: 1.45, h: [0.07, -0.16, 0.26], a: [2, 18], l: [0.12, -0.22, 0.14], by: -0.24, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.26 },
       { u: 1.9, h: [0.15, 0.08, 0.5], a: [0, 24], l: [0.24, -0.26, -0.08], by: -0.1, bz: 0.12, hip: 0.24, sy: 0.32, sx: 0.16 },
       { u: 2.45, h: [0.14, 0.04, 0.45], a: [0, 20], l: [0.26, -0.26, -0.12], by: -0.12, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.16 },
+    ],
+  },
+
+  // ---- hit 5: the finisher ---------------------------------------------------------------------
+  /** The slam (combat.js LIGHT[4], kind 'slam'), both hands on the grip. The windup is its own
+   *  anticipation: he GATHERS (dips and coils right, the hands drawing the blade down-back past the
+   *  right hip), then rises off the ground (combat.js `hop`) as the blade sweeps up his right side,
+   *  where the camera behind him sees it, and cocks back over the right shoulder. The blow is one
+   *  diagonal from there down across his front into the ground ahead and a little left, the hands
+   *  leading and the steel whipping over after them; he lands folded over the planted blade and holds
+   *  it (the shards burst at the point: player.js).
+   *  (Until Session 26 the slam was its own code: the blade went over the top of his head in an
+   *  upright plane leaned 24°, and the hands covered half a metre in one frame of the blow.) */
+  slam: {
+    line: 'down',
+    home: 0.55,
+    step: [0.45, 1.5],
+    drag: 0.25,
+    keys: [
+      { u: 0.3, h: [-0.13, -0.34, 0.08], a: [-145, -25], two: 1, by: -0.2, hip: -0.2, sy: -0.34, sx: 0.32, sz: 0.06, hx: 0.12, hy: 0.38 },
+      { u: 0.7, h: [-0.1, 0.12, 0.1], a: [-102, 67], two: 1, by: -0.05, hip: -0.24, sy: -0.3, sx: -0.06, sz: 0.04, hx: -0.16, hy: 0.3 },
+      { u: 1.0, h: [-0.04, 0.26, 0.02], a: [-152, 46], two: 1, by: -0.03, bz: -0.06, hip: -0.3, sy: -0.42, sx: -0.14, sz: 0.05, hx: -0.2, hy: 0.5 },
+      { u: 1.25, h: [0.04, 0.25, 0.22], a: [-104, 42] },
+      { u: 1.5, h: [0.13, 0.1, 0.45], a: [-34, 22], two: 1, by: -0.14, bz: 0.05, hip: 0.04, sy: 0.0, sx: 0.28, sz: 0.0, hx: 0.0, hy: 0.0 },
+      { u: 1.75, h: [0.19, -0.16, 0.46], a: [8, -18] },
+      { u: 2.0, h: [0.2, -0.36, 0.36], a: [16, -48], two: 1, by: -0.34, bz: 0.12, hip: 0.22, sy: 0.26, sx: 0.62, sz: -0.05, hx: 0.1, hy: -0.3 },
+      { u: 2.2, h: [0.2, -0.38, 0.35], a: [16, -50], two: 1, by: -0.38, bz: 0.12, hip: 0.22, sy: 0.26, sx: 0.68, sz: -0.05, hx: 0.26, hy: -0.3 },
+      { u: 2.55, h: [0.2, -0.38, 0.35], a: [16, -50], two: 1, by: -0.36, bz: 0.12, hip: 0.22, sy: 0.26, sx: 0.66, sz: -0.05, hx: 0.2, hy: -0.3 },
     ],
   },
 

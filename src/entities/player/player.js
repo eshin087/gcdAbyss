@@ -186,10 +186,13 @@ export class Player {
     this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
     this.bladeLock = null; // { att, meter, push, decay, dur } while blades are locked (startBladeLock)
 
-    // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, heal(), teleport(x, z) })
+    // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, attackSpeed, heal(), teleport(x, z) })
     this.debug = {
       god: false,
       infiniteFlasks: false,
+      // a multiplier on the attack clock: every swing's windup, cut and recovery run this much
+      // faster (its lunge covers the same ground). 1 in play; the Lab's slider tries other paces
+      attackSpeed: 1,
       heal: () => this._debugHeal(),
       teleport: (x, z) => this._teleport(x, z),
       kill: () => this._debugKill(), // used by flow.debug.toState('dead') when present
@@ -1727,7 +1730,7 @@ export class Player {
     this.chargeK = 0;
     if (!def.keepYaw) this.yaw = this._aimYaw(this.yaw); // commit the swing direction
     // the cross-fade IS the windup: the body eases into the coil pose
-    this._enter('attack', 'attack', def.windup * 0.85, true);
+    this._enter('attack', 'attack', (def.windup * 0.85) / this._attackSpeed(), true);
     if (!this.atk.pending) this._swingStarted(def, 0);
     return true;
   }
@@ -1827,6 +1830,11 @@ export class Player {
     return clamp(gap - fin(def.reach, 2) + 0.4, base, base + A.max);
   }
 
+  /** The Lab's attack-speed multiplier (debug.attackSpeed), 1 in play. */
+  _attackSpeed() {
+    return clamp(fin(this.debug.attackSpeed, 1), 0.25, 4);
+  }
+
   _tickAttack(dt) {
     const a = this.atk;
     if (!a) {
@@ -1835,6 +1843,8 @@ export class Player {
     }
     const d = a.def;
     const W = d.windup, A = d.active, R = d.recovery;
+    const sp = this._attackSpeed();
+    dt *= sp; // the attack's own clock (the root's speeds below are scaled back, so distances hold)
     if (a.pending) {
       if (!this.lmb.held) {
         a.pending = false; // tap: the swing goes ahead
@@ -1864,8 +1874,8 @@ export class Player {
         lv = a.lunge / (l1 - l0);
       }
     }
-    this.want.x = Math.sin(this.yaw) * lv;
-    this.want.z = Math.cos(this.yaw) * lv;
+    this.want.x = Math.sin(this.yaw) * lv * sp;
+    this.want.z = Math.cos(this.yaw) * lv * sp;
 
     if (t >= W + A) {
       const r = (t - W - A) / R;
