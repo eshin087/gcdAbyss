@@ -53,6 +53,9 @@ const EASE = {
 };
 const ARM_R = [0.2, 0.46]; // the fist's radius round the shoulder: folded … full reach
 const SCR = new Float32Array(64);
+const SCR_W = new Float32Array(64);
+// the channels the raised guard (pilot.ward) takes over from his footwork: the arms, the blade, the chest
+const WARD_CH = [P.rH, P.rH + 1, P.rH + 2, P.rP, P.rP + 1, P.rP + 2, P.lH, P.lH + 1, P.lH + 2, P.lP, P.lP + 1, P.lP + 2, P.swF, P.swF + 1, P.swF + 2, P.spX, P.spY, P.hdY, P.bodyY, P.pitch];
 const AX = { arm: 0, ext: 0.75, lead: 0, larm: 0, lext: 0.75, llead: 0, laz: 0, lel: 0 };
 
 const _az = [0, 0];
@@ -170,6 +173,7 @@ export function createDuelPoses(GUARD, opt = {}) {
     duelStance(p, A);
     const w = A.moveW;
     if (w < 0.002 && A.swordW < 0.002) {
+      raiseWard(p, A);
       turnTwist(p, A);
       jolt(p, A);
       return;
@@ -206,8 +210,30 @@ export function createDuelPoses(GUARD, opt = {}) {
       to3(p, P.lH, SCR[P.lH], SCR[P.lH + 1], SCR[P.lH + 2], k);
       to3(p, P.lP, SCR[P.lP], SCR[P.lP + 1], SCR[P.lP + 2], k);
     }
+    raiseWard(p, A);
     turnTwist(p, A);
     jolt(p, A);
+  }
+
+  /** The guard RAISED over his footwork (the pilot's `ward` 0..1 and `wardClip`, guard.js wardHold):
+   *  the hero is swinging at him and he will turn it. The arms, the blade and the chest take the
+   *  ward's pose; the legs keep walking. */
+  function raiseWard(p, A) {
+    const k = clamp(A.player?.ward ?? 0, 0, 1), clip = A.player?.wardClip;
+    if (!(k > 0.002) || !clip?.tracks) return;
+    const off = A.off ? A.off.az : 0, offE = A.off ? A.off.el : 0;
+    const rc = A.recoil;
+    A.recoil = 0; // (the jolt is applied once, by the caller)
+    (clip.kit && clip.kit !== api ? clip.kit : api).evalClip(SCR_W, clip, 0, A);
+    A.recoil = rc;
+    if (A.off) {
+      A.off.az = off; // (the off-hand blade keeps its carry)
+      A.off.el = offE;
+    }
+    const e = k * k * (3 - 2 * k);
+    const ax = p[P.swD], ay = p[P.swD + 1], az = p[P.swD + 2];
+    for (const i of WARD_CH) p[i] += (SCR_W[i] - p[i]) * e;
+    dirLerp(p, P.swD, ax, ay, az, SCR_W[P.swD], SCR_W[P.swD + 1], SCR_W[P.swD + 2], e);
   }
 
   /** A field's value in the guard (the implicit first / last key). */

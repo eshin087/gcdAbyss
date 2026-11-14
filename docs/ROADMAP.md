@@ -150,7 +150,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
-## M1.26 — The Starless Lord: black plate, motion, three more spells (2026-11-14, `enemies/starless-lord-armour`, ADR-079, ADR-080)
+## M1.27 — The Starless Lord: black plate, motion, three more spells (2026-11-14, `enemies/starless-lord-armour`, ADR-083, ADR-084)
 - [x] A harness of his own (hood and faceplate, cuirass, yoke and pauldrons, plate limbs, war-skirt, cape), drawn at 1.32
 - [x] Three heads rendered for the owner's pick (sallet, crown, hood): the owner picked the hood
 - [x] New guards, the glide, strings that walk, hop spins, a cartwheel and a backflip, flourishes
@@ -165,6 +165,20 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Watch the glide, the cartwheel and the flourishes in motion at 60 fps (reviewed as strips)
   - [ ] His hurt spheres against his drawn size (32 % larger than they are)
   - [ ] Sounds of his own (still none): the blade's hum, thunder, the grip, the star
+## M1.26 — Steel on steel: blades that meet, a guard you can read, cancels (2026-11-14, `combat/epic-clash`, ADR-079 – ADR-082)
+- [x] The clash: one effect of lines on the crossing of the blades; sparks fly through the freeze; a camera punch (ADR-079)
+- [x] A parried blow is held where it met the guard and rebounds; the hero's deflect goes to its side and height (ADR-079)
+- [x] A short freeze inside a string, a long one where the exchange turns (ADR-079)
+- [x] His guard: raised as you swing, a ward on the strike's side, the deflect that bounces the hero and brings the Riposte (ADR-080)
+- [x] Cancels: the hero's guard or dodge out of any point of a swing; his guard or step out of a late recovery (ADR-080)
+- [x] The blade lock: the two close, the blades cross, the pair slides with the push (ADR-081)
+- [x] Duel framing: the camera 6 m closer within a duelist's reach (ADR-081)
+- [x] The trade clash (the owner's pick): the hero's cut and his blow at the same moment meet; a string goes on, no punish window, a full cleave wins it, no two in a row (ADR-082)
+- [ ] Follow-ups:
+  - [ ] The owner's play on the preview (both duelists, the phone): the closer camera, the deflect's odds, the 45 % step out of heavy blows
+  - [ ] Ideas not built (the owner's pick): a **counter cut** (the first light after a deflect comes out in half the time); a deathblow camera that orbits; the posture bar glowing as it nears the break; the wyrm's claws met by the same contact pose
+  - [ ] A thrust set aside still shows the blades ~0.4 m apart; his hilt is at the hero's chest at the impact (his dash stops 1 m short)
+
 ## M1.25 — A faster chain, the finisher as a clip, a recovery that flows (2026-11-14, `player/faster-flow`, ADR-075, ADR-076)
 - [x] The pace: a light every ~0.32 s (was 0.42), a 0.12 s cut; the lights' damage back to 30 / 32 / 36 / 30 (ADR-075)
 - [x] The Lab's attack-speed slider (`player.debug.attackSpeed`) for trying other paces on the preview (ADR-075)
@@ -202,9 +216,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] A human playtest: is form 4's 0.36 s rhythm readable, is the blink fair, is he too long?
 - [ ] Follow-ups:
   - [ ] Look at every move frame by frame up close (the somersault, the off-hand cuts, the staff)
-  - [x] His look as options for the owner (M1.26: three heads on one harness; the owner picked the hood)
+  - [x] His look as options for the owner (M1.27: three heads on one harness; the owner picked the hood)
   - [ ] Sounds of his own: a blade hum and swing, thunder for the lightning, the ignition
-  - [ ] The Void grip (lifted and held: mash to break free), designed and left out (M1.26 ships the
+  - [ ] The Void grip (lifted and held: mash to break free), designed and left out (M1.27 ships the
         Crushing Dark instead: a pin, no new hero state)
   - [ ] The hall on a phone: frame cost of the inlay batch and six brazier lights
   - [ ] A reward for beating him (ADR-059), once the technique system lands

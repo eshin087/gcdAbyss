@@ -396,7 +396,7 @@ all glyph particles in the dragon's `add` / `alpha` pools.
   every second one), and one red point light that follows it and lights the floor round him. The
   sweep trail is the duelist's, in red. Void lightning is the only other colour he owns: violet-white
   jagged strokes with a light of the same hue, so a bolt never reads as a blade.
-- **The lord's harness** (2026-11-14, ADR-079): black plate reads in the hero-art pass as dim fill
+- **The lord's harness** (2026-11-14, ADR-083): black plate reads in the hero-art pass as dim fill
   inside bright ink lines, so every plate is its own piece (alternating ink sub-ids between lames) or
   a drawn fold line (the cuirass's chevrons, the yoke's bands). What carries him at the fight camera
   is the silhouette: a hooded head, a yoke wider than his shoulders, and the cape, a triangle of black
@@ -414,3 +414,25 @@ all glyph particles in the dragon's `add` / `alpha` pools.
   is lost on it. Lightning is a white-violet core inside a dimmer sheath that outlives it, two thin
   strands wound round it and forks that die in the air: one stroke per segment, laid along it on
   screen and stretched to its length (`LordFx._stroke`).
+
+### Steel on steel (2026-11-14, ADR-079; `combat/clashFx.js`)
+One effect for every blade that meets a blade: the hero's parry, a duelist's guard, his deflect, the
+blade lock. At the game camera the two fighters are ~70 px tall, and a freeze-frame holds the
+picture for 3 – 8 frames, so the rule is: **lines, not light**.
+- **Streaks:** 20 – 36 `|` glyphs stretched 1.4 – 3.2×, laid along their own velocity in the SCREEN's
+  plane (the camera's right / up axes: a 2D starburst, not a 3D cloud), two thirds of them inside
+  ±50° of the way the turned blade was travelling. Born 0.1 – 0.34 m off the centre: stacked on it,
+  additive strokes sum to a blot.
+- **The cross:** two short rows of `|` strokes along the two blades' directions on screen (opened to
+  an X when they are nearly one line), 0.11 s: the meeting of the edges is what is lit.
+- **The core:** one `*`, 0.3 m, 0.045 s. Nothing bigger: with bloom's threshold at 0.55 a 1 m `*` at
+  HDR 4 is a white disc the size of the hero (the old parry burst, and the old tell glint, which is
+  now a 0.4 m core at 0.6× with four thin rays).
+- **Embers:** 9 – 16 small points (dots, ticks and bullets) that arc and fall under gravity, flickering, 0.45 – 0.9 s.
+- **A ring** only where the exchange turns (a string's last blow, a heavy blow, a perfect parry, a
+  deflect): 16 `-` strokes opening from 0.34 to 1.25 m.
+- **Colour says what happened:** white-gold = the hero turned a blow; cold blue = a heavy one; gold =
+  perfect; dull steel, few and short = his guard held the hero's strike (nothing was won); hot
+  orange-red = he beat it away and his counter is coming.
+- Sparks and lights advance through a hit-stop (`game.fxDt`), so nothing is pre-aged to "look
+  mid-burst": the fighters freeze, the burst does not.

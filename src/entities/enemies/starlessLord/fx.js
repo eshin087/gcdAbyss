@@ -77,7 +77,7 @@ export class LordFx extends DuelFx {
     if (!add || !(k > 0.02) || !Number.isFinite(a.x + a.y + a.z + b.x + b.y + b.z)) return;
     const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, len = Math.hypot(dx, dy, dz) * k;
     if (!(len > 0.05)) return;
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.6);
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.6);
     const rot = this._screenRot(dx, dy, dz);
     const n = Math.max(3, Math.round(len / 0.16));
     for (let i = 0; i < n; i++) {
@@ -333,7 +333,7 @@ export class LordFx extends DuelFx {
   }
 
   _drawCrescent(c) {
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.7);
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.7);
     const px = -c.dz, pz = c.dx, rot = Math.atan2(c.dz, c.dx);
     if (c.style === 'push') {
       // a wall of force: ranks of pale strokes bowed forward and standing as tall as a man, a shimmer
@@ -664,7 +664,7 @@ export class LordFx extends DuelFx {
   }
 
   _drawGlaive(s) {
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.6);
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.6);
     const c = Math.cos(s.spin), sn = Math.sin(s.spin);
     for (let i = -4; i <= 4; i++) {
       const u = i / 4, x = s.x + c * u * 0.95, z = s.z + sn * u * 0.95;
@@ -685,7 +685,7 @@ export class LordFx extends DuelFx {
   }
 
   _drawStone(s, hang) {
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.6);
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.6);
     const k = s.big ? 1.7 : 1, n = s.big ? 9 : 5;
     for (let i = 0; i < n; i++) {
       const a = s.spin + (i / n) * TAU, r = i === 0 ? 0 : 0.26 * k, e = Math.sin(a * 1.7 + i) * 0.5;

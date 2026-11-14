@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DIM } from './model.js';
+import { CLASH, clashBurst } from '../../combat/clashFx.js';
 
 // Glyph-particle effects owned by the Wanderer: cyan slash arcs (the light swings, the slam, the
 // cleave and its impact), the thrust's long streak, the slam's crystal-shard burst, the violet gem's glow + glints, impact
@@ -104,11 +105,7 @@ const alongRot = (dx, dy, dz) => {
   return Math.atan2(dy * UP_Y + dz * UP_Z, dx) - Math.PI / 2;
 };
 
-// a parry's sparks are born this many s along their way (the freeze-frame shows them mid-burst)
-const PRE = 0.045;
-// colours near the contact, kept below the bloom's blow-out (a freeze-frame holds them for 0.1 s+)
-const CENTER = [2.4, 2.2, 1.8];
-const MOON_SOFT = [1.7, 2.2, 3.0];
+const SPRAY = new THREE.Vector3(); // parry(): the default spray (back toward the blow and up)
 // the parry shockwave's rings (shockwave): bright, but not so hot that bloom swallows the duel
 const RING = { white: [1.5, 1.55, 1.75], warm: [1.6, 1.3, 0.8], gold: [2.0, 1.45, 0.45] };
 
@@ -453,99 +450,33 @@ export class PlayerFx {
   }
 
   /**
-   * Parry (deflect): a bright white-gold clash at the blade (blue-tinted for blue tells) + a ring of
-   * streaks. `chain` = the deflect chain count (player.deflect): each deflect in rhythm clashes
-   * bigger and brighter, with a crossed pair of sparking streaks; (dx, dz) = toward the blow.
+   * Parry (deflect): steel on steel at (x, y, z) (combat/clashFx.js: a starburst of thin streaks, a
+   * cross of light along the two edges, a two-frame core, falling embers; cold blue for a heavy blow,
+   * gold for a perfect parry). `chain` = the deflect chain count (player.deflect): each deflect in
+   * rhythm throws more and further; (dx, dz) = toward the blow.
+   * `o`: { e1, e2 (the two blades' directions), spray (the turned blade's way), perfect, light (a
+   * bullet: a small burst), ring (0 none, 1, 2) }.
+   * (Until 2026-11-14 this was a 0.7 m '*' core, a '°' bloom ring and a 4.5 light on top of the
+   * attacker's own burst: through the freeze-frame, two white blots where the blades should cross.)
    */
-  parry(x, y, z, blue, chain = 1, dx = 0, dz = 0) {
-    const fx = this.add;
-    if (!fx || !Number.isFinite(x + y + z)) return;
-    // the blade point is sampled from the pose BEFORE the parry snaps up (the idle blade hangs low):
-    // keep the clash at a blade's height, and its light well off the floor (a light ~0.3 m above the
-    // paving blows it out into a white disc, worse with every parry of a long string)
-    const ly = Math.max(1, y);
+  parry(x, y, z, blue, chain = 1, dx = 0, dz = 0, o = null) {
+    if (!this.add || !Number.isFinite(x + y + z)) return;
+    // (never at the floor: a light ~0.3 m above the paving blows it out into a white disc)
     y = Math.max(0.75, y);
-    const c0 = blue ? COL.parryBlue : COL.parry, c1 = blue ? COL.parryBlueEnd : COL.parryEnd;
     const n = Math.max(1, Math.min(6, Number.isFinite(chain) ? chain : 1));
-    const k = 1 + 0.16 * (n - 1);
     const fdx = Number.isFinite(dx) ? dx : 0, fdz = Number.isFinite(dz) ? dz : 0;
-    for (let i = 0; i < Math.round(26 * k); i++) {
-      const a = (i / 26) * Math.PI * 2 + R(-0.12, 0.12);
-      const sp = R(3, 7) * (0.9 + 0.1 * k);
-      // the clash sprays back toward the blow and up; born a step along their way (PRE s), so the
-      // parry's freeze-frame shows a burst frozen in the air, not every spark stacked on the contact
-      const vx = Math.cos(a) * sp + fdx * 2, vy = R(-1, 3.5) + 0.5 * (n - 1), vz = Math.sin(a) * sp + fdz * 2, pre = R(0.5, 1) * PRE;
-      fx.spawn({
-        x: x + vx * pre, y: y + vy * pre, z: z + vz * pre,
-        vx, vy, vz,
-        life: R(0.16, 0.34) * (0.9 + 0.1 * k), size: R(0.18, 0.3), sizeEnd: 0.04,
-        glyph: '+x*×', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, gravity: -6, drag: 3.5, spin: R(-8, 8),
-      });
-    }
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      fx.spawn({
-        x: x + Math.cos(a) * (0.15 + 9 * k * PRE), y, z: z + Math.sin(a) * (0.15 + 9 * k * PRE),
-        vx: Math.cos(a) * 9 * k, vy: 0, vz: Math.sin(a) * 9 * k,
-        life: 0.12, size: 0.3, sizeEnd: 0.1, stretch: 2.5, rot: -a,
-        glyph: '-', color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, drag: 10,
-      });
-    }
-    if (n >= 2) {
-      // a chained deflect: two crossed streaks of steel light through the contact (an X on screen,
-      // laid along the rendering camera's axes)
-      const rx = CAM ? CAM[0] : 1, ry = CAM ? CAM[1] : 0, rz = CAM ? CAM[2] : 0;
-      const ux = CAM ? CAM[4] : 0, uy = CAM ? CAM[5] : UP_Y, uz = CAM ? CAM[6] : UP_Z;
-      for (let d = 0; d < 2; d++) {
-        const s = d ? -0.785 : 0.785, cs = Math.cos(s), sn = Math.sin(s);
-        for (let j = -3; j <= 3; j++) {
-          if (!j) continue;
-          const o = j * 0.12 * k;
-          fx.spawn({
-            x: x + o * (cs * rx + sn * ux), y: y + o * (cs * ry + sn * uy), z: z + o * (cs * rz + sn * uz),
-            life: 0.1 + 0.02 * Math.abs(j), size: 0.26, sizeEnd: 0.08,
-            glyph: '-', rot: s, stretch: 2.2, color: CENTER, colorEnd: c1, alpha: 1, alphaEnd: 0,
-          });
-        }
-      }
-    }
-    // the moonlit blade's own light: one cold slash of steel through the contact on every deflect
-    // (laid along a screen diagonal, alternating with the chain), and sparks that fall, still lit
-    {
-      const rx = CAM ? CAM[0] : 1, ry = CAM ? CAM[1] : 0, rz = CAM ? CAM[2] : 0;
-      const ux = CAM ? CAM[4] : 0, uy = CAM ? CAM[5] : UP_Y, uz = CAM ? CAM[6] : UP_Z;
-      const s = (n % 2 ? 0.62 : -0.62) + R(-0.12, 0.12), cs = Math.cos(s), sn = Math.sin(s);
-      for (let j = -5; j <= 5; j++) {
-        const o = j * 0.15 * k;
-        fx.spawn({
-          x: x + o * (cs * rx + sn * ux), y: y + o * (cs * ry + sn * uy), z: z + o * (cs * rz + sn * uz),
-          life: 0.16 - 0.012 * Math.abs(j), size: 0.3 - 0.03 * Math.abs(j), sizeEnd: 0.05,
-          glyph: '-', rot: s, stretch: 2.6, color: MOON_SOFT, colorEnd: COL.moonEnd, alpha: 1, alphaEnd: 0,
-        });
-      }
-      for (let i = 0; i < Math.round(9 * k); i++) {
-        const a = R(0, Math.PI * 2), sp = R(1.5, 5);
-        const vx = Math.cos(a) * sp + fdx * 3, vy = R(2.5, 7), vz = Math.sin(a) * sp + fdz * 3, pre = R(0.5, 1) * PRE;
-        fx.spawn({
-          x: x + vx * pre, y: y + vy * pre, z: z + vz * pre,
-          vx, vy, vz,
-          life: R(0.5, 0.9), size: R(0.13, 0.22), sizeEnd: 0.03,
-          glyph: ".'`•", color: i % 3 ? c0 : COL.moon, colorEnd: i % 3 ? c1 : COL.moonEnd, alpha: 1, alphaEnd: 0, gravity: -16, drag: 0.9, flicker: 0.3,
-        });
-      }
-    }
-    // (the core flash stays compact: the wyrm's own parry burst lands on the same spot, and two big
-    // blooms hid the hero's deflect snap for a few frames)
-    fx.spawn({ x, y, z, life: 0.08, size: 0.7 * Math.min(k, 1.3), sizeEnd: 0.2, glyph: '*', color: [2.6, 2.3, 1.7], colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3) });
-    fx.spawn({ x, y, z, life: 0.12, size: 0.5 * Math.min(k, 1.3), sizeEnd: 1.0 * Math.min(k, 1.3), glyph: '°', color: c1, colorEnd: c1, alpha: 0.4, alphaEnd: 0 });
-    // (the light barely grows with the chain: the wyrm's own parry light lands on top of it)
-    this._light({ x, y: ly, z, color: blue ? [0.5, 0.75, 1.3] : [1.2, 1.0, 0.65], intensity: 4.5 * (1 + 0.05 * (n - 1)), radius: 7, life: 0.2, fade: 0.18 });
+    const spray = o?.spray ?? (fdx || fdz ? SPRAY.set(fdx * 0.7, 0.6, fdz * 0.7) : null);
+    clashBurst(this.game, x, y, z, {
+      pal: o?.perfect ? CLASH.perfect : blue ? CLASH.blue : CLASH.parry,
+      power: (o?.light ? 0.55 : 1) * (1 + 0.12 * (n - 1)) * (o?.perfect ? 1.25 : 1),
+      spray, e1: o?.e1 ?? null, e2: o?.e2 ?? null,
+      ring: o?.ring ?? (o?.light ? 0 : 1),
+    });
   }
 
   /**
-   * A blade's parry, layered on the clash (player.js _parry): a white shockwave ring in the screen's
-   * plane bursting out of the contact (`big`: blue or perfect, wider, a second slower ring), a hard
-   * white core flash; `perfect` adds a gold ring and a spray of gold sparks.
+   * A shockwave ring in the screen's plane bursting out of a contact (the cleave's bite; `big`:
+   * wider, a second slower ring; `perfect` adds a gold ring and a spray of gold sparks).
    */
   shockwave(x, y, z, big = false, perfect = false) {
     const fx = this.add;

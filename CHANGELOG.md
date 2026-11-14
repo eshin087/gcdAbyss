@@ -4,8 +4,8 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Nineteen pieces of work since 0.4.0:
-- **The Starless Lord in black plate, and how he moves** (2026-11-14, ADR-079, ADR-080): he wears a
+Twenty pieces of work since 0.4.0:
+- **The Starless Lord in black plate, and how he moves** (2026-11-14, ADR-083, ADR-084): he wears a
   harness of his own now: a deep hood over a faceplate with a slit of red light (the owner's pick of
   three heads), a cuirass with a ring of red light on the breastbone, a plate yoke and pauldrons,
   plate arms and legs, hip plates over a war-skirt and a cape to his ankles, and he stands a head
@@ -19,6 +19,31 @@ Nineteen pieces of work since 0.4.0:
   push, the pull, the thrown stones, the storm, the blink and the ignitions are redrawn.
   *Fixed:* he sat on the throne only in name (he stood on its seat in his guard until woken), and
   Shen Hui stood where he should kneel: both wait in their own pose now.
+- **Steel on steel** (2026-11-14, ADR-079 – ADR-082; both duelists):
+  - **Parries where the blades meet.** A parried blow is now shown stopped on your guard, your blade
+    snapped to the side and height it came from, the two edges crossed, and it is that picture the
+    freeze holds while the sparks keep flying: thin streaks thrown the way the blade was going, a
+    cross of light on the edges, falling embers. The white glare that used to cover both fighters is
+    gone. The freeze is short inside a string (a seven-cut exchange keeps its rhythm) and long only
+    on the blow that ends it; the camera punches in on every clash; a deflected blade rebounds.
+  - **A guard you can read.** The boss raises his blade across his body as you swing at him. A
+    strike he holds: dull steel sparks, a dry clack, GUARDED, and your chain goes on (it wears his
+    posture). A strike he beats away: an orange burst, a harsh clang, DEFLECTED in red, your blade
+    thrown back, and his Riposte is coming. He also breaks off the late half of his recoveries to
+    guard, and sometimes steps out of a charged cleave or the finisher.
+  - **Cancel anything.** A guard press or a dodge now ends your swing at any point: its windup, the
+    cut itself, the recovery. Bounced off a deflect, guard or roll at once.
+  - **Blade lock.** The two step in, the blades cross between you, sparks grind at the crossing and
+    every press shoves him back a little.
+  - **A closer camera in a duel:** within a duelist's reach it eases 6 m closer.
+  - **Trade clash** (ADR-082). Swing as he swings and the two cuts meet: CLASH, neither of you is
+    hurt, both blades are thrown back. His string goes on, so guard or dodge the blow that follows
+    (two in a row cannot be traded). A fully charged cleave is not thrown back: it beats his blow
+    aside and lands.
+  - Added: `combat/clashFx.js`, `enemies/duelist/guard.js`, `game.fxDt`, `game.punch` /
+    `cameraRig.punch`, `player:bounced`, `dragon:guard {deflect}`, the sounds `guard` and
+    `deflected`, the DEFLECTED call-out, the test scenario CLASH (`duel.mjs`); for the trade clash
+    `RESULT.CLASHED`, `combat:clash`, the sound `trade`, the CLASH call-out, the scenario TRADE.
 - **A faster chain, a new finisher, swings that flow home** (2026-11-14, ADR-075, ADR-076): the
   attack chain is quicker: a hit every ~0.32 s when you mash (it was 0.42 s), each cut over in 0.12
   s. The light hits deal 30 / 32 / 36 / 30 again (the ×1.4 that paid for the slow chain is gone),

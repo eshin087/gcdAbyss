@@ -84,6 +84,9 @@ export const CONFIG = {
     exposure: 1.55,
     bloomStrength: 0.85,
     bloomThreshold: 0.55,
+    // through a freeze-frame (game.hitstop) particles and lights run on at this share of real time:
+    // the fighters hold the impact's pose while its sparks fly (game.fxDt)
+    fxLive: 0.6,
   },
 
   // Quality presets (cycle with F2). grass = blade instances drawn, shadow = moon shadow map size.

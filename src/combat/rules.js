@@ -19,6 +19,8 @@ export const RESULT = Object.freeze({
   HIT: 'hit',
   BLOCKED: 'blocked',
   PARRIED: 'parried',
+  // the trade clash: the blow met the defender's own cut (DEFENSE.trade): neither is hurt
+  CLASHED: 'clashed',
   DODGED: 'dodged', // i-frames, not perfectly timed
   PERFECT: 'perfectDodge', // dodge started within the perfect window → plunge / Ghostep
   IGNORED: 'ignored',
@@ -51,6 +53,13 @@ export const DEFENSE = Object.freeze({
   perfectParryWindow: 0.08,
   parryRearm: 0.25, // s RMB must be released before a new press can parry again (anti-mash)
   parryArc: (110 * Math.PI) / 180, // the attacker must be within this cone in front of the defender
+  // --- the trade clash: a blade's blow (hit.steel, not red) that arrives while the defender's own
+  // cut is in its active frames (`early` s before them to `late` s after) meets it: both blades are
+  // thrown back, neither is hurt. The same when the defender's cut connects with an attacker whose
+  // blow is at most `window` s from its impact. No button: it is two swings at the same moment.
+  // After one, the next needs `rearm` s (a string's blows come ~0.4 s apart: two in a row cannot be
+  // traded by mashing attack; the one between must be guarded or dodged).
+  trade: { early: 0.03, late: 0.02, window: 0.1, rearm: 0.6 },
   // --- block: hold RMB
   blockArc: (130 * Math.PI) / 180,
   blockReduction: { normal: 0.8, blue: 0.5 }, // fraction of damage removed while blocking

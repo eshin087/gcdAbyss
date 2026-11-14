@@ -28,6 +28,9 @@ const FIT = {
   near: 2, // m: a subject closer to the camera plane than this is clamped (never divides by ~0)
 };
 
+// the zoom punch (punch()): at most `max` m closer, easing back at `lambda` 1/s
+const PUNCH = { max: 6, lambda: 11 };
+
 export class CameraRig {
   constructor(camera) {
     const c = CONFIG.camera;
@@ -48,6 +51,8 @@ export class CameraRig {
     // a cinematic moment (flow.cinematic): `zoom` m added to the distance (negative = in close) and
     // the follow focus leaned `w` (0..1) toward (x, z); flow eases them in and out
     this.cine = { zoom: 0, x: 0, z: 0, w: 0 };
+    // a zoom punch (punch()): metres the camera sits closer right now, springing back
+    this.punchZ = 0;
     this._cineFocus = new THREE.Vector3();
     // keep-in-view: this frame's subjects and the eased pan (fitX / fitZ, m) and zoom (fitZoom, m)
     this.fitX = 0;
@@ -77,6 +82,7 @@ export class CameraRig {
     this._base.copy(focus);
     this.focus.copy(focus);
     this.fitX = this.fitZ = this.fitZoom = 0;
+    this.punchZ = 0;
     this._n = 0;
     this.distance = this.targetDistance + this._extra();
     this.update(0, focus);
@@ -85,6 +91,13 @@ export class CameraRig {
   zoom(steps) {
     if (!Number.isFinite(steps)) return;
     this.targetDistance = clamp(this.targetDistance + steps * 2.5, this.minDistance, this.maxDistance);
+  }
+
+  /** A zoom punch: jump `m` metres closer (at the desktop distance; scaled for the phone's closer
+   *  camera), springing back in ~0.25 s. Stacks up to PUNCH.max. A blade's clash, a heavy hit. */
+  punch(m) {
+    if (!(m > 0)) return;
+    this.punchZ = Math.min(PUNCH.max, this.punchZ + m);
   }
 
   /** amount 0..1; stacks and decays. ~0.25 light hit, ~0.6 big slam. */
@@ -128,7 +141,9 @@ export class CameraRig {
     this.distance = damp(this.distance, this.targetDistance + this._extra(), 4, dt);
     this._fit(dt);
     this.focus.set(b.x + this.fitX, b.y, b.z + this.fitZ);
-    const D = this.distance + this.fitZoom;
+    this.punchZ = damp(this.punchZ, 0, PUNCH.lambda, dt);
+    if (!(this.punchZ > 1e-3)) this.punchZ = 0;
+    const D = this.distance + this.fitZoom - this.punchZ * (this.defaultDistance / c.distance);
 
     const s = this.trauma * this.trauma;
     const t = this.t * 38;

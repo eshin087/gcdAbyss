@@ -152,8 +152,15 @@ export class GameFlow {
     ev?.on('player:dodge', () => this.stats.dodges++);
     ev?.on('player:parry', (d) => {
       this.stats.parries++;
-      // a blade met: a white flash on the clash (a perfect parry: a bright one); a deflected bullet: none
-      if (!d?.light) this.grade.flashPulse(d?.perfect ? 0.85 : d?.tell === 'blue' ? 0.4 : 0.28);
+      // a blade met: a white flash of the frame on the clash (inside a string: a flicker; where the
+      // exchange turns, a heavy blow or a perfect parry: brighter); a deflected bullet: none
+      if (!d?.light) this.grade.flashPulse(d?.perfect ? 0.55 : d?.tell === 'blue' ? 0.3 : d?.last === false ? 0.12 : 0.22);
+    });
+    // two cuts meet (the trade clash): a bright flicker
+    ev?.on('combat:clash', () => this.grade.flashPulse(0.26));
+    // a duelist beats the hero's strike away (his counter is coming): the frame flickers too
+    ev?.on('dragon:guard', (d) => {
+      if (d?.deflect) this.grade.flashPulse(0.25);
     });
     ev?.on('player:block', () => this.stats.blocks++);
     ev?.on('player:guardBreak', () => this.stats.guardBreaks++);

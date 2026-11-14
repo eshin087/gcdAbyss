@@ -22,8 +22,12 @@ const KINDS = {
   // the execution of a boss with several bars (dragon.lives: the Starless Lord): it ends a form
   deathblow: { text: 'DEATHBLOW', life: 1.5, rise: 30, pop: 1.7, cls: 'deflect', streak: true },
   ret: { text: 'RETURN', life: 1.0, rise: 34, pop: 1.5, cls: 'return' },
-  // a duelist's guard turned the hero's strike (dragon:guard; the Ash Disciple)
+  // a duelist's guard turned the hero's strike (dragon:guard; the Ash Disciple) ...
   guard: { text: 'GUARDED', life: 0.7, rise: 16, pop: 1.15 },
+  // ... or beat it away: the hero's blade is thrown back and his counter is coming (red: a warning)
+  deflected: { text: 'DEFLECTED', life: 0.9, rise: 20, pop: 1.5, cls: 'danger' },
+  // two cuts met (combat:clash): neither landed
+  trade: { text: 'CLASH', life: 1.0, rise: 24, pop: 1.6, cls: 'deflect' },
   // the duel's moments (player:lock, player:mikiri, dragon:deflected)
   lock: { text: 'BLADE LOCK', life: 1.1, rise: 20, pop: 1.5, cls: 'deflect' },
   lockWon: { text: 'BREAKTHROUGH', life: 1.3, rise: 30, pop: 1.6, cls: 'deflect' },
@@ -90,7 +94,8 @@ export class Callouts {
     game.events?.on?.('player:plungeHit', (d) => {
       if (d?.execution) this.call(game.dragon?.lives ? 'deathblow' : 'exec');
     });
-    game.events?.on?.('dragon:guard', () => this.call('guard'));
+    game.events?.on?.('dragon:guard', (d) => this.call(d?.deflect ? 'deflected' : 'guard'));
+    game.events?.on?.('combat:clash', () => this.call('trade'));
     game.events?.on?.('player:lock', (d) => {
       if (d?.phase === 'start') this.call('lock');
       else if (d?.phase === 'won') this.call('lockWon');
