@@ -2154,6 +2154,11 @@ export class Player {
       // any overlap of this frame with the active window counts (robust to long frames)
       if (t >= W && prevT <= end + 0.04) {
         this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, d.kind, crit);
+        // a glint on the point as the cut comes through (the cleave cuts late in its dash)
+        if (!a.glint && d.kind !== 'thrust' && t >= W + d.active * (d.kind === 'cleave' ? 0.82 : 0.6)) {
+          a.glint = true;
+          this.fx.arcGlint(sw.b.x, sw.b.y, sw.b.z, sw.b.x - sw.pb.x, sw.b.y - sw.pb.y, sw.b.z - sw.pb.z, !!d.heavy, crit);
+        }
         if (!a.hit && prevT <= end) this._tryHit(a);
         // the sweep's snap flares the coat tails (cosmetic: the animator's own noise, not the RNG)
         if (d.kind === 'light' && !a.flared) {
@@ -2206,7 +2211,7 @@ export class Player {
     const pl = this.pl, ph = pl.phase;
     sw.point(1, this._tip);
     if (ph === PL.DIVE || (ph === PL.RIDE && pl.streak)) {
-      this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, 'slam', pl.exec);
+      this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, 'slam', pl.exec, false); // (the dive carries the blade: no turn to gate on)
       this.fx.thrustStreak(this._tipPrev, this._tip, 1, pl.exec);
       pl.streak = ph === PL.DIVE;
     } else pl.streak = false;

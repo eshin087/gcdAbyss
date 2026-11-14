@@ -27,7 +27,8 @@ import { DIM } from './model.js';
 //   kind 'slam'   — two-handed vertical slam; a0/a1/a2 = blade elevation (π/2 = straight up,
 //                   0 = ahead, − = into the ground, > π/2 = back over the head) at the overhead
 //                   coil / impact / follow-through; ready → raise = the windup's path to a0. Takes
-//                   `hop` (a leap through the raise, landing on the impact).
+//                   `hop` (a leap through the raise, landing on the impact) and `tilt` (rad: the
+//                   swing's plane leans toward his right).
 //   kind 'thrust' — the execution's lunge: blade level along the facing line, hands driven forward.
 //
 // `variants` (Session 16, owner: "I don't want him to show the same pattern over and over"): other
@@ -58,7 +59,7 @@ export const LIGHT = [
     anim: { kind: 'clip', clip: 'fallingCut' }, // high right → low left
     variants: [
       { kind: 'clip', clip: 'drawCut', turn: 0.3 }, // low and flat from the right hip, pivoting into it
-      { kind: 'clip', clip: 'leapCut', hop: 0.14 }, // a skip in, straight down the middle
+      { kind: 'clip', clip: 'risingSlash', hop: 0.12 }, // a skip in, from the right knee up to high left
     ],
   },
   {
@@ -105,10 +106,12 @@ export const LIGHT = [
     shards: { radius: 1.7, height: 3.2 }, // ground burst at the impact point (hits if the blade missed)
     // windup: blade low ahead (ready) → up-back 33° past the head (raise, mid-windup) → hanging
     // down the back at the apex (a0, the wrists coil); active: over the top into the ground ahead
-    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8 },
+    // `tilt` (rad): the whole swing leans toward his right, so the blow comes down from over the
+    // right shoulder to the ground ahead and a little left: a diagonal, not straight down the middle
+    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, tilt: 0.42 },
     variants: [
       // a leap through the raise, landing on the blow
-      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, hop: 0.16 },
+      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, tilt: 0.42, hop: 0.16 },
     ],
   },
 ];

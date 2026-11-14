@@ -918,6 +918,28 @@ function swingPose(p, A, k, t, W, Ac, R) {
   A.pathCh = C.ch;
 }
 
+/** Lean the slam's plane `phi` rad toward his right, about the line ahead of him through the base
+ *  of his neck: the blade, its flat and the grip turn with it and the chest bends to that side, so
+ *  the blow comes down from over the right shoulder to the ground ahead and a little left. (Session
+ *  25, owner: the cuts were "so perfectly top to bottom": in its upright plane the slam was drawn as
+ *  one straight bar up the screen by the camera behind him.) */
+function slamTilt(p, phi) {
+  if (Math.abs(phi) < 1e-4) return;
+  const c = Math.cos(phi), s = Math.sin(phi);
+  for (const i of SLAM_TILT_CH) {
+    const x = p[i], y = p[i + 1];
+    p[i] = x * c - y * s;
+    p[i + 1] = x * s + y * c;
+  }
+  // the grip is an offset from the sword shoulder, DIM.gripShoulder to the right of that line
+  const gx = p[P.rH] - DIM.gripShoulder[0], gy = p[P.rH + 1];
+  p[P.rH] = gx * c - gy * s + DIM.gripShoulder[0];
+  p[P.rH + 1] = gx * s + gy * c;
+  p[P.spZ] += 0.5 * phi;
+  p[P.hdZ] -= 0.3 * phi;
+}
+const SLAM_TILT_CH = [P.swD, P.swF];
+
 /** The slam (combat.js kind 'slam'): the windup raises the blade up past the head to hang down
  *  his back (its own path: slamWindup), the active frames crash it over the top into the ground
  *  ahead (a0 → a1), then the blow's weight settles before the follow-through. */
@@ -943,6 +965,8 @@ function slamSwing(p, A, k, t, W, Ac, R) {
   }
   slamPose(p, A, ang, lunge);
   if (t < W) slamWindup(p, A, t);
+  // (the lean comes in as the blade rises: the gather at the hip is as it was)
+  if (k.tilt) slamTilt(p, k.tilt * smoothstep(W * 0.45, W * 0.9, t));
   if (t > W + Ac + SLAM_AFTER) {
     // the blow's weight settles: the body sinks a little further over the planted blade and the
     // head bows, then the follow-through hold and rise take over (after the hit-tested frames)

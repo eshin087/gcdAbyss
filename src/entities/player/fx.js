@@ -12,6 +12,7 @@ const R = (a, b) => a + Math.random() * (b - a);
 const COL = {
   trail: [0.4, 1.25, 2.3], trailEnd: [0.02, 0.14, 0.45], // icy cyan arcs
   trailHeavy: [0.55, 1.6, 2.9], trailCore: [1.1, 2.1, 3.1],
+  arcCore: [1.5, 2.5, 3.5], arcGlint: [3.0, 3.5, 4.3], // the sword arc's edge line and its glint
   shard: [0.9, 1.9, 4.2], shardEnd: [0.1, 0.25, 1.0], // blue crystal burst
   gem: [1.7, 0.5, 3.4], gemEnd: [0.45, 0.08, 0.9], gemCore: [3.4, 2.2, 4.6], // violet
   spark: [3.4, 2.7, 1.6], sparkEnd: [1.4, 0.45, 0.1],
@@ -36,9 +37,12 @@ const COL = {
   gemGlow: [0.6, 0.15, 1.4], // the gem's always-on glow point
 };
 
-// points along the hit segment (0 = hilt … 1 = the edge-wave tip past the steel) that leave a trail
-const TRAIL_ALONG = [0.62, 0.76, 0.89, 1.0];
-const TRAIL_ALONG_HEAVY = [0.5, 0.64, 0.77, 0.89, 1.0];
+// the sword arc's veil: rows along the hit segment (0 = hilt … 1 = the tip of the reach, where the
+// edge line runs) and each row's opacity: faint, and fainter toward the hilt
+const ARC_VEIL = [[0.91, 0.7], [0.81, 0.48], [0.7, 0.3], [0.59, 0.15]];
+const ARC_VEIL_HEAVY = [[0.92, 0.8], [0.83, 0.6], [0.73, 0.42], [0.63, 0.26], [0.53, 0.13]];
+const ARC_EDGE = [0.15, 0.2]; // the edge line's stroke size: light, heavy (its width is ~0.4 of it)
+const ARC_TURN = [0.03, 0.2]; // rad the blade turns in a frame: below, no arc; above, the full one
 const TRAIL_SUB_LEN = 0.24; // m of outer-point travel per trail sub-step …
 const TRAIL_SUB_MAX = 8; // … up to this many sub-steps a frame
 // the swept blade between two frames: hilt lerped, direction slerped round it, length lerped
@@ -147,70 +151,107 @@ export class PlayerFx {
   }
 
   /**
-   * Icy cyan slash arc in the panel's language (hero.md §4.9): a 1-cell bright leading edge of
-   * 'A' / '8' at the outer blade, a body of ')' / '|' strokes laid ALONG the motion of each point
-   * (so a sweep reads as one continuous crescent), and a halftone tail of '+' then '·' snapped to a
-   * regular 0.12 m lattice behind it, fading over ~0.3 s. Fills the gap between last frame's blade
-   * (pa→pb) and this one's (a→b). kind: 'light' | 'slam' (bigger, denser, longer-lived) |
-   * 'cleave' (the slam's, hanging about twice as long: the charged cut's crescent stays in the air) |
-   * 'thrust' (the streak is drawn by thrustStreak; only a thin edge trail here).
+   * The sword arc. Fills the gap between last frame's blade (pa→pb) and this one's (a→b) with:
+   *  - the EDGE: one thin bright line along the point's path (round strokes laid end to end), which
+   *    thins and cools as it fades, so the cut hangs in the air for a moment as a drawn line;
+   *  - the VEIL: a few rows of faint streaks inside it, each fainter toward the hilt and gone in a
+   *    few frames: the sweep reads as a crescent without a slab of light;
+   *  - MOTES: a speck or two of light shed off the point, drifting on along the cut.
+   * The arc is the blade TURNING: its strength follows how far the blade turned this frame (`gate`),
+   * so it tapers in and out with the cut and a blade merely carried along (a dash, a lunge) leaves
+   * none. kind: 'light' | 'slam' (a wider veil, longer-lived) | 'cleave' (the slam's, hanging twice
+   * as long) | 'thrust' (the edge only: thrustStreak draws the beam).
+   * (Session 25, owner: "make the sword arc glow effect be more subtle and way more epic cooler
+   * looking". It was four or five rows of bright strokes under a rim of 'A' / '8' letters with a
+   * halftone of '+' behind: a solid glowing band as wide as half the blade, and during the cleave's
+   * dash a wall of light as tall as the sword.)
    */
-  trail(pa, pb, a, b, kind = 'light', crit = false) {
+  trail(pa, pb, a, b, kind = 'light', crit = false, gate = true) {
     const fx = this.add;
     if (!fx) return;
     const cleave = kind === 'cleave';
     const heavy = kind === 'slam' || cleave;
     const thrust = kind === 'thrust';
-    const along = heavy ? TRAIL_ALONG_HEAVY : thrust ? TRAIL_NONE : TRAIL_ALONG;
-    const col = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
-    // sub-steps follow the outer point's travel (a fast frame sweeps 1.5 m): with three fixed
-    // ones the strokes left gaps and the arc read as scattered dashes at the game camera; now
-    // each stroke covers its sub-step, so the band is one continuous crescent at any speed
-    const tipStep = Math.hypot(b.x - pb.x, b.y - pb.y, b.z - pb.z);
-    const nSub = Math.min(TRAIL_SUB_MAX, Math.max(3, Math.ceil(tipStep / TRAIL_SUB_LEN)));
     arcSetup(pa, pb, a, b);
+    const turn = gate ? Math.min(1, Math.max(0, (ARC.th - ARC_TURN[0]) / (ARC_TURN[1] - ARC_TURN[0]))) : 1;
+    if (!(turn > 0.02) || !Number.isFinite(turn)) return;
+    // sub-steps follow the outer point's travel (a fast frame sweeps 1.5 m), each stroke covering
+    // its own, so the line is continuous at any speed
+    const tipStep = Math.hypot(b.x - pb.x, b.y - pb.y, b.z - pb.z);
+    const nSub = Math.min(TRAIL_SUB_MAX, Math.max(2, Math.ceil(tipStep / TRAIL_SUB_LEN)));
+    const core = crit ? COL.crit : COL.arcCore, veil = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
+    const end = crit ? COL.critEnd : COL.trailEnd;
+    const linger = cleave ? 2 : heavy ? 1.35 : 1;
+    const rows = thrust ? TRAIL_NONE : heavy ? ARC_VEIL_HEAVY : ARC_VEIL;
     for (let s = 1; s <= nSub; s++) {
       const t = s / nSub, t0 = (s - 1) / nSub;
-      for (let k = 0; k < along.length; k++) {
-        // this point now, and a sub-step earlier: the stroke lies along its path. The blade turns
-        // round the hilt between frames (slerped), so the band is a curved crescent, not a polygon
-        // of straight chords; the inner rows wander a little so the band fills like a smear
-        const f = along[k] < 0.95 ? along[k] + R(-0.04, 0.04) : along[k];
+      // the edge
+      arcPoint(t, 1, ARC_P);
+      arcPoint(t0, 1, ARC_Q);
+      let dx = ARC_P[0] - ARC_Q[0], dy = ARC_P[1] - ARC_Q[1], dz = ARC_P[2] - ARC_Q[2];
+      let step = Math.hypot(dx, dy, dz);
+      if (step > 0.01) {
+        const size = (heavy ? ARC_EDGE[1] : ARC_EDGE[0]) * (0.55 + 0.45 * turn);
+        fx.spawn({
+          x: (ARC_P[0] + ARC_Q[0]) / 2, y: (ARC_P[1] + ARC_Q[1]) / 2, z: (ARC_P[2] + ARC_Q[2]) / 2,
+          life: R(0.2, 0.26) * linger, size, sizeEnd: size * 0.3,
+          // (the dot fills ~0.4 of its cell: stretched so that one stroke meets the next)
+          glyph: '•', rot: alongRot(dx, dy, dz), stretch: Math.min(18, (step / size) * 3),
+          color: core, colorEnd: end, alpha: 0.5 + 0.5 * turn, alphaEnd: 0, drag: 2,
+        });
+      }
+      // the veil
+      for (let k = 0; k < rows.length; k++) {
+        const f = rows[k][0] + R(-0.03, 0.03);
         arcPoint(t, f, ARC_P);
         arcPoint(t0, f, ARC_Q);
-        const x = ARC_P[0], y = ARC_P[1], z = ARC_P[2];
-        const dx = x - ARC_Q[0], dy = y - ARC_Q[1], dz = z - ARC_Q[2];
-        const step = Math.hypot(dx, dy, dz);
-        const moving = step > 0.02;
-        const outer = f > 0.95;
-        const size = (heavy ? 0.26 : 0.2) * (0.65 + 0.35 * f);
-        // the edge glyph sits on every other sub-step (a bright dotted rim), the body strokes cover
-        // their sub-step end to end
-        if (outer && (s & 1) && nSub > 3) continue;
+        dx = ARC_P[0] - ARC_Q[0];
+        dy = ARC_P[1] - ARC_Q[1];
+        dz = ARC_P[2] - ARC_Q[2];
+        step = Math.hypot(dx, dy, dz);
+        if (!(step > 0.02)) continue;
+        const size = (heavy ? 0.24 : 0.19) * (0.6 + 0.4 * f);
         fx.spawn({
-          x, y, z,
-          vx: R(-0.1, 0.1), vy: R(0, 0.15), vz: R(-0.1, 0.1),
-          life: (outer ? R(0.1, 0.14) : R(0.12, 0.2)) * (cleave ? 2.2 : heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
-          glyph: outer ? 'A8' : moving ? ')|' : '-~', rot: moving ? alongRot(dx, dy, dz) : R(-0.4, 0.4),
-          stretch: moving && !outer ? Math.min(3, (step / size) * 1.1) : 0,
-          color: outer && !crit ? COL.trailCore : col, colorEnd: COL.trailEnd,
-          alpha: outer ? 1 : 0.8 + 0.15 * f, alphaEnd: 0, drag: 2.5,
+          x: (ARC_P[0] + ARC_Q[0]) / 2, y: (ARC_P[1] + ARC_Q[1]) / 2, z: (ARC_P[2] + ARC_Q[2]) / 2,
+          life: R(0.09, 0.15) * linger, size, sizeEnd: size * 0.5,
+          glyph: '|', rot: alongRot(dx, dy, dz), stretch: Math.min(6, (step / size) * 1.4),
+          color: veil, colorEnd: end, alpha: rows[k][1] * turn, alphaEnd: 0, drag: 2.5,
         });
       }
     }
-    // the halftone tail: a regular dot field where the outer blade just was ('+' near the edge,
-    // '·' further in), on a world lattice so the dots line up like the panel's
-    const n = thrust ? 0 : heavy ? 7 : 5;
+    // motes off the point, carried on along the cut
+    const n = thrust ? 0 : cleave ? 3 : heavy ? 2 : 1;
+    const tx = b.x - pb.x, ty = b.y - pb.y, tz = b.z - pb.z, tl = Math.hypot(tx, ty, tz) || 1;
     for (let i = 0; i < n; i++) {
-      const f = R(0.45, 1), t = Math.random();
-      const x = pa.x + (pb.x - pa.x) * f + (a.x - pa.x + (b.x - pb.x - a.x + pa.x) * f) * t;
-      const y = pa.y + (pb.y - pa.y) * f + (a.y - pa.y + (b.y - pb.y - a.y + pa.y) * f) * t;
-      const z = pa.z + (pb.z - pa.z) * f + (a.z - pa.z + (b.z - pb.z - a.z + pa.z) * f) * t;
-      const L = LATTICE;
+      if (Math.random() > turn) continue;
+      arcPoint(Math.random(), R(0.82, 1), ARC_P);
+      const sp = R(0.6, 2.4);
       fx.spawn({
-        x: Math.round(x / L) * L, y: Math.round(y / L) * L, z: Math.round(z / L) * L,
-        life: R(0.25, 0.35) * (cleave ? 1.8 : heavy ? 1.2 : 1), size: f > 0.8 ? 0.12 : 0.1, sizeEnd: 0.05,
-        glyph: f > 0.8 ? '+' : '·', color: col, colorEnd: COL.trailEnd, alpha: 0.85, alphaEnd: 0,
+        x: ARC_P[0], y: ARC_P[1], z: ARC_P[2],
+        vx: (tx / tl) * sp + R(-0.3, 0.3), vy: (ty / tl) * sp + R(-0.1, 0.5), vz: (tz / tl) * sp + R(-0.3, 0.3),
+        life: R(0.28, 0.5) * Math.sqrt(linger), size: R(0.07, 0.11), sizeEnd: 0.03,
+        glyph: "·'`.", color: core, colorEnd: end, alpha: 0.9, alphaEnd: 0, drag: 3, gravity: -1.2,
+      });
+    }
+  }
+
+  /** The glint as a cut comes through: a small star on the point for a few frames and a pinch of
+   *  sparks thrown on along the cut (dx, dy, dz: the point's travel). Once a swing (player.js). */
+  arcGlint(x, y, z, dx = 0, dy = 0, dz = 0, heavy = false, crit = false) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    const core = crit ? COL.ghostCore : COL.arcGlint, c1 = crit ? COL.critEnd : COL.trailEnd;
+    const size = heavy ? 0.5 : 0.32;
+    fx.spawn({ x, y, z, life: 0.1, size, sizeEnd: size * 0.25, glyph: '+', rot: R(0.5, 1.1), color: core, colorEnd: c1, alpha: 1, alphaEnd: 0 });
+    fx.spawn({ x, y, z, life: 0.07, size: size * 0.6, sizeEnd: size * 0.15, glyph: '×', color: core, colorEnd: c1, alpha: 0.9, alphaEnd: 0 });
+    const l = Math.hypot(dx, dy, dz) || 1, n = heavy ? 7 : 4;
+    for (let i = 0; i < n; i++) {
+      const sp = R(2.5, 6.5);
+      fx.spawn({
+        x, y, z,
+        vx: (dx / l) * sp + R(-1.2, 1.2), vy: (dy / l) * sp + R(-0.6, 1.4), vz: (dz / l) * sp + R(-1.2, 1.2),
+        life: R(0.16, 0.3), size: R(0.08, 0.13), sizeEnd: 0.03, glyph: "·'*", color: core, colorEnd: c1,
+        alpha: 1, alphaEnd: 0, drag: 4, gravity: -2,
       });
     }
   }

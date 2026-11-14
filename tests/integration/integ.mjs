@@ -2732,6 +2732,54 @@ async function scenarioHeroLife() {
     assert(all.every((n) => picked.has(n)), `every look of every hit comes up in 40 chains (missing ${all.filter((n) => !picked.has(n)).join(', ') || 'none'})`);
   }
 
+  // (1d) the cuts are diagonals, never straight up and down (Session 25, owner: "not so perfectly top
+  // to bottom"): in every cut's keys the blade stays under 50° of elevation through the active
+  // frames and crosses his front within 20° of level; and the blade hangs back at mid-cut (the whip)
+  {
+    const { SWINGS } = await imp('src/entities/player/swings.js');
+    const bad = [], whip = [];
+    for (const [name, C] of Object.entries(SWINGS)) {
+      if (C.line === 'point') continue; // a thrust has no plane
+      const ks = C.keys.filter((k) => Array.isArray(k.a) && k.u > 1.001 && k.u <= 2.001);
+      const steep = Math.max(...ks.map((k) => Math.abs(k.a[1])));
+      // the key where the blade is nearest to pointing ahead: its elevation is the cut's height there
+      const front = ks.reduce((b, k) => (Math.abs(k.a[0]) < Math.abs(b.a[0]) ? k : b));
+      // (a whirl's blade never points ahead in his own frame: the turn of his body carries it round)
+      const crosses = Math.abs(front.a[0]) <= 45;
+      if (!(steep <= 50) || (crosses && !(Math.abs(front.a[1]) <= 20))) bad.push(`${name} (steepest ${steep}°, ${front.a[1]}° as it crosses his front)`);
+      const mid = C.keys.find((k) => Array.isArray(k.a) && Math.abs(k.u - 1.5) < 0.06);
+      if (mid && !C.keys.some((k) => k.two === 1) && name !== 'whirl' && name !== 'risingWhirl') whip.push([name, Math.abs(mid.a[0])]);
+    }
+    out(`   planes: ${Object.keys(SWINGS).length} clips, upright ones: ${bad.join('; ') || 'none'}; blade behind the hand at mid-cut: ${whip.map(([n, v]) => `${n} ${v}°`).join(' · ')}`);
+    assert(!bad.length, `every cut is a diagonal: the blade under 50° of elevation in the active frames and within 20° of level as it crosses his front (${bad.join('; ') || 'all'})`);
+    assert(whip.length >= 8 && whip.every(([, v]) => v >= 20 && v <= 45), `the blade whips: at mid-cut it still hangs 20°-45° short of pointing ahead (${whip.filter(([, v]) => !(v >= 20 && v <= 45)).map(([n, v]) => `${n} ${v}°`).join(', ') || 'all'})`);
+  }
+
+  // (1e) the sword arc (fx.js trail): a blade that turns leaves an edge line and a veil, with no
+  // letter glyphs; a blade only carried along (the cleave's dash) leaves nothing
+  {
+    const fxa = p.fx.add, spawn0 = fxa.spawn, made = [];
+    fxa.spawn = (o) => { made.push(o); };
+    const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+    try {
+      // a quarter turn of a 1.9 m blade about a still hilt
+      p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0), V3(1.75, 1, 0.74), 'light', false);
+      const turned = made.splice(0);
+      // the same blade moved 0.4 m sideways without turning
+      p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0.4), V3(1.9, 1, 0.4), 'cleave', false);
+      const carried = made.splice(0);
+      const glyphs = new Set(turned.map((o) => o.glyph));
+      const edge = turned.filter((o) => o.glyph === '•'), veil = turned.filter((o) => o.glyph === '|');
+      out(`   arc: a turning blade ${turned.length} particles (${edge.length} edge, ${veil.length} veil; glyphs ${[...glyphs].join(' ')}), a carried blade ${carried.length}; veil alpha ${Math.min(...veil.map((o) => o.alpha)).toFixed(2)}-${Math.max(...veil.map((o) => o.alpha)).toFixed(2)}`);
+      assert(edge.length >= 2 && veil.length >= 6 && ![...glyphs].some((g) => /[A-Za-z0-9+]/.test(g)),
+        `the sword arc is an edge line and a veil of streaks, no letters (${[...glyphs].join(' ')})`);
+      assert(Math.max(...veil.map((o) => o.alpha)) <= 0.8 && Math.min(...veil.map((o) => o.alpha)) < 0.25, 'the veil is see-through and fades toward the hilt');
+      assert(carried.length === 0, `a blade carried along without turning leaves no arc (${carried.length} particles)`);
+    } finally {
+      fxa.spawn = spawn0;
+    }
+  }
+
   // (1c) the pace: mashing the button, the next light waits for the cut to carry through (`chain` of
   // the recovery): a hit every ~0.42 s, not one every 0.25 s
   {
