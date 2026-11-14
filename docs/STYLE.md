@@ -397,7 +397,7 @@ all glyph particles in the dragon's `add` / `alpha` pools.
   sweep trail is the duelist's, in red. Void lightning is the only other colour he owns: violet-white
   jagged strokes with a light of the same hue, so a bolt never reads as a blade.
 
-### Steel on steel (2026-11-14, ADR-078; `combat/clashFx.js`)
+### Steel on steel (2026-11-14, ADR-079; `combat/clashFx.js`)
 One effect for every blade that meets a blade: the hero's parry, a duelist's guard, his deflect, the
 blade lock. At the game camera the two fighters are ~70 px tall, and a freeze-frame holds the
 picture for 3 – 8 frames, so the rule is: **lines, not light**.

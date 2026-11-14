@@ -349,22 +349,31 @@ critTimer: number                      // > 0 while the crit window is open (aft
 lockOn: boolean                        // toggled by Tab / middle mouse; facing tracks dragon.lockPoint
 get alive(): boolean
 isInvulnerable(): boolean              // roll i-frames, the whole plunge, Ghostep / plunge-landing i-frames, get-up, the blade lock, dead
-// impact (ADR-063, ADR-078; TUNE.parryStop / parryPunch / perfectParry / hurtStop): a blade's parry
+// impact (ADR-063, ADR-079; TUNE.parryStop / parryPunch / perfectParry / hurtStop): a blade's parry
 // freezes the frame (inside a string 0.05 – 0.075 s, a heavy blow 0.095, a string's last blow or a
 // single one 0.11, a perfect parry 0.14), punches the camera in and kicks it; a perfect one calls
 // game.flow.cinematic({ kind: 'perfectParry' }). A blow that lands freezes it 0.085 s (big 0.13 s).
-// The blades MEET (ADR-078): for a hit marked `steel` the attacker's parryContact(chest, last) poses
+// The blades MEET (ADR-079): for a hit marked `steel` the attacker's parryContact(chest, last) poses
 // him where his blade met the guard and returns it; the deflect pose is taken on that side
 // (deflect.side), raised for a blow from above or hung for a low cut (deflect.high), posed in the
 // same call (_poseNow: the freeze holds it) and the grip nudged (deflect.nx / ny / nz) onto his
 // steel; fx.parry (combat/clashFx.js) draws one clash on the crossing. deflect.gap0 / gap = how far
 // apart the blades were before / after the nudge.
+canTrade(): boolean                    // swinging (not the execution) and DEFENSE.trade.rearm s past the last trade
+onTrade(att, { tell, attack, last }): { heavy, crush } | null
+                                       // the trade clash, resolved by the attacker (ADR-082: the hero's cut connected
+                                       // when its blow was <= DEFENSE.trade.window from landing). takeHit resolves the
+                                       // other half itself: a hit marked `steel` that arrives in the hero's cut returns
+                                       // RESULT.CLASHED. Both run _trade: the attacker held at the contact, the hero's
+                                       // cut stopped on his blade (_meetBlade, shared with the parry), the burst,
+                                       // 'combat:clash', the bounce. crush (a cleave whose poise reaches the attacker's
+                                       // TUNING.guard.crushPoise): no bounce, the cut carries on.
 onGuarded({ deflect, heavy, attacker })
                                        // a duelist's guard met the hero's strike (he calls it from takeHit). A plain
                                        // ward: the chain goes on. deflect: the blade is thrown back, state 'bounce'
                                        // (TUNE.bounceDur 0.42 s; a guard or a dodge cancels it at once, an attack after
                                        // 0.28 s), 'player:bounced'.
-// cancels (ADR-079): a guard press or a dodge cancels a swing at ANY point (windup, the cut, the
+// cancels (ADR-080): a guard press or a dodge cancels a swing at ANY point (windup, the cut, the
 // recovery; not the execution's thrust). A flask still waits for 35 % of the recovery.
 startBladeLock(att, { start, push, decay, dur, hold }): boolean
                                        // a duelist's perfectly parried `lock` blow (ADR-062): state 'lock', every press
@@ -374,7 +383,7 @@ startBladeLock(att, { start, push, decay, dur, hold }): boolean
                                        // False while down / plunging / already locked. The two close to TUNE.lockDist
                                        // 1.3 m (half each), the blades cross between them (the grip follows
                                        // att.bladeSegment(): _lockCross), sparks grind at the crossing, and the pair
-                                       // slides TUNE.lockSlide 0.9 m with the meter (ADR-080).
+                                       // slides TUNE.lockSlide 0.9 m with the meter (ADR-081).
 isSwinging(): boolean                  // a light / heavy swing's active frames (the dragon's bullets are cut on it)
 takeHit({ damage, from:{x,z}, knockback=0, knockdown=false, kind='hit', burn=0,
           tell='normal', parryable, blockable, attack, attacker, plunge, perfect, light }): RESULT   // see COMBAT.md
@@ -1490,12 +1499,12 @@ a subclass with a few hooks.
   POSES }` round one guard stance (a compiled clip remembers its set: `clip.kit`). Besides the Ash
   Disciple's channels: `lsw` ([az, el] of an off-hand blade, left on the animator as `A.off` for the
   actor to pose a second blade) and `larm` / `lext` / `llead` (the left hand driven by it).
-- `guard.js` (ADR-079): the guard's reaction clips every duelist shares (`GUARD_CLIPS`, spread into a
+- `guard.js` (ADR-080): the guard's reaction clips every duelist shares (`GUARD_CLIPS`, spread into a
   kit's CLIPS and compiled round its stance): `wardHold` (the guard raised over his footwork), `ward` /
   `wardR` / `wardHigh` (a strike met on his left / right / from above; the contact pose is the clip's
   first frame, it ends raised), `deflect` (he beats the strike away), `clash` (the old name);
   `GUARD_TRAVEL`, `GUARD_KINDS`.
-- The guard, read from him (ADR-079): `brain.wardK` 0..1 raises the ward over his footwork while
+- The guard, read from him (ADR-080): `brain.wardK` 0..1 raises the ward over his footwork while
   `brain.threatened()` (the hero swinging at him from his front within 4.4 m) or for
   `TUNING.guard.wardLinger` s after a strike was met (the pilot's `ward` / `wardClip`, `poses.js`
   `raiseWard`). `brain.onGuarded(heavy, clip)` → `'armor'` (mid-windup: turned in passing), `'ward'`
@@ -1503,7 +1512,7 @@ a subclass with a few hooks.
   away: `player.onGuarded({ deflect })` bounces the hero, and the counter move starts as the 0.24 s
   beat ends). `brain._evade(s)`: once per 3 s he may step out of a heavy blow (`TUNING.guard.evade`),
   from footwork or a late recovery.
-- A parried blow is HELD at the contact (ADR-078): `d.parryContact(chest, last)` steps his pose back
+- A parried blow is HELD at the contact (ADR-079): `d.parryContact(chest, last, blade?)` steps his pose back
   along the strike (≤ 0.06 s of clip time) to the last pose before the blade crossed the hero's
   centre line in which it is still 0.34 m clear, or sets a thrust 0.4 m aside; `brain.back.off` keeps
   the shown pose that far behind the timeline (the timeline itself is untouched); a blow that is only
@@ -1535,6 +1544,12 @@ onParried({ attack, tell })   // the deflect chain (as the wyrm's): a move's non
                          // brain.startLock() (react 'lock', player.startBladeLock, a camera push-in);
                          // every real hit of a string of >= TUNING.fullDeflect.minHits parried →
                          // 'dragon:deflected', posture, a cinematic, react 'reeling'
+onClashed({ tell, beat, heavy, crush })
+                         // a trade clash (ADR-082; hitPlayer on RESULT.CLASHED, or _tradeNow from takeHit
+                         // with o.swing: a blade's beat <= DEFENSE.trade.window from its impact is spent and
+                         // brain.skipTo(impact) jumps the timeline to it): guard posture × TUNING.trade.posture;
+                         // a string goes on (the blade rebounds); a single strike / a last blow → react 'clash',
+                         // TUNING.trade.push m back, no punish window; crush → 'dragon:stagger', react 'stagger'
 onLockEnd(won)           // the lock decided (player._endLock): won → posture, a cinematic, react 'reeling';
                          // lost → a red unblockable shove (player.takeHit kind 'shove'), the Riposte next
 onMikiri({ attack })     // the hero rolled into a beat marked `mikiri` (player.takeHit sees hit.mikiri):
@@ -1629,6 +1644,9 @@ Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash 
   `combat:flash {source:'dragon', attack, tell, x, y, z, perilous}` (~0.35 s before impact — the **authoritative**
   timing cue: moving targets (charge, fireball) and hazard-dealt blows re-time it after the tell; perilous:
   a duelist's mikiri thrust, roll into it),
+  `combat:clash {heavy, crush, x, y, z}` (the trade clash: the hero's cut met a duelist's blow at the same moment and
+  neither landed; heavy = the hero's cut was a heavy one, crush = a full cleave that was not thrown back; HUD "CLASH",
+  audio two steels ringing, a flicker of the frame),
   `combat:deflectChain {count}` (the attacker's count: the 2nd, 3rd ... parry in a row within one string;
   a hit that lands or is blocked resets it, dodges keep it; contract 1; the HUD shows "DEFLECT ×N")
 - `dragon:wake`, `dragon:roar {strength}`, `dragon:introDone`, `dragon:windup {name}`, `dragon:attack {name}`,

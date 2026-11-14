@@ -1749,7 +1749,7 @@ on the forearm; the held charge's wrist, elbows and off hand in range. Not cover
 wrist (it runs 4–40° off the steel in two-handed cuts), the free arm's elbow drawn behind the back
 in two backhands' recoveries, hit reactions and the death fall (not driven by the audit).
 
-## ADR-078 — A clash is two blades that meet: the contact is posed, held and drawn once (2026-11-14)
+## ADR-079 — A clash is two blades that meet: the contact is posed, held and drawn once (2026-11-14)
 
 **Context.** The owner: "Make the parries and deflect more epic. the clash is buggy and doesnt feel
 like a sword clash." Filmed frame by frame at the game camera (side on, the Ash Disciple):
@@ -1794,7 +1794,7 @@ turns him up to 0.5 rad for one beat; the next windup's tracking takes it back. 
 with the blades ≤ 0.2 m apart, all 10 held back off the hero, the freeze short inside a string.
 Not checked: how it reads on a phone.
 
-## ADR-079 — His guard is read from him; a swing can be cancelled into a guard or a dodge (2026-11-14)
+## ADR-080 — His guard is read from him; a swing can be cancelled into a guard or a dodge (2026-11-14)
 
 **Context.** The owner: "improve the combat mechanics of enemy guarding, being able to animation
 cancel from a swing to a guard or dodge instantly. right now i cant tell animation or feel wise that
@@ -1828,7 +1828,7 @@ a flinch already raised his guard after one hit). Measured (`duel.mjs` WIN, seed
 that answers every tell): 55 s, 42 parries, 22 guarded swings, 5 breaks; before: about a minute.
 No human has played it; whether 45 % of heavy blows dodged feels fair is the owner's call.
 
-## ADR-080 — The blade lock is two crossed blades; a duel is framed closer (2026-11-14)
+## ADR-081 — The blade lock is two crossed blades; a duel is framed closer (2026-11-14)
 
 **Context.** "The clash" may also have meant the blade lock. Filmed from the side: the two stood
 1.5 m apart, his blade standing up, the hero's in his ordinary guard: nothing crossed. Every press
@@ -1852,3 +1852,38 @@ look (ADR-005), and the X reads from above once the blades truly cross.
 top. The lock moves the boss (`moveBy`, inside his bound). Checked by `duel.mjs` CLASH (1.3 m apart,
 blades within 0.2 m). The closer camera is a taste call that was not put to the owner as options:
 it is one number to change.
+
+## ADR-082 — The trade clash: two cuts at the same moment meet (2026-11-14)
+
+**Context.** Proposed in Session 27 and picked by the owner ("Trade clash"). Until now a cut of the
+hero's and a blow of the duelist's that fell together both landed: the two most committed moments
+of a duel passed through each other. The parry and the guard already clash; trading blows did not.
+
+**Decision.** A blade's blow (normal or blue, from a zone beat: not red, not a cast, not a thrown
+thing) and the hero's cut within the same moment **meet**: neither is hurt.
+- **Two entries, one outcome.** `player.takeHit`: a hit marked `steel` that arrives while the cut
+  is in the air (`DEFENSE.trade`: its active frames, 0.03 s before, 0.02 s after) returns
+  `RESULT.CLASHED`. `duelist.takeHit` (`_tradeNow`): the hero's cut connects when his blow is at
+  most 0.1 s from landing: the beat is spent and his timeline skips to its impact. Without the
+  second, a cut that reached him a frame before his blow would bite and then be bitten.
+- **The picture is a parry's:** he is held where his blade met the hero (`parryContact`), the
+  hero's cut is stopped on it (`_meetBlade`, the code the parry uses), the burst is white-hot with
+  two rings. Left in their swing poses the blades were 0.7 m apart in the frozen frame (his cut
+  low, the hero's high); stopped on his blade they are 0.01 – 0.22 m apart for cuts.
+- **Nobody wins it:** the hero bounces (a guard or a dodge at once, an attack after 0.28 s); a
+  string goes on; a single strike or a last blow ends in the short `clash` reaction, not the recoil.
+  Guard posture × 1.5 (12 / 30). The exception is a cleave that would crush his guard: it beats
+  the blow aside, staggers him and lands.
+- **It cannot be mashed:** after one, the next needs `rearm` 0.6 s. The first version had no such
+  rule and relied on the bounce's 0.28 s; the test caught a mashed button trading the second blow
+  too (a string's blows are 0.42 s apart, not the 0.34 s of their windups).
+
+**Alternatives.** A button for it: it is the absence of one that makes it a trade. Making it a
+parry (the recoil, the blade lock, the full deflect's count): attacking would then be the better
+defence. Ending the string on a trade: a duelist who is relentless by the owner's brief should
+not be stopped by a light.
+
+**Consequences.** `RESULT.CLASHED`, `combat:clash`, the sound `trade`, the CLASH call-out. A press
+window of ~0.19 s (the parry's is 0.22 s) for a smaller reward and no opening. An invisible timer
+(the re-arm), like the parry's. Checked by `duel.mjs` TRADE (16 checks). Not checked: a human
+playing; whether "attack into his attack" is found without being told.

@@ -29,18 +29,18 @@ half of "the combat is a bit slow", and the preview should carry both).
   are ~60 px tall.
 
 **Done:**
-- **The clash (ADR-078):** `combat/clashFx.js` (one effect of lines for every blade on blade);
+- **The clash (ADR-079):** `combat/clashFx.js` (one effect of lines for every blade on blade);
   `game.fxDt` (particles and lights run on through a hit-stop); `duelist.parryContact` holds a
   parried blow where it met the guard and lets a deflected one rebound; the hero's deflect goes to
   the blow's side and height, is posed in the parry's own frame and nudged onto the steel; a short
   freeze inside a string, a long one on its last blow; `cameraRig.punch`; the tell glint without its
   disc; a riposte 0.07 s into a parry.
-- **His guard and the cancels (ADR-079):** `duelist/guard.js` (raised, three wards, the deflect);
+- **His guard and the cancels (ADR-080):** `duelist/guard.js` (raised, three wards, the deflect);
   `brain.wardK`, `onGuarded` → armor / ward / deflect, the counter out of the deflect's beat; the
   hero's bounce (`player.onGuarded`, state `bounce`, `player:bounced`); the recovery's late half
   cancels into a guard or a step out of a heavy blow; the hero's guard / dodge out of any point of a
   swing; sounds `guard` and `deflected`, the DEFLECTED call-out.
-- **The lock and the camera (ADR-080):** the lock pose, the servo onto the crossing, the grind, the
+- **The lock and the camera (ADR-081):** the lock pose, the servo onto the crossing, the grind, the
   slide; duel framing (−6 m in his reach).
 - **Tests:** `duel.mjs` CLASH (20 checks); IMPACT's parry numbers; GUARD's counter check.
 
@@ -63,7 +63,26 @@ and a parry each: the blades 0 – 3 cm apart). No console errors.
   made without options put to the owner.
 - A thrust set aside still shows the blades ~0.4 m apart. The hero's cut still passes through a
   ward that only holds it. The wyrm's claws get the new sparks and freeze, not a contact pose.
-- Proposed, not built: a trade clash, a counter cut after a deflect (ROADMAP M1.26).
+- Proposed, not built: a counter cut after a deflect (ROADMAP M1.26).
+
+**Round 2, the owner's pick: "Trade clash" (ADR-082).** The hero's cut and a duelist's blow at the
+same moment now meet instead of both landing: `RESULT.CLASHED` from `player.takeHit` (his blow
+arrives in the cut) and `duelist._tradeNow` (the cut connects ≤ 0.1 s before his blow would land,
+which spends the beat and skips his timeline to its impact). Neither is hurt; the hero bounces; a
+string goes on; a single strike ends in the short `clash` reaction (no punish window); a cleave that
+would crush his guard wins it. `combat:clash`, the sound `trade`, the CLASH call-out.
+- **Found by the test:** mashing attack traded the second blow of a string too. I had counted on
+  the bounce's 0.28 s, with blows "0.34 s apart": that is their windup; impact to impact is 0.42 s.
+  A re-arm of 0.6 s (`DEFENSE.trade.rearm`) now keeps two in a row from being traded.
+- **Found on film:** left in their swing poses the two blades were 0.7 m apart in the freeze (his
+  rising cut low, the hero's falling cut high), and the bigger burst stacked into a white blot for
+  three frames. The hero's cut is now stopped on his blade with the parry's own contact code
+  (`_meetBlade`, extracted from `_parry`): 0.01 – 0.22 m for cuts, 0.4 – 0.6 m for a thrust or a
+  spin. A big burst spreads its streaks wider instead of brighter. The duelist's tell glint lost
+  the rest of its disc (rays at 0.62×, the eight short strokes born off the centre).
+- Rebased three more times onto `player/faster-flow` (it took ADR-078: this branch's are 079 – 082).
+- Tests: `duel.mjs` TRADE (16 checks). Verification: see the PR. Not checked: as above, and whether
+  a player finds the trade without being told.
 
 ---
 

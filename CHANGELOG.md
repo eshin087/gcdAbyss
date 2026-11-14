@@ -5,7 +5,7 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 Nineteen pieces of work since 0.4.0:
-- **Steel on steel** (2026-11-14, ADR-078 – ADR-080; both duelists):
+- **Steel on steel** (2026-11-14, ADR-079 – ADR-082; both duelists):
   - **Parries where the blades meet.** A parried blow is now shown stopped on your guard, your blade
     snapped to the side and height it came from, the two edges crossed, and it is that picture the
     freeze holds while the sparks keep flying: thin streaks thrown the way the blade was going, a
@@ -22,9 +22,14 @@ Nineteen pieces of work since 0.4.0:
   - **Blade lock.** The two step in, the blades cross between you, sparks grind at the crossing and
     every press shoves him back a little.
   - **A closer camera in a duel:** within a duelist's reach it eases 6 m closer.
+  - **Trade clash** (ADR-082). Swing as he swings and the two cuts meet: CLASH, neither of you is
+    hurt, both blades are thrown back. His string goes on, so guard or dodge the blow that follows
+    (two in a row cannot be traded). A fully charged cleave is not thrown back: it beats his blow
+    aside and lands.
   - Added: `combat/clashFx.js`, `enemies/duelist/guard.js`, `game.fxDt`, `game.punch` /
     `cameraRig.punch`, `player:bounced`, `dragon:guard {deflect}`, the sounds `guard` and
-    `deflected`, the DEFLECTED call-out, the test scenario CLASH (`duel.mjs`).
+    `deflected`, the DEFLECTED call-out, the test scenario CLASH (`duel.mjs`); for the trade clash
+    `RESULT.CLASHED`, `combat:clash`, the sound `trade`, the CLASH call-out, the scenario TRADE.
 - **A faster chain, a new finisher, swings that flow home** (2026-11-14, ADR-075, ADR-076): the
   attack chain is quicker: a hit every ~0.32 s when you mash (it was 0.42 s), each cut over in 0.12
   s. The light hits deal 30 / 32 / 36 / 30 again (the ×1.4 that paid for the slow chain is gone),
