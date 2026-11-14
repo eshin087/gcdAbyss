@@ -1,6 +1,7 @@
 import { TELL } from '../../../combat/rules.js';
 import { DIM } from '../../player/model.js';
 import { makeRealise } from '../duelist/realise.js';
+import { GUARD_CLIPS } from '../duelist/guard.js';
 import { FORM_POSES } from './poses.js';
 import { TUNING } from './tuning.js';
 
@@ -518,8 +519,8 @@ const THRONE = {
 };
 
 export const CLIPS = {
-  /** A strike caught on his guard: the blade snaps across to meet it. */
-  clash: { dur: 0.26, keys: [[0.06, { e: 'o', bZ: -0.06, yaw: 0.5, rH: [0.12, -0.02, 0.36], sw: [0.42, 0.55], swF: [0, 1, -0.4], hdY: -0.4 }]] },
+  /** His guard: the wards that meet a strike, the deflect, the raised guard (duelist/guard.js). */
+  ...GUARD_CLIPS,
   flinch: { dur: 0.26, keys: [[0.07, { e: 'o', spX: -0.06, hdX: -0.12, bZ: -0.05, yaw: 0.46 }]] },
   backstep: { dur: 0.42, keys: [[0.12, { bY: -0.18, pitch: -0.08, ...STEP_BACK }], [0.32, { bY: -0.14, rF: [-0.1, 0.26], lF: [0.17, -0.3] }]] },
   sidestep: { dur: 0.36, keys: [[0.12, { bY: -0.2, roll: 0.08, rF: [-0.2, 0.25], lF: [0.25, -0.2] }]] },
@@ -557,8 +558,8 @@ export const CLIPS = {
   lock: {
     dur: 3, hold: true,
     keys: [
-      [0.08, { e: 'o', two: 0.8, bY: -0.22, bZ: 0.06, pitch: 0.1, yaw: 0.3, rH: [0.1, -0.02, 0.42], rP: [-0.7, -0.2, -0.3], sw: [0.55, 0.7], swF: [0, 1, -0.4], hdX: 0.1, hdY: -0.3, rF: [-0.1, 0.4], lF: [0.2, -0.42] }],
-      [3, { two: 0.8, bY: -0.24, bZ: 0.08, pitch: 0.12, yaw: 0.3, rH: [0.1, -0.02, 0.43], sw: [0.5, 0.72], swF: [0, 1, -0.4], rF: [-0.1, 0.42], lF: [0.2, -0.44] }],
+      [0.1, { e: 'o', two: 0.8, bY: -0.22, bZ: 0.08, pitch: 0.12, yaw: 0.3, rH: [0.08, 0.0, 0.44], rP: [-0.7, -0.2, -0.3], sw: [0.5, 0.95], swF: [0, 0.3, -1], hdX: 0.1, hdY: -0.3, rF: [-0.1, 0.4], lF: [0.2, -0.42] }],
+      [3, { two: 0.8, bY: -0.24, bZ: 0.1, pitch: 0.14, yaw: 0.3, rH: [0.08, 0.0, 0.45], sw: [0.46, 0.97], swF: [0, 0.3, -1], rF: [-0.1, 0.42], lF: [0.2, -0.44] }],
     ],
   },
   /** Broken: on one knee, the blade's point on the floor, the head bowed: the deathblow's opening. */

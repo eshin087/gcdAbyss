@@ -32,7 +32,12 @@ and the shadow box follow `focus` (default `target`) instead of the player / rig
 camera, so lighting, rim / outline, particles and the glyph grid work from any angle. The rig keeps
 updating underneath; `null` snaps back to the game camera. A missing, non-finite or degenerate
 override is skipped for that frame (never throws, never feeds NaN).
-`dt = realDt × game.timeScale × game.debugTimeScale × hit-stop`. `realDt` is unscaled. Input edges
+`dt = realDt × game.timeScale × game.debugTimeScale × hit-stop`. `realDt` is unscaled.
+**`fxDt`** (`game.fxDt`): what the particles and the light pool advance by. Equal to `dt`, except
+through a hit-stop, where it is `realDt × timeScale × debugTimeScale × max(hit-stop, CONFIG.render.fxLive
+0.6)`: a freeze-frame holds the fighters on the impact's pose while its sparks fly on (never faster
+than the game, never while the game stands still: a pause). Glyphs re-drawn every frame size their
+life from `game.fxDt ?? game.dt`. Input edges
 (`pressed`) are valid for exactly one frame. Construction order: world, audio, player, dragon, hud,
 gamepad, touch, flow, lab — constructors must not dereference modules built later.
 **`render`** = `pipeline.updateShadowCamera(focus)` then `pipeline.render()` (`render/pipeline.js`):
@@ -60,10 +65,12 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `events` | pub/sub: `on(name, fn)` → unsubscribe fn, `emit(name, data)` |
 | `input` | **Actions** (ADR-067, `core/bindings.js`): `act(a)`, `actPressed(a)`, `actReleased(a)` — true when any code bound to action `a` (or its virtual code `'@a'`) is down / pressed / released; `bindings` (the `Bindings` instance); the player, flow and timing trainer read only actions. Raw: `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north, from the up / down / left / right actions; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. **Gamepad source** (ADR-066): `setPad(code, down)`, `setPadAxis(x, y)`, `releasePad()` — the same semantics with their own holds (a release on one source never drops a hold on another); a deflected pad stick wins over the touch stick and the keys in `moveAxis()`. `pulse(code)`: a one-frame `pressed` edge with no hold. `kbmT`: `performance.now()` of the last real keyboard / mouse event (a mousemove only with movement). Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
 | `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame; with a gamepad in use or touch controls on, their aim point (see Gamepad controls, Touch controls; shared helper `ui/aim.js` `aimWithoutCursor`) |
-| `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus`, `zoom(steps)` (2.5 m per step, clamped to the profile), `targetDistance`; distance profile `setMobile(bool)` / `mobile`, `defaultDistance`, `minDistance`, `maxDistance`, `maxExtraZoom` (desktop: `CONFIG.camera.distance/min/max`, unlimited extra zoom; phone: `mobileDistance` 20 / `mobileMinDistance` 14 / `mobileMaxDistance` 34, extra zoom (lock-on, boss framing, title / intro shots) capped at `mobileMaxExtraZoom` 3 m). `setMobile` resets the zoom to the profile default. `cine = { zoom, x, z, w }`: flow.cinematic's pull-in (zoom m added to the distance, negative = closer; the follow focus leans toward (x, z) by w; all 0 when no moment runs). **Keep-in-view** (`FIT` in `core/cameraRig.js`): `keep(x, y, z, r = 1, must = false)` asks for a world sphere to stay on screen this frame (≤ 16 per frame; non-finite input is ignored). After the usual follow / distance damping the rig projects the subjects with the real camera and eases a ground-plane pan (`fitX` / `fitZ`, ≤ 30 m) and extra distance (`fitZoom`: ≤ 6 m to fit every subject, ≤ 12 m for `must` ones; phone 1.5 / 3 m) until they sit inside the NDC box (\|x\| 0.9, top 0.86, bottom 0.78). `must` subjects (the hero) are never cropped to fit the others. Damped (5/s, 12/s while a must subject is off the box), eased back to 0 with no requests, reset by `snap()`. `focus` = the damped follow focus + the pan. |
+| `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus`, `zoom(steps)` (2.5 m per step, clamped to the profile), `targetDistance`; distance profile `setMobile(bool)` / `mobile`, `defaultDistance`, `minDistance`, `maxDistance`, `maxExtraZoom` (desktop: `CONFIG.camera.distance/min/max`, unlimited extra zoom; phone: `mobileDistance` 20 / `mobileMinDistance` 14 / `mobileMaxDistance` 34, extra zoom (lock-on, boss framing, title / intro shots) capped at `mobileMaxExtraZoom` 3 m). `setMobile` resets the zoom to the profile default. `punch(m)`: the zoom punch (`game.punch`). `cine = { zoom, x, z, w }`: flow.cinematic's pull-in (zoom m added to the distance, negative = closer; the follow focus leans toward (x, z) by w; all 0 when no moment runs). **Keep-in-view** (`FIT` in `core/cameraRig.js`): `keep(x, y, z, r = 1, must = false)` asks for a world sphere to stay on screen this frame (≤ 16 per frame; non-finite input is ignored). After the usual follow / distance damping the rig projects the subjects with the real camera and eases a ground-plane pan (`fitX` / `fitZ`, ≤ 30 m) and extra distance (`fitZoom`: ≤ 6 m to fit every subject, ≤ 12 m for `must` ones; phone 1.5 / 3 m) until they sit inside the NDC box (\|x\| 0.9, top 0.86, bottom 0.78). `must` subjects (the hero) are never cropped to fit the others. Damped (5/s, 12/s while a must subject is off the box), eased back to 0 with no requests, reset by `snap()`. `focus` = the damped follow focus + the pan. |
 | `touch` | touch controls (`ui/touch.js`, below): `active`, `phone`, `portrait`, `autoAim`, `setActive(bool)`, `update(realDt)` |
 | `gamepad` | gamepad controls (`ui/gamepad.js`, below): `active`, `connected`, `layout` (`'xbox'`/`'ps'`), `autoAim`, `focus`, `label(token)`, `rumble([ms, strong, weak])`, `update(realDt)` |
 | `shake(a)` | camera trauma (0.15 light hit … 0.7 huge slam) |
+| `punch(m)` | a zoom punch: the camera jumps `m` metres closer and springs back in ~0.25 s (`cameraRig.punch`: stacks to 6 m, eased at 11/s, scaled for the phone's closer camera). A blade's clash (1.5 – 3.6), a guard (0.7 – 2.4), a heavy hit (1.6). Optional: callers use `game.punch?.()` |
+| `fxDt` | this frame's FX time step (see Frame order): particles and lights run on through a hit-stop |
 | `hitstop(sec, scale=0.04)` | brief time-scale dip measured in real seconds (also the perfect-dodge slow-mo, the plunge's included: `hitstop(0.6, 0.3)`) |
 | `debugTimeScale` | Lab multiplier on game time (1 = normal). Only the Lab writes it. |
 | `viewOverride` | `null` or `{ pos, target, focus? }` — camera override applied by main.js after the rig (see Frame order). Only the Lab model viewer writes it. |
@@ -342,16 +349,41 @@ critTimer: number                      // > 0 while the crit window is open (aft
 lockOn: boolean                        // toggled by Tab / middle mouse; facing tracks dragon.lockPoint
 get alive(): boolean
 isInvulnerable(): boolean              // roll i-frames, the whole plunge, Ghostep / plunge-landing i-frames, get-up, the blade lock, dead
-// impact (ADR-063, TUNE.parryStop / perfectParry / hurtStop): a blade's parry freezes the frame (0.1 /
-// blue 0.12 / perfect 0.15 s), its FX sit in front of the guard (fx.parry + fx.shockwave: a ring in the
-// screen's plane, born open so the freeze holds a ring, not a blot), a camera kick; a perfect one calls
+// impact (ADR-063, ADR-079; TUNE.parryStop / parryPunch / perfectParry / hurtStop): a blade's parry
+// freezes the frame (inside a string 0.05 – 0.075 s, a heavy blow 0.095, a string's last blow or a
+// single one 0.11, a perfect parry 0.14), punches the camera in and kicks it; a perfect one calls
 // game.flow.cinematic({ kind: 'perfectParry' }). A blow that lands freezes it 0.085 s (big 0.13 s).
+// The blades MEET (ADR-079): for a hit marked `steel` the attacker's parryContact(chest, last) poses
+// him where his blade met the guard and returns it; the deflect pose is taken on that side
+// (deflect.side), raised for a blow from above or hung for a low cut (deflect.high), posed in the
+// same call (_poseNow: the freeze holds it) and the grip nudged (deflect.nx / ny / nz) onto his
+// steel; fx.parry (combat/clashFx.js) draws one clash on the crossing. deflect.gap0 / gap = how far
+// apart the blades were before / after the nudge.
+canTrade(): boolean                    // swinging (not the execution) and DEFENSE.trade.rearm s past the last trade
+onTrade(att, { tell, attack, last }): { heavy, crush } | null
+                                       // the trade clash, resolved by the attacker (ADR-082: the hero's cut connected
+                                       // when its blow was <= DEFENSE.trade.window from landing). takeHit resolves the
+                                       // other half itself: a hit marked `steel` that arrives in the hero's cut returns
+                                       // RESULT.CLASHED. Both run _trade: the attacker held at the contact, the hero's
+                                       // cut stopped on his blade (_meetBlade, shared with the parry), the burst,
+                                       // 'combat:clash', the bounce. crush (a cleave whose poise reaches the attacker's
+                                       // TUNING.guard.crushPoise): no bounce, the cut carries on.
+onGuarded({ deflect, heavy, attacker })
+                                       // a duelist's guard met the hero's strike (he calls it from takeHit). A plain
+                                       // ward: the chain goes on. deflect: the blade is thrown back, state 'bounce'
+                                       // (TUNE.bounceDur 0.42 s; a guard or a dodge cancels it at once, an attack after
+                                       // 0.28 s), 'player:bounced'.
+// cancels (ADR-080): a guard press or a dodge cancels a swing at ANY point (windup, the cut, the
+// recovery; not the execution's thrust). A flask still waits for 35 % of the recovery.
 startBladeLock(att, { start, push, decay, dur, hold }): boolean
                                        // a duelist's perfectly parried `lock` blow (ADR-062): state 'lock', every press
                                        // of attack / guard pushes the meter +push, it falls decay / s; 1 wins, 0 loses,
                                        // at dur s it wins if >= hold. HUD prompt + ASCII meter; 'player:lock' start /
                                        // push / won / lost; then att.onLockEnd(won). Won: crit window, 0.3 s i-frames.
-                                       // False while down / plunging / already locked.
+                                       // False while down / plunging / already locked. The two close to TUNE.lockDist
+                                       // 1.3 m (half each), the blades cross between them (the grip follows
+                                       // att.bladeSegment(): _lockCross), sparks grind at the crossing, and the pair
+                                       // slides TUNE.lockSlide 0.9 m with the meter (ADR-081).
 isSwinging(): boolean                  // a light / heavy swing's active frames (the dragon's bullets are cut on it)
 takeHit({ damage, from:{x,z}, knockback=0, knockdown=false, kind='hit', burn=0,
           tell='normal', parryable, blockable, attack, attacker, plunge, perfect, light }): RESULT   // see COMBAT.md
@@ -1170,7 +1202,7 @@ Ghostep edge pulse (a plunge's perfect dodge included), the posture bar, and the
 head: one counter per string that counts up in place and absorbs the PARRY / DEFLECT pop of the same
 blow), `player:plungeHit {execution}` ("EXECUTION") and the duel's moments: `player:lock {phase}`
 ("BLADE LOCK" / "BREAKTHROUGH"), `player:mikiri` ("MIKIRI"), `dragon:deflected` ("PERFECT DEFLECT"),
-`dragon:guard` ("GUARDED"). The boss bar draws a thin tick at each
+`dragon:guard` ("GUARDED", or "DEFLECTED" in red when `deflect`). The boss bar draws a thin tick at each
 phase gate (`dragon.phaseAt` after the first, read at construction: 66 % and 33 %) and takes the
 `p2` (orange) / `p3` (white-hot) style from `dragon.phase`; the minimap's wyrm dot follows the same
 three colours.
@@ -1467,7 +1499,27 @@ a subclass with a few hooks.
   POSES }` round one guard stance (a compiled clip remembers its set: `clip.kit`). Besides the Ash
   Disciple's channels: `lsw` ([az, el] of an off-hand blade, left on the animator as `A.off` for the
   actor to pose a second blade) and `larm` / `lext` / `llead` (the left hand driven by it).
-- `fx.js` `class DuelFx(d)` (also exported as `DiscipleFx`): tells, clashes, sparks, the sweep trail
+- `guard.js` (ADR-080): the guard's reaction clips every duelist shares (`GUARD_CLIPS`, spread into a
+  kit's CLIPS and compiled round its stance): `wardHold` (the guard raised over his footwork), `ward` /
+  `wardR` / `wardHigh` (a strike met on his left / right / from above; the contact pose is the clip's
+  first frame, it ends raised), `deflect` (he beats the strike away), `clash` (the old name);
+  `GUARD_TRAVEL`, `GUARD_KINDS`.
+- The guard, read from him (ADR-080): `brain.wardK` 0..1 raises the ward over his footwork while
+  `brain.threatened()` (the hero swinging at him from his front within 4.4 m) or for
+  `TUNING.guard.wardLinger` s after a strike was met (the pilot's `ward` / `wardClip`, `poses.js`
+  `raiseWard`). `brain.onGuarded(heavy, clip)` → `'armor'` (mid-windup: turned in passing), `'ward'`
+  (held; also breaking off a recovery past `TUNING.guard.recoverOpen` of it) or `'deflect'` (beaten
+  away: `player.onGuarded({ deflect })` bounces the hero, and the counter move starts as the 0.24 s
+  beat ends). `brain._evade(s)`: once per 3 s he may step out of a heavy blow (`TUNING.guard.evade`),
+  from footwork or a late recovery.
+- A parried blow is HELD at the contact (ADR-079): `d.parryContact(chest, last, blade?)` steps his pose back
+  along the strike (≤ 0.06 s of clip time) to the last pose before the blade crossed the hero's
+  centre line in which it is still 0.34 m clear, or sets a thrust 0.4 m aside; `brain.back.off` keeps
+  the shown pose that far behind the timeline (the timeline itself is untouched); a blow that is only
+  deflected then rebounds for 0.07 s before the clip takes over again. `d.bladeSegment()` → `{ a, b }`.
+- `fx.js` `class DuelFx(d)` (also exported as `DiscipleFx`): tells, `guard(x, y, z, { heavy, deflect,
+  e1, e2, spray })` (his guard's clash: dull steel, or hot orange for a deflect; `clash` / `parrySpark`
+  are the old names), sparks, the sweep trail
   (`sweep(.., ember)`: false steel, true ember, or a colour key such as 'red'), the Ash Crescent's
   projectiles (each may carry its own `speed`, `radius`, `half`, `life`, `style`), `update(dt, d)`.
 
@@ -1478,9 +1530,11 @@ of phase 2 and the Ash Crescent are his own. The boss slot's surface above (no p
 kind = 'duelist';  name = 'SHEN HUI, THE ASH DISCIPLE';  execRange = 3.2;  ghostepBehind = 1.5
 mode: 'sleep'|'intro'|'foot'|'act'|'react'|'broken'|'dying'|'dead'   // brain.js (state follows it)
 guarding: boolean        // his guard covers his front (±TUNING.guard.arc): footwork after the raise
-                         // delay, a clash, and the first TUNING.guard.windupOpen of each windup
-takeHit(o): number       // a strike into his guarded front: 0 damage, guard posture, 'dragon:guard',
-                         // a counter likelier (footwork only); heavy with poise >= TUNING.guard.crushPoise
+                         // delay, a ward or a deflect, the first TUNING.guard.windupOpen of each windup,
+                         // and a recovery past TUNING.guard.recoverOpen of it
+takeHit(o): number       // a strike into his guarded front: 0 damage, guard posture, 'dragon:guard
+                         // {heavy, deflect}', player.onGuarded; held on the strike's side, or (likelier with
+                         // each one in a row) deflected; heavy with poise >= TUNING.guard.crushPoise
                          // (a ~full charged cleave) crushes it: lands + stagger. Otherwise as the wyrm's
                          // (part multipliers, ×breakCritMult while broken, the 50 % phase gate)
 onExecute({ damage })    // a broken disciple: final damage, the break spent, 'dragon:plunged {execution: true}'
@@ -1490,6 +1544,12 @@ onParried({ attack, tell })   // the deflect chain (as the wyrm's): a move's non
                          // brain.startLock() (react 'lock', player.startBladeLock, a camera push-in);
                          // every real hit of a string of >= TUNING.fullDeflect.minHits parried →
                          // 'dragon:deflected', posture, a cinematic, react 'reeling'
+onClashed({ tell, beat, heavy, crush })
+                         // a trade clash (ADR-082; hitPlayer on RESULT.CLASHED, or _tradeNow from takeHit
+                         // with o.swing: a blade's beat <= DEFENSE.trade.window from its impact is spent and
+                         // brain.skipTo(impact) jumps the timeline to it): guard posture × TUNING.trade.posture;
+                         // a string goes on (the blade rebounds); a single strike / a last blow → react 'clash',
+                         // TUNING.trade.push m back, no punish window; crush → 'dragon:stagger', react 'stagger'
 onLockEnd(won)           // the lock decided (player._endLock): won → posture, a cinematic, react 'reeling';
                          // lost → a red unblockable shove (player.takeHit kind 'shove'), the Riposte next
 onMikiri({ attack })     // the hero rolled into a beat marked `mikiri` (player.takeHit sees hit.mikiri):
@@ -1561,9 +1621,10 @@ ignites and he leaps to the seal; a skipped intro puts him where the leap lands.
 Player → hud/audio/fx/flow:
 - `player:attack {kind:'light'|'slam'|'cleave'|'thrust', combo, charge}` (swing starts; combo 1–5 = the chain hit, slam = hit 5, the sprint slash and the roll cut report 1; cleave = the charge's release, thrust = the execution against a duelist),
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
-  `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / cleave / thrust / plunge; kind 'plunge' = the
-  head-stab, crit on an execution), `player:hurt {damage, kind, hp}`,
-  `player:block {damage, tell}`, `player:parry {tell, attack, chain, light, perfect}` (chain = the hero's parries in rhythm, ≤ 1.1 s
+  `player:hitDragon {damage, part, point, heavy, crit, kind, guarded}` (heavy = slam / cleave / thrust / plunge; kind 'plunge' = the
+  head-stab, crit on an execution; guarded = a duelist's guard turned it: damage 0), `player:hurt {damage, kind, hp}`,
+  `player:bounced {heavy}` (a duelist's guard deflected the hero's strike: his blade is thrown back),
+  `player:block {damage, tell}`, `player:parry {tell, attack, chain, light, perfect, last}` (last = false for a string's non-final blow; chain = the hero's parries in rhythm, ≤ 1.1 s
   apart, 1 = single; it can run across two strings; light = a deflected bullet: a lighter clash; perfect = pressed within
   `DEFENSE.perfectParryWindow`: with light, the bullet is returned), `player:guardBreak {attack}`,
   `player:dodge {kind}` (an attack passed through i-frames), `player:perfectDodge {attack, tell}` (every perfect dodge:
@@ -1583,6 +1644,9 @@ Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash 
   `combat:flash {source:'dragon', attack, tell, x, y, z, perilous}` (~0.35 s before impact — the **authoritative**
   timing cue: moving targets (charge, fireball) and hazard-dealt blows re-time it after the tell; perilous:
   a duelist's mikiri thrust, roll into it),
+  `combat:clash {heavy, crush, x, y, z}` (the trade clash: the hero's cut met a duelist's blow at the same moment and
+  neither landed; heavy = the hero's cut was a heavy one, crush = a full cleave that was not thrown back; HUD "CLASH",
+  audio two steels ringing, a flicker of the frame),
   `combat:deflectChain {count}` (the attacker's count: the 2nd, 3rd ... parry in a row within one string;
   a hit that lands or is blocked resets it, dodges keep it; contract 1; the HUD shows "DEFLECT ×N")
 - `dragon:wake`, `dragon:roar {strength}`, `dragon:introDone`, `dragon:windup {name}`, `dragon:attack {name}`,
@@ -1600,8 +1664,9 @@ Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash 
   `dragon:phase3`, `dragon:phase4` (a duelist's later phases: the Starless Lord's blade forms), `dragon:phase {n}` (the wyrm: with phase 2 and 3, on the transition roar), `dragon:plunged {execution}`
   (contract 2: every plunge that lands, even during a transition or the killing one),
   `dragon:death`, `dragon:dead`,
-  `dragon:guard {heavy}` (a duelist's guard turned the hero's strike: no damage, guard posture; the Ash Disciple;
-  HUD "GUARDED", audio a block clang), `dragon:deflected {count}` (every real hit of a long string parried:
+  `dragon:guard {heavy, deflect}` (a duelist's guard turned the hero's strike: no damage, guard posture; HUD
+  "GUARDED", audio a dry clack; deflect = he beat it away and the hero bounces: HUD "DEFLECTED", a harsh falling
+  clang, a flicker of the frame), `dragon:deflected {count}` (every real hit of a long string parried:
   the full deflect; HUD "PERFECT DEFLECT"),
   `dragon:spell {name, x, z}` (a fire attack's signature moment: the strafe's pass, the dive, the barrage's
   rise, a spell's cast / the nova's charge start), `dragon:hazard {kind, stage, x, z, radius}` (a fire hazard:

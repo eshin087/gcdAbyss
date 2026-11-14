@@ -654,7 +654,7 @@ export class AudioEngine {
     // the duel's moments (a duelist; the Ash Disciple): steel on steel, heavier as they land
     on('player:lock', (d) => {
       if (d.phase === 'start') this.play('block', { tell: 'blue', damage: 0 });
-      else if (d.phase === 'push') this.play('parry', { tell: 'normal', chain: 1 });
+      else if (d.phase === 'push') this.play('guard', { heavy: false }); // (a shove grinds: no bell per press)
       else if (d.phase === 'won') this.play('parry', { tell: 'blue', chain: 6 });
       else this.play('block', { tell: 'blue', damage: 10 });
     });
@@ -705,7 +705,13 @@ export class AudioEngine {
     on('dragon:attack', (d) => {
       if (beast() && !RX_OWN_SOUND.test(String(d.name || ''))) this.play('dragonSwipe', this._atDragon());
     });
-    on('dragon:guard', (d) => this.play('block', { tell: d?.heavy ? 'blue' : 'normal', damage: 0 }));
+    // two cuts meet (the trade clash)
+    on('combat:clash', (d) => {
+      this.charge?.stop(0.05);
+      this.play('trade', { heavy: !!d?.heavy });
+    });
+    // his guard: a dry clack when he holds the strike, a harsh falling clang when he beats it away
+    on('dragon:guard', (d) => this.play(d?.deflect ? 'deflected' : 'guard', { heavy: !!d?.heavy }));
     on('dragon:step', (d) => this.play('dragonStep', d));
     on('dragon:wingFlap', (d) => this.play('wingFlap', this._atDragon({ strength: d.strength })));
     on('dragon:takeoff', () => beast() && this.play('takeoff', this._atDragon()));

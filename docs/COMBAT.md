@@ -122,7 +122,7 @@ hazard the ground heats up from its spawn     its edge shows, the heat flares, a
 
 ## Contract (summary — full signatures in ARCHITECTURE.md)
 - Attacker → defender: `defender.takeHit({ damage, from, knockback, knockdown, kind, burn, tell,
-  parryable, blockable, attack, attacker, plunge })` returns a `RESULT` (`hit` / `blocked` /
+  parryable, blockable, attack, attacker, plunge, steel, last })` returns a `RESULT` (`hit` / `blocked` / `clashed` /
   `parried` / `dodged` / `perfectDodge` / `ignored`). `plunge: false` keeps a perfect dodge of that
   hit from becoming the plunge (fire hazards).
 - On `parried` the attacker calls its own parry reaction: a deflect for a string's non-final hit
@@ -174,6 +174,11 @@ hit. The slam and the charged cleave are two-handed.
   mid-active (the low sweep later, at ~65 %: a low blade reaches less far under a tall target): a
   cut that crossed earlier swung past the front before the step-in assist closed the gap and lost
   the 3–3.5 m REACH cases.
+- **Cancels (ADR-080):** a guard press (RMB) or a dodge (Space) cancels a swing **at any point**:
+  its windup, the cut itself, the recovery (only the execution's thrust runs to its end). A cut
+  cancelled before it lands does not land. A flask still waits for 35 % of the recovery, movement
+  for 60 %. (Until 2026-11-14 the guard came out of windups and recoveries only and a dodge only
+  after 35 % of a recovery: a hero mid-swing could not answer a counter.)
 - Pacing (ADR-075): a light is a short gather, a quick cut and a held finish (0.11 / 0.12 s, then
   the next light may start 30 % into the recovery: `chain`), so a mashed chain lands a hit every
   ~0.32 s. History: 0.25 s a hit until Session 25, where the owner found the swings "too fast to
@@ -379,14 +384,32 @@ rules hold at that speed: every hit cued by its flash `flashLead` 0.3 s before i
 windup ≥ 0.42 s in every phase, a string's impacts ≥ 0.32 s apart (so each flash comes after the hit
 before it), red hits glow and red areas ring the ground; the deflect chain (a move's non-final hit is
 deflected, its last recoils him). His own:
-- **His guard** covers ±75° of his facing: in footwork (0.18 s after a move, a stagger or a recoil
-  ends; at once after a clash or a flinch), through a clash, and through the first 55 % of each windup
-  (after that he has committed: the strike can be traded). A strike into it deals nothing, adds guard
-  posture (light 8, heavy 20) and clashes ("GUARDED", a 0.07 s freeze, 0.11 s for a heavy strike). In
-  footwork each guarded strike in a row (within 2.5 s) makes a counter likelier: 0, 35, 70, 100 % on
-  the 1st–4th: the **Riposte**. A heavy strike with posture ≥ 48 (the charged cleave from ~90 %
-  charge; CLEAVE.poise 30–50) crushes the guard: it lands and he staggers (0.8 s).
-- **Openings:** his recoveries (0.45–0.8 s); the recoil (1.0 s) after his last hit is parried; the
+- **His guard** (ADR-080) covers ±75° of his facing: in footwork (0.18 s after a move, a stagger or
+  a recoil ends; at once after a ward or a flinch), through a ward, through the first 55 % of each
+  windup (after that he has committed: the strike can be traded), and in the **late half of a move's
+  recovery** (the first half is the punish window; after it he breaks the recovery off into his
+  guard). A strike into it deals nothing and adds guard posture (light 8, heavy 20). It is read from
+  him, in three steps:
+  - **Raised.** As the hero swings at him from his front (within 4.4 m) the blade leaves the
+    en-garde line and stands across his body, the free palm behind the flat: up in ~0.07 s, before
+    the strike arrives, and kept up 0.6 s after one was met. A raised blade means: this will be turned.
+  - **GUARDED** (a ward). He meets the strike on the side it came from (left, right, or overhead for
+    the finisher), is driven back 0.24 m (0.4 m by a heavy strike), dull steel sparks on the crossing
+    of the blades, a dry clack, a 0.07 s freeze (0.11 s heavy). The hero's chain goes on: each
+    guarded strike wears his posture, and each one in a row (within 2.5 s) makes the next likelier to be
+  - **DEFLECTED** (0, 35, 70, 100 % on the 1st – 4th). He beats the strike away: a hot orange burst
+    and two rings, a harsh falling clang, a flicker of the frame, a red call-out. The hero's blade is
+    thrown back and he gives 0.9 m (**the bounce**, 0.42 s: a guard or a dodge cancels it at once, an
+    attack only after 0.28 s), and the **Riposte** comes straight out of the 0.24 s beat: its first
+    cut lands ~0.7 s after the deflect, cued as any other. Orange means: stop attacking, answer.
+  A strike turned in his early windup is turned in passing (sparks, GUARDED; his own blow goes on).
+  A heavy strike with posture ≥ 48 (the charged cleave from ~90 % charge; CLEAVE.poise 30–50)
+  crushes the guard: it lands and he staggers (0.8 s).
+- **He steps out of heavy blows:** a charge more than half way, the cleave in flight or the
+  finisher's raise, within 6 m: once per 3 s, 45 % of the time (the Starless Lord 50 %), a sidestep
+  out of a charge's line or a backstep from a blow already coming; from footwork, or breaking off the
+  late half of a recovery.
+- **Openings:** the first half of his recoveries (0.45–0.8 s in all); the recoil (1.0 s) after his last hit is parried; the
   Ghostep (a perfect dodge blinks the hero 1.5 m behind him; no plunge; his back is never guarded); the
   reeling and trampled reactions of the moments below; the posture break.
 - **Hit stun on him (ADR-063):** every blow that lands freezes the frame (light 0.065 s, heavy 0.1 s,
@@ -435,6 +458,28 @@ Sekiro / Phantom Blade Zero beats, each read from his data (`moves.js` beat flag
   loses in ~1.5 s. **Won:** "BREAKTHROUGH", posture +110, he reels, the hero gets the crit window
   (1.6 s) and 0.3 s of i-frames, slow motion. **Lost:** he shoves the hero (14, kb 2.6, unblockable)
   and comes straight in with the Riposte. The hero can't be hit while locked.
+  The picture (ADR-081): the two close to 1.3 m (each steps half the way), both hands on the grips,
+  the blades crossed between their heads (the hero's grip follows the crossing: 1 – 12 cm between
+  the blades in the tests), leaning in, arms shaking; sparks grind out of the crossing, every press
+  spits a few more and shoves the pair 8 cm toward him (0.9 m over the whole meter; they slide back
+  onto the hero as he loses); the blades break apart in gold (won) or orange (lost).
+- **Trade clash** (ADR-082) — no button: two cuts at the same moment. A blade's blow (normal or
+  blue; not a red one, not a thrown thing) that arrives while the hero's own cut is in the air (its
+  active frames, 0.03 s before to 0.02 s after), or a cut of the hero's that connects when his blow
+  is at most 0.1 s from landing, **meets it**: "CLASH", neither is hurt, a white-hot burst and two
+  rings on the crossing, a 0.12 s freeze, two steels ringing. In press terms: an attack press
+  0.08 – 0.27 s before his blow lands (a window as wide as the parry's 0.22 s).
+  - The hero's blade is thrown back (the bounce: a guard or a dodge at once, an attack after 0.28 s)
+    and he gives 0.55 m. His posture takes guard × 1.5 (12 / 30 for a light / heavy cut): more than a
+    guarded strike, less than a parry (26 / 48).
+  - **A string goes on** (his blade rebounds as from a deflect), and **two blows in a row cannot be
+    traded**: after one, the next needs 0.6 s (blows come ~0.4 s apart), so the blow that follows
+    must be guarded or dodged. Mashing attack trades one blow and takes the next.
+  - A single strike, or a string's last blow, traded: he is thrown back 0.5 m into his guard (0.26
+    s). **No punish window**: only a parry earns the recoil.
+  - **A full cleave wins it:** a charge whose posture reaches the guard's crush (48) is not thrown
+    back: it beats his blow aside, staggers him and lands.
+  - A cut that bit him more than 0.1 s before his blow lands is not a clash: both blows land, as before.
 - **Mikiri (perilous thrust)** — a red thrust marked `mikiri` (Piercing Ash; the last hit of Hundred
   Petals) flashes `combat:flash` with `perilous: true`. A roll **into** it (the roll's direction
   against his facing, dot ≥ 0.55) whose impact comes within 0.3 s of the roll's start steps on the
@@ -445,15 +490,35 @@ Sekiro / Phantom Blade Zero beats, each read from his data (`moves.js` beat flag
   actor's short hitstop is not stretched over it), the camera 10 m closer, leaning 60 % toward the
   clash, a deep gong. A newer moment replaces a running one.
 
-### Impact: the parry and the hit (ADR-063)
+### Impact: the parry and the hit (ADR-063; the clash: ADR-079)
 For every blade the hero meets (the wyrm's too; bullets keep their light clash):
-- **A parry** freezes the frame (0.1 s; a blue blow 0.12 s; a perfect parry 0.15 s, at ×0.02), throws
-  the clash's sparks already mid-burst (the freeze shows a burst, not a blot), a **shockwave ring** in
-  the screen's plane that bursts out when time resumes (a blue or perfect parry: two rings), a camera
-  kick (0.3–0.5), a **white flash** of the whole frame (`grade.flashPulse`: 0.28, blue 0.4, perfect
-  0.85) and a heavier clang (a deep body, a low ring). The clash sits in front of the hero's guard.
+- **The blades meet** (a duelist's blow). At the frame a blow "lands" its blade is already through
+  the hero, or past him (a cut travels ~0.4 m a frame). So he is shown **held where his blade met
+  the guard**: the pose is stepped back along the strike (≤ 0.06 s of clip time) to the last one
+  before it crossed the hero in which the steel is still 0.34 m clear of him; a thrust down the
+  centre line is set 0.4 m aside. The hero's deflect is taken **on that side**, raised into an
+  overhead ward for a blow from above or hung point-down for a cut at the waist, posed in the same
+  frame, and the grip nudged until the blades touch: in the tests 7 of 10 parried blows of two
+  strings end with the blades ≤ 0.2 m apart (most ≤ 0.1 m; a thrust set aside stays ~0.4 m off).
+  The clash is drawn once, on that crossing. A blow that is only deflected then **rebounds** off the
+  guard (0.07 s) before the string goes on; the timeline, the tells and the hits are untouched.
+- **The clash** (`combat/clashFx.js`): a starburst of thin streaks in the screen's plane, most of
+  them thrown on the way the turned blade was going; a cross of light along the two edges; a small
+  core gone in two frames; embers that fall; a thin ring where the exchange turns. White-gold, cold
+  blue for a heavy blow, gold for a perfect parry. No big bright glyph: until 2026-11-14 the
+  freeze-frame showed two white blots where the blades should cross.
+- **A parry** freezes the frame at ×0.02: **0.05 – 0.075 s inside a string**, 0.095 s for a blue
+  blow, **0.11 s on a string's last blow** (the one that recoils him) or a single strike, 0.14 s for
+  a perfect parry. (It was 0.1 / 0.12 / 0.15 s on every blow: 0.7 s of standstill in a seven-cut
+  string.) The fighters hold the contact; **the sparks fly on** (`game.fxDt`: particles and lights
+  run at 0.6 of real time through a freeze). The camera **punches in** 1.5 – 3.6 m and springs back,
+  kicks (0.3–0.5), and the frame flickers white (`grade.flashPulse`: 0.12 inside a string, 0.22 on
+  its last blow, blue 0.3, perfect 0.55) under a heavier clang (a deep body, a low ring). A riposte
+  may start 0.07 s into the parry (was 0.12).
 - **A perfect parry** adds a beat of slow motion (× 0.35 for 0.36 real s, the camera 2.5 m closer:
-  `game:cinematic` 'perfectParry', no gong), a gold ring and gold sparks, and a bright bell.
+  `game:cinematic` 'perfectParry', no gong), a gold burst and two rings, and a bright bell.
+- **Duel framing:** within 6.5 m of a duelist the camera sits 6 m closer (30 m, not 36; gone 4 m
+  further out; scaled for the phone's closer camera), so the blades read; the punches start there.
 - **A blow that lands on the hero** freezes the frame (0.085 s; a big one 0.13 s) with a heavier
   shake (0.3–0.6) on top of the hurt flash and the stagger.
 - **His blade** leaves a sweep trail through every strike, from the snap out of the cock through the

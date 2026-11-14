@@ -1656,14 +1656,19 @@ function plungePose(p, A) {
   else plLand(p, A, u);
 }
 
-/** Deflect: from the guard the blade snaps out into the blow (alternate sides through a chain:
- *  player.deflect.side), the chest rocks back with the pushback, and the guard is back by ~0.17 s
- *  so the next blow of the string can be met at once. Later deflects of a chain snap harder. */
+/** Deflect: the blade is ON the blow as the clip starts (the parry's own frame, which a freeze
+ *  holds: player.js _parry poses it at once), then comes back to the guard by ~0.2 s so the next blow
+ *  of the string can be met. The side is the one the blow's steel is on (player.deflect.side; they
+ *  alternate when the attacker gives no blade), `high` raises it into an overhead ward for a blow
+ *  from above, and the grip is moved by the deflect's nudge (nx, ny, nz: body axes) so the two blades
+ *  touch. The chest rocks back with the pushback. Later deflects of a chain snap harder.
+ *  (Until 2026-11-14 the blade snapped out over the clip's first 0.045 s: frozen at 2 % speed by the
+ *  parry's own hit-stop, the freeze-frame showed the guard it started from and no contact.) */
 function deflectPose(p, A) {
   blockPose(p, A);
   const t = A.t, D = A.player?.deflect;
   const n = fin(D?.n, 1), side = D?.side < 0 ? -1 : 1;
-  const f = t < 0.045 ? easeOutCubic(t / 0.045) : 1 - smoothstep(0.06, 0.17, t);
+  const f = 1 - smoothstep(0.07, 0.2, t);
   const s = clamp(0.85 + 0.06 * (n - 1), 0.85, 1.15);
   if (side > 0) {
     // the blow from the front-right: the edge flicks out to the right and up (the classic parry)
@@ -1680,14 +1685,95 @@ function deflectPose(p, A) {
     p[P.pelvY] += 0.1 * f * s;
     p[P.hdY] -= 0.2 * f;
   }
+  // a blow from above: the grip up before the brow, the blade level across over the head
+  const hi = fin(D?.high);
+  const h = clamp(hi, 0, 1) * f;
+  if (h > 0.001) {
+    dirTo(p, P.swD, 0.9, 0.3, 0.3, h);
+    to3(p, P.rH, -0.14, 0.2, 0.34, h);
+    p[P.spX] -= 0.1 * h;
+    p[P.hdX] -= 0.12 * h;
+    p[P.bodyY] -= 0.04 * h;
+  }
+  // a low cut (at the waist or under): the hanging parry, the grip kept up and the point dropped
+  // down and out on the blow's side, the knees giving
+  const lo = clamp(-hi, 0, 1) * f;
+  if (lo > 0.001) {
+    dirTo(p, P.swD, side > 0 ? -0.5 : 0.55, -0.78, 0.38, lo);
+    to3(p, P.rH, side > 0 ? -0.12 : 0.2, -0.06, 0.4, lo);
+    p[P.bodyY] -= 0.06 * lo;
+    p[P.spX] += 0.1 * lo;
+  }
+  // the nudge onto the blow's steel (the hand stays inside the arm's reach)
+  const nx = fin(D?.nx) * f, ny = fin(D?.ny) * f, nz = fin(D?.nz) * f;
+  if (nx || ny || nz) {
+    let x = p[P.rH] + nx, y = p[P.rH + 1] + ny, z = p[P.rH + 2] + nz;
+    const l = Math.hypot(x, y, z);
+    if (l > 0.55) {
+      x *= 0.55 / l;
+      y *= 0.55 / l;
+      z *= 0.55 / l;
+    }
+    v3(p, P.rH, x, y, z);
+  }
   to3(p, P.swF, 0, 0.3, 1, f);
-  to3(p, P.lH, side > 0 ? 0.22 : 0.3, -0.32, side > 0 ? 0.02 : -0.05, f);
+  to3(p, P.lH, side > 0 ? 0.22 : 0.3, -0.32, side > 0 ? 0.02 : -0.05, f * (1 - h));
   p[P.spX] -= 0.05 * f;
   // the rock back: the chest gives with the blow, the weight onto the back foot
-  const push = t < 0.03 ? t / 0.03 : 1 - smoothstep(0.03, 0.22, t);
+  const push = 1 - smoothstep(0.02, 0.22, t);
   p[P.spX] -= 0.12 * push * s;
   p[P.bodyZ] -= 0.05 * push;
   p[P.hdX] -= 0.08 * push;
+}
+
+/** Blades locked (player.js startBladeLock): both hands on the grip, driven forward at chest height,
+ *  the blade standing up and across to his left so it crosses the other's between them; he leans his
+ *  weight into it, the arms shake with the strain, and every press of the push (A.recoil) shoves the
+ *  grip and the chest in. The grip follows the crossing (the deflect's nudge: _lockCross). */
+function lockPose(p, A) {
+  const r = A.recoil;
+  A.recoil = 0; // (blockPose reads a recoil as a blow driving the guard IN: here it is his shove out)
+  blockPose(p, A);
+  A.recoil = r;
+  const D = A.player?.deflect;
+  const sh = Math.sin(A.time * 47) * 0.006 + Math.sin(A.time * 31 + 1.3) * 0.004; // the strain
+  dirTo(p, P.swD, 0.42, 0.84, 0.3, 1);
+  v3(p, P.swF, -0.3, 0, 1);
+  let x = 0.03 + fin(D?.nx) + sh, y = -0.03 + fin(D?.ny) + sh * 0.6, z = 0.44 + fin(D?.nz) + 0.04 * r;
+  const l = Math.hypot(x, y, z);
+  if (l > 0.55) {
+    x *= 0.55 / l;
+    y *= 0.55 / l;
+    z *= 0.55 / l;
+  }
+  v3(p, P.rH, x, y, z);
+  p[P.bodyZ] = 0.07 + 0.05 * r;
+  p[P.bodyY] = -0.2;
+  p[P.spX] = 0.26 + 0.05 * r;
+  p[P.spY] = -0.06;
+  p[P.pelvY] = -0.2;
+  p[P.hdX] = -0.12;
+  p[P.hdY] = 0.2;
+}
+
+/** Bounced: his strike thrown back off a guard that deflected it (player.js onGuarded): the sword
+ *  arm flung up and back past the right shoulder, the chest rocked back, the free hand out for
+ *  balance, a half step back; home by ~0.4 s (a guard or a dodge cuts it short at once). */
+function bouncePose(p, A) {
+  const t = A.t;
+  guard(p, A);
+  const k = t < 0.05 ? easeOutCubic(t / 0.05) : 1 - smoothstep(0.14, 0.42, t);
+  p[P.spX] = lerp(p[P.spX], -0.32, k);
+  p[P.spY] -= 0.35 * k;
+  p[P.pelvY] -= 0.12 * k;
+  p[P.hdX] = lerp(p[P.hdX], -0.2, k);
+  p[P.bodyZ] -= 0.1 * k;
+  p[P.bodyY] -= 0.05 * k;
+  to3(p, P.rH, -0.3, 0.2, 0.05, k);
+  to3(p, P.rP, -0.9, -0.2, -0.3, k);
+  dirTo(p, P.swD, -0.45, 0.8, -0.4, k);
+  to3(p, P.lH, 0.28, -0.15, 0.3, k);
+  p[P.lF + 2] -= 0.16 * k;
 }
 
 /** Walking clips after a parry in rhythm: the upper body holds the block's guard (guardHold
@@ -1827,6 +1913,8 @@ const POSES = {
   charge: chargePose,
   block: blockPose,
   parry: deflectPose,
+  bounce: bouncePose,
+  lock: lockPose,
   ghostep: ghostepPose,
   plunge: plungePose,
   guardBreak: guardBreakPose,
@@ -2140,7 +2228,8 @@ export class HeroAnimator {
     return s > 0 ? s : HERO_SCALE;
   }
 
-  /** Start a clip, cross-fading from the current pose over `blend` seconds. */
+  /** Start a clip, cross-fading from the current pose over `blend` seconds (0: no fade at all, the
+   *  clip's pose is the next frame's: an impact's contact pose, which a freeze-frame holds). */
   play(key, blend = 0.12, easeOut = false) {
     if (!this.poses[key]) key = 'loco';
     const pp = this.player.position;
@@ -2179,7 +2268,7 @@ export class HeroAnimator {
     if (key === 'attack') this._pickVariant();
     this.fadeMem.ok = false; // the new fade picks its own way round
     this.blendT = 0;
-    this.blendDur = Math.max(1e-3, blend);
+    this.blendDur = blend > 0 ? Math.max(1e-3, blend) : 0;
     this.easeOut = easeOut;
   }
 

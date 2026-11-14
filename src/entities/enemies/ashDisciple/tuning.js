@@ -39,8 +39,21 @@ export const TUNING = {
     // a heavy strike with at least this much posture crushes it: the charged thrust from ~90 % charge
     // (player/combat.js THRUST.poise 30..50); the chain's slam (40) is turned aside like any other
     crushPoise: 48,
-    clashStop: 0.07, // hit-stop on a clash (× 1.6 for a heavy strike)
+    clashStop: 0.07, // hit-stop on a ward (× 1.6 for a heavy strike)
+    deflectStop: 0.1, // ... and when he beats the strike away (the hero's blade is thrown back)
+    // (owner, 2026-11-14: "being able to animation cancel from a swing to a guard or dodge instantly")
+    // a move's recovery is open for this fraction of it (the punish window); after that he breaks it
+    // off into his guard when a strike comes, or steps out of a heavy blow
+    recoverOpen: 0.5,
+    evade: 0.45, // the chance (once per 3 s) he steps out of a heavy blow levelled at him
+    wardLinger: 0.6, // s the guard stays raised after a strike was met
   },
+  // the trade clash (the hero's cut meets his blow, DEFENSE.trade): guard posture × `posture`
+  // (light 12, heavy 30), he gives `push` m
+  trade: { posture: 1.5, push: 0.5 },
+  // duel framing (main.js): within `within` m of him the camera eases `zoom` m closer (gone `fade` m
+  // further out), so the blades read; the hits punch it in from there
+  camera: { within: 6.5, fade: 4, zoom: -6 },
   // strikes that land on him outside his attacks: after `breakOff` of them within `window` he backsteps
   flinch: { breakOff: 2, window: 1.6, hitStun: 0.22 },
   // hit stun (owner, 2026-11-12: "more impactful hit stun, not weightless"): every blow that lands on
