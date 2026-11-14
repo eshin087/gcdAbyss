@@ -2209,7 +2209,7 @@ const IDLE_FLARE = [0.01, 0.02, 0.07, 0.1, 0.09, 0.12];
 
 export class HeroAnimator {
   /** player must expose: yaw, state, stateT, animT, atk ({def}), groundVel {x, z}, chargeK,
-   *  releaseK, recoil (+ position, kb, lockOn, guardHold). `poses` (optional): extra clips for this
+   *  releaseK, recoil (+ position, kb, lockOn, guardHold, updraft). `poses` (optional): extra clips for this
    *  instance, key → fn(pose, animator), merged over the hero's (a key it shares replaces the hero's
    *  clip for this instance only: the Ash Disciple brings his own 'loco' and 'duel'). */
   constructor(rig, player, poses = null) {
@@ -2514,7 +2514,8 @@ export class HeroAnimator {
     this.sprintW = damp(this.sprintW, pl.state === 'sprint' ? 1 : 0, 6, dt);
     this.swordW = damp(this.swordW, this.moveW, 7, dt);
     // the charge's updraft (0..1): lifts the coat tails and the hair as the cleave charges
-    this.updraft = damp(this.updraft, this.key === 'charge' ? clamp(fin(pl.chargeK), 0, 1) : 0, 5, dt);
+    // (a pilot may raise a wind of its own under its cloth: `updraft` 0..1, a duelist's casts)
+    this.updraft = damp(this.updraft, this.key === 'charge' ? clamp(fin(pl.chargeK), 0, 1) : clamp(fin(pl.updraft), 0, 1), 5, dt);
     // acceleration (model space) for the lean into starts / the sit-back on stops, and the turn rate
     // of the velocity heading for banking into curves
     const P0 = this._pv;

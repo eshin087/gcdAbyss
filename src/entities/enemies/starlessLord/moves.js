@@ -12,7 +12,10 @@ import { TUNING } from './tuning.js';
 //   pull: true            the Void pull: the hit drags the hero toward him instead of away
 //   blink: { behind }     he vanishes as the windup starts and is behind the hero (lord.js beatMotion)
 //   release: { style }    'push' (a wall of force) / 'crescent' (red sword-light) thrown at the impact
-//   cast: { kind, ... }   'glaive' (the thrown blade), 'debris' (hurled stones), 'storm' (called lightning)
+//   release: { style }    … or 'rift' (fissures of red light racing along the floor)
+//   cast: { kind, ... }   'glaive' (the thrown blade), 'debris' (hurled stones), 'storm' (called lightning),
+//                         'star' (the Dark Star: a drifting singularity that bursts)
+//   grip: true            the Crushing Dark: the hit pins the hero to the floor (lord.js draws the crush)
 //   left: true            the off-hand blade strikes (form 2: its sweep trail, its glint)
 // A move's `weight` is per FORM [1, 2, 3, 4] (0 = not in that form's moveset): each form has its own
 // strings; a few spells are shared. Rules (checked by tests/integration/lord.mjs): a tell on every real
@@ -21,11 +24,12 @@ import { TUNING } from './tuning.js';
 
 const N = TELL.NORMAL, B = TELL.BLUE, R = TELL.RED;
 const TAU = Math.PI * 2;
-const PIV = DIM.pivot;
+const PIV = DIM.pivot, ANK = DIM.ankle;
 
 // ---------------------------------------------------------------- pose fragments
 // (body-space hand offsets / blade [az, el]; feet model space [x, z] or [x, y, z]; see duelist/poses.js)
 const SET = { rF: [-0.12, 0.36], lF: [0.2, -0.3] };
+const SET_L = { lF: [0.14, 0.32], rF: [-0.2, -0.26], rFy: -0.8, lFy: 0.3 }; // the left foot leads
 const STEP_IN = { rF: [-0.12, 0.64], lF: [0.22, -0.4], rK: [-0.25, 0, 1], lK: [0.6, -0.2, 0.8], lFy: 0.95 };
 const STEP_L = { lF: [0.14, 0.6], rF: [-0.2, -0.36], lK: [0.25, 0, 1], rK: [-0.6, -0.2, 0.8], rFy: -0.95, lFy: 0.25 }; // the left foot steps in
 const LUNGE_FEET = { rF: [-0.08, 0.9], lF: [0.22, -0.62], rK: [-0.1, 0, 1], lK: [0.35, -0.3, 0.9], rFy: -0.05, lFy: 0.95 };
@@ -60,17 +64,19 @@ const thrustKeys = (two = 0, cock = 0.74) => {
  * cocked, `through` at the impact, `to` the follow-through; `yaw` = the body's turn at the three
  * points. `two`: both hands on the hilt.
  */
-function slash({ from, through, to, yaw: [y0, y1, y2], cock = 0.7, sink = 0, two = 0, extra = {} }) {
+function slash({ from, through, to, yaw: [y0, y1, y2], cock = 0.7, sink = 0, two = 0, step = 'R', extra = {} }) {
   const dir = Math.sign(to[0] - from[0]) || 0;
-  const gy = (y0 + 0.5) / 2;
+  const gy = (y0 + 0.3) / 2;
   const T = two ? { two: 1 } : {};
   const free = (v) => (two ? {} : { lH: v });
+  // `step`: which foot drives into the cut ('R' / 'L'): a string alternates them, so he walks through it
+  const set = step === 'L' ? SET_L : SET, into = step === 'L' ? STEP_L : STEP_IN;
   return [
-    [cock * 0.45, { ...T, arm: 0.7, ext: 0.6, lead: 0.05 * dir, yaw: gy, sw: w2b([from[0] * 0.55, from[1] * 0.55 + 0.08], gy), bY: -0.2 - sink * 0.5, bZ: -0.03, ...free([0.12, 0.02, 0.36]), ...SET }],
-    [cock, { ...T, arm: 1, ext: 0.5, lead: 0.22 * dir, yaw: y0, sw: w2b(from, y0), bY: -0.24 - sink, bZ: -0.06, pitch: 0.08, hip: 0.1 * dir, ...free([0.16, -0.02, 0.38]), ...SET, ...extra.cocked }],
-    [1.0, { ...T, e: 'i', arm: 1, ext: 1, lead: 0, yaw: y1, sw: w2b(through, y1), bY: -0.28 - sink, bZ: 0.1, pitch: 0.1, hip: -0.06 * dir, ...free([0.3, 0.06, -0.24]), ...STEP_IN, ...extra.strike }],
-    [1.6, { ...T, e: 'o', arm: 1, ext: 0.88, lead: -0.32 * dir, yaw: y2, sw: w2b(to, y2), bY: -0.24 - sink, bZ: 0.08, pitch: 0.04, hip: -0.12 * dir, ...free([0.32, 0.1, -0.3]), ...STEP_IN, ...extra.follow }],
-    [2.0, { ...T, arm: 1, ext: 0.84, lead: -0.26 * dir, yaw: y2, sw: w2b([to[0] * 0.94, to[1] * 0.9], y2), bY: -0.22 - sink, bZ: 0.06, ...free([0.3, 0.08, -0.26]), ...STEP_IN }],
+    [cock * 0.45, { ...T, arm: 0.7, ext: 0.6, lead: 0.05 * dir, yaw: gy, sw: w2b([from[0] * 0.55, from[1] * 0.55 + 0.08], gy), bY: -0.18 - sink * 0.5, bZ: -0.03, roll: 0.03 * dir, ...free([0.12, 0.02, 0.36]), ...set }],
+    [cock, { ...T, arm: 1, ext: 0.5, lead: 0.22 * dir, yaw: y0, sw: w2b(from, y0), bY: -0.23 - sink, bZ: -0.07, pitch: 0.06, roll: 0.08 * dir, hip: 0.1 * dir, ...free([0.16, -0.02, 0.38]), ...set, ...extra.cocked }],
+    [1.0, { ...T, e: 'i', arm: 1, ext: 1, lead: 0, yaw: y1, sw: w2b(through, y1), bY: -0.3 - sink, bZ: 0.12, pitch: 0.13, roll: -0.05 * dir, hip: -0.06 * dir, ...free([0.3, 0.06, -0.24]), ...into, ...extra.strike }],
+    [1.6, { ...T, e: 'o', arm: 1, ext: 0.88, lead: -0.32 * dir, yaw: y2, sw: w2b(to, y2), bY: -0.25 - sink, bZ: 0.1, pitch: 0.06, roll: -0.1 * dir, hip: -0.12 * dir, ...free([0.32, 0.1, -0.3]), ...into, ...extra.follow }],
+    [2.0, { ...T, arm: 1, ext: 0.84, lead: -0.26 * dir, yaw: y2, sw: w2b([to[0] * 0.94, to[1] * 0.9], y2), bY: -0.23 - sink, bZ: 0.08, roll: -0.06 * dir, ...free([0.3, 0.08, -0.26]), ...into }],
   ];
 }
 
@@ -110,15 +116,37 @@ const overKeys = (cock = 0.7) => [
 
 /** A spin: wound up, then a full turn with the blade(s) out level (a ring). `twin`: both blades out;
  *  `two`: the staff held level across him (both its blades sweep). */
+const rotXZ = (x, z, a) => [x * Math.cos(a) + z * Math.sin(a), -x * Math.sin(a) + z * Math.cos(a)];
+/** Both feet carried `ph` rad round with the body (a turn on the spot), `y` m off the floor: without
+ *  it a full turn of the hips over planted feet winds the legs round each other. */
+const spinFeet = (ph, y = ANK) => {
+  const r = rotXZ(-0.13, 0.3, ph), l = rotXZ(0.2, -0.28, ph);
+  return { rF: [r[0], y, r[1]], lF: [l[0], y, l[1]], rFy: -0.25 + ph, lFy: 0.9 + ph };
+};
 const spinKeys = (cock = 0.66, { low = false, twin = false, two = 0 } = {}) => {
   const Bd = low ? { ...CROUCH } : { bY: -0.22 };
   const T = two ? { two: 1 } : {};
   const out = { ...T, arm: 1, ext: 1, lead: 0, sw: low ? [-1.45, -0.44] : [-1.45, -0.04], ...(twin ? { larm: 1, lext: 1, llead: 0, lsw: low ? [1.45, -0.44] : [1.45, -0.04] } : two ? {} : { lH: [0.3, low ? -0.12 : 0.04, 0.08], lP: [0.9, 0.1, -0.2] }) };
+  const wound = { ...Bd, ...T, arm: 1, ext: 0.55, lead: -0.2, yaw: 1.2, sw: low ? [-2.1, -0.5] : [-2.15, -0.12], ...(twin ? { larm: 1, lext: 0.55, lsw: low ? [0.9, -0.5] : [0.85, -0.12] } : {}), hdY: -1.0 };
+  if (low) {
+    // the low sweep: he drops and the blade goes round at the ankles; the feet stay under him
+    return [
+      [cock, { ...wound }],
+      [1.0, { ...Bd, ...out, e: 'i', yaw: 0.9, hdY: -0.6 }],
+      [2.0, { ...Bd, ...out, e: 'l', yaw: 0.9 - TAU, hdY: -0.6 }],
+      [2.001, { e: 'h', yaw: 0.9 }],
+    ];
+  }
+  // the whirl: wound up on bent legs, then a hop that carries the whole body round once
+  const turn = (u, k, hop) => [u, { e: 'l', yaw: 0.9 - TAU * k, bY: -0.22 + 0.1 * hop, roll: -0.1 * hop, ...spinFeet(-TAU * k, ANK + 0.16 * hop), flat: 0.95 - 0.6 * hop }];
   return [
-    [cock, { ...Bd, ...T, arm: 1, ext: 0.55, lead: -0.2, yaw: 1.2, sw: low ? [-2.1, -0.5] : [-2.15, -0.12], ...(twin ? { larm: 1, lext: 0.55, lsw: low ? [0.9, -0.5] : [0.85, -0.12] } : {}), hdY: -1.0, ...(low ? {} : SET) }],
-    [1.0, { ...Bd, ...out, e: 'i', yaw: 0.9, hdY: -0.6, ...(low ? {} : STEP_IN) }],
-    [2.0, { ...Bd, ...out, e: 'l', yaw: 0.9 - TAU, hdY: -0.6, ...(low ? {} : STEP_IN) }],
-    [2.001, { e: 'h', yaw: 0.9 }],
+    [cock, { ...wound, bY: -0.3, ...spinFeet(0.3) }],
+    [1.0, { ...Bd, ...out, e: 'i', yaw: 0.9, hdY: -0.6, roll: 0, ...spinFeet(0), flat: 0.95 }],
+    turn(1.25, 0.25, 1),
+    turn(1.5, 0.5, 1),
+    turn(1.75, 0.75, 0.7),
+    [2.0, { ...Bd, ...out, e: 'l', yaw: 0.9 - TAU, hdY: -0.6, roll: 0, ...spinFeet(-TAU), flat: 0.95 }],
+    [2.001, { e: 'h', yaw: 0.9, ...spinFeet(0) }],
   ];
 };
 
@@ -143,6 +171,58 @@ function flipKeys({ cock = 0.36 } = {}) {
   ];
 }
 const FLIP_LIFT = (cock = 0.36, apex = 1.5) => [[cock, 0], [cock + (1 - cock) * 0.5, apex], [1.0, 0]];
+
+/** A foot's model-space target for a body rolled ro rad round its fore-aft axis (a cartwheel: the
+ *  legs go over with the body), `side` −1 right / +1 left, the legs split fore and aft. */
+const rollFoot = (ro, side, L = 0.6) => {
+  const bx = side * 0.14;
+  return [bx * Math.cos(ro) + L * Math.sin(ro), PIV - 0.1 + bx * Math.sin(ro) - L * Math.cos(ro), -side * 0.16];
+};
+/** The aerial: a crouch, a hands-free cartwheel in the air with the blade carried round over him
+ *  (the beat's `lift`), and a diagonal cut as he lands. `twin`: the off-hand blade goes round too. */
+function aerialKeys({ cock = 0.34, two = 0, twin = false } = {}) {
+  const T = two ? { two: 1 } : {};
+  const u = (k) => cock + (1 - cock) * k;
+  const L = twin ? { larm: 0, lH: [0.26, 0.26, 0.04], lP: [0.9, 0.4, -0.2], lsw: [0.4, 1.2] } : two ? {} : { lH: [0.3, 0.2, 0.0], lP: [0.9, 0.3, -0.3] };
+  const air = (k, e = 'l') => {
+    const ro = TAU * k;
+    return [u(k), { e, ...T, arm: 0, roll: ro, bY: -0.1, pitch: 0.1, yaw: 0.35, rH: [-0.24, 0.28, 0.06], rP: [-0.9, 0.4, -0.2], sw: [-0.4, 1.25], ...L, rF: rollFoot(ro, -1), lF: rollFoot(ro, 1, 0.5), rK: [-0.2, 0.2, 1], lK: [0.2, 0.2, 1], flat: 0, hdY: -0.2 }];
+  };
+  const P = PATHS.diag, land = { ...T, arm: 1, ext: 1, lead: 0, yaw: P.yaw[1], sw: w2b(P.through, P.yaw[1]), bY: -0.36, bZ: 0.1, pitch: 0.16, ...STEP_IN, flat: 0.95, ...(twin ? { larm: 1, lext: 0.7, lsw: [1.5, 0.3] } : two ? {} : { lH: [0.3, 0.06, -0.24] }) };
+  return [
+    [cock * 0.6, { ...T, bY: -0.44, pitch: 0.16, yaw: 0.3, roll: -0.12, rH: [-0.16, -0.2, 0.2], sw: [-1.2, 0.5], rF: [-0.16, 0.24], lF: [0.18, -0.22], rK: [-0.3, 0.1, 1], lK: [0.4, 0.1, 1] }],
+    air(0, 'o'),
+    air(0.28),
+    air(0.56),
+    air(0.84),
+    [1.0, { ...land, e: 'l', roll: TAU }],
+    [1.001, { e: 'h', roll: 0 }],
+    [1.6, { ...land, e: 'o', lead: -0.3, yaw: P.yaw[2], sw: w2b(P.to, P.yaw[2]), bY: -0.3, pitch: 0.08 }],
+    [2.0, { ...land, lead: -0.26, yaw: P.yaw[2], sw: w2b([P.to[0] * 0.94, P.to[1] * 0.9], P.yaw[2]), bY: -0.26 }],
+  ];
+}
+/** The backflip (he throws himself away from the opponent: the beat's `travel` and `lift`), and a
+ *  level cut as he lands that lets fly whatever the beat releases. */
+function backflipKeys({ cock = 0.3, two = 0 } = {}) {
+  const T = two ? { two: 1 } : {};
+  const u = (k) => cock + (1 - cock) * k;
+  const air = (k, e = 'l') => {
+    const th = -TAU * k;
+    return [u(k), { e, ...T, arm: 0, pitch: th, bY: -0.1, yaw: 0.2, rH: [-0.2, 0.0, 0.26], rP: [-0.8, -0.2, -0.3], sw: [-1.5, 0.2], ...(two ? {} : { lH: [0.26, 0.04, 0.2] }), rF: flipFoot(th, -0.11, 0.46), lF: flipFoot(th, 0.13, 0.4), rK: [-0.2, 0.4, 1], lK: [0.2, 0.4, 1], flat: 0 }];
+  };
+  const cutPose = { ...T, arm: 1, ext: 1, lead: 0, yaw: 0.5, sw: w2b([0.0, 0.04], 0.5), bY: -0.32, bZ: 0.06, pitch: 0.12, rF: [-0.12, 0.3], lF: [0.2, -0.4], flat: 0.95, ...(two ? {} : { lH: [0.3, 0.06, -0.24] }) };
+  return [
+    [cock * 0.55, { ...T, bY: -0.42, pitch: 0.12, yaw: 0.3, rH: [-0.1, -0.24, 0.26], sw: [-0.4, 0.3], rF: [-0.13, 0.22], lF: [0.17, -0.1], rK: [-0.2, 0.2, 1], lK: [0.3, 0.2, 1] }],
+    air(0, 'o'),
+    air(0.3),
+    air(0.6),
+    [u(0.86), { ...air(0.86)[1], arm: 0.6, ext: 0.5, sw: w2b([-1.9, 0.1], 0.2) }],
+    [1.0, { ...cutPose, e: 'l', pitch: -TAU + 0.12 }],
+    [1.001, { e: 'h', pitch: 0.12 }],
+    [1.6, { ...cutPose, e: 'o', lead: -0.3, yaw: 0.9, sw: w2b([1.7, 0.06], 0.9), bY: -0.28 }],
+    [2.0, { ...cutPose, lead: -0.26, yaw: 0.9, sw: w2b([1.6, 0.05], 0.9), bY: -0.26 }],
+  ];
+}
 
 /** The perilous thrust (red; a mikiri answers it): a deep coil, held a beat, then a long lunge. */
 const PERIL_COIL = { ...COIL, bY: -0.34, bZ: -0.14, yaw: 0.95, rH: [-0.12, -0.32, -0.08], sw: [-1.0, -0.08], lH: [0.28, 0.06, 0.1], lP: [0.9, 0.2, -0.2], hdY: -0.8, rF: [-0.12, 0.34], lF: [0.2, -0.38] };
@@ -185,6 +265,28 @@ const stormKeys = () => [
   [1.0, { e: 'i', two: 0, yaw: 0.1, bY: -0.04, pitch: -0.16, lH: [0.2, 0.5, 0.02], lP: [0.9, 0.5, -0.2], rH: [-0.16, 0.46, 0.06], rP: [-0.9, 0.4, -0.2], sw: [-0.1, 1.5], hdX: -0.3, spX: -0.1 }],
   [2.0, { two: 0, yaw: 0.1, bY: -0.04, pitch: -0.16, lH: [0.2, 0.5, 0.02], rH: [-0.16, 0.46, 0.06], sw: [-0.1, 1.5], hdX: -0.3 }],
 ];
+/** The Crushing Dark: the open hand lifts toward the opponent, holds him in it, and closes: the
+ *  fist is wrenched down. */
+const gripKeys = () => [
+  [0.3, { two: 0, yaw: 0.2, bY: -0.1, lH: [0.06, -0.02, 0.46], lP: [0.7, -0.4, 0.1], rH: [-0.08, -0.42, 0.02], sw: [-1.4, -0.7], hdX: 0.06, hdY: -0.1 }],
+  [0.86, { two: 0, yaw: 0.14, bY: -0.07, pitch: -0.05, lH: [0.04, 0.13, 0.5], lP: [0.7, -0.2, 0.2], rH: [-0.1, -0.42, 0.0], sw: [-1.5, -0.7], hdX: 0.0, hdY: -0.06 }],
+  [1.0, { e: 'i', two: 0, yaw: 0.32, bY: -0.18, pitch: 0.1, lH: [0.1, -0.2, 0.32], lP: [0.9, -0.3, -0.2], rH: [-0.1, -0.4, 0.0], sw: [-1.5, -0.6], hdX: 0.16, hdY: -0.2 }],
+  [2.0, { two: 0, yaw: 0.32, bY: -0.18, pitch: 0.1, lH: [0.1, -0.2, 0.32], rH: [-0.1, -0.4, 0.0], sw: [-1.5, -0.6], hdX: 0.16 }],
+];
+/** The Rift: the staff raised upright in both hands, then driven point-down into the floor. */
+const riftKeys = () => [
+  [0.45, { two: 1, yaw: 0.1, bY: -0.05, pitch: -0.08, rH: [0.1, 0.22, 0.2], rP: [-0.8, 0.3, -0.3], sw: [0.0, 1.5], hdX: -0.08, ...SET }],
+  [0.82, { two: 1, yaw: 0.08, bY: 0.0, pitch: -0.14, rH: [0.1, 0.3, 0.16], sw: [0.0, 1.62], hdX: -0.14 }],
+  [1.0, { e: 'i', two: 1, yaw: 0.05, bY: -0.42, pitch: 0.3, spX: 0.16, rH: [0.1, -0.22, 0.36], rP: [-0.8, -0.3, 0], sw: [0.0, -1.3], hdX: 0.3, rF: [-0.14, 0.42], lF: [0.2, -0.38], rK: [-0.2, 0, 1], lK: [0.4, -0.4, 0.8] }],
+  [2.0, { two: 1, yaw: 0.05, bY: -0.4, pitch: 0.28, rH: [0.1, -0.22, 0.36], sw: [0.0, -1.3], hdX: 0.26, rF: [-0.14, 0.42], lF: [0.2, -0.38] }],
+];
+/** The Dark Star: the free hand cupped before the chest while it gathers, then thrown up and out. */
+const starKeys = () => [
+  [0.55, { two: 0, yaw: 0.12, bY: -0.18, pitch: 0.1, lH: [-0.03, -0.14, 0.3], lP: [0.9, -0.5, 0.1], rH: [-0.2, -0.32, 0.14], sw: [-1.5, 0.3], hdX: 0.16 }],
+  [0.85, { two: 0, yaw: 0.12, bY: -0.2, pitch: 0.12, lH: [-0.03, -0.12, 0.31], rH: [-0.2, -0.32, 0.14], sw: [-1.5, 0.3], hdX: 0.18 }],
+  [1.0, { e: 'i', two: 0, yaw: 0.0, bY: -0.05, pitch: -0.12, spX: -0.08, lH: [0.06, 0.36, 0.34], lP: [0.9, 0.3, 0], rH: [-0.3, -0.2, 0.0], rP: [-0.9, 0.1, -0.3], sw: [-1.9, 0.5], hdX: -0.18 }],
+  [2.0, { two: 0, yaw: 0.0, bY: -0.05, pitch: -0.12, lH: [0.06, 0.36, 0.34], rH: [-0.3, -0.2, 0.0], sw: [-1.9, 0.5], hdX: -0.18 }],
+];
 /** The thrown blade: wound far back across the body, then flung flat. */
 const throwKeys = () => [
   [0.7, { two: 0, arm: 1, ext: 0.5, lead: 0.2, yaw: 1.15, bY: -0.24, bZ: -0.08, sw: w2b([2.4, 0.1], 1.15), hdY: -1.0, ...SET }],
@@ -198,7 +300,7 @@ const REACH = [0, 2.3, 2.3, 2.95, 2.6];
 
 /** One beat of a string. `kind`: a PATHS name, 'over', 'thrust', 'flip'; `o`: { form, left, ...overrides }. */
 function cut(kind, tell, windup, damage, o = {}) {
-  const { form = 1, left = false, ...extra } = o;
+  const { form = 1, left = false, step = 'R', ...extra } = o;
   const two = form >= 3 ? 1 : 0, r = REACH[form];
   const kb = tell === N ? 0.7 : 1.5;
   if (kind === 'thrust') {
@@ -211,8 +313,12 @@ function cut(kind, tell, windup, damage, o = {}) {
     const cock = extra.cock ?? 0.36;
     return { tell, windup, active: 0.1, damage, knockback: 1.8, zone: { kind: 'sector', r: r + 0.1, ang: 0.6 }, close: 2.6, lift: FLIP_LIFT(cock, 1.5), track: 0.5, keys: flipKeys({ cock }), ...extra, cock };
   }
+  if (kind === 'aerial') {
+    const cock = extra.cock ?? 0.34;
+    return { tell, windup, active: 0.1, damage, knockback: 1.6, zone: { kind: 'sector', r: r + 0.1, ang: 0.85 }, close: 2.4, lift: FLIP_LIFT(cock, 1.15), track: 0.5, keys: aerialKeys({ cock, two, twin: form === 2 }), ...extra, cock };
+  }
   const P = (left ? PATHS_L : PATHS)[kind];
-  const keys = left ? slashL({ ...P, cock: extra.cock ?? 0.7 }) : slash({ ...P, cock: extra.cock ?? 0.7, two });
+  const keys = left ? slashL({ ...P, cock: extra.cock ?? 0.7 }) : slash({ ...P, cock: extra.cock ?? 0.7, two, step });
   return { tell, windup, active: 0.08, damage, knockback: kb, zone: { kind: 'sector', r, ang: P.ang }, keys, ...(left ? { left: true, part: 'off' } : {}), ...extra };
 }
 
@@ -221,7 +327,7 @@ const spin = (tell, windup, damage, o = {}) => {
   const { form = 1, low = false, cock = 0.64, ...extra } = o;
   const r = REACH[form] + (low ? 0.6 : 0);
   return {
-    tell, windup, active: low ? 0.22 : 0.18, damage, knockback: low ? 2.6 : 0.9, zone: { kind: 'ring', r }, track: 0.65,
+    tell, windup, active: low ? 0.22 : 0.2, damage, knockback: low ? 2.6 : 0.9, zone: { kind: 'ring', r }, track: 0.65,
     ...(low ? { knockdown: true, ring: r, part: 'feet', close: 1.2 } : {}),
     keys: spinKeys(cock, { low, twin: form === 2, two: form >= 3 ? 1 : 0 }), ...extra,
   };
@@ -239,6 +345,53 @@ const pull = (windup, o = {}) => ({
   tell: R, windup, active: 0.1, damage: 5, knockback: TUNING.pull.drag, zone: { kind: 'line', r: TUNING.pull.range, w: 2.4 }, pull: true, part: 'hand',
   track: 0.9, close: 0, keys: pullKeys(), ...o,
 });
+
+/** The Crushing Dark as a beat: red; a line from his hand. Caught, the hero is pinned and crushed. */
+const grip = (windup, o = {}) => ({
+  tell: R, windup, fixed: true, active: 0.1, damage: 30, knockback: 0.4, knockdown: true, zone: { kind: 'line', r: TUNING.grip.range, w: TUNING.grip.width }, grip: true, part: 'hand',
+  track: 0.88, close: 0, keys: gripKeys(), ...o,
+});
+/** The Rift as a beat: `count` fissures of red light thrown along the floor from the staff's point. */
+const rift = (windup, count, o = {}) => ({
+  tell: N, windup, fixed: true, active: 0.1, damage: 16, knockback: 1.6, release: { style: 'rift', count, spread: 0.36 }, part: 'feet', close: 0, track: 0.8, keys: riftKeys(), ...o,
+});
+/** Parting Light as a beat: a backflip away from the opponent and, landing, crescents of red light
+ *  (`count`, a number or one per form). */
+const parting = (count, o = {}) => {
+  const cock = 0.3;
+  return {
+    // (thrown from 4 m further off and a little slower than Red Tide's: time for their cue from close in)
+    tell: N, windup: 0.66, fixed: true, active: 0.1, damage: 14, knockback: 1.2, release: { style: 'crescent', count, spread: 0.3, speed: 12, from: 0.5 }, close: 0, track: 0.3,
+    travel: [[cock, 0], [1.0, -4.0]], lift: FLIP_LIFT(cock, 1.35), keys: backflipKeys({ cock }), cock, ...o,
+  };
+};
+/** The crossing cut (form 2): both blades drawn wide and crossed before him; two crescents fly. */
+const crossCut = (windup, o = {}) => ({
+  tell: N, windup, active: 0.1, damage: 14, knockback: 1.2, release: { style: 'crescent', count: 2, spread: 0.46 }, close: 0, track: 0.8,
+  keys: [
+    [0.7, { yaw: 0.1, bY: -0.2, bZ: -0.04, pitch: -0.04, arm: 1, ext: 0.5, sw: [-1.7, 0.5], larm: 1, lext: 0.5, lsw: [1.7, 0.5], hdY: -0.1, ...SET }],
+    [1.0, { e: 'i', yaw: 0.06, bY: -0.32, bZ: 0.12, pitch: 0.16, arm: 1, ext: 1, sw: [0.9, -0.36], larm: 1, lext: 1, lsw: [-0.9, -0.36], hdY: 0, ...STEP_IN }],
+    [2.0, { yaw: 0.06, bY: -0.3, bZ: 0.1, pitch: 0.12, arm: 1, ext: 0.9, sw: [1.1, -0.5], larm: 1, lext: 0.9, lsw: [-1.1, -0.5], ...STEP_IN }],
+  ],
+  ...o,
+});
+
+/** How each form's strings end: the steel brought back to its guard with a flourish (a move's
+ *  `recoveryKeys`; times are fractions of its recovery). */
+const FLOURISH = [
+  // 1 — the blade rolled once round the wrist at his side
+  [[0.2, { arm: 0, two: 0, rH: [-0.04, -0.26, 0.26], sw: [-0.5, 0.5], yaw: 0.3 }], [0.68, { e: 'l', rH: [-0.05, -0.36, 0.14], sw: [-0.7, 0.5 - TAU] }], [0.681, { e: 'h', sw: [-0.7, 0.5] }]],
+  // 2 — both blades rolled, mirrored
+  [
+    [0.2, { arm: 0, larm: 0, rH: [-0.12, -0.28, 0.22], sw: [-0.7, 0.5], lH: [0.12, -0.28, 0.22], lsw: [0.7, 0.5], yaw: 0.08 }],
+    [0.68, { e: 'l', rH: [-0.1, -0.36, 0.14], sw: [-0.9, 0.5 - TAU], lH: [0.1, -0.36, 0.14], lsw: [0.9, 0.5 - TAU] }],
+    [0.681, { e: 'h', sw: [-0.9, 0.5], lsw: [0.9, 0.5] }],
+  ],
+  // 3 — the staff turned once like a mill wheel before him, and stopped level
+  [[0.16, { arm: 0, two: 1, rH: [0.04, -0.26, 0.32], sw: [-1.4, 0.14], yaw: 0.14 }], [0.72, { e: 'l', rH: [0.04, -0.28, 0.32], sw: [-1.4, 0.14 + TAU] }], [0.721, { e: 'h', sw: [-1.4, 0.14] }]],
+  // 4 — the blade swept down and out, the Void shaken off it, then raised to the vigil
+  [[0.3, { e: 'o', arm: 0, two: 1, rH: [-0.08, -0.36, 0.12], sw: [-1.1, -0.72], yaw: 0.2, bY: -0.12 }], [0.56, { two: 1, rH: [-0.08, -0.36, 0.12], sw: [-1.15, -0.7] }]],
+];
 
 /** The ignition of a blade form (a transition): he rises, the blades light, a red shock ring. */
 const ignite = (form) => ({
@@ -269,27 +422,39 @@ export const MOVES = {
   /** Crimson Litany: six cuts from every side; the fourth is a held overhead or a thrust, the last
    *  a somersault chop or a flat cut into a heavy thrust. */
   litany: {
-    label: 'Crimson Litany', phase: 1, weight: W(1, 2.6), cooldown: 6, band: [0, 3.8], recovery: 0.65,
+    label: 'Crimson Litany', phase: 1, weight: W(1, 2.6), cooldown: 6, band: [0, 3.8], recovery: 0.78, recoveryKeys: FLOURISH[0],
     beats: [
       cut('rise', N, 0.48, 13),
-      cut('back', N, 0.34, 12),
-      cut('flat', N, 0.34, 12),
+      cut('back', N, 0.34, 12, { step: 'L' }),
+      { pick: [spin(N, 0.38, 13, { form: 1, cock: 0.6 }), cut('flat', N, 0.34, 12)] },
       { pick: [cut('over', B, 0.42, 20, { hold: [0.1, 0.3], cock: 0.72, lock: true }), cut('thrust', B, 0.4, 19)] },
-      cut('diag', N, 0.36, 12),
-      { pick: [cut('flip', B, 0.6, 24, { lock: true }), cut('flatBack', N, 0.34, 12)] },
+      cut('diag', N, 0.36, 12, { step: 'L' }),
+      { pick: [cut('flip', B, 0.6, 24, { lock: true }), cut('aerial', B, 0.58, 22), cut('flatBack', N, 0.34, 12)] },
       cut('thrust', B, 0.4, 19, { chance: 0.5 }),
     ],
   },
   /** Void Cadence: cuts with the Void between them: two cuts, the push, two more, a heavy thrust. */
   cadence: {
-    label: 'Void Cadence', phase: 1, weight: W(1, 2.4), cooldown: 7, band: [0, 4.2], recovery: 0.65,
+    label: 'Void Cadence', phase: 1, weight: W(1, 2.4), cooldown: 7, band: [0, 4.2], recovery: 0.78, recoveryKeys: FLOURISH[0],
     beats: [
       cut('flat', N, 0.5, 13),
-      cut('back', N, 0.34, 12),
+      cut('back', N, 0.34, 12, { step: 'L' }),
       push(0.55, { fixed: true }),
       cut('rise', N, 0.46, 12),
-      cut('diag', N, 0.34, 12),
+      cut('diag', N, 0.34, 12, { step: 'L' }),
       { pick: [cut('thrust', B, 0.4, 20), bolt(0.62, 20, { fixed: true })] },
+    ],
+  },
+  /** Starless Dirge: a thrust that covers ground, a rising cut, a cartwheel over the hero's guard
+   *  into a diagonal cut, a level cut, and a low red sweep (or lightning from the free hand). */
+  dirge: {
+    label: 'Starless Dirge', phase: 1, weight: W(1, 2.2), cooldown: 7, band: [1.6, 6], recovery: 0.78, recoveryKeys: FLOURISH[0], gapCloser: true,
+    beats: [
+      { ...cut('thrust', N, 0.5, 15, { cock: 0.72 }), dash: { from: 0.7, to: 1.0, stop: 1.0, max: 3.8 } },
+      cut('rise', N, 0.36, 12, { step: 'L' }),
+      cut('aerial', B, 0.58, 22),
+      cut('flatBack', N, 0.36, 12, { step: 'L' }),
+      { pick: [spin(R, 0.62, 22, { low: true, form: 1, cock: 0.62 }), bolt(0.56, 20, { fixed: true, cock: 0.6 })] },
     ],
   },
   /** Starless Lunge: a coiled thrust that covers ground. */
@@ -322,6 +487,12 @@ export const MOVES = {
     label: 'Grasp and Sever', phase: 1, weight: [1.4, 1.0, 1.2, 1.6], cooldown: 8, band: [4.5, 10.5], recovery: 0.6, gapCloser: true,
     beats: [pull(0.8, { fixed: true }), cut('over', B, 0.62, 24, { lock: true, fixed: true, cock: 0.7 })],
   },
+  /** Crushing Dark: his open hand lifts, and the Void closes on whoever stands before it (red: roll
+   *  through it or get out of its line). Caught, the hero is thrown to the floor and crushed. */
+  grip: {
+    label: 'Crushing Dark', phase: 1, weight: [1.3, 0, 0, 1.5], cooldown: 10, band: [3, 9], recovery: 0.7,
+    beats: [grip(0.95)],
+  },
   /** His counter out of a guard (form 1): a diagonal cut, then a thrust. */
   riposte: {
     label: 'Riposte', phase: 1, weight: 0, counter: true, cooldown: 0, band: [0, 5], recovery: 0.55,
@@ -331,7 +502,7 @@ export const MOVES = {
   // ============================================================== form 2: twin blades
   /** Twin Tempest: the blades alternate, seven cuts in a breath; the fifth is both at once. */
   tempest: {
-    label: 'Twin Tempest', phase: 2, weight: W(2, 2.8), cooldown: 6, band: [0, 3.8], recovery: 0.65,
+    label: 'Twin Tempest', phase: 2, weight: W(2, 2.8), cooldown: 6, band: [0, 3.8], recovery: 0.78, recoveryKeys: FLOURISH[1],
     beats: [
       cut('rise', N, 0.48, 11, { form: 2 }),
       cut('rise', N, 0.34, 11, { form: 2, left: true }),
@@ -344,13 +515,25 @@ export const MOVES = {
   },
   /** Bladed Gale: two whirling rings, two rising cuts, and the somersault. */
   gale: {
-    label: 'Bladed Gale', phase: 2, weight: W(2, 2.4), cooldown: 7, band: [0, 3.8], recovery: 0.65,
+    label: 'Bladed Gale', phase: 2, weight: W(2, 2.4), cooldown: 7, band: [0, 3.8], recovery: 0.7,
     beats: [
       spin(N, 0.5, 13, { form: 2 }),
       spin(N, 0.36, 13, { form: 2, cock: 0.6 }),
       cut('rise', N, 0.36, 11, { form: 2 }),
       cut('back', N, 0.34, 11, { form: 2, left: true }),
       { pick: [cut('flip', B, 0.6, 24, { form: 2, lock: true }), spin(R, 0.62, 22, { form: 2, low: true, cock: 0.62 })] },
+      { ...parting(2), chance: 0.6 },
+    ],
+  },
+  /** Pinwheel: a cartwheel over the gap with both blades going round, the off-hand blade behind it,
+   *  and the blades crossed: two crescents of red light. */
+  pinwheel: {
+    label: 'Pinwheel', phase: 2, weight: W(2, 2.2), cooldown: 7, band: [1.5, 6.5], recovery: 0.78, recoveryKeys: FLOURISH[1], gapCloser: true,
+    beats: [
+      cut('aerial', B, 0.62, 22, { form: 2 }),
+      cut('flat', N, 0.34, 11, { form: 2, left: true }),
+      cut('back', N, 0.34, 11, { form: 2 }),
+      crossCut(0.46),
     ],
   },
   /** Scissor: both blades thrust home on a dash. */
@@ -384,10 +567,10 @@ export const MOVES = {
   // ============================================================== form 3: the staff
   /** Cyclone: the long blades sweep wide; two level cuts, two full turns, a held overhead, a low red ring. */
   cyclone: {
-    label: 'Cyclone', phase: 3, weight: W(3, 2.8), cooldown: 6, band: [0, 4.4], recovery: 0.7,
+    label: 'Cyclone', phase: 3, weight: W(3, 2.8), cooldown: 6, band: [0, 4.4], recovery: 0.8, recoveryKeys: FLOURISH[2],
     beats: [
       cut('flat', N, 0.5, 13, { form: 3 }),
-      cut('flatBack', N, 0.34, 13, { form: 3 }),
+      cut('flatBack', N, 0.34, 13, { form: 3, step: 'L' }),
       spin(N, 0.38, 14, { form: 3, cock: 0.6 }),
       spin(N, 0.36, 14, { form: 3, cock: 0.6 }),
       { pick: [cut('over', B, 0.44, 22, { form: 3, hold: [0.1, 0.3], cock: 0.72, lock: true }), cut('thrust', B, 0.4, 20, { form: 3 })] },
@@ -396,7 +579,7 @@ export const MOVES = {
   },
   /** Turning Mill: he walks forward inside the turning staff: four rings, then a thrust. */
   mill: {
-    label: 'Turning Mill', phase: 3, weight: W(3, 2.4), cooldown: 7, band: [1.5, 6.5], recovery: 0.7, gapCloser: true,
+    label: 'Turning Mill', phase: 3, weight: W(3, 2.4), cooldown: 7, band: [1.5, 6.5], recovery: 0.8, recoveryKeys: FLOURISH[2], gapCloser: true,
     beats: [
       spin(N, 0.52, 12, { form: 3, travel: [[0.2, 0], [1.0, 1.2], [2.0, 1.9]], close: 0 }),
       spin(N, 0.34, 12, { form: 3, cock: 0.55, travel: [[0, 0], [1.0, 0.9], [2.0, 1.5]], close: 0 }),
@@ -432,6 +615,17 @@ export const MOVES = {
     label: 'Drawn Under', phase: 3, weight: W(3, 1.4), cooldown: 8, band: [4.5, 10.5], recovery: 0.6, gapCloser: true,
     beats: [pull(0.8, { fixed: true }), spin(N, 0.62, 16, { form: 3, fixed: true }), cut('over', B, 0.42, 22, { form: 3, lock: true })],
   },
+  /** The Rift: the staff driven into the floor; fissures of red light race out along it. Parry the
+   *  one that comes for you, or step between them. */
+  rift: {
+    label: 'The Rift', phase: 3, weight: [0, 0, 1.8, 1.3], cooldown: 9, band: [3, 14], recovery: 0.7,
+    beats: [rift(0.9, [3, 3, 3, 5])],
+  },
+  /** Parting Light: a backflip out of reach, and crescents of red light as he lands. */
+  parting: {
+    label: 'Parting Light', phase: 2, weight: [0, 1.5, 1.3, 1.3], cooldown: 8, band: [0, 3.0], recovery: 0.5,
+    beats: [parting([1, 2, 2, 3])],
+  },
   riposte3: {
     label: 'Riposte (staff)', phase: 3, weight: 0, counter: true, cooldown: 0, band: [0, 5], recovery: 0.6,
     beats: [cut('flatBack', N, 0.46, 15, { form: 3, track: 0.7 }), spin(N, 0.36, 14, { form: 3, cock: 0.6 })],
@@ -440,26 +634,27 @@ export const MOVES = {
   // ============================================================== form 4: the cross-hilted blade, the Void's aura
   /** Judgment: six heavy two-handed blows; a held overhead in the middle, a perilous thrust to end. */
   judgment: {
-    label: 'Judgment', phase: 4, weight: W(4, 2.8), cooldown: 6, band: [0, 4.0], recovery: 0.7,
+    label: 'Judgment', phase: 4, weight: W(4, 2.8), cooldown: 6, band: [0, 4.0], recovery: 0.8, recoveryKeys: FLOURISH[3],
     beats: [
       cut('diag', N, 0.5, 14, { form: 4 }),
-      cut('back', N, 0.34, 13, { form: 4 }),
+      cut('back', N, 0.34, 13, { form: 4, step: 'L' }),
       cut('flat', N, 0.34, 13, { form: 4 }),
       cut('over', B, 0.44, 22, { form: 4, hold: [0.1, 0.32], cock: 0.72, lock: true }),
-      { pick: [cut('flatBack', N, 0.36, 13, { form: 4 }), cut('rise', N, 0.36, 13, { form: 4 })] },
+      { pick: [cut('flatBack', N, 0.36, 13, { form: 4, step: 'L' }), cut('rise', N, 0.36, 13, { form: 4, step: 'L' })] },
       { pick: [
         { tell: R, windup: 0.62, active: 0.12, damage: 28, knockback: 2.5, zone: { kind: 'line', r: 2.4, w: 0.7 }, mikiri: true, dash: { from: 0.84, to: 1.0, stop: 0.8, max: 2.8 }, close: 0, track: 0.7, keys: perilKeys(1) },
         cut('flip', B, 0.6, 26, { form: 4, lock: true }),
+        cut('aerial', B, 0.58, 24, { form: 4 }),
       ] },
     ],
   },
   /** Eclipse: steel and the Void in one breath: two cuts, a full turn, a bolt from the free hand,
    *  a rising cut, and the somersault (or a thrust). */
   eclipse: {
-    label: 'Eclipse', phase: 4, weight: W(4, 2.4), cooldown: 7, band: [0, 4.0], recovery: 0.7,
+    label: 'Eclipse', phase: 4, weight: W(4, 2.4), cooldown: 7, band: [0, 4.0], recovery: 0.8, recoveryKeys: FLOURISH[3],
     beats: [
       cut('flat', N, 0.5, 13, { form: 4 }),
-      cut('back', N, 0.34, 13, { form: 4 }),
+      cut('back', N, 0.34, 13, { form: 4, step: 'L' }),
       spin(N, 0.36, 14, { form: 4, cock: 0.6 }),
       bolt(0.5, 20, { fixed: true, cock: 0.6 }),
       cut('rise', N, 0.42, 13, { form: 4 }),
@@ -494,6 +689,12 @@ export const MOVES = {
     label: 'The Starless Sky', phase: 4, weight: W(4, 1.6), cooldown: 14, band: [0, 16], recovery: 0.45,
     beats: [{ tell: R, windup: 0.95, fixed: true, active: 0.1, damage: 26, knockback: 3, cast: { kind: 'storm', count: 6, selfCue: true }, part: 'feet', close: 0, track: 0.3, keys: stormKeys() }],
   },
+  /** Dark Star: a starless sun that drifts after the hero, drinking the light, and bursts (red: be
+   *  out of its ring when it does). He does not wait for it. */
+  star: {
+    label: 'Dark Star', phase: 3, weight: [0, 0, 1.0, 1.7], cooldown: 12, band: [0, 16], recovery: 0.4,
+    beats: [{ tell: R, windup: 0.9, fixed: true, active: 0.1, damage: 30, knockback: 3.5, cast: { kind: 'star', selfCue: true }, part: 'hand', close: 0, track: 0.5, keys: starKeys() }],
+  },
   riposte4: {
     label: 'Riposte (cross)', phase: 4, weight: 0, counter: true, cooldown: 0, band: [0, 5], recovery: 0.55,
     beats: [cut('diag', N, 0.5, 16, { form: 4, track: 0.7 }), cut('thrust', B, 0.36, 22, { form: 4 })],
@@ -522,8 +723,22 @@ export const CLIPS = {
   /** His guard: the wards that meet a strike, the deflect, the raised guard (duelist/guard.js). */
   ...GUARD_CLIPS,
   flinch: { dur: 0.26, keys: [[0.07, { e: 'o', spX: -0.06, hdX: -0.12, bZ: -0.05, yaw: 0.46 }]] },
-  backstep: { dur: 0.42, keys: [[0.12, { bY: -0.18, pitch: -0.08, ...STEP_BACK }], [0.32, { bY: -0.14, rF: [-0.1, 0.26], lF: [0.17, -0.3] }]] },
-  sidestep: { dur: 0.36, keys: [[0.12, { bY: -0.2, roll: 0.08, rF: [-0.2, 0.25], lF: [0.25, -0.2] }]] },
+  // (he does not hop back: the Void carries him, the feet off the floor: lord.js lifts the root)
+  backstep: {
+    dur: 0.46,
+    keys: [
+      [0.14, { bY: -0.04, pitch: -0.16, spX: 0.06, hdX: 0.1, rF: [-0.1, 0.14, 0.34], lF: [0.13, 0.2, 0.16], rK: [-0.2, 0, 1], lK: [0.2, 0, 1], flat: 0.2 }],
+      [0.3, { bY: -0.05, pitch: -0.1, rF: [-0.11, 0.12, 0.26], lF: [0.14, 0.16, 0.06], flat: 0.3 }],
+      [0.42, { bY: -0.16, pitch: 0.04, rF: [-0.14, 0.22], lF: [0.19, -0.2], flat: 0.9 }],
+    ],
+  },
+  sidestep: {
+    dur: 0.4,
+    keys: [
+      [0.12, { bY: -0.04, roll: 0.14, rF: [-0.14, 0.14, 0.12], lF: [0.16, 0.2, -0.1], rK: [-0.2, 0, 1], lK: [0.2, 0, 1], flat: 0.2 }],
+      [0.3, { bY: -0.08, roll: 0.06, rF: [-0.15, 0.1, 0.16], lF: [0.18, 0.12, -0.14], flat: 0.5 }],
+    ],
+  },
   stagger: {
     dur: 0.8,
     keys: [

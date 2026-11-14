@@ -1950,3 +1950,54 @@ The fastest frames after the change: the blade 0.2–0.75 m entering a reaction 
 more than 2 cm under the grass through all of it. Not covered: the plunge's and the blade lock's
 poses were not part of this audit (the lock was reposed in ADR-081); the off hand's wrist in two-handed cuts and the free arm's
 elbow in two backhands' recoveries (ADR-078) still stand.
+## ADR-084 — The Starless Lord's harness: an armoured dark lord of his own design (2026-11-14)
+- **Context:** the owner asked to improve the boss's "character detail" and to make him look like a
+  famous film villain in black armour, a helmet and a cape. He had been built from the Wanderer's
+  coat, pauldron, boots and half-cape under a horned helm, at the Ash Disciple's size.
+- **Decision:** the archetype, not the character. He gets a harness of his own (gear.js): a deep
+  hood over a prow faceplate with one slit of red light and a ribbed breather; a cuirass with a
+  gorget and a ring of red light on the breastbone; a plate yoke on the chest joint with a lamed
+  pauldron on each arm; plate arms and thighs; hip plates over a war-skirt; and a cape of five sheets
+  to the ankles on the streamer springs. Nothing is copied from another work's design: the faceplate
+  is his own, there is no chest panel, and the names stay his own. He is drawn at 1.32 (`kit.scale`;
+  the hero is 1.08, Shen Hui 1.2): a head taller, visual only.
+- **His head, the owner's pick:** three heads were rendered in game on one sheet over the same
+  harness (A a crested sallet with a lamed tail, B the same helm under a crown of swept-back spikes,
+  C the faceplate in a deep hood) and A was built first. The owner picked C ("the hood",
+  2026-11-14). The two helms and the `?lordLook=` switch that showed them on the preview were
+  removed, and the hood was finished as his head (`HOOD_RINGS`, a ring per row as [y, half-width,
+  front edge, back edge, opening]): a round crown, a brow that hangs forward over the faceplate and
+  closes just above it, a rim in the cloth's ember red round the opening, a drape pooled on the
+  yoke. As first rendered it read from the side as a flat-topped box. The standing collar behind the
+  head went with the helms: it poked through the hood's sides.
+- **Consequences:** the game is public, so a look-alike of a film character was not built; the owner
+  was told so with the sheet. The yoke is rigid on the chest, so a raised arm passes under it (as the
+  hero's mantle). The hood is rigid on the head joint (no springs): its drape turns with his head
+  over the yoke. The hero is hooded too; his hood is pushed back off a face and gold hair, the
+  lord's is closed over the brow round a faceplate. His drawn body is 32 % larger than his hurt
+  spheres (was 20 %).
+
+## ADR-085 — How the Starless Lord moves: the glide, strings that walk, three more spells (2026-11-14)
+- **Context:** the owner asked for better animation, movesets, spell and force effects and motion. On
+  film a man in full plate sprinting at 9 m/s on the hero's run cycle looked wrong; every cut of a
+  string re-planted the same foot; a spinning cut turned the hips a full turn over planted feet; and
+  his spells were few strokes each.
+- **Decision:** (1) **He does not run.** Past 3.4 m/s in footwork the animator takes his own `glide`
+  clip (not a walking clip: no foot planning), lord.js lifts the root 0.22 m and a wake streams off
+  under him; his backstep and sidestep are carried the same way. Inside striking range he walks.
+  (2) **Strings walk and turn:** cuts alternate the driving foot, a spin's feet go round with the
+  body on a hop, two new aerials (a cartwheel cut, a backflip that throws crescents), a flourish per
+  form in the recovery of its main strings, a slower and deeper breath in the guard. (3) **Four new
+  moves and three new spells** that need no new hero state: the Crushing Dark (a red line; the catch
+  is a knockdown under a closing seal), the Rift (fissures along the floor: crescents with their own
+  look), the Dark Star (a marked ring that follows the hero until its cue). (4) Every spell's
+  effect was redrawn (fx.js); a pilot may raise the cloth's updraft, so his cape lifts through a cast.
+  (5) Found on the way: a waiting duelist stood in his guard (the animator's reset came after the
+  brain's and went back to the walking clip): both bosses now wait in their clip (he sits, Shen Hui
+  kneels).
+- **Consequences:** the grip is the pin, not the "lifted and held, mash to break free" grab the
+  roadmap sketched: that needs a hero state of its own. 37 moves (was 31); on main's faster chain
+  and guard (ADR-075, ADR-080) the 85 % bot takes 315 damage (was 325 at his release) and the 70 %
+  bot 692 (was 740): about as hard, not re-tuned against a human. No sounds of their own for any of
+  it yet. A flourish is the first half of its recovery only: past `guard.recoverOpen` (ADR-080) his
+  guard is up again and he may ward or step out of the rest.

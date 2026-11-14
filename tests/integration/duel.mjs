@@ -298,6 +298,8 @@ async function scenarioLevels() {
   const G = build();
   const d = G.game.dragon;
   assert(d instanceof AshDisciple && G.game.boss === d && d.state === 'sleeping' && d.mode === 'sleep', 'the boss slot holds the Ash Disciple, kneeling');
+  // (kneeling for real: the animator plays his meditation clip, not the walking clip's guard)
+  assert(d.anim.key === 'duel' && d.brain.clip?.name === 'meditate', `he waits in his meditation clip (${d.anim.key}, ${d.brain.clip?.name})`);
   assert(Math.hypot(d.position.x - CONFIG.world.dragonSleep.x, d.position.z - CONFIG.world.dragonSleep.z) < 1e-6, 'he kneels at the level\'s resting spot');
   let bad = 0;
   d.object3d.traverse((m) => { const pos = m.geometry?.attributes?.position; if (pos) for (const v of pos.array) if (!Number.isFinite(v)) bad++; });

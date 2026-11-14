@@ -572,8 +572,9 @@ less. The bots never use the blade lock (their parries are not perfect) or the m
 across red). Target: 1.5–2.5 min for a player who knows him. No human has played him yet.
 
 ## The Starless Lord (2026-11-13, ADR-068 – ADR-070; `?level=starless`)
-Varr Nihil, a dark lord who fell out of the night sky and took the Obsidian Throne: black plate, a
-horned helm with one slit of red light, blades of red light, and the Void in his free hand. The owner's
+Varr Nihil, a dark lord who fell out of the night sky and took the Obsidian Throne: a full harness
+of black plate, a deep hood over a faceplate with one slit of red light, a cape to his ankles, blades
+of red light, and the Void in his free hand (his look and motion: ADR-084, ADR-085). The owner's
 brief: very fast, acrobatic and fluid, strings of six with variations, jump and flip attacks, spells
 between the cuts, four blade forms. He runs on the duelist engine (the Ash Disciple's: the guard, the
 deflect chain, the blade lock, the mikiri, the full deflect, the Ghostep behind him, pressure and
@@ -604,8 +605,9 @@ hit stun are all as written above), with these differences.
   0.3 s) and never before the blow ahead of it has landed. Breathers [0.14 – 0.4, 0.1 – 0.32, 0.08 –
   0.26, 0.05 – 0.18] s; he flows straight into another move [40, 50, 55, 65] % of the time.
 - **He keeps to the hall's floor** (a rectangle: between the walls, off the dais, inside the door), so
-  a hero backed into a corner or against the door is still in his reach. He runs at 6 m/s and sprints
-  at 9.2 m/s past 5.5 m (the hero sprints at 7.2).
+  a hero backed into a corner or against the door is still in his reach. He walks inside striking
+  range; outside it he **glides**: 6 m/s, and 9.2 m/s past 5.5 m (the hero sprints at 7.2), carried a
+  hand's breadth over the floor with his cape streaming. He steps back and aside the same way.
 - Every blow × `damageScale` 1.1.
 
 **The Void** (his spells; each is read and answered like a blade):
@@ -618,7 +620,11 @@ hit stun are all as written above), with these differences.
 | **Torn stone** (forms 3, 4) | normal + red | floor torn up beside him: three stones (14) thrown 0.42 s apart at 16 m/s, then a great one (red, 27, knockdown) | parry / cut the small ones, roll the great one |
 | **The Starless Sky** (form 4) | red | six strikes, one called every 0.5 s onto where you are heading: a red ring (r 2.3 m) for 0.95 s, then the bolt (26, knockdown); he fights on meanwhile | leave the ring or roll as it lands |
 | **Red tide** (form 4) | normal | three cuts that throw crescents of red light (1, a fan of 3, 1) at 14 m/s | parry, roll, block chips |
-| **The blink** (form 4, Void Rend) | - | as a cut's windup starts he is gone and 2 m behind you (to your side if there is no floor there) | turn and parry, or roll: the cut is cued as any other |
+| **The blink** (form 4, Void Rend) | - | as a cut's windup starts he is gone and 2 m behind you (to your side if there is no floor there); a shape of him is left where he stood | turn and parry, or roll: the cut is cued as any other |
+| **Crushing Dark** (forms 1, 4) | red | 0.95 s: his open hand lifts and five talons of the Void close on where it is aimed (on you while he tracks you, until 88 % of the windup); a 9.5 × 2.2 m line. Caught: 30 damage, you are thrown to the floor and the Void presses down for 0.55 s | roll through the instant it closes, or be out of its line; a block is broken |
+| **The Rift** (forms 3, 4) | normal | 0.9 s: the staff raised and driven into the floor; three fissures of red light (five in form 4) race out in a fan at 13.5 m/s (16 each) | parry the one that comes for you (each cues itself), or step between them; roll |
+| **Dark Star** (forms 3, 4) | red | 0.9 s: a starless sun leaves his hand, drifts after you at 2.3 m/s for 1.7 s over a violet ring (r 3 m), then bursts (30, knockdown); he fights on meanwhile | be out of the ring when it bursts, or roll at its cue (it stops following you then) |
+| **Parting Light** (forms 2, 3, 4) | normal | a backflip 4 m away from you, and crescents of red light as he lands (2, 2, 3 by form) at 12 m/s | parry, roll, block chips |
 
 Thrown things (the push, the crescents, the blade, the stones) cue themselves `flashLead` before they
 reach the hero; one that could only cue later than 0.2 s before contact fizzles, as the wyrm's
@@ -628,16 +634,19 @@ bullets do. The ground under a strike is marked from the moment it is called.
 Shen Hui's; `a | b` = one of the two is drawn as the move starts; weights are per form, 0 = not in it):
 | Move (forms) | Hits | AI band (m) · cooldown |
 |---|---|---|
-| **Crimson Litany** (1) | N 0.48 (13) · N 0.34 (12) · N 0.34 (12) · B overhead 0.42 + hold 0.1–0.3 (20) LOCK `|` B thrust 0.4 (19) · N 0.36 (12) · B somersault chop 0.6 (24) LOCK `|` N 0.34 (12) · 50 %: B thrust 0.4 (19) | 0–3.8 · 6 |
+| **Crimson Litany** (1) | N 0.48 (13) · N 0.34 (12) · N whirl 0.38 (13) `|` N 0.34 (12) · B overhead 0.42 + hold 0.1–0.3 (20) LOCK `|` B thrust 0.4 (19) · N 0.36 (12) · B somersault chop 0.6 (24) LOCK `|` B cartwheel cut 0.58 (22) `|` N 0.34 (12) · 50 %: B thrust 0.4 (19) | 0–3.8 · 6 |
 | **Void Cadence** (1) | N 0.5 (13) · N 0.34 (12) · the push 0.55 · N 0.46 (12) · N 0.34 (12) · B thrust 0.4 (20) `|` a bolt 0.62 (20) | 0–4.2 · 7 |
+| **Starless Dirge** (1) | N thrust 0.5 (15), a lunge ≤ 3.8 m · N 0.36 (12) · B cartwheel cut 0.58 (22) · N 0.36 (12) · R low spin 0.62 (22) `|` a bolt 0.56 (20) | 1.6–6 · 7 |
 | Starless Lunge (1, 4) | N 0.5 (17), a lunge ≤ 5 m | 2.6–7 · 2.5 |
 | **Falling Star** (1, 2, 4) | B 0.72 (26) LOCK: a somersault across ≤ 5.5 m (apex 1.5 m), the chop where he lands | 2.2–7.5 · 4 |
 | Reaping Arc (1) | R 0.62 (22, knockdown): a low spin, ring 2.9 m | 0–3.4 · 6 |
 | Void Lightning (1, 2, 3) | B 0.78 (24) · 50 %: B 0.5 (22) | 4.5–16 · 5 |
 | Void Push (all) | N 0.62 (15) | 2.5–11 · 5 |
 | **Grasp and Sever** (all) | R pull 0.8 (5) · B overhead 0.62 (24) LOCK | 4.5–10.5 · 8 |
+| **Crushing Dark** (1, 4) | R 0.95 (30, knockdown), above | 3–9 · 10 |
 | **Twin Tempest** (2) | seven, the blades alternating: N 0.48 · N 0.34 · N 0.34 · N 0.34 (11 each) · B overhead 0.42 + hold (20) LOCK `|` B thrust 0.4 (18) · N 0.36 · N 0.34 (11) | 0–3.8 · 6 |
-| **Bladed Gale** (2) | N spin 0.5 (13) · N spin 0.36 (13) · N 0.36 (11) · N 0.34 (11) · B somersault chop 0.6 (24) LOCK `|` R low spin 0.62 (22) | 0–3.8 · 7 |
+| **Bladed Gale** (2) | N spin 0.5 (13) · N spin 0.36 (13) · N 0.36 (11) · N 0.34 (11) · B somersault chop 0.6 (24) LOCK `|` R low spin 0.62 (22) · 60 %: Parting Light | 0–3.8 · 7 |
+| **Pinwheel** (2) | B cartwheel cut 0.62 (22), both blades going round · N 0.34 (11) · N 0.34 (11) · the blades crossed 0.46: two crescents (14) | 1.5–6.5 · 7 |
 | Scissor (2) | B 0.52 (22) LOCK: both blades thrust home on a dash ≤ 5 m | 2.6–7 · 3 |
 | Returning Blade (2, 3) | N 0.6 (16), twice (above) | 4–13 · 9 |
 | Reaping Arcs (2) | N spin 0.5 (13) · R low spin 0.6 (22) | 0–3.4 · 6 |
@@ -646,7 +655,10 @@ Shen Hui's; `a | b` = one of the two is drawn as the move starts; weights are pe
 | Starfall (3, 4) | R 1.15 (30, knockdown): a leap (apex 3.8 m), the red ring follows you until 66 % of the windup | 4.2–14 · 9 |
 | Torn Stone (3, 4) | above | 5–15 · 10 |
 | Drawn Under (3) | R pull 0.8 · N spin 0.62 (16) · B overhead 0.42 (22) LOCK | 4.5–10.5 · 8 |
-| **Judgment** (4) | N 0.5 (14) · N 0.34 (13) · N 0.34 (13) · B overhead 0.44 + hold 0.1–0.32 (22) LOCK · N 0.36 (13) · R perilous thrust 0.62 (28) MIKIRI `|` B somersault chop 0.6 (26) LOCK | 0–4 · 6 |
+| The Rift (3, 4) | N 0.9 (16 each), above | 3–14 · 9 |
+| Parting Light (2, 3, 4) | N 0.66 (14 each), above | 0–3 · 8 |
+| Dark Star (3, 4) | R 0.9 (30, knockdown), above | 0–16 · 12 |
+| **Judgment** (4) | N 0.5 (14) · N 0.34 (13) · N 0.34 (13) · B overhead 0.44 + hold 0.1–0.32 (22) LOCK · N 0.36 (13) · R perilous thrust 0.62 (28) MIKIRI `|` B somersault chop 0.6 (26) LOCK `|` B cartwheel cut 0.58 (24) | 0–4 · 6 |
 | **Eclipse** (4) | N 0.5 (13) · N 0.34 (13) · N spin 0.36 (14) · a bolt 0.5 (20) · N 0.42 (13) · B somersault chop 0.6 (26) LOCK `|` B thrust 0.4 (22) | 0–4 · 7 |
 | **Void Rend** (4) | blink, N 0.62 (14) · blink, N 0.5 (14) · blink, B overhead 0.56 (24) LOCK (windups not scaled) | 0–12 · 8 |
 | Chained Lightning (4) | four bolts: B 0.8 (20) · 0.46 (20) · 0.46 (20) · 0.46 (24) | 4–16 · 9 |
@@ -654,19 +666,29 @@ Shen Hui's; `a | b` = one of the two is drawn as the move starts; weights are pe
 | The Starless Sky (4) | above | 0–16 · 14 |
 | Riposte (each form its own) | 2–3 hits, only from his guard or after he wins a blade lock | - |
 
-Checked by `npm test` → `tests/integration/lord.mjs`: LEVEL (the set, its colliders, the boss slot),
-DATA (176 realisations: a tell per hit, first windup ≥ 0.4 s, blows ≥ 0.34 s apart, each flash after
-the blow before it, a six-hit string that varies in every form, faster form by form), TIMING (42 move ×
-form runs: every contact within 40 ms of its flash + 0.26 s, every move's first hit lands), FORMS (the
-whole four-bar flow through the hero's own attack press), SPELLS (every answer in the table above),
-BOUNDS (never off the floor; 47 blows reach a cornered hero in 45 s), FLOW (the door, the throne
-intro, a death and the reset), WIN.
-**Difficulty (measured, seed 4242, god-mode fencing bots):** a bot that answers every tell wins in
-75 s with 63 parries (forms at 0 / 18 / 33 / 54 s); answering 85 % it takes 18 hits for 325 damage in
-89 s (the hero has 160 HP and five flasks of 70: he would live); answering 70 % it takes 44 hits for
-740 damage in 111 s (he would not). Shen Hui's 85 % bot takes 7 – 8 hits. Target: 3 – 5 min for a
-player who knows him. No human has played him yet, and the bots never use the blade lock or the
-mikiri and stand inside his reach the whole fight.
+**How a string moves** (ADR-085): its cuts alternate the foot that drives them, so he walks through
+it; a spin is a hop that carries the whole body round; the somersault, the cartwheel and the backflip
+leave the floor (he cannot be hit by the hero's blade less for it: his hurt spheres go with him); a
+main string ends with its form's flourish as he recovers (the blade rolled round the wrist, both
+blades, the staff turned like a mill wheel, the cross-hilt swept down and raised): that recovery is
+the opening.
+
+Checked by `npm test` → `tests/integration/lord.mjs`: LEVEL (the set, its colliders, the boss slot,
+his harness, that he waits seated), DATA (224 realisations: a tell per hit, first windup ≥ 0.4 s,
+blows ≥ 0.34 s apart, each flash after the blow before it, a six-hit string that varies in every
+form, faster form by form), TIMING (53 move × form runs: every contact within 23 ms of its flash +
+0.26 s, every move's first hit lands), FORMS (the whole four-bar flow through the hero's own attack
+press), SPELLS (every answer in the table above, and the glide), BOUNDS (never off the floor; 32
+blows reach a cornered hero in 45 s), FLOW (the door, the throne intro, a death and the reset), WIN.
+**Difficulty (measured, seed 4242, god-mode fencing bots; 2026-11-14, with the moves above, the
+hero's faster chain of ADR-075, the guard of ADR-080 and the hit reactions of ADR-083):** a bot that
+answers every tell wins in 93 s with 67 parries (forms at 0 / 18 / 41 / 66 s); answering 85 % it takes
+19 hits for 315 damage in 101 s (the hero has 160 HP and five flasks of 70: he would live); answering
+70 % it takes 36 hits for 692 damage in 112 s (he would not). At his first release (31 moves, the hero's old swings): 75 s, 18
+hits / 325, 44 hits / 740.
+Shen Hui's 85 % bot takes 7 – 8 hits. Target: 3 – 5 min for a player who knows him. No human has
+played him yet, and the bots never use the blade lock or the mikiri and stand inside his reach the
+whole fight.
 
 ## Current numbers (v0.6 "bullet hell", 2026-11-09)
 Source of truth: `rules.js` (`DEFENSE`, `POSTURE`), `player.js` `TUNE`, `tuning.js`, `tuningFire.js`,

@@ -396,6 +396,24 @@ all glyph particles in the dragon's `add` / `alpha` pools.
   every second one), and one red point light that follows it and lights the floor round him. The
   sweep trail is the duelist's, in red. Void lightning is the only other colour he owns: violet-white
   jagged strokes with a light of the same hue, so a bolt never reads as a blade.
+- **The lord's harness** (2026-11-14, ADR-084): black plate reads in the hero-art pass as dim fill
+  inside bright ink lines, so every plate is its own piece (alternating ink sub-ids between lames) or
+  a drawn fold line (the cuirass's chevrons, the yoke's bands). What carries him at the fight camera
+  is the silhouette: a hooded head, a yoke wider than his shoulders, and the cape, a triangle of black
+  cloth to his ankles whose lower edge is ember-red (the `hem` part prints brighter far off, so the
+  cape's foot reads against the black floor). Red light is kept to three places: the blades, the slit
+  in his faceplate and the ring on his breastbone. The hood (the owner's pick of three heads) is a
+  round crown whose brow hangs forward over the faceplate, so the slit glows out of a dark opening;
+  the opening's rim is the cloth's ember red, which is what draws it from the front. A hood given
+  as rings needs its front and back edge per ring, not a radius and an offset: the first one, written
+  the second way, read from the side as a flat-topped box.
+- **The Void's colours:** red for what comes from his blades and his will (crescents, the Rift's
+  fissures, the grip's talons, the pull, his wake and aura), violet-white for what comes from the
+  sky and the dark (lightning, the Dark Star). A marked area is ringed in the tell's red on the floor;
+  the Dark Star also draws its reach in violet, because the hall's inlay is red and a red ring alone
+  is lost on it. Lightning is a white-violet core inside a dimmer sheath that outlives it, two thin
+  strands wound round it and forks that die in the air: one stroke per segment, laid along it on
+  screen and stretched to its length (`LordFx._stroke`).
 
 ### Steel on steel (2026-11-14, ADR-079; `combat/clashFx.js`)
 One effect for every blade that meets a blade: the hero's parry, a duelist's guard, his deflect, the
