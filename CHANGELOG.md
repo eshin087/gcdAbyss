@@ -14,6 +14,13 @@ Fifteen pieces of work since 0.4.0:
   pad buttons (PlayStation symbols on a PlayStation pad) while the pad is in use and back on the
   first key or click. Rumble on hits, guards, parries and perfect dodges. Unplugging the pad
   mid-fight pauses the game.
+- **Remappable controls** (2026-11-13, ADR-067): pause → CONTROLS. Rebind any action on the keyboard
+  and mouse (move, attack, block, dodge, sprint, flask, lock-on, rest, help, mute) and on the
+  controller (attack, block, dodge, sprint, flask, lock-on, rest, help, zoom): pick an action, press
+  the new key, mouse button or pad button. A key already in use swaps over. Works from the keyboard
+  and mouse or entirely from the pad, with a reset per tab, and is remembered in this browser.
+  Every key shown on screen (prompts, hints, the title, the controls lists) follows your bindings.
+  Esc / the pad's Menu always pause and cannot be remapped.
 - **The hero at Shen Hui's size, a trimmed cloak** (2026-11-12, ADR-064, ADR-065): the hero is drawn
   10 % smaller, so in a fight he reads about the same size as Shen Hui (he was the nearer of the two
   to the camera and looked a size bigger); his reach and hitboxes are unchanged. His cloak is the

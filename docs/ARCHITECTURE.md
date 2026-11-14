@@ -58,7 +58,7 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `THREE`, `CONFIG` | three.js namespace, `core/config.js` |
 | `renderer, scene, fxScene, camera, pipeline, U` | rendering. `U` = shared uniforms (`render/shaderLib.js`), including `U.uBoneTex` (the rigid batches' bone matrices, see Rigid batching below). `pipeline.setShadowSize(texels)` resizes the moon shadow map (`pipeline.shadowSize`; main.js `applyQuality` passes the preset's `shadow`) |
 | `events` | pub/sub: `on(name, fn)` → unsubscribe fn, `emit(name, data)` |
-| `input` | `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. **Gamepad source** (ADR-066): `setPad(code, down)`, `setPadAxis(x, y)`, `releasePad()` — the same semantics with their own holds (a release on one source never drops a hold on another); a deflected pad stick wins over the touch stick and the keys in `moveAxis()`. `pulse(code)`: a one-frame `pressed` edge with no hold. `kbmT`: `performance.now()` of the last real keyboard / mouse event (a mousemove only with movement). Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
+| `input` | **Actions** (ADR-067, `core/bindings.js`): `act(a)`, `actPressed(a)`, `actReleased(a)` — true when any code bound to action `a` (or its virtual code `'@a'`) is down / pressed / released; `bindings` (the `Bindings` instance); the player, flow and timing trainer read only actions. Raw: `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north, from the up / down / left / right actions; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. **Gamepad source** (ADR-066): `setPad(code, down)`, `setPadAxis(x, y)`, `releasePad()` — the same semantics with their own holds (a release on one source never drops a hold on another); a deflected pad stick wins over the touch stick and the keys in `moveAxis()`. `pulse(code)`: a one-frame `pressed` edge with no hold. `kbmT`: `performance.now()` of the last real keyboard / mouse event (a mousemove only with movement). Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
 | `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame; with a gamepad in use or touch controls on, their aim point (see Gamepad controls, Touch controls; shared helper `ui/aim.js` `aimWithoutCursor`) |
 | `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus`, `zoom(steps)` (2.5 m per step, clamped to the profile), `targetDistance`; distance profile `setMobile(bool)` / `mobile`, `defaultDistance`, `minDistance`, `maxDistance`, `maxExtraZoom` (desktop: `CONFIG.camera.distance/min/max`, unlimited extra zoom; phone: `mobileDistance` 20 / `mobileMinDistance` 14 / `mobileMaxDistance` 34, extra zoom (lock-on, boss framing, title / intro shots) capped at `mobileMaxExtraZoom` 3 m). `setMobile` resets the zoom to the profile default. `cine = { zoom, x, z, w }`: flow.cinematic's pull-in (zoom m added to the distance, negative = closer; the follow focus leans toward (x, z) by w; all 0 when no moment runs). **Keep-in-view** (`FIT` in `core/cameraRig.js`): `keep(x, y, z, r = 1, must = false)` asks for a world sphere to stay on screen this frame (≤ 16 per frame; non-finite input is ignored). After the usual follow / distance damping the rig projects the subjects with the real camera and eases a ground-plane pan (`fitX` / `fitZ`, ≤ 30 m) and extra distance (`fitZoom`: ≤ 6 m to fit every subject, ≤ 12 m for `must` ones; phone 1.5 / 3 m) until they sit inside the NDC box (\|x\| 0.9, top 0.86, bottom 0.78). `must` subjects (the hero) are never cropped to fit the others. Damped (5/s, 12/s while a must subject is off the box), eased back to 0 with no requests, reset by `snap()`. `focus` = the damped follow focus + the pan. |
 | `touch` | touch controls (`ui/touch.js`, below): `active`, `phone`, `portrait`, `autoAim`, `setActive(bool)`, `update(realDt)` |
@@ -1094,11 +1094,11 @@ showBossBar(name) / hideBossBar()    // boss HP + posture bar
 banner(text, kind, opts)             // kind: 'death'|'victory'|'area'|'bonfire'|'phase'
 bannerHint(text) / clearBanner(instant)   // sub-line under the current banner; flow uses both
 showStats(rows)                      // victory / death run stats
-prompt(text|null)                    // interaction prompt, e.g. "[E] Rest at bonfire"
-promptText                           // getter: the prompt shown now (raw "[E] ..." text) or null
+prompt(text|null)                    // interaction prompt, e.g. "[@interact] Rest at bonfire" (the chip shows the bound key)
+promptText                           // getter: the prompt shown now (raw "[@interact] ..." text) or null
 promptEl                             // the prompt's element (touch controls make it a tap target)
-refreshPrompt()                      // redraw it (the gamepad: device in use or layout changed; "[E]" → "[Y]")
 pauseUi.buttons; titleUi.stageButtons  // the menu buttons in order, for the gamepad's focus
+remapUi                              // the CONTROLS panel (ui/remap.js; see Bindings)
 showTitle() / hideTitle();  showPause(bool);  toggleHelp()
 ```
 **Touch layout:** the touch controls add `.ab-touch` to the HUD root (`.ab-root`). Elements with
@@ -1110,10 +1110,10 @@ hidden, the prompt becomes a tap target ("TAP › Rest at bonfire"), the pause p
 bar narrows to the bottom centre between the thumbs, and the title / banners / record compact.
 Desktop (no `.ab-touch`) is unchanged.
 **Gamepad layout:** while a pad is the device in use, `html.abyss-pad` (and `.ab-pad` on the HUD root)
-hides `kb-only` and `tp-only` elements and shows `pad-only` ones (title "PRESS ANY BUTTON" and pad
-list, the pause / help pad grid, the "[VIEW] help [MENU] pause" hint). Pad key chips carry
-`data-pad` (the Xbox token) and are relabelled for a PlayStation pad. `.pad-focus` marks the focused
-menu button.
+hides `kb-only` and `tp-only` elements and shows `pad-only` ones (title "PRESS ANY BUTTON", the
+pause / help pad grid); `ab-nontouch` elements (the title's controls line, the corner hint, the
+CONTROLS item) hide on touch unless a pad is in use. Action chips relabel to the pad's buttons (and
+PlayStation symbols). `.pad-focus` marks the focused menu button.
 Renders no attack tells of its own: no text, icons, rings or arrows (tells are read from the
 attacker — COMBAT.md). Its only tell cue is a brief red screen-edge flash (~0.25 s, game time,
 stronger on the attacker's side) on a red `combat:flash`, dropped by a stagger / posture break /
@@ -1253,29 +1253,62 @@ right. `solo` hides the other actor only between `lab.postUpdate` and the next `
 actors never see their `visible` flag change). Poses are driven as usual — `dragon.debug.trigger(name)`,
 player inputs / methods — and stepped with `__tick(dt, frames)`.
 
-### Gamepad controls — `src/ui/gamepad.js` exports `class GamepadControls`, `PAD_LABELS` (ADR-066)
+### Bindings — `src/core/bindings.js` (ADR-067)
+```
+ACTIONS                     // [{ id, label, kb: [codes] | null, pad: [buttons] | null, fixed? }] — the defaults
+new Bindings(storage = localStorage)   // loads 'abyss.bindings.v1'; storage null = defaults, nothing saved
+codes(a) / buttons(a)       // the keyboard-mouse codes / pad button indices bound to action a
+bindKey(a, code) / bindPad(a, i)   // replace a's binding; false when refused (reserved, fixed, wrong device)
+reset(save, 'kb' | 'pad' | null);  isDefault(which);  onChange(fn) → unsubscribe;  version
+keyText(a, all) / padText(a, layout, all) / moveText()   // on-screen names ('E', 'Tab / MMB', '△', 'WASD')
+keyLabel(code) / padLabel(i, layout);  installActions(input, bindings)   // the act* API (Input, test mocks)
+```
+Actions: up, down, left, right (keyboard only), attack, block, dodge, sprint, flask, lockOn,
+interact (rest / fight again), help, mute (keyboard only), zoomIn, zoomOut (pad only), pause
+(fixed: Esc / the pad's Menu). Keyboard codes are `KeyboardEvent.code` or `Mouse0`-`Mouse2`; pad
+buttons are standard-mapping indices. **Every action also answers to its virtual code `'@<id>'`**:
+the touch and gamepad layers press those (so a keyboard remap never moves a touch or pad button).
+A rebind removes the code / button from every other action; an action left with nothing takes the
+rebound action's old ones (a swap), so no action is ever unbound. Reserved, never bound: Esc, F1,
+F2, F3, Backquote; the pad's Menu (9). Saved on every change; on load, junk and unknown actions are
+dropped, a key stored twice keeps its first action, and a device left with an unbound action goes
+back to its defaults. Defaults = the controls before ADR-067 (plus R as a second interact key).
+**Key chips** (`ui/dom.js`): a `[@action]` token in `fillKeyText` (prompts, hints, title, menus)
+becomes a chip showing the bound key, or the pad button while a pad is in use (`@move`, `@aim`,
+`@zoom` are pseudo actions: WASD / LS, Mouse / RS, Wheel / the D-pad); `controlsGrid(parent, 'kb' |
+'pad')` builds a device's grid from the same chips. `setChipSource({ bindings, padActive(), layout() })`
+(the HUD) and `relabelChips()` (on a remap, a device switch, a pad layout change) keep them current.
+**The CONTROLS panel** (`ui/remap.js` `RemapPanel`, `hud.remapUi`; the pause menu's CONTROLS item,
+hidden on touch unless a pad is in use): tabs KEYBOARD · MOUSE / CONTROLLER (opens on the device in
+use), one row per remappable action; pick a row, then press the key / mouse button / pad button.
+`open()`, `close()`, `setTab(t)`, `begin(id)`, `cancel()`, `resetTab()`, `capturePad(i)`, `on`, `tab`,
+`waiting`, `rows`, `navButtons`. Its window capture listeners (keydown, mousedown, click) swallow
+the key being bound (`stopImmediatePropagation`: the game and the Lab never see it), Esc cancels a
+pick or closes the panel (not the pause menu), the click that ends a binding mousedown is eaten.
+
+### Gamepad controls — `src/ui/gamepad.js` exports `class GamepadControls` (ADR-066, ADR-067)
 ```
 constructor(game)          // inert until navigator.getGamepads() reports a pad and it is used
 active: boolean            // the pad is the device in use: its last input is newer than input.kbmT and input.lastTouch
 connected; layout ('xbox' | 'ps', from the id: Sony's vendor id 054c); autoAim; focus (menu index)
-label(token)               // 'A', 'Y', 'RB', 'MENU', 'VIEW', ... in the current layout (PAD_LABELS)
+actionText(a)              // the pad button bound to action a ('△'), or null when the pad is not in use
 rumble([ms, strong, weak]) // dual-rumble on the pad; nothing where vibrationActuator is missing
 update(realDt)             // main.js, after the mouse ray, before the touch layer / Lab / flow / player
 ```
-Polls once a frame (the `standard` mapping preferred) and feeds `input.setPad` / `setPadAxis` with the
-real codes, so tap vs hold timings are the real device's. Play states (everything but `title` and
-`paused`):
+Polls once a frame (the `standard` mapping preferred) and, for every action with pad buttons
+(`input.bindings`), holds `'@<action>'` with `input.setPad` while one of its buttons is down, so tap vs
+hold timings are the real device's. Play states (everything but `title` and `paused`):
 
-| button (standard index) | feeds | behaviour |
+| button (standard index), default binding | feeds | behaviour |
 |---|---|---|
-| LS (axes 0, 1) | `setPadAxis` | radial dead zone `CONFIG.gamepad.deadZone` 0.2, full run at `runAt` 0.9; stick up = north |
-| RB 5 / RT 7 | `Mouse0` | tap = light combo, hold = charge, release = thrust (triggers: on ≥ 0.5, off < 0.3) |
-| LB 4 / LT 6 | `Mouse2` | hold = block, tap = parry |
-| A 0 · B 1 · X 2 · R3 11 | `Space` · `ShiftLeft` · `KeyF` · `Tab` | dodge · hold to sprint · flask · lock-on |
-| L3 10 | `ShiftLeft` | sprint until the stick returns to centre |
-| Y 3 | `Key<letter>` of the HUD prompt's `[E]` / `[R]` token | rest / fight again (nothing without a prompt) |
-| Menu 9 · View 8 | `Escape` · `KeyH` | pause · help |
-| D-pad up 12 / down 13 | `cameraRig.zoom(∓1)` | zoom |
+| LS (axes 0, 1), fixed | `setPadAxis` | radial dead zone `CONFIG.gamepad.deadZone` 0.2, full run at `runAt` 0.9; stick up = north |
+| RB 5 / RT 7 | `@attack` | tap = light combo, hold = charge, release = thrust (triggers 6 / 7: on ≥ 0.5, off < 0.3, whatever they are bound to) |
+| LB 4 / LT 6 | `@block` | hold = block, tap = parry |
+| A 0 · B 1 · X 2 · R3 11 | `@dodge` · `@sprint` · `@flask` · `@lockOn` | dodge · hold to sprint · flask · lock-on |
+| L3 10 | `@sprint` | a stick click (10 / 11) bound to sprint latches it until the stick returns to centre |
+| Y 3 · View 8 | `@interact` · `@help` | rest / fight again · help |
+| Menu 9, fixed | `@pause` | pause (never remappable) |
+| D-pad up 12 / down 13 | `cameraRig.zoom(∓1)` | the zoomIn / zoomOut bindings (pad-only actions) |
 
 **Aim** (`explore` / `bossIntro` / `boss`, unless the touch controls are on): the right stick past
 `aimDeadZone` 0.35 steers `game.mouseGround` `aimDistance` m ahead along it; idle, it auto-aims on the
@@ -1283,8 +1316,11 @@ boss's lock point within `autoAimRange` (32 m), else ahead along the last move d
 **Menus:** `title` — any face / shoulder / trigger / Menu / stick-click button `input.pulse('Gamepad')`
 (dismisses "press any key"); D-pad left / right walks `titleUi.stageButtons`, A on another stage
 clicks it. `paused` — focus opens on RESUME, D-pad / LS up-down move it (repeat every `menuRepeat`
-0.22 s while held), A clicks, B or Menu = `Escape` (resume). **A button held across a menu ↔ play
-change counts only after it is let go** (the title's A never rolls, the resuming B never sprints);
+0.22 s while held), A clicks, B or Menu = `@pause` (resume). With the CONTROLS panel open: LB / RB
+switch its tabs, the focus walks its rows + RESET + BACK, A picks a row (on the CONTROLLER tab the
+next pad press is the new binding: `capturePad`; Menu cancels), B / Menu close the panel only.
+Menu-screen buttons (A, B, D-pad, LB / RB, Menu) are fixed: a remap never changes them. **A button held across a menu ↔ play
+change counts only after it is let go** (the title's A never rolls, the resuming B never sprints; likewise after any CONTROLS panel press);
 the press that makes the pad active counts. Inactive (keyboard / mouse / touch used since): every
 pad hold is released. A pad unplugged while active in a play state pauses the game.
 `gamepadconnected` / `gamepaddisconnected` log a system line. **Rumble** (`CONFIG.gamepad.rumble`)
@@ -1305,12 +1341,12 @@ timings are the real device's):
 
 | control | feeds | behaviour |
 |---|---|---|
-| stick (left thumb, floats under the thumb in the left 42 % × lower 74 %) | `setVirtualAxis` | analog: dead zone 0.16, full run at 0.62 of the 52 px travel; ≥ 0.94 (rim) holds `ShiftLeft` = sprint (off below 0.86) |
-| ATTACK | `Mouse0` | tap = light combo, hold ≥ 0.3 s = charge, release = thrust; shows an ASCII charge meter `[###...]` |
-| BLOCK | `Mouse2` | hold = block, tap just before impact = parry |
-| DODGE | `Space` | roll / perfect dodge |
-| FLASK · LOCK · PAUSE (glyph `\|\|`) | `KeyF` · `Tab` · `Escape` | flask count, LOCK lit while locked on |
-| the HUD prompt | `Key<letter>` from its `[E]` / `[R]` token | rest at the bonfire / fight again |
+| stick (left thumb, floats under the thumb in the left 42 % × lower 74 %) | `setVirtualAxis` | analog: dead zone 0.16, full run at 0.62 of the 52 px travel; ≥ 0.94 (rim) holds `@sprint` (off below 0.86) |
+| ATTACK | `@attack` | tap = light combo, hold ≥ 0.3 s = charge, release = thrust; shows an ASCII charge meter `[###...]` |
+| BLOCK | `@block` | hold = block, tap just before impact = parry |
+| DODGE | `@dodge` | roll / perfect dodge |
+| FLASK · LOCK · PAUSE (glyph `\|\|`) | `@flask` · `@lockOn` · `@pause` | flask count, LOCK lit while locked on |
+| the HUD prompt | `@<action>` from its `[@interact]` chip | rest at the bonfire / fight again |
 | a bare-screen tap on title / death | `Mouse0` | "press any key" |
 | two bare-screen fingers in play | `cameraRig.zoom` | pinch (distance × start / now) |
 

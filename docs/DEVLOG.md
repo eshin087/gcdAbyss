@@ -5,6 +5,41 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-13 — Session 23: remappable controls (keyboard, mouse and pad)
+
+**Owner:** "are we able to remap buttons as well?" → "do both pad and keyboard mapping". Same branch /
+PR (#21).
+
+**Done (ADR-067):**
+- `core/bindings.js` (new): the actions, their keyboard / pad defaults, rebind with swap, reserved
+  keys, labels, localStorage with repair. `Input` gets `act` / `actPressed` / `actReleased`;
+  `moveAxis()` reads the move actions.
+- The player, flow (pause, help, mute, rest, fight again, "press any key") and timing trainer read
+  actions. Touch and pad press `'@<action>'` codes; the pad's mapping is now the bindings.
+- `ui/remap.js` (new): the pause menu's CONTROLS panel, two tabs, mouse / keyboard / pad capture,
+  reset per tab; the pad walks it (LB / RB tabs, A pick, B back).
+- `ui/dom.js`: `[@action]` key chips and `controlsGrid(parent, dev)` from one list; they relabel on
+  every remap / device switch / pad layout. The HUD prompt, hint, title line, help and pause grids use them.
+- Tests: scenario REMAP (the rules, persistence, the panel by key, mouse and pad, the game obeying);
+  mocks get `installActions`; touch / pad assertions read actions. The shim's `fireWin` honours
+  `stopImmediatePropagation`.
+
+**Found on the way:** a 300 ms wall-clock guard against the click that ends a mouse bind broke the
+headless run (no wall time passes); replaced by eating exactly that click. The panel's key capture
+must use `stopImmediatePropagation`, or the Lab's own capture listener also saw F1.
+
+**Verification:** `npm test`, `npm run build` (see the PR). In the dev server with real clicks and
+keys: CONTROLS opened, DODGE → Q, LOCK-ON → right click (block swapped onto Tab / MMB), saved across
+a reload, Q rolls and Space does not; with a faked DualSense: Options → CONTROLS → the controller tab
+→ DODGE → △ (rest swapped onto ✕), PlayStation labels throughout.
+
+**Not checked / open:** no real controller, no phone (the CONTROLS item is hidden on touch unless a
+pad is in use). One key per action after a remap; no side mouse buttons.
+
+**Next:** the owner tries the remapping on the preview.
+
+---
+
 ## 2026-11-13 — Session 22: controller support
 
 **Owner:** "add controller support". Branch `input/gamepad` from `main`.
