@@ -8,6 +8,17 @@
 // from the real device (a real keyup never drops a held touch button, and vice versa).
 // Mouse events that the browser synthesises from a touch (compatibility mousedown / mouseup /
 // mousemove, fired ~0-300 ms after the touch) are ignored, so one tap never counts twice.
+//
+// A gamepad (src/ui/gamepad.js) is a second, separate virtual source with the same semantics:
+// setPad(code, down) / setPadAxis(x, y) / releasePad(). Touch, pad and the real device each keep
+// their own holds, so letting go on one never drops a hold on another. `kbmT` stamps the last real
+// keyboard / mouse event (performance.now()): the pad layer uses it to tell which device is in use.
+//
+// Actions (core/bindings.js): the game reads act(a) / actPressed(a) / actReleased(a), true when any
+// code bound to `a` (or its virtual code '@a', pressed by touch / pad) is down / pressed / released.
+// moveAxis() reads the up / down / left / right actions. Raw codes stay readable for fixed keys.
+
+import { Bindings, installActions } from './bindings.js';
 
 const PREVENT = new Set(['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1']);
 const MOUSE_CODE = { Mouse0: 0, Mouse1: 1, Mouse2: 2 };
@@ -15,8 +26,9 @@ const TOUCH_MOUSE_GUARD = 1000; // ms after a touch during which mouse events ar
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 export class Input {
-  constructor(canvas) {
+  constructor(canvas, bindings = new Bindings()) {
     this.canvas = canvas;
+    installActions(this, bindings); // this.bindings, act(), actPressed(), actReleased()
     this.keys = new Set();
     this.pressedKeys = new Set();
     this.releasedKeys = new Set();
@@ -31,6 +43,11 @@ export class Input {
     this.vKeys = new Set();
     this.vButtons = [false, false, false];
     this.vAxis = { x: 0, y: 0 };
+    // virtual (gamepad) source
+    this.pKeys = new Set();
+    this.pButtons = [false, false, false];
+    this.pAxis = { x: 0, y: 0 };
+    this.kbmT = -Infinity; // performance.now() of the last real keyboard / mouse event
     this.lastTouch = -Infinity; // performance.now() of the last touch pointer event
 
     // capture phase: stamp touches before any mouse compatibility event can arrive
@@ -43,6 +60,7 @@ export class Input {
 
     addEventListener('keydown', (e) => {
       if (PREVENT.has(e.code)) e.preventDefault();
+      this.kbmT = now();
       if (e.repeat) return;
       this.keys.add(e.code);
       this.pressedKeys.add(e.code);
@@ -56,10 +74,12 @@ export class Input {
       this.keys.clear();
       this.buttons = [false, false, false];
       this.releaseVirtual();
+      this.releasePad();
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('mousedown', (e) => {
       if (e.button > 2 || this._fromTouch()) return;
+      this.kbmT = now();
       if (e.target !== canvas && !e.target.closest?.('[data-passthrough]')) return;
       this.buttons[e.button] = true;
       this.pressedButtons[e.button] = true;
@@ -73,6 +93,8 @@ export class Input {
     });
     addEventListener('mousemove', (e) => {
       if (this._fromTouch()) return;
+      // a real move (not a 0 px event some browsers fire on focus / scroll) marks the mouse in use
+      if (e.movementX || e.movementY) this.kbmT = now();
       const r = canvas.getBoundingClientRect();
       this.mouse.x = e.clientX - r.left;
       this.mouse.y = e.clientY - r.top;
@@ -95,7 +117,7 @@ export class Input {
   }
 
   down(code) {
-    return this.enabled && (this.keys.has(code) || this.vKeys.has(code));
+    return this.enabled && (this.keys.has(code) || this.vKeys.has(code) || this.pKeys.has(code));
   }
   pressed(code) {
     return this.enabled && this.pressedKeys.has(code);
@@ -104,7 +126,7 @@ export class Input {
     return this.enabled && this.releasedKeys.has(code);
   }
   mouseDown(b) {
-    return this.enabled && (this.buttons[b] || this.vButtons[b]);
+    return this.enabled && (this.buttons[b] || this.vButtons[b] || this.pButtons[b]);
   }
   mousePressed(b) {
     return this.enabled && this.pressedButtons[b];
@@ -113,17 +135,18 @@ export class Input {
     return this.enabled && this.releasedButtons[b];
   }
   /**
-   * WASD / arrows as a vector in screen space: x right, y up (north). Keys give a unit vector; a
-   * virtual stick (when deflected) wins and keeps its analog length (0..1).
+   * The move actions (WASD / arrows by default) as a vector in screen space: x right, y up (north). Keys give a unit vector; a
+   * deflected stick wins and keeps its analog length (0..1): the gamepad's, then the touch stick.
    */
   moveAxis() {
-    const v = this.vAxis;
+    const pa = this.pAxis, v = this.vAxis;
+    if (this.enabled && (pa.x !== 0 || pa.y !== 0)) return { x: pa.x, y: pa.y };
     if (this.enabled && (v.x !== 0 || v.y !== 0)) return { x: v.x, y: v.y };
     let x = 0, y = 0;
-    if (this.down('KeyA') || this.down('ArrowLeft')) x -= 1;
-    if (this.down('KeyD') || this.down('ArrowRight')) x += 1;
-    if (this.down('KeyW') || this.down('ArrowUp')) y += 1;
-    if (this.down('KeyS') || this.down('ArrowDown')) y -= 1;
+    if (this.act('left')) x -= 1;
+    if (this.act('right')) x += 1;
+    if (this.act('up')) y += 1;
+    if (this.act('down')) y -= 1;
     const len = Math.hypot(x, y);
     return len > 0 ? { x: x / len, y: y / len } : { x: 0, y: 0 };
   }
@@ -136,10 +159,15 @@ export class Input {
    * a release sets `released` for one frame.
    */
   setVirtual(code, down) {
+    this._setSource(this.vKeys, this.vButtons, code, down);
+  }
+
+  /** One source's press / release with the real device's edges (only on a change of that source). */
+  _setSource(keys, buttons, code, down) {
     const b = MOUSE_CODE[code];
     if (b !== undefined) {
-      if (down === this.vButtons[b]) return;
-      this.vButtons[b] = !!down;
+      if (!!down === buttons[b]) return;
+      buttons[b] = !!down;
       if (down) {
         this.pressedButtons[b] = true;
         this.anyPressed = true;
@@ -147,28 +175,20 @@ export class Input {
       return;
     }
     if (typeof code !== 'string' || !code) return;
-    if (!!down === this.vKeys.has(code)) return;
+    if (!!down === keys.has(code)) return;
     if (down) {
-      this.vKeys.add(code);
+      keys.add(code);
       this.pressedKeys.add(code);
       this.anyPressed = true;
     } else {
-      this.vKeys.delete(code);
+      keys.delete(code);
       this.releasedKeys.add(code);
     }
   }
 
   /** Virtual stick: x right, y up (north), length clamped to 1. Non-finite input reads as centred. */
   setVirtualAxis(x, y) {
-    x = Number.isFinite(x) ? x : 0;
-    y = Number.isFinite(y) ? y : 0;
-    const len = Math.hypot(x, y);
-    if (len > 1) {
-      x /= len;
-      y /= len;
-    }
-    this.vAxis.x = x;
-    this.vAxis.y = y;
+    setAxis(this.vAxis, x, y);
   }
 
   /** Release every virtual key / button (with their `released` edges) and centre the stick. */
@@ -176,6 +196,31 @@ export class Input {
     for (const code of [...this.vKeys]) this.setVirtual(code, false);
     for (let b = 0; b < 3; b++) if (this.vButtons[b]) this.setVirtual(`Mouse${b}`, false);
     this.vAxis.x = this.vAxis.y = 0;
+  }
+
+  // ---------------------------------------------------------------- virtual source (gamepad)
+  /** The gamepad's press / release: same codes and edges as setVirtual, its own holds. */
+  setPad(code, down) {
+    this._setSource(this.pKeys, this.pButtons, code, down);
+  }
+
+  /** The gamepad's move stick: x right, y up (north), length clamped to 1; wins over touch and keys. */
+  setPadAxis(x, y) {
+    setAxis(this.pAxis, x, y);
+  }
+
+  /** A one-frame `pressed` edge with no hold (the pad's "any button" on press-any-key screens). */
+  pulse(code) {
+    if (typeof code !== 'string' || !code) return;
+    this.pressedKeys.add(code);
+    this.anyPressed = true;
+  }
+
+  /** Release every gamepad key / button (with their `released` edges) and centre its stick. */
+  releasePad() {
+    for (const code of [...this.pKeys]) this.setPad(code, false);
+    for (let b = 0; b < 3; b++) if (this.pButtons[b]) this.setPad(`Mouse${b}`, false);
+    this.pAxis.x = this.pAxis.y = 0;
   }
 
   endFrame() {
@@ -186,4 +231,16 @@ export class Input {
     this.wheel = 0;
     this.anyPressed = false;
   }
+}
+
+function setAxis(out, x, y) {
+  x = Number.isFinite(x) ? x : 0;
+  y = Number.isFinite(y) ? y : 0;
+  const len = Math.hypot(x, y);
+  if (len > 1) {
+    x /= len;
+    y /= len;
+  }
+  out.x = x;
+  out.y = y;
 }

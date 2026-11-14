@@ -1,18 +1,19 @@
 import { CONFIG } from '../core/config.js';
 import { el } from './dom.js';
 import { injectTouchStyle } from './touchStyle.js';
+import { aimWithoutCursor } from './aim.js';
 
 // Touch controls for phones / tablets (contract: docs/ARCHITECTURE.md → Touch controls).
 // A thin layer ON TOP of core/input.js: the left-thumb stick feeds input.setVirtualAxis(), the
-// right-thumb buttons feed input.setVirtual(code, down) with the real key / mouse codes, so the
-// player and flow keep reading the same game.input API and every edge (tap / hold / release) is
-// the real device's:
-//   stick → move (analog; pushed to the rim = Shift sprint)   ATTACK → Mouse0 (tap light, hold thrust)
-//   BLOCK → Mouse2 (hold block, tap parry)   DODGE → Space   FLASK → KeyF   LOCK → Tab   || → Escape
+// right-thumb buttons feed input.setVirtual(code, down) with the actions' virtual codes ('@attack',
+// core/bindings.js: a keyboard remap never moves a touch button), so the player and flow keep
+// reading the same actions and every edge (tap / hold / release) is the real device's:
+//   stick → move (analog; pushed to the rim = @sprint)   ATTACK → @attack (tap light, hold thrust)
+//   BLOCK → @block (hold block, tap parry)   DODGE → @dodge   FLASK → @flask   LOCK → @lockOn   || → @pause
 // Aim: in a fight with the dragon targetable (and within CONFIG.touch.autoAimRange) game.mouseGround
 // is put on its lock point (auto-aim); otherwise it sits CONFIG.touch.aimDistance m ahead of the hero
 // along the last stick direction. Taps on the bare screen dismiss "press any key" screens (title,
-// death) as a virtual click; the HUD prompt ("[E] Rest", "[R] Fight again") is tappable. Two fingers
+// death) as a virtual click; the HUD prompt ("[@interact] Rest", "... Fight again") is tappable. Two fingers
 // on the bare screen pinch-zoom through cameraRig.zoom. Portrait shows a rotate overlay and pauses.
 // Inert (no DOM, no state) until activated: `pointer: coarse` at boot, ?touch in the URL, or the
 // first touch. ?touch=0 keeps it off. Desktop mouse + keyboard play never sees it.
@@ -26,12 +27,12 @@ const CHARGE_CELLS = 6;
 const SPRINT_OFF = 0.08; // hysteresis below sprintAt before the sprint drops
 
 const BUTTONS = [
-  { id: 'attack', code: 'Mouse0', glyph: '†', label: 'ATTACK' },
-  { id: 'block', code: 'Mouse2', glyph: '[#]', label: 'BLOCK', sub: 'tap: parry' },
-  { id: 'dodge', code: 'Space', glyph: '»', label: 'DODGE' },
-  { id: 'flask', code: 'KeyF', glyph: '◆', label: 'FLASK' },
-  { id: 'lock', code: 'Tab', glyph: '◎', label: 'LOCK' },
-  { id: 'pause', code: 'Escape', glyph: '||', label: '' },
+  { id: 'attack', code: '@attack', glyph: '†', label: 'ATTACK' },
+  { id: 'block', code: '@block', glyph: '[#]', label: 'BLOCK', sub: 'tap: parry' },
+  { id: 'dodge', code: '@dodge', glyph: '»', label: 'DODGE' },
+  { id: 'flask', code: '@flask', glyph: '◆', label: 'FLASK' },
+  { id: 'lock', code: '@lockOn', glyph: '◎', label: 'LOCK' },
+  { id: 'pause', code: '@pause', glyph: '||', label: '' },
 ];
 
 // a phone in portrait, drawn in ASCII (the overlay turns it to landscape); '@' is the hero
@@ -178,28 +179,8 @@ export class TouchControls {
 
   // ---------------------------------------------------------------- aim
   _aimUpdate() {
-    const g = this.game, p = g.player, mg = g.mouseGround, pos = p?.position;
-    if (!pos || !mg) return;
-    const d = g.dragon;
-    this.autoAim = false;
-    if (p.alive !== false && typeof d?.isTargetable === 'function' && typeof d.lockPoint === 'function' && d.isTargetable()) {
-      d.lockPoint(this._v);
-      const dx = this._v.x - pos.x, dz = this._v.z - pos.z, r = CONFIG.touch.autoAimRange;
-      if (Number.isFinite(dx + dz) && dx * dx + dz * dz <= r * r) {
-        mg.set(this._v.x, 0, this._v.z);
-        this.autoAim = true;
-        return;
-      }
-    }
-    const A = this.aim;
-    if (!A.set) {
-      const y = fin(p.yaw, Math.PI);
-      A.x = Math.sin(y);
-      A.z = Math.cos(y);
-      A.set = true;
-    }
-    const D = CONFIG.touch.aimDistance;
-    mg.set(pos.x + A.x * D, 0, pos.z + A.z * D);
+    const T = CONFIG.touch;
+    this.autoAim = aimWithoutCursor(this.game, this.aim, T.autoAimRange, T.aimDistance, this._v);
   }
 
   // ---------------------------------------------------------------- layout / visibility
@@ -255,7 +236,7 @@ export class TouchControls {
       this.buttons = BUTTONS.map((def) => this._button(root, def));
       this.btn = Object.fromEntries(this.buttons.map((b) => [b.def.id, b]));
 
-      // the HUD prompt ("[E] Rest at bonfire", "[R] Fight again") is a tap target on touch
+      // the HUD prompt ("[@interact] Rest at bonfire") is a tap target on touch
       const prompt = this.game.hud?.promptEl;
       if (prompt?.addEventListener) {
         prompt.addEventListener('pointerdown', (e) => this._guard('prompt', () => this._promptDown(e), e));
@@ -366,7 +347,7 @@ export class TouchControls {
     const sprint = m >= T.sprintAt || (S.sprint && m >= T.sprintAt - SPRINT_OFF);
     if (sprint !== S.sprint) {
       S.sprint = sprint;
-      input?.setVirtual?.('ShiftLeft', sprint);
+      input?.setVirtual?.('@sprint', sprint);
     }
     // visuals
     const u = this.ui;
@@ -387,7 +368,7 @@ export class TouchControls {
     input?.setVirtualAxis?.(0, 0);
     if (S.sprint) {
       S.sprint = false;
-      input?.setVirtual?.('ShiftLeft', false);
+      input?.setVirtual?.('@sprint', false);
     }
     this._restStick();
   }
@@ -514,9 +495,10 @@ export class TouchControls {
   _promptDown(e) {
     if (!this.active || this.portrait) return;
     e.preventDefault?.();
-    const m = /\[([A-Z0-9])\]/.exec(String(this.game.hud?.promptText ?? ''));
+    // the prompt's action chip ("[@interact] Rest at bonfire") is the action the tap presses
+    const m = /\[@([A-Za-z]+)\]/.exec(String(this.game.hud?.promptText ?? ''));
     if (!m) return;
-    const code = /[0-9]/.test(m[1]) ? `Digit${m[1]}` : `Key${m[1]}`;
+    const code = `@${m[1]}`;
     this.taps.set(e.pointerId, code);
     this.game.input?.setVirtual?.(code, true);
   }

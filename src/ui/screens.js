@@ -16,21 +16,22 @@ const LOGO = [
 const LOGO_W = LOGO[0].length;
 const SHIMMER_HZ = 12;
 
+// the title's controls line; "[@action]" chips show the bound key (or the pad button while a pad is
+// in use) and follow every remap (ui/dom.js actionChip)
 const TITLE_KEYS = [
-  '[WASD] move',
-  '[Mouse] aim',
-  '[LMB] attack · hold: heavy',
-  '[RMB] block · tap: parry',
-  '[Space] dodge',
-  '[Shift] sprint',
-  '[F] flask',
-  '[Tab] lock-on',
-  '[E] rest',
-  '[Esc] pause',
-  '[H] help',
-  '[M] mute',
-  '[F1] lab',
+  '[@move] move',
+  '[@aim] aim',
+  '[@attack] attack · hold: heavy',
+  '[@block] block · tap: parry',
+  '[@dodge] dodge',
+  '[@sprint] sprint',
+  '[@flask] flask',
+  '[@lockOn] lock-on',
+  '[@interact] rest',
+  '[@pause] pause',
+  '[@help] help',
 ];
+const TITLE_KB_ONLY = ['[@mute] mute', '[F1] lab'];
 
 // the same list for the touch controls (src/ui/touch.js); shown instead on touch devices
 const TITLE_TOUCH = [
@@ -54,6 +55,7 @@ export class TitleScreen {
     this.logo = el('pre', 'ab-logo', LOGO.join('\n'), inner);
     el('div', 'ab-title-rule', '◆', inner);
     el('div', 'ab-title-sub', 'an ASCII action RPG', inner);
+    this.stageButtons = []; // the stage picker's buttons, for the gamepad's focus (ui/gamepad.js)
     if (stage?.levels?.length > 1) {
       const row = el('div', 'ab-stage', null, inner);
       for (const L of stage.levels) {
@@ -62,12 +64,16 @@ export class TitleScreen {
         });
         b.textContent = String(L.name).toUpperCase();
         b.dataset.level = L.id;
+        this.stageButtons.push(b);
       }
     }
     el('div', 'ab-press kb-only', 'PRESS ANY KEY', inner);
     el('div', 'ab-press tp-only', 'TAP TO BEGIN', inner);
-    const ctrl = el('div', 'ab-title-ctrl kb-only', null, inner);
+    el('div', 'ab-press pad-only', 'PRESS ANY BUTTON', inner);
+    // keyboard and pad share one list (the chips follow the device); hidden on touch
+    const ctrl = el('div', 'ab-title-ctrl ab-nontouch', null, inner);
     for (const item of TITLE_KEYS) fillKeyText(el('span', 'item', null, ctrl), item);
+    for (const item of TITLE_KB_ONLY) fillKeyText(el('span', 'item kb-only', null, ctrl), item);
     const tctrl = el('div', 'ab-title-ctrl tp-only', null, inner);
     for (const item of TITLE_TOUCH) fillKeyText(el('span', 'item', null, tctrl), item);
     tellLegend(inner).classList.add('title');
@@ -139,13 +145,17 @@ export class PauseMenu {
     const panel = el('div', 'ab-pause-panel ab-panel', null, this.root);
     el('div', 'ab-pause-title', 'PAUSED', panel);
     const resume = button(panel, 'primary', () => game.flow?.resume?.());
-    fillKeyText(resume, 'RESUME  [Esc]');
+    fillKeyText(resume, 'RESUME  [@pause]');
     this.btnQuality = button(panel, '', () => game.flow?.cycleQuality?.());
     fillKeyText(el('span', '', null, this.btnQuality), 'QUALITY [F2]');
     this.qualityVal = el('span', 'v', '', this.btnQuality);
     this.btnMute = button(panel, '', () => game.flow?.toggleMute?.());
-    fillKeyText(el('span', '', null, this.btnMute), 'SOUND [M]');
+    fillKeyText(el('span', '', null, this.btnMute), 'SOUND [@mute]', 'kb');
     this.muteVal = el('span', 'v', '', this.btnMute);
+    // remap keys, mouse buttons and pad buttons (ui/remap.js; the HUD builds the panel)
+    this.btnControls = button(panel, 'ab-nontouch', () => game.hud?.remapUi?.open?.()); // no keys on a phone (unless a pad is in use)
+    el('span', '', 'CONTROLS', this.btnControls);
+    el('span', 'v', 'REMAP ›', this.btnControls);
     // touch devices: fullscreen (hides the browser bars; Android also locks landscape), if supported
     const doc = globalThis.document;
     if (doc?.fullscreenEnabled && typeof doc.documentElement?.requestFullscreen === 'function') {
@@ -153,9 +163,12 @@ export class PauseMenu {
       el('span', '', 'FULLSCREEN', this.btnFull);
       this.fullVal = el('span', 'v', '', this.btnFull);
     }
+    // the buttons in order, for the gamepad's menu focus (ui/gamepad.js)
+    this.buttons = [resume, this.btnQuality, this.btnMute, this.btnControls, this.btnFull].filter(Boolean);
     el('div', 'ab-sep', null, panel);
-    controlsGrid(panel).classList.add('kb-only');
+    controlsGrid(panel, 'kb').classList.add('kb-only');
     touchGrid(panel).classList.add('tp-only');
+    controlsGrid(panel, 'pad').classList.add('pad-only');
     tellLegend(panel);
     this.on = false;
     this._q = null;
@@ -208,8 +221,9 @@ export class HelpPanel {
     this.root = el('div', 'ab-help ab-panel', null, parent);
     const head = el('div', 'ab-help-title', null, this.root);
     el('span', '', 'CONTROLS', head);
-    fillKeyText(el('span', '', null, head), '[H] close');
-    controlsGrid(this.root);
+    fillKeyText(el('span', '', null, head), '[@help] close');
+    controlsGrid(this.root, 'kb').classList.add('kb-only');
+    controlsGrid(this.root, 'pad').classList.add('pad-only');
     el('div', 'ab-help-sub', 'ATTACK TELLS', this.root);
     tellLegend(this.root);
     this.on = false;

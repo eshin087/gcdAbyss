@@ -41,6 +41,7 @@ export class El {
   getBoundingClientRect() { return { left: 0, top: 0, width: 1920, height: 1080 }; }
   closest() { return null; }
   blur() {}
+  click() { this.dispatch('click'); }
   focus() {}
   getContext() { return ctxStub; }
   find(pred) { if (pred(this)) return this; for (const c of this.children) if (c instanceof El) { const r = c.find(pred); if (r) return r; } return null; }
@@ -67,10 +68,11 @@ globalThis.document = {
 if (!globalThis.performance) globalThis.performance = { now: () => Date.now() };
 /** Dispatch a window event. Returns true when a capture listener stopped it (the game never sees it). */
 export const fireWin = (n, e = {}) => {
-  let stopped = false;
-  const ev = { preventDefault() {}, stopPropagation() { stopped = true; }, ...e };
+  let stopped = false, immediate = false;
+  const ev = { preventDefault() {}, stopPropagation() { stopped = true; }, stopImmediatePropagation() { stopped = immediate = true; }, ...e };
   // capture listeners (Lab key handler) run first and may stop the event, like the browser
-  for (const f of (winListeners['capture:' + n] || []).slice()) f(ev);
+  // (stopImmediatePropagation also skips the window's later capture listeners)
+  for (const f of (winListeners['capture:' + n] || []).slice()) { f(ev); if (immediate) break; }
   if (stopped) return true;
   for (const f of (winListeners[n] || []).slice()) f(ev);
   return false;

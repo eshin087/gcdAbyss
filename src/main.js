@@ -14,6 +14,7 @@ import { Player } from './entities/player/player.js';
 import { LEVELS, levelFromSearch, applyLevel, levelUrl } from './levels/index.js';
 import { Hud } from './ui/hud.js';
 import { TouchControls } from './ui/touch.js';
+import { GamepadControls } from './ui/gamepad.js';
 import { AudioEngine } from './audio/audio.js';
 import { GameFlow } from './game/flow.js';
 import { Lab } from './dev/lab.js';
@@ -91,6 +92,7 @@ async function boot() {
   game.dragon = level.createBoss(game);
   game.boss = game.dragon;
   game.hud = new Hud(game);
+  game.gamepad = new GamepadControls(game); // inert until a pad is connected and used
   game.touch = new TouchControls(game); // inert on desktop; may pick the touch quality preset
   game.flow = new GameFlow(game);
   game.lab = new Lab(game);
@@ -236,6 +238,7 @@ async function boot() {
 
     if (game.input.wheel) game.cameraRig.zoom(game.input.wheel);
     updateMouseGround();
+    safe('gamepad', () => game.gamepad.update(realDt)); // pad aim overrides mouseGround
     safe('touch', () => game.touch.update(realDt)); // touch aim overrides mouseGround
 
     safe('lab', () => game.lab.update(realDt));

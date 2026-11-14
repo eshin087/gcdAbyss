@@ -54,6 +54,28 @@ export const CONFIG = {
     aimDistance: 6, // m ahead of the hero along the stick when there is nothing to auto-aim at
   },
 
+  // Gamepad (src/ui/gamepad.js; the Gamepad API "standard" layout). Stick values are 0..1 deflection.
+  gamepad: {
+    deadZone: 0.2, // radial dead zone of the left (move) stick
+    runAt: 0.9, // deflection that reaches full run speed (analog below)
+    aimDeadZone: 0.35, // the right stick steers the aim past this deflection
+    triggerOn: 0.5, // an analog trigger (LT / RT) presses at this pull ...
+    triggerOff: 0.3, // ... and releases below this one
+    autoAimRange: 32, // m: with the right stick idle, attacks / facing auto-aim at the boss within this range
+    aimDistance: 6, // m ahead of the hero along the aim direction when there is nothing to auto-aim at
+    menuRepeat: 0.22, // s between repeated menu steps while the D-pad / stick is held
+    // rumble per event: [duration ms, strong 0..1, weak 0..1] (dual-rumble; silently off where unsupported)
+    rumble: {
+      hurt: [180, 0.85, 0.5],
+      guardBreak: [260, 1, 0.6],
+      block: [70, 0.25, 0.35],
+      parry: [90, 0.35, 0.8],
+      perfectParry: [160, 0.7, 1],
+      perfectDodge: [110, 0.15, 0.6],
+      hitHeavy: [90, 0.45, 0.25],
+    },
+  },
+
   render: {
     maxPixelRatio: 2,
     shadowSize: 2048, // default moon shadow map size (texels); the quality presets set their own

@@ -1322,3 +1322,53 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Consequences:** from behind his back, arms and legs show between the sheets; the cloak keeps its
   look (the same pieces, the left wing, the drape over the left arm). The Wanderer's set shares the
   shorter coat tails.
+
+## ADR-066 — Gamepad support as a third input source (2026-11-13)
+- **Context:** the owner asked for controller support. The game reads one input API
+  (`game.input`: key codes, mouse buttons, `moveAxis()`); the touch controls already proved that a
+  layer feeding virtual codes keeps every timing (parry tap, charge hold) identical to the real
+  device. A boss-rush fighter is played on a pad by many players.
+- **Decision:**
+  - `core/input.js` gets a separate gamepad source (`setPad`, `setPadAxis`, `releasePad`, `pulse`)
+    beside the touch source, each with its own holds, so a release on one never drops another. The
+    player and the flow are unchanged: they still read the same codes.
+  - `ui/gamepad.js` polls `navigator.getGamepads()` once a frame (the `standard` mapping) and maps a
+    souls-like layout: LS move, RS aim, RB / RT attack, LB / LT guard and parry, A dodge, B sprint
+    (hold; L3 latches), X flask, Y the HUD prompt's key, R3 lock-on, Menu pause, View help, D-pad
+    zoom. A is dodge (not a tap / hold B) so a perfect dodge has no release latency.
+  - Aim without a cursor: the right stick steers; idle, attacks auto-aim at the boss in range (the
+    touch rule, now one shared helper `ui/aim.js`).
+  - Device in use = whichever produced the last input; `html.abyss-pad` swaps the on-screen hints
+    (and PlayStation labels from Sony's vendor id). Menus: title any button / stage picker, pause
+    menu focus with the D-pad and A, B to resume. A button held across a menu ↔ play change counts
+    only after release, so closing a menu never also rolls or sprints.
+  - Rumble on the hero's hits, guards, parries and perfect dodges where the browser supports it.
+- **Consequences:** no gameplay code changed; keyboard / mouse and touch play are unchanged. The
+  headless PAD scenario drives a fake standard pad through the real `Input`. Browsers do not count
+  a pad button as a user gesture, so sound starts only after a key / click / tap (or not at all on a
+  pad-only session) — a known limit of the Web Audio autoplay rules. Non-standard mappings are read
+  with the standard indices (may be wrong on exotic pads); no rebinding yet (ADR-067 adds it).
+
+## ADR-067 — Remappable controls: the game reads actions, not keys (2026-11-13)
+- **Context:** the owner asked for button remapping on both the pad and the keyboard. The player and
+  the flow read raw codes (`Space`, `KeyF`, `Mouse2`), and the touch and pad layers pressed those
+  same codes, so a keyboard remap would have moved the touch buttons and the pad buttons with it.
+- **Decision:**
+  - `core/bindings.js`: a list of actions with keyboard / mouse and pad defaults (the controls as
+    they were, plus R as a second interact key for "fight again"). `Input` answers `act(a)`,
+    `actPressed(a)`, `actReleased(a)`; the player, flow and timing trainer read only actions.
+  - Every action also answers to a virtual code `'@<action>'`, which the touch and pad layers press.
+    The three devices stay independent: remapping a key never changes a touch or pad control.
+  - A rebind takes the key / button from any other action; an action left with nothing gets the
+    rebound action's old ones (a swap). No action is ever unbound, and no hidden double-binding.
+  - Fixed, never remappable: Esc and the pad's Menu (pause; a remap can never lock you out of the
+    pause menu), F1–F3 and ` (the Lab, quality, fps), the sticks (move, aim), and the buttons that
+    drive menus (A / B / D-pad / LB / RB).
+  - The pause menu's CONTROLS panel: two tabs, pick a row, press the new key / mouse button / pad
+    button; usable with mouse + keyboard or entirely from the pad. Saved per browser
+    (localStorage); a broken or clashing store falls back to the defaults per device.
+  - On-screen keys are `[@action]` chips that show the bound key (or pad button while a pad is in
+    use) and relabel on every change: prompts, hints, the title line, the control grids.
+- **Consequences:** remapped keys are shown everywhere a key is named. Test mocks get the same action
+  API (`installActions`). One binding per action after a remap (defaults can have two, e.g. W and ↑);
+  no "secondary key" column yet. Mouse buttons 3+ (side buttons) cannot be bound.

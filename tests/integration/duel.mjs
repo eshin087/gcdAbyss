@@ -27,6 +27,7 @@ const { AshDisciple } = await imp('src/entities/enemies/ashDisciple/disciple.js'
 const { MOVES, MOVE_NAMES, CLIP, realise } = await imp('src/entities/enemies/ashDisciple/moves.js');
 const { TUNING } = await imp('src/entities/enemies/ashDisciple/tuning.js');
 const { Hud } = await imp('src/ui/hud.js');
+const { Bindings, installActions } = await imp('src/core/bindings.js');
 const { TouchControls } = await imp('src/ui/touch.js');
 const { AudioEngine } = await imp('src/audio/audio.js');
 const { GameFlow } = await imp('src/game/flow.js');
@@ -84,6 +85,7 @@ function build() {
       this.anyPressed = false; this.wheel = 0;
     },
   };
+  installActions(input, new Bindings(null)); // act / actPressed / actReleased (core/bindings.js), default bindings
   // the courtyard's colliders: the ring of pillars, the gate, the lanterns (world/courtyard.js layout)
   const colliders = new Colliders();
   const P = COURTYARD.pillarAt;

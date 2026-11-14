@@ -5,6 +5,75 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-13 — Session 23: remappable controls (keyboard, mouse and pad)
+
+**Owner:** "are we able to remap buttons as well?" → "do both pad and keyboard mapping". Same branch /
+PR (#21).
+
+**Done (ADR-067):**
+- `core/bindings.js` (new): the actions, their keyboard / pad defaults, rebind with swap, reserved
+  keys, labels, localStorage with repair. `Input` gets `act` / `actPressed` / `actReleased`;
+  `moveAxis()` reads the move actions.
+- The player, flow (pause, help, mute, rest, fight again, "press any key") and timing trainer read
+  actions. Touch and pad press `'@<action>'` codes; the pad's mapping is now the bindings.
+- `ui/remap.js` (new): the pause menu's CONTROLS panel, two tabs, mouse / keyboard / pad capture,
+  reset per tab; the pad walks it (LB / RB tabs, A pick, B back).
+- `ui/dom.js`: `[@action]` key chips and `controlsGrid(parent, dev)` from one list; they relabel on
+  every remap / device switch / pad layout. The HUD prompt, hint, title line, help and pause grids use them.
+- Tests: scenario REMAP (the rules, persistence, the panel by key, mouse and pad, the game obeying);
+  mocks get `installActions`; touch / pad assertions read actions. The shim's `fireWin` honours
+  `stopImmediatePropagation`.
+
+**Found on the way:** a 300 ms wall-clock guard against the click that ends a mouse bind broke the
+headless run (no wall time passes); replaced by eating exactly that click. The panel's key capture
+must use `stopImmediatePropagation`, or the Lab's own capture listener also saw F1.
+
+**Verification:** `npm test`, `npm run build` (see the PR). In the dev server with real clicks and
+keys: CONTROLS opened, DODGE → Q, LOCK-ON → right click (block swapped onto Tab / MMB), saved across
+a reload, Q rolls and Space does not; with a faked DualSense: Options → CONTROLS → the controller tab
+→ DODGE → △ (rest swapped onto ✕), PlayStation labels throughout.
+
+**Not checked / open:** no real controller, no phone (the CONTROLS item is hidden on touch unless a
+pad is in use). One key per action after a remap; no side mouse buttons.
+
+**Next:** the owner tries the remapping on the preview.
+
+---
+
+## 2026-11-13 — Session 22: controller support
+
+**Owner:** "add controller support". Branch `input/gamepad` from `main`.
+
+**Done (ADR-066):**
+- `core/input.js`: a gamepad source beside the touch one (`setPad`, `setPadAxis`, `releasePad`,
+  `pulse`, `kbmT`); `setVirtual` and the pad share one `_setSource`; the pad stick wins in `moveAxis()`.
+- `ui/gamepad.js` (new): polls the standard mapping and feeds the real codes. LS move, RS aim, RB / RT
+  attack, LB / LT guard + parry (trigger hysteresis 0.5 / 0.3), A dodge, B / L3 sprint, X flask,
+  Y the prompt's key, R3 lock-on, Menu pause, View help, D-pad zoom. Menus: title any button / stage
+  picker; pause menu focus (D-pad, A, B resumes). Buttons held across a menu ↔ play change are
+  ignored until let go. Device in use by last input; a disconnect mid-fight pauses. Rumble.
+- `ui/aim.js` (new): the touch layer's no-cursor aim, shared with the pad.
+- UI: `pad-only` hints (title, pause and help grids, the corner hint, the arrival log line, the death
+  line), the prompt drawn as "[Y] Rest", PlayStation relabel through `data-pad`, `.pad-focus`.
+- Tests: scenario PAD (fake pad through `navigator.getGamepads` → the real Input); the shim's `El`
+  gains `click()`.
+
+**Found on the way:** an Xbox pad's id is "Xbox Wireless Controller", so a "wireless controller"
+PlayStation match labelled it △: the PlayStation test is now Sony's vendor id (054c) or the names.
+
+**Verification:** `npm test` (see the PR), `npm run build`. In the dev server with a faked standard
+pad: title → explore on A, "[Y] Rest at bonfire", the VIEW / MENU hint, the pause menu's focus on
+QUALITY and the pad grid, the PlayStation relabel; no console errors (the Vercel insights 404 is
+local only).
+
+**Not checked / open:** no real controller has been used (the pane has none): the dead zone, trigger
+thresholds and rumble strengths want the owner's hands. Sound does not start from a pad press alone
+(browser autoplay rules). No rebinding.
+
+**Next:** the owner tries it with a controller on the preview; tune `CONFIG.gamepad`.
+
+---
+
 ## 2026-11-12 — Session 21: the hero at Shen Hui's size, a trimmed cloak
 
 **Owner:** "i dont like the new look and animations. lets start over. lets first focus on making the

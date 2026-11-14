@@ -621,35 +621,35 @@ export class Player {
     I.x = fin(m?.x);
     I.z = -fin(m?.y); // W = north = −Z
     I.len = Math.hypot(I.x, I.z);
-    I.sprint = inp.down('ShiftLeft') || inp.down('ShiftRight');
-    if (inp.pressed('Space')) this._buffer('roll');
-    if (inp.pressed('KeyF')) this._buffer('heal');
-    if (inp.pressed('Tab') || inp.mousePressed(1)) this._toggleLock();
+    I.sprint = inp.act('sprint');
+    if (inp.actPressed('dodge')) this._buffer('roll');
+    if (inp.actPressed('flask')) this._buffer('heal');
+    if (inp.actPressed('lockOn')) this._toggleLock();
 
-    // LMB: a press starts a light attack at once; holding past CHARGE.hold turns it into a charge
-    if (inp.mousePressed(0)) {
+    // attack (LMB): a press starts a light attack at once; holding past CHARGE.hold turns it into a charge
+    if (inp.actPressed('attack')) {
       L.held = true;
       L.t = 0;
       this._buffer('light');
     } else if (L.held) {
       L.t += dt;
     }
-    if (L.held && (!inp.mouseDown(0) || L.t >= CHARGE.maxHold)) L.held = false; // released (or auto-release)
+    if (L.held && (!inp.act('attack') || L.t >= CHARGE.maxHold)) L.held = false; // released (or auto-release)
 
-    // RMB: hold = block; a press counts as a parry attempt only after a full re-arm (anti-mash). A
+    // block (RMB): hold = block; a press counts as a parry attempt only after a full re-arm (anti-mash). A
     // successful deflect re-arms at once (Rb.chain): the next press counts as soon as RMB was released,
     // so a string can be deflected hit after hit even with the guard held between blows; whiffed
     // presses keep the re-arm, so mashing still fails.
-    if (inp.mousePressed(2)) {
+    if (inp.actPressed('block')) {
       if (Rb.chain || this.time - Rb.upT >= DEFENSE.parryRearm) Rb.parryT = this.time;
       Rb.chain = false;
       Rb.held = true;
       Rb.edge = true;
     }
-    if (Rb.held && !inp.mouseDown(2)) {
+    if (Rb.held && !inp.act('block')) {
       Rb.held = false;
       Rb.upT = this.time;
-    } else if (!Rb.held && inp.mouseDown(2)) {
+    } else if (!Rb.held && inp.act('block')) {
       Rb.held = true; // held through a pause / menu / respawn: guard again, but no parry attempt
     }
   }
@@ -1212,7 +1212,7 @@ export class Player {
     const n = Math.round(clamp(B.meter, 0, 1) * 10);
     if (n === B.shown) return;
     B.shown = n;
-    const key = this.game.touch?.active ? 'TAP ATTACK' : 'MASH [LMB]';
+    const key = this.game.touch?.active ? 'TAP ATTACK' : 'MASH [@attack]';
     this.game.hud?.prompt?.(`${key}  [${'#'.repeat(n)}${'-'.repeat(10 - n)}]`);
   }
 
