@@ -889,9 +889,10 @@ function spinTurn(p, dir, t, W, Ac) {
   p[P.bodyY] -= 0.07 * w;
   p[P.spZ] -= dir * 0.13 * w;
   p[P.spX] += 0.06 * w;
-  p[P.hdY] -= dir * SPIN_SPOT * Math.sin(TAU * e);
+  p[P.hdY] = clamp(p[P.hdY] - dir * SPIN_SPOT * Math.sin(TAU * e), -NECK_TURN, NECK_TURN);
 }
-const SPIN_SPOT = 0.85; // rad: how far the head turns back toward the target (and then ahead of the body) in a whirl
+const NECK_TURN = 1.0; // rad: the most the head turns on the chest in a whirl (it reached 76°)
+const SPIN_SPOT = 0.6; // rad: how far the head turns back toward the target (and then ahead of the body) in a whirl
 
 const FOOT_CH = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rFy, P.lFy];
 const FOOT_KEEP = new Float32Array(FOOT_CH.length);
@@ -1063,13 +1064,21 @@ function chargePose(p, A) {
   // (the hands and the blade are there at once: the clip's cross-fade carries them up from the
   // light swing's coil, where the blade already stands behind the right shoulder; easing them in
   // from the ready stance as well swung the steel up through the sword arm)
-  v3(p, P.rH, -0.04, 0.06 + 0.02 * k, 0.11);
-  v3(p, P.rP, -0.85, -0.5, -0.15);
+  // The grip is held OUT from him, a forearm's length before the right shoulder, the sword elbow
+  // lifted out to the side: both forearms come in across the upright grip, so the wrists sit square
+  // to the steel. (Session 26, owner: "while charging the right hand makes an unnatural angle": the
+  // hands were 0.11 m before the shoulder. The sword elbow was folded to 18°, the forearm stood up
+  // under the hilt in one line with the blade, and the off hand was inside his chest.)
+  v3(p, P.rH, 0.0, -0.05 + 0.02 * k, 0.26);
+  // (the elbow lifts out once the blade is up: lifted at once, the upper arm stood in the way of the
+  // steel coming up from a light swing's coil)
+  const lift = smoothstep(0.12, 0.36, A.t);
+  v3(p, P.rP, lerp(-0.85, -0.92, lift), lerp(-0.5, -0.06, lift), lerp(-0.15, -0.3, lift));
   const az = CHARGE_SW[0] * SW_DEG, el = lerp(CHARGE_SW[1], CHARGE_SW[2], k) * SW_DEG;
   v3(p, P.swD, Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
   v3(p, P.swF, 0.8, 0.3, -0.5);
   p[P.twoHand] = smoothstep(0.1, 0.7, s);
-  v3(p, P.lP, 0.55, -0.8, 0.15);
+  v3(p, P.lP, 0.8, -0.45, 0.35);
   if (k >= 0.999) {
     const q = Math.sin(A.time * 47) * 0.012;
     p[P.bodyX] += q;
@@ -1956,6 +1965,15 @@ const STREAM_A = 2.6, STREAM_B = 1.3;
 // soft reach: where the arm's reach starts to give / the most it opens, as fractions of its length
 // (0.955: the elbow keeps ~35° at a full stretch)
 const ARM_SOFT = [0.78, 0.955];
+// joint limits (ADR-078): the least angle an elbow / a knee closes to, as the nearest a hand / a foot
+// may come to its shoulder / hip (the law of cosines on the two bones)
+const ARM_FOLD = 40 * (Math.PI / 180), LEG_FOLD = 32 * (Math.PI / 180);
+const ARM_NEAR = Math.sqrt(DIM.upperArm ** 2 + DIM.foreArm ** 2 - 2 * DIM.upperArm * DIM.foreArm * Math.cos(ARM_FOLD));
+const LEG_NEAR = Math.sqrt(DIM.thigh ** 2 + DIM.shin ** 2 - 2 * DIM.thigh * DIM.shin * Math.cos(LEG_FOLD));
+const TORSO_R = [0.15, 0.115]; // m: the ribs' half-width and half-depth round the chest's axis (a hand stays outside)
+const WRIST_BACK = 128 * (Math.PI / 180); // the most the blade folds back from the forearm's line (0 = in line with it, a point)
+const WRIST_COS = Math.cos(WRIST_BACK), WRIST_SIN = Math.sin(WRIST_BACK);
+const WRIST_CLEAR_COS = Math.cos(70 * (Math.PI / 180)); // … and, there, the least angle round the forearm between the steel and the upper arm
 const ELBOW_RATE = 14; // rad/s: the most an elbow swings round its shoulder → hand line (~13° a frame)
 const _eA = new THREE.Vector3(), _eW = new THREE.Vector3(), _eP = new THREE.Vector3(), _eC = new THREE.Vector3();
 const TWO_HAND_GRIP = DIM.offGrip; // m down the grip from the sword hand to the off hand (two-handed)
@@ -2693,6 +2711,7 @@ export class HeroAnimator {
       this._tipFloor(r);
       this._bladeClear(r, false);
     }
+    this._wristLimit(r);
     this._tipFloor(r);
     _by.set(p[P.swF], p[P.swF + 1], p[P.swF + 2]);
     _by.addScaledVector(_bz, -_by.dot(_bz));
@@ -2714,6 +2733,38 @@ export class HeroAnimator {
     const f = clamp(p[P.flask], 0, 1);
     r.flask.visible = f > 0.03;
     r.flask.scale.setScalar(Math.max(0.01, f));
+  }
+
+  /** The sword wrist's limit (ADR-078): the blade (_bz, body space) never folds back along the
+   *  forearm further than WRIST_BACK from the forearm's own line. A pose or a cross-fade that asks
+   *  for more (the charge coming up from a low coil: the blade pointed straight back over the elbow
+   *  for three frames, 170°) gets the blade at the limit, on the same side. */
+  _wristLimit(r) {
+    const A = r.arms.R;
+    // the forearm's line, elbow → wrist, in body space (the arm hangs along -Y; chest → body)
+    _v.set(0, -1, 0).applyQuaternion(_q1.copy(A.upper.quaternion).multiply(A.fore.quaternion)).applyQuaternion(_q2.copy(_qBC).invert());
+    const c = clamp(_v.dot(_bz), -1, 1);
+    if (c >= WRIST_COS) return;
+    // the part of the blade's direction square to the forearm
+    _w.copy(_bz).addScaledVector(_v, -c);
+    if (_w.lengthSq() < 1e-6) _w.set(0, 1, 0).addScaledVector(_v, -_v.y);
+    if (_w.lengthSq() < 1e-6) return;
+    _w.normalize();
+    // … and at the limit it stays clear of his own upper arm: folded back that far the steel lies
+    // near the elbow, so round the forearm's line it keeps WRIST_CLEAR from the side the upper arm
+    // is on (it turns away on the side it is already on)
+    _G.set(0, 1, 0).applyQuaternion(A.upper.quaternion).applyQuaternion(_q2); // elbow → shoulder, body space
+    _G.addScaledVector(_v, -_G.dot(_v));
+    if (_G.lengthSq() > 1e-6) {
+      _G.normalize();
+      const cu = clamp(_w.dot(_G), -1, 1);
+      if (cu > WRIST_CLEAR_COS) {
+        _TL.crossVectors(_v, _G); // square to both: the way round the forearm
+        const side = _w.dot(_TL) < 0 ? -1 : 1;
+        _w.copy(_G).multiplyScalar(WRIST_CLEAR_COS).addScaledVector(_TL, side * Math.sqrt(1 - WRIST_CLEAR_COS * WRIST_CLEAR_COS)).normalize();
+      }
+    }
+    _bz.copy(_v).multiplyScalar(WRIST_COS).addScaledVector(_w, WRIST_SIN).normalize();
   }
 
   /** Keep the blade tip out of the ground: raise _bz's world pitch just enough. */
@@ -2831,6 +2882,26 @@ export class HeroAnimator {
         _T.copy(_S).addScaledVector(_v, lerp(d2, d, lock) / d);
       }
     }
+    // … and it never folds flatter than ARM_FOLD at the elbow: a hand asked for nearer its shoulder
+    // than that is held out along the same line (the off hand on the grip keeps the grip)
+    {
+      _v.subVectors(_T, _S);
+      const d = _v.length();
+      if (d < ARM_NEAR && lock < 1) {
+        if (d > 1e-4) _T.copy(_S).addScaledVector(_v, lerp(ARM_NEAR, d, lock) / d);
+        else _T.set(_S.x, _S.y, _S.z + ARM_NEAR);
+      }
+    }
+    // … and a hand never passes through the chest: inside the ribs' outline (an ellipse round the
+    // chest's axis, from the shoulders down) it is moved out to the surface, the way it was heading
+    if (lock < 1 && _T.y < _S.y + 0.02 && _T.y > _S.y - 0.5) {
+      const e = (_T.x / TORSO_R[0]) ** 2 + (_T.z / TORSO_R[1]) ** 2;
+      if (e < 1) {
+        const k = e > 1e-4 ? lerp(1 / Math.sqrt(e), 1, lock) : 1;
+        _T.x *= k;
+        _T.z = e > 1e-4 ? _T.z * k : TORSO_R[1];
+      }
+    }
     // hands never reach into the ground
     this.rig.chest.localToWorld(_w.copy(_T));
     if (_w.y < HAND_FLOOR) {
@@ -2889,6 +2960,10 @@ export class HeroAnimator {
     _T.set(p[fi], Math.max(FOOT_FLOOR, p[fi + 1]), p[fi + 2]); // model y == height above ground
     r.root.localToWorld(_T);
     r.pelvis.worldToLocal(_T);
+    // a knee never closes past LEG_FOLD (the roll's tuck asked for a heel against the hip, 10°)
+    _v.subVectors(_T, _S);
+    const dl = _v.length();
+    if (dl < LEG_NEAR && dl > 1e-4) _T.copy(_S).addScaledVector(_v, LEG_NEAR / dl);
     _pole.set(p[ki], p[ki + 1], p[ki + 2]).applyQuaternion(_qBP);
     const beta = solveTwoBone(_S, _T, _pole, DIM.thigh, DIM.shin, -1, leg.thigh.quaternion, _end);
     leg.shin.rotation.set(beta, 0, 0);

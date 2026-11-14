@@ -2894,6 +2894,76 @@ async function scenarioHeroLife() {
     go(1.0);
   }
 
+  // (1g) anatomy (ADR-078; Session 26, owner: "while charging the right hand makes an unnatural
+  // angle ... make sure the anatomy and motion is all natural"). Joint angles measured in the hero's
+  // own frame (the drawn one is sheared toward the camera), through a held charge and its cleave, a
+  // mashed chain, a roll and the guard: no elbow closes past 38°, no knee past 30°, and the blade
+  // never folds back on the sword forearm past 130°. In the held charge the sword wrist is square
+  // to the steel and the off hand is outside the chest.
+  {
+    const invR = new THREE.Matrix4(), invC = new THREE.Matrix4();
+    const V = () => new THREE.Vector3();
+    const sh = V(), el = V(), wr = V(), a = V(), b = V(), bl = V(), o = V();
+    const ang = (x, y) => Math.acos(Math.max(-1, Math.min(1, x.dot(y) / ((x.length() * y.length()) || 1)))) * 57.2958;
+    const worst = { elbow: 180, knee: 180, wrist: 0 }, at = { elbow: '', knee: '', wrist: '' };
+    const now = {};
+    const measure = () => {
+      invR.copy(p.object3d.matrixWorld).invert();
+      invC.copy(r.chest.matrixWorld).invert();
+      o.set(0, 0, 0).applyMatrix4(r.sword.matrixWorld).applyMatrix4(invR);
+      bl.set(0, 0, 1).applyMatrix4(r.sword.matrixWorld).applyMatrix4(invR).sub(o);
+      const tag = `${p.state}${p.atk?.def ? ' ' + p.atk.def.name : ''}`;
+      [r.arms.R, r.arms.L].forEach((arm, k) => {
+        sh.setFromMatrixPosition(arm.upper.matrixWorld).applyMatrix4(invR);
+        el.setFromMatrixPosition(arm.fore.matrixWorld).applyMatrix4(invR);
+        wr.set(0, -HD.foreArm, 0).applyMatrix4(arm.fore.matrixWorld);
+        now[k ? 'handL' : 'handR'] = (() => { a.copy(wr).applyMatrix4(invC); return Math.hypot(a.x, a.z) / p.drawScale; })();
+        wr.applyMatrix4(invR);
+        a.subVectors(el, sh);
+        b.subVectors(wr, el);
+        const e = 180 - ang(a, b), w = ang(b, bl);
+        now[k ? 'elbowL' : 'elbowR'] = e;
+        now[k ? 'wristL' : 'wristR'] = w;
+        if (e < worst.elbow) { worst.elbow = e; at.elbow = tag; }
+        if (k === 0 && w > worst.wrist) { worst.wrist = w; at.wrist = tag; }
+      });
+      for (const leg of [r.legs.R, r.legs.L]) {
+        sh.setFromMatrixPosition(leg.thigh.matrixWorld).applyMatrix4(invR);
+        el.setFromMatrixPosition(leg.shin.matrixWorld).applyMatrix4(invR);
+        wr.setFromMatrixPosition(leg.foot.matrixWorld).applyMatrix4(invR);
+        const e = 180 - ang(a.subVectors(el, sh), b.subVectors(wr, el));
+        if (e < worst.knee) { worst.knee = e; at.knee = tag; }
+      }
+    };
+    go(1.0);
+    input.press(0);
+    go(1.3, measure);
+    const held = { ...now };
+    input.up(0);
+    go(1.0, measure);
+    for (let look = 0; look < 3; look++) {
+      A.forceVariant = look;
+      for (let k = 0; k < 5; k++) { input.click(0); go(k === 4 ? 0.9 : CHAIN_EVERY, measure); }
+      go(0.8, measure);
+    }
+    A.forceVariant = null;
+    input.axis = { x: 0, y: 1 };
+    go(0.3, measure);
+    input.tap('Space');
+    go(0.8, measure);
+    input.axis = { x: 0, y: 0 };
+    input.press(2);
+    go(0.6, measure);
+    input.up(2);
+    go(0.6, measure);
+    out(`   anatomy: tightest elbow ${worst.elbow.toFixed(0)}° (${at.elbow}), tightest knee ${worst.knee.toFixed(0)}° (${at.knee}), the blade back on the forearm at most ${worst.wrist.toFixed(0)}° (${at.wrist}); held charge: sword wrist ${held.wristR.toFixed(0)}°, elbows ${held.elbowR.toFixed(0)}° / ${held.elbowL.toFixed(0)}°, off wrist ${held.wristL.toFixed(0)}°, off hand ${(held.handL * 100).toFixed(0)} cm from the chest's axis`);
+    assert(worst.elbow >= 38 && worst.knee >= 30, `no joint folds flat: elbows ≥ 38° (${worst.elbow.toFixed(0)}°, ${at.elbow}), knees ≥ 30° (${worst.knee.toFixed(0)}°, ${at.knee})`);
+    assert(worst.wrist <= 130, `the blade never folds back along the sword forearm (at most ${worst.wrist.toFixed(0)}° from its line, ${at.wrist}; ≤ 130°)`);
+    assert(held.wristR >= 70 && held.wristR <= 125 && held.elbowR >= 45 && held.elbowL >= 42 && held.wristL >= 35 && held.handL >= 0.105,
+      `the held charge is a guard a body can hold: the sword wrist square to the steel (${held.wristR.toFixed(0)}°), open elbows (${held.elbowR.toFixed(0)}° / ${held.elbowL.toFixed(0)}°), the off hand outside the chest (${(held.handL * 100).toFixed(0)} cm from its axis)`);
+    go(1.0);
+  }
+
   // (2) the guard, the cross ward (Session 25): both hands, the blade slanting up across the body
   // (25°–50° up: its length shows across his back from the camera behind him), sunk and side-on
   {
