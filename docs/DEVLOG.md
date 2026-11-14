@@ -73,7 +73,10 @@ the ground. make the sword trail effect look way cooler and more subtle" (ADR-07
 - Verified: `npm test` ALL PASSED (947 checks, DUEL and LORD too), build ok. REACH passes at every distance with the rising thrusts. The Lab's arc buttons
   switch the look and light up.
 
-**Next:** the owner's pick of the arc's look, and the pace.
+- **The owner's pick: "Crescent".** The other two looks, the Lab's arc buttons and
+  `debug.arcStyle` are deleted; `ARC_LOOK` holds the crescent's numbers.
+
+**Next:** the owner's word on the pace.
 
 ## 2026-11-13 — Session 25: wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape, a shorter sword, a new sword arc
 

@@ -156,9 +156,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] The slam as a swings.js clip: a gather, a leap, one two-handed diagonal into the ground, a held landing (ADR-076)
 - [x] The way home starts while the follow-through is still moving: no stop, no snap (ADR-076)
 - [x] The whirl drops and leans into its turn, the head spots (ADR-076)
-- [x] After the first look: both thrusts rise (the level poke read as planted in the ground); the sword arc a fine line off the steel, in three looks (ADR-077)
+- [x] After the first look: both thrusts rise (the level poke read as planted in the ground); the sword arc a fine line off the steel, a thin crescent picked by the owner from three looks (ADR-077)
 - [ ] Follow-ups:
-  - [ ] The owner's pick of the arc's look (Line / Crescent / Ghost in the Lab); then delete the other two
   - [ ] The owner's look at the preview: the pace (a number from the Lab's slider if it is still off)
   - [ ] Ideas not built (the owner's pick): an afterimage on the sprint slash and the cleave's dash; a strafing guard-up stance while locked on; a second finisher (a spinning smash); a flick of the blade as a chain ends
   - [ ] The roll out of a swing and the guard's raise move the point 0.4–0.8 m in a frame (left: both must be instant)

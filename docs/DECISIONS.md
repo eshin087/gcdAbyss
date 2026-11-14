@@ -1682,17 +1682,19 @@ through the ground. make the sword trail effect look way cooler and more subtle"
 - **The edge is a fine unbroken line:** overlapping `|` strokes 0.11 m in size (a sliver wide),
   one per 0.11 m of travel, white-hot as drawn and cooling to indigo as each thins away, so the tail
   tapers to a hair. No dots, no dashes.
-- **Three looks, one default** (`ARC_STYLES`; `player.debug.arcStyle`, the Lab's "arc" buttons):
-  `line` (the edge alone), `crescent` (the default: four faint rows close inside the edge, the
-  faintest at 6 %), `ghost` (afterimages of the steel fanned behind it). A trail is a taste call
-  and it moves: the owner can try all three on the preview and say which stays; the other two then
-  go.
+- **The look is a thin crescent** (`ARC_LOOK`): the edge with four faint rows close inside it, the
+  faintest at 6 %. It was chosen from three: a trail is a taste call and it moves, so three looks
+  were built behind a Lab button (`line`: the edge alone; `crescent`; `ghost`: afterimages of the
+  steel fanned behind it), rendered as a sheet and put on the preview. The owner answered
+  "Crescent"; the other two, the button and `debug.arcStyle` were deleted.
 
 **Rejected.** Keeping the thrust level and selling it with a long streak along the ground (it would
 still point at the grass). Shrinking the old veil's opacity only (the band's width and the dashes
-were the problem). One look chosen by me (the last two rounds of this effect both came back).
+were the problem). One look chosen by me with nothing to compare it to (the last two rounds of
+this effect both came back).
 
 **Consequences.** The crescent no longer shows the full gameplay reach (hits land up to 0.7 m past
-the drawn arc, in the player's favour). Tests (HEROLIFE 1e): each look draws a turning blade in
-strokes of at most 0.14 m no further than 1.3 m from the hilt, with no letters, and nothing for a
-carried blade; the thrusts' points are at least 30° above level at full reach.
+the drawn arc, in the player's favour). Tests (HEROLIFE 1e): a turning blade is drawn in strokes
+of at most 0.14 m no further than 1.3 m from the hilt, a bright edge over a faint veil, with no
+letters, and nothing for a carried blade; the thrusts' points are at least 30° above level at full
+reach.

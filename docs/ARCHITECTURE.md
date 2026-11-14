@@ -370,7 +370,6 @@ update(dt)
 debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill(),   // used by the Lab
          attackSpeed: number,          // × the attack clock (1 in play): every swing's windup, cut and recovery run this
                                        //   much faster, its step covering the same ground (the Lab's "atk" slider)
-         arcStyle: 'line' | 'crescent' | 'ghost',   // the sword arc's look (fx.js ARC_STYLES; the Lab's "arc" buttons)
          plunge(execution = false) }   // Lab / captures: start the plunge on the dragon now (any range, in the air too)
 ```
 Module-private state the animator reads (anim.js): `plungeAnim { phase, u, t, exec, h }` (the plunge
@@ -646,14 +645,13 @@ glow point at the gem; `bladeHalo(dt, k, far)` grows its dots with distance and 
 sub-steps by the edge's travel (one per 0.11 m, up to 14) and slerps the blade round the hilt
 between frames, so a sweep reads as one curved arc. Since ADR-077 the arc hugs the STEEL: its EDGE
 is one fine line of overlapping `|` strokes laid along the path of a point just past the steel's
-point (`arcAt(kind)`: 0.5–0.64 of the hit segment, × 1.22 for the slam and the cleave; the steel
+point (`arcAt(kind)`: 0.64 of the hit segment, × 1.22 for the slam and the cleave; the steel
 ends at 0.44, the reach at 1), white-hot when drawn and cooling to indigo as it thins to nothing.
-Its look is `ARC_STYLES[fx.arcStyle]` (exported with `ARC_DEFAULT`): `line` (the edge alone),
-`crescent` (the default: plus four faint rows close inside it) or `ghost` (plus afterimages of the
-steel). Its strength follows how far the blade TURNED this frame, so a blade only carried along (a
-dash) leaves none (`gate: false` for the plunge's dive). `arcGlint(x, y, z, dx, dy, dz, heavy,
-crit)`: a small star and sparks on the arc's edge, once a swing as the cut comes through
-(`player.js` `_combat`, which also copies `debug.arcStyle` to `fx.arcStyle`). New: `skid(dt, slot, x, z, dx, dz, sp,
+A VEIL of four faint rows runs close inside it (a thin crescent; the numbers are the exported
+`ARC_LOOK`). Its strength follows how far the blade TURNED this frame, so a blade only carried
+along (a dash) leaves none (`gate: false` for the plunge's dive). `arcGlint(x, y, z, dx, dy, dz,
+heavy, crit)`: a small star and sparks on the arc's edge, once a swing as the cut comes through
+(`player.js` `_combat`). New: `skid(dt, slot, x, z, dx, dz, sp,
 k)` (dust and torn grass off a sliding contact; `slot` 0 / 1 keeps a rate accumulator each) and
 `scrape(dt, x, y, z, dx, dz, sp)` (cold sparks off the dragging point). 2026-11-09: `parry(x, y, z,
 blue, chain = 1, dx = 0, dz = 0)` (the clash grows with the deflect chain, crossed streaks from the
