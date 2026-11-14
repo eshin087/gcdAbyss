@@ -577,7 +577,11 @@ alone. Feet: `lungeFeet`: the foot that is behind as the swing starts steps thro
 (so the lead foot alternates down a chain) while the other holds its spot, its heel peeling; or
 `dashFeet` with `feet: 'dash'` (`dashW: true` starts the dash at the windup's end). In `apply()`,
 `_elbow` limits how fast either elbow swings round its shoulder → hand line (`ELBOW_RATE`, 14 rad/s:
-the hand still reaches its target), for every clip. A light def's `chain` (0..1) is the fraction of
+the hand still reaches its target), for every clip. **Joint limits** (ADR-078), also in `apply()`
+and so for every pose and every cross-fade: `_arm` / `_leg` hold a hand / a foot at least
+`ARM_NEAR` / `LEG_NEAR` from its shoulder / hip (an elbow never closes past 40°, a knee past 32°)
+and move a hand out of the ribs' outline (`TORSO_R`); `_wristLimit` keeps the blade within
+`WRIST_BACK` (128°) of the sword forearm's line. The off hand on the grip keeps the grip. A light def's `chain` (0..1) is the fraction of
 its recovery after which the next light may start (`player.js` `_tickAttack`). Options on the
 anim block: `spin` (±1, a full turn through the active frames: `spinTurn`), `turn` (rad, a partial
 pivot from mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`),

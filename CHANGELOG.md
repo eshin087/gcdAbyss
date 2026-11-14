@@ -19,6 +19,11 @@ Eighteen pieces of work since 0.4.0:
   planted the sword in the ground at his feet. The **sword trail** is finer (ADR-077): one thin
   unbroken line just past the blade's point, white-hot and cooling to indigo as it tapers away,
   with a faint veil inside it, instead of a wide band a metre past the steel.
+  **Anatomy** (ADR-078): the charge is now a guard he can actually hold, the grip out in front of
+  the right shoulder with the sword elbow lifted and the wrist square to the blade (the hands were
+  jammed against the shoulder, the forearm in one line with the sword). The body now has joint
+  limits everywhere: elbows and knees never fold flat, the sword never bends back along the
+  forearm, a hand never passes through the chest.
 - **Wuxia-flow swings, a dashing cleave, a deeper guard, a narrower cloak, a new sword arc**
   (2026-11-13, ADR-071 – ADR-074): the hero's attack chain is new. Every swing is now a one-handed cut driven by the whole
   body: the hips turn through it, the sword arm opens to full reach as the blade crosses his front,

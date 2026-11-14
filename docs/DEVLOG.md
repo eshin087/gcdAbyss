@@ -76,6 +76,21 @@ the ground. make the sword trail effect look way cooler and more subtle" (ADR-07
 - **The owner's pick: "Crescent".** The other two looks, the Lab's arc buttons and
   `debug.arcStyle` are deleted; `ARC_LOOK` holds the crescent's numbers.
 
+**Round 3, the owner with a screenshot of the charge:** "while charging the right hand makes an
+unnatural angle. review all the characters animation and make sure the anatomy and motion is all
+natural and legit" (ADR-078).
+- A second scratch audit, joint ANGLES this time, through every state, in the hero's own frame (the
+  first pass measured the drawn hero, sheared toward the camera: its angles were off by up to 15°).
+- The charge: sword elbow 18°, the forearm in line with the blade, the off hand inside the chest.
+  Now a guard held out from the body: wrist 103°, elbows 58° / 49°.
+- Limits in the solver for every pose and blend: elbows ≥ 40°, knees ≥ 32° (the roll's tuck asked
+  for 10°), the blade ≤ 128° back on the sword forearm (170° for three frames entering the charge),
+  hands outside the ribs. The slam's and the cleave's cocked grips come forward of the shoulder
+  line; the whirl's head turn is capped (76° → 54°).
+- Verified: `npm test` ALL PASSED (950 checks, DUEL and LORD too), build ok; REACH at every distance; the charge filmed from the front, the side and bare.
+- Not covered: the off hand's wrist in two-handed cuts, the free arm's elbow behind the back in two
+  backhands' recoveries, hit reactions and the death fall.
+
 **Next:** the owner's word on the pace.
 
 ## 2026-11-13 — Session 25: wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape, a shorter sword, a new sword arc

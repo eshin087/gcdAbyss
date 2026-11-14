@@ -1698,3 +1698,53 @@ the drawn arc, in the player's favour). Tests (HEROLIFE 1e): a turning blade is 
 of at most 0.14 m no further than 1.3 m from the hilt, a bright edge over a faint veil, with no
 letters, and nothing for a carried blade; the thrusts' points are at least 30° above level at full
 reach.
+
+## ADR-078 — Joint limits in the solver; the charge is a guard held out from the body (2026-11-14)
+
+**Context.** The owner, with a screenshot of the held charge: "while charging the right hand makes
+an unnatural angle. review all the characters animation and make sure the anatomy and motion is all
+natural and legit". Poses are authored as hand and foot targets and a blade direction; nothing
+stopped a pose, or a cross-fade between two good poses, from asking for what a body cannot do. The
+hero was run through every state (idle, run, sprint, every look of the chain, single hits, roll and
+sprint attacks, block, charge and cleave, heal) and his joint angles were measured in his own frame
+(the drawn hero is sheared toward the camera, which bends angles by up to ~15°). Found:
+- **The held charge:** the hands were 0.11 m before the right shoulder. The sword elbow was folded
+  to 18°, the forearm stood up under the hilt in one line with the blade, the off hand was inside
+  the chest and the off forearm ran 15° off the steel.
+- **Elbows** closed to 18–20° in the charge and the falling cut's coil; **knees** to 10° in the
+  roll's tuck.
+- **The sword wrist** folded the blade back along the forearm to 170° for three frames as the
+  charge came up from a low coil, and to 139–150° in the slam's gather.
+- **The slam's and the cleave's cocked position** put the grip level with the shoulders beside the
+  head: the off arm's elbow went up behind the back to reach it.
+- **The free hand** passed 2 cm inside the chest on its way to a backhand's coil; **the neck**
+  turned 76° in the whirl (Session 26's own head spotting).
+- In range everywhere: the shoulders of the sword arm, knees bending forward, the spine (54° at
+  most, in the roll), run / sprint / stop / turn / heal / idle.
+
+**Decision.** Limits live in the solver, so no pose and no blend between poses can pass them:
+- **Elbows never close past 40°, knees past 32°** (`ARM_FOLD`, `LEG_FOLD`): a hand or a foot asked
+  for nearer its shoulder or hip than that is held out along the same line (`_arm`, `_leg`).
+- **The sword wrist** (`_wristLimit`, `WRIST_BACK` 128°): the blade never folds back along the
+  forearm further than that from the forearm's own line; a pose that asks for more gets the blade
+  at the limit, on the same side.
+- **A hand never passes through the chest** (`TORSO_R`): inside the ribs' outline it is moved out
+  to the surface. The off hand on the grip is exempt from the first and the last (it keeps the
+  grip): two-handed poses are fixed in their data instead.
+- **The charge** is a high guard held out from him: the grip a forearm's length before the right
+  shoulder, the sword elbow lifted out to the side, the off forearm across the chest. Sword wrist
+  103° to the steel, elbows 58° / 49°, the off hand 18 cm from the chest's axis.
+- **The slam and the cleave** cock the grip 0.16–0.24 m before the shoulder line, and their off
+  elbow is keyed down and out (`lp`); the slam's gather draws the hand behind the hip line.
+- **The whirl's head** turns 0.6 rad (`SPIN_SPOT`) and is clamped to 1.0 rad on the chest.
+
+**Rejected.** Fixing only the charge's numbers (the next pose would repeat it; the transitions
+cannot be fixed in data at all). A full biomechanical model (shoulder cones, forearm twist): the
+rig has no hand bones and the audit found the sword-side shoulder in range everywhere.
+
+**Consequences.** The wrist limit turns the blade by up to ~10° in the first active frame of the
+falling cut; REACH passes at every distance. Tests (HEROLIFE 1g): through a held charge and its
+cleave, three chains, a roll and the guard, elbows ≥ 38°, knees ≥ 30°, the blade at most 130° back
+on the forearm; the held charge's wrist, elbows and off hand in range. Not covered: the off hand's
+wrist (it runs 4–40° off the steel in two-handed cuts), the free arm's elbow drawn behind the back
+in two backhands' recoveries, hit reactions and the death fall (not driven by the audit).
