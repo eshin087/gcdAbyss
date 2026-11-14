@@ -779,6 +779,15 @@ export class Lab {
     button(tp, 'Front 8m', () => this._teleport('front')).title = '8 m in front of the dragon, facing it';
     button(tp, 'Behind', () => this._teleport('behind')).title = '8 m behind the dragon, facing it';
     button(tp, 'Bonfire', () => this._teleport('bonfire'));
+    // the pace of the hero's swings (player.debug.attackSpeed): for finding the speed that feels right
+    const sp = el('div', 'lab-row', null, body);
+    el('span', 'lab-lbl', 'atk', sp).title = 'attack speed: every swing runs this much faster (1 = the pace of the game)';
+    this.ui.atkSpeed = slider(sp, { min: 0.6, max: 1.6, step: 0.05, value: 1 }, (v) => {
+      const pd = this.game.player?.debug;
+      if (pd) pd.attackSpeed = v;
+      setText(this.ui.atkSpeedVal, `x${v.toFixed(2)}`);
+    });
+    this.ui.atkSpeedVal = el('span', 'lab-val', 'x1.00', sp);
   }
 
   _buildTime(root) {
@@ -1107,6 +1116,7 @@ export class Lab {
     const pd = g.player?.debug;
     if (pd?.god) flags.push('god');
     if (pd?.infiniteFlasks) flags.push('inf flasks');
+    if (finite(pd?.attackSpeed, 1) !== 1) flags.push(`atk x${finite(pd.attackSpeed, 1).toFixed(2)}`);
     const ts = finite(g.debugTimeScale, 1);
     if (ts !== 1) flags.push(ts === 0 ? 'FROZEN' : `x${ts}`);
     if (this.loop.on) flags.push(`loop ${this.selected}`);

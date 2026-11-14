@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp, lerp, smoothstep, damp, easeOutCubic, easeInOutSine, wrapAngle, TAU } from '../../core/math.js';
+import { clamp, lerp, smoothstep, damp, easeOutCubic, wrapAngle, TAU } from '../../core/math.js';
 import { DIM, BODY, HAIR_CLUSTERS, HERO_SCALE, sheetOffset } from './model.js';
 import { SWINGS } from './swings.js';
 
@@ -464,46 +464,6 @@ function stance(p, A, lunge) {
   p[P.footFlat] = 0.9;
 }
 
-/** Two-handed overhead slam (§4.8): blade elevation ang (π/2 = straight up, 0 = ahead, > π/2 =
- *  back over the head). The hands rise past the head to straight overhead while the wrists keep
- *  coiling, so at the apex the blade HANGS down the back with the torso arched and the head up;
- *  then everything folds hard over the impact, the blade into the ground ahead. */
-const SLAM_E = [-0.9, 1.7]; // hand-circle limits (rad): knee height in front … straight overhead
-// (ADR-044: at the apex the hands stopped straight overhead while the blade hung down the back,
-// 147° between the forearm and the steel: no wrist bends that far. The hands now carry on past the
-// top to BEHIND the head, on a tighter circle (the elbows fold up and forward), and on the way down
-// they run SLAM_LEAD ahead of the blade: the arms pull first, the steel whips over after them.)
-const SLAM_BACK = 2.45, SLAM_BACK_R = 0.3, SLAM_LEAD = 0.35;
-function slamPose(p, A, ang, lunge) {
-  stance(p, A, lunge);
-  const e = clamp(ang, SLAM_E[0], SLAM_E[1]);
-  const q = clamp((SLAM_E[1] - e) / (SLAM_E[1] - SLAM_E[0]), 0, 1); // 0 raised → 1 struck
-  // the hands' own angle on their circle, and its radius
-  const eh = clamp(ang - SLAM_LEAD * smoothstep(SLAM_E[0], SLAM_E[1], ang), SLAM_E[0], SLAM_BACK);
-  const rh = lerp(0.5, SLAM_BACK_R, smoothstep(Math.PI / 2, SLAM_BACK, eh));
-  const sE = Math.sin(eh), cE = Math.cos(eh);
-  v3(p, P.rH, lerp(0.13, 0.17, q), rh * sE, rh * cE + 0.02);
-  v3(p, P.rP, -0.9, 0.1, -0.4);
-  v3(p, P.lP, 0.9, 0.1, -0.4);
-  v3(p, P.swD, 0.02, Math.sin(ang), Math.cos(ang));
-  v3(p, P.swF, 1, 0, 0);
-  p[P.twoHand] = 1;
-  const back = smoothstep(1.7, 3.7, ang); // how far the blade hangs behind: the back arches
-  p[P.spX] = lerp(-0.05 - 0.22 * back, 0.78, q);
-  p[P.spY] = -0.06;
-  p[P.spZ] = 0;
-  p[P.pelvY] = -0.08;
-  p[P.hdX] = lerp(0.05 - 0.4 * back, 0.32, q);
-  p[P.hdY] = 0.05;
-  // knees stay bent (~150°) at the apex so the feet hold the 0.85 m stance the sheet shows
-  p[P.bodyY] = lerp(-0.08, -0.22, q) - 0.04 * lunge;
-  p[P.bodyZ] = lerp(-0.04, 0.1, q);
-  v3(p, P.rF, -0.2, ANK, -0.42);
-  v3(p, P.lF, 0.18, ANK, 0.42 + 0.12 * lunge);
-  v3(p, P.rK, -0.45, 0, 1);
-  v3(p, P.lK, 0.4, 0, 1);
-}
-
 /** The thrust's start (§4.7; until ADR-072 also the charge's stance, which is chargePose now): a
  *  deep wide crouch (feet ~0.95 m apart, hips at 0.70 m, lean 30°, twisted −30° with the head up on
  *  the target), the sword held TWO-HANDED at the right hip, blade back-down-right with its point
@@ -568,105 +528,6 @@ function thrustPose(p, A, t, W, Ac) {
   to3(p, P.rK, -0.2, -0.3, 1, e);
 }
 
-// ---------------------------------------------------------------- windup paths
-// Hand + point splines (shoulder-relative, body axes) from the entry pose to a clip's own pose,
-// through two via keys: the slam's windup (below). The light swings have their own keys (swings.js).
-const PATH_LEN = 1.17; // steel length used to place the point
-const LP_H = [0, 0, 0, 0].map(() => new Float32Array(3)); // hand keys
-const LP_T = [0, 0, 0, 0].map(() => new Float32Array(3)); // point keys
-const LP_OUT = new Float32Array(6);
-/** Catmull-Rom (non-uniform keys `ks`, zero end tangents) through key arrays K at u ∈ [0, 1] → o[off..]. */
-function crPath(K, ks, u, o, off) {
-  let j = 0;
-  while (j < 2 && u > ks[j + 1]) j++;
-  const t0 = ks[j], t1 = ks[j + 1], h = Math.max(1e-6, t1 - t0);
-  const s = clamp((u - t0) / h, 0, 1), s2 = s * s, s3 = s2 * s;
-  const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
-  for (let c = 0; c < 3; c++) {
-    const m0 = j === 0 ? 0 : (K[j + 1][c] - K[j - 1][c]) / (ks[j + 1] - ks[j - 1]);
-    const m1 = j === 2 ? 0 : (K[j + 2][c] - K[j][c]) / (ks[j + 2] - ks[j]);
-    o[off + c] = h00 * K[j][c] + h10 * h * m0 + h01 * K[j + 1][c] + h11 * h * m1;
-  }
-}
-/** Path keys 0 (the entry pose F) and 3 (the clip's own pose p) of the hand / point splines. */
-function pathEnds(F, p, Ln) {
-  const dl0 = Math.hypot(F[P.swD], F[P.swD + 1], F[P.swD + 2]) || 1;
-  const dl3 = Math.hypot(p[P.swD], p[P.swD + 1], p[P.swD + 2]) || 1;
-  for (let c = 0; c < 3; c++) {
-    LP_H[0][c] = F[P.rH + c];
-    LP_T[0][c] = F[P.rH + c] + (F[P.swD + c] / dl0) * Ln;
-    LP_H[3][c] = p[P.rH + c];
-    LP_T[3][c] = p[P.rH + c] + (p[P.swD + c] / dl3) * Ln;
-  }
-}
-/** Hand + blade along the key splines (LP_H / LP_T, knots ks) at spline parameter u (the knots
- *  time the segments) → p's rH / swD. */
-function bladePath(p, ks, u) {
-  crPath(LP_H, ks, u, LP_OUT, 0);
-  crPath(LP_T, ks, u, LP_OUT, 3);
-  v3(p, P.rH, LP_OUT[0], LP_OUT[1], LP_OUT[2]);
-  setLen(p, P.swD, LP_OUT[3] - LP_OUT[0], LP_OUT[4] - LP_OUT[1], LP_OUT[5] - LP_OUT[2], 1);
-}
-// ---------------------------------------------------------------- the slam's windup
-// The combo finisher's windup was the clip's long cross-fade (0.34 s) from light 2's finish onto
-// a raise straight up the middle: from behind (the game camera) the blade vanished behind the
-// head for most of it, then popped out hanging down the back. It now has its own anticipation:
-// GATHER (the body dips and coils right, both hands draw the blade down-back past the right hip:
-// a spring loading), RAISE (the body rises onto it, the blade sweeps up the RIGHT side past the
-// head, where the camera sees it), then over the top into the apex (the blade hanging down the
-// back, torso arched). Arrives on the slam's own pose by SLAM_WU.T, so the apex and everything
-// after it are untouched (blade bit-identical); the step in still comes from lungeFeet.
-const SLAM_WU = {
-  T: 0.36, // s (windup 0.4): from here the slam pose runs as before
-  k: [0, 0.32, 0.7, 1], // knots: gather 0.115 s, raise 0.25 s, apex
-  h1: [-0.13, -0.34, 0.08], d1: [-0.52, -0.42, -0.74], // gather: hands at the right hip, point down-back-right (clear of the right shin)
-  h2: [-0.1, 0.12, 0.1], d2: [-0.38, 0.92, -0.08], // raise: hands by the right temple, blade up the right side
-  // body keys at the gather / raise: [bodyY, spX, spY, pelvY, hdX, hdY, spZ]
-  b1: [-0.2, 0.32, -0.34, -0.2, 0.12, 0.38, 0.06],
-  b2: [-0.05, -0.08, -0.12, -0.1, -0.22, 0.14, 0.04],
-};
-const SLAM_BODY = [P.bodyY, P.spX, P.spY, P.pelvY, P.hdX, P.hdY, P.spZ];
-const SLAM_CH = [P.rH, P.rH + 1, P.rH + 2, P.swD, P.swD + 1, P.swD + 2, P.twoHand, ...SLAM_BODY];
-const SB_K = [0, 0, 0, 0].map(() => new Float32Array(1));
-function slamWindup(p, A, t) {
-  if (!(t < SLAM_WU.T)) return;
-  const F = A.from, S = SLAM_WU, Ln = PATH_LEN;
-  pathEnds(F, p, Ln);
-  for (let c = 0; c < 3; c++) {
-    LP_H[1][c] = S.h1[c];
-    LP_T[1][c] = S.h1[c] + S.d1[c] * Ln;
-    LP_H[2][c] = S.h2[c];
-    LP_T[2][c] = S.h2[c] + S.d2[c] * Ln;
-  }
-  const u = t / S.T;
-  bladePath(p, S.k, u);
-  // the body follows the same knots (a scalar Catmull-Rom per channel)
-  for (let j = 0; j < SLAM_BODY.length; j++) {
-    const c = SLAM_BODY[j];
-    SB_K[0][0] = F[c];
-    SB_K[1][0] = S.b1[j];
-    SB_K[2][0] = S.b2[j];
-    SB_K[3][0] = p[c];
-    crScalar(SB_K, S.k, u, p, c);
-  }
-  // the off hand joins the grip as the blade is drawn back
-  p[P.twoHand] = lerp(F[P.twoHand], 1, smoothstep(0, 0.28, u));
-  A.pathCh = SLAM_CH;
-}
-// s after the slam's active window before its settle starts: the frame just after the window is
-// still hit-tested (the sweep runs from the last active one)
-const SLAM_AFTER = 0.035;
-/** crPath for one channel: keys K[i][0] → o[off]. */
-function crScalar(K, ks, u, o, off) {
-  let j = 0;
-  while (j < 2 && u > ks[j + 1]) j++;
-  const t0 = ks[j], t1 = ks[j + 1], h = Math.max(1e-6, t1 - t0);
-  const s = clamp((u - t0) / h, 0, 1), s2 = s * s, s3 = s2 * s;
-  const m0 = j === 0 ? 0 : (K[j + 1][0] - K[j - 1][0]) / (ks[j + 1] - ks[j - 1]);
-  const m1 = j === 2 ? 0 : (K[j + 2][0] - K[j][0]) / (ks[j + 2] - ks[j]);
-  o[off] = (2 * s3 - 3 * s2 + 1) * K[j][0] + (s3 - 2 * s2 + s) * h * m0 + (-2 * s3 + 3 * s2) * K[j + 1][0] + (s3 - s2) * h * m1;
-}
-
 // ---------------------------------------------------------------- swing clips (swings.js)
 // The hero's swings as keyframed clips: the sword hand and the blade follow splines through the
 // clip's keys (so the point travels one smooth arc), the body's channels with them. A clip starts
@@ -680,6 +541,7 @@ const SW_VEC = { h: P.rH, l: P.lH, rp: P.rP, lp: P.lP, f: P.swF };
 const SW_DEG = Math.PI / 180;
 const SW_ENTRY = 1.3; // the entry's tangent (× the straight rate): he leaves the last pose at speed
 const SW_COIL = 0.35; // the blade's rate into the coil (× the straight rate) as it gets there
+const SW_HOME = 0.3; // the fraction of a recovery after which he starts back to the ready stance (a clip's `home`)
 const SW_CLEAR = 0.24; // m: the sword hand's way to a coil stays this far from the spine (it bulges forward)
 const SW_FLAT = [1.2, 3.2]; // rad per phase of blade turn: below, the keyed flat; above, the swing's plane
 const SW_CACHE = new Map();
@@ -743,7 +605,7 @@ function swingClip(name) {
       tracks, dir, hand: tracks.find((T) => T.ch === P.rH) ?? null, ch: [...new Set(ch)],
       autoR: has('h') && !has('rp'), autoL: has('l') && !has('lp'), autoHy: !has('hy'), autoHx: !has('hx'), keyedF: has('f'),
       flat: Array.isArray(def.flat) ? def.flat : SW_UP,
-      rF: def.rF ?? null, lF: def.lF ?? null, step: def.step ?? null, drag: def.drag ?? 0.22, home: def.home ?? 0.5,
+      rF: def.rF ?? null, lF: def.lF ?? null, step: def.step ?? null, drag: def.drag ?? 0.22, home: def.home ?? SW_HOME,
     };
   }
   SW_CACHE.set(name, C);
@@ -918,67 +780,8 @@ function swingPose(p, A, k, t, W, Ac, R) {
   A.pathCh = C.ch;
 }
 
-/** Lean the slam's plane `phi` rad toward his right, about the line ahead of him through the base
- *  of his neck: the blade, its flat and the grip turn with it and the chest bends to that side, so
- *  the blow comes down from over the right shoulder to the ground ahead and a little left. (Session
- *  25, owner: the cuts were "so perfectly top to bottom": in its upright plane the slam was drawn as
- *  one straight bar up the screen by the camera behind him.) */
-function slamTilt(p, phi) {
-  if (Math.abs(phi) < 1e-4) return;
-  const c = Math.cos(phi), s = Math.sin(phi);
-  for (const i of SLAM_TILT_CH) {
-    const x = p[i], y = p[i + 1];
-    p[i] = x * c - y * s;
-    p[i + 1] = x * s + y * c;
-  }
-  // the grip is an offset from the sword shoulder, DIM.gripShoulder to the right of that line
-  const gx = p[P.rH] - DIM.gripShoulder[0], gy = p[P.rH + 1];
-  p[P.rH] = gx * c - gy * s + DIM.gripShoulder[0];
-  p[P.rH + 1] = gx * s + gy * c;
-  p[P.spZ] += 0.5 * phi;
-  p[P.hdZ] -= 0.3 * phi;
-}
-const SLAM_TILT_CH = [P.swD, P.swF];
-
-/** The slam (combat.js kind 'slam'): the windup raises the blade up past the head to hang down
- *  his back (its own path: slamWindup), the active frames crash it over the top into the ground
- *  ahead (a0 → a1), then the blow's weight settles before the follow-through. */
-function slamSwing(p, A, k, t, W, Ac, R) {
-  const dir = Math.sign(k.a1 - k.a0) || 1;
-  const coil = k.a0 - dir * 0.12;
-  let ang, lunge;
-  if (t < W) {
-    const v = t / W;
-    // ready (blade low ahead) → up past the head → hanging down the back at the apex
-    if (k.raise != null) ang = v < 0.5 ? lerp(k.ready ?? -0.86, k.raise, easeInOutSine(v / 0.5)) : lerp(k.raise, coil, easeOutCubic((v - 0.5) / 0.5));
-    else ang = lerp(k.a0, coil, easeOutCubic(v));
-    lunge = 0;
-  } else if (t < W + Ac) {
-    const v = (t - W) / Ac;
-    // it builds and crashes down
-    const e = v * v * (3 - v * 2) * (0.6 + 0.4 * v) + 0.4 * v * v * (1 - v);
-    ang = lerp(coil, k.a1, clamp(e, 0, 1));
-    lunge = e;
-  } else {
-    ang = lerp(k.a1, k.a2, easeOutCubic(clamp((t - W - Ac) / (R * 0.45), 0, 1)));
-    lunge = 1;
-  }
-  slamPose(p, A, ang, lunge);
-  if (t < W) slamWindup(p, A, t);
-  // (the lean comes in as the blade rises: the gather at the hip is as it was)
-  if (k.tilt) slamTilt(p, k.tilt * smoothstep(W * 0.45, W * 0.9, t));
-  if (t > W + Ac + SLAM_AFTER) {
-    // the blow's weight settles: the body sinks a little further over the planted blade and the
-    // head bows, then the follow-through hold and rise take over (after the hit-tested frames)
-    const s = smoothstep(W + Ac + SLAM_AFTER, W + Ac + 0.09, t) * (1 - smoothstep(W + Ac + 0.16, W + Ac + 0.3, t));
-    p[P.bodyY] -= 0.05 * s;
-    p[P.spX] += 0.06 * s;
-    p[P.hdX] += 0.18 * s;
-  }
-}
-
-/** The attack clip: a swings.js clip (the light chain, the sprint and roll cuts, the charged
- *  cleave), the slam, or the execution's thrust, then the footwork and the way home. A light attack
+/** The attack clip: a swings.js clip (the light chain and its finisher, the sprint and roll cuts,
+ *  the charged cleave) or the execution's thrust, then the footwork and the way home. A light attack
  *  whose button is still held freezes at the coil (A.t is held at the windup end). */
 function attackPose(p, A) {
   const d = A.def;
@@ -989,12 +792,10 @@ function attackPose(p, A) {
   const k = A.atkDef === d && A.atkAnim ? A.atkAnim : d.anim, t = A.t;
   const W = d.windup, Ac = d.active, R = d.recovery;
   if (k.kind === 'thrust') thrustPose(p, A, t, W, Ac);
-  else if (k.kind === 'clip') swingPose(p, A, k, t, W, Ac, R);
-  else slamSwing(p, A, k, t, W, Ac, R);
+  else swingPose(p, A, k, t, W, Ac, R);
   // footwork: the lunge is a real step (feet never skate with the root)
   if (k.kind === 'thrust') dashFeet(p, A, W);
   else if (k.feet === 'dash') dashFeet(p, A, k.dashW ? W : 0.04);
-  else if (k.kind === 'slam') lungeFeet(p, A, W - 0.16, W + Ac * 0.5, 0.25, true);
   else {
     const C = swingClip(k.clip), st = C?.step;
     lungeFeet(p, A, st ? phaseTime(st[0], W, Ac, R) : 0.03, st ? phaseTime(st[1], W, Ac, R) : W + Ac * 0.45, C?.drag ?? 0.22, true);
@@ -1010,12 +811,19 @@ function attackPose(p, A) {
     // a skip: off the ground through the windup's end and the strike's start, landing in the cut
     const h = k.hop * Math.sin(Math.PI * clamp((t - W * 0.35) / (W * 0.65 + Ac * 0.55), 0, 1));
     p[P.bodyY] += h;
-    p[P.rF + 1] += h * 0.7;
-    p[P.lF + 1] += h * 0.7;
+    // (`tuck`: how far the feet lift, × the hop. Under 1 the legs hang; over 1 the knees draw up
+    // under him, the rear foot more than the front: a leap, not a hover)
+    const tuck = k.tuck ?? 0.7;
+    p[P.rF + 1] += h * tuck;
+    p[P.lF + 1] += h * tuck * (tuck > 1 ? 0.8 : 1);
     p[P.footFlat] = lerp(p[P.footFlat], 0.4, clamp(h / k.hop, 0, 1));
   }
   const rec = (t - W - Ac) / R;
-  const home = k.kind === 'clip' ? swingClip(k.clip)?.home ?? 0.5 : 0.45; // the fraction of the recovery the finish is held for
+  // the fraction of the recovery after which he starts home. A clip's last keys are still moving
+  // then, so the follow-through runs into the way home without a stop (it was held to 0.5 of the
+  // recovery, past the last key: the blade stood still for two frames and then snapped home in 0.12 s,
+  // as fast as the cut)
+  const home = k.kind === 'clip' ? swingClip(k.clip)?.home ?? SW_HOME : 0.45;
   if (rec > home) {
     // back toward the ready stance: the rear foot stays planted, the front foot draws back home in
     // a recovery step (the foot planner settles the rest), and the sword hand comes round in FRONT
@@ -1074,8 +882,17 @@ function spinTurn(p, dir, t, W, Ac) {
   p[P.rFy] += yaw;
   p[P.lFy] += yaw;
   p[P.rFf] = p[P.lFf] = 0.5; // on the balls of the feet through the turn
-  p[P.bodyY] -= 0.03 * Math.sin(Math.PI * u);
+  // he drops into the turn and leans to the inside of it (he stood bolt upright through it, turning
+  // like a figure on a turntable), and his head SPOTS: it stays on the target while the body turns
+  // away, comes round ahead of the body and finds the target again before the shoulders do
+  const w = Math.sin(Math.PI * u);
+  p[P.bodyY] -= 0.07 * w;
+  p[P.spZ] -= dir * 0.13 * w;
+  p[P.spX] += 0.06 * w;
+  p[P.hdY] = clamp(p[P.hdY] - dir * SPIN_SPOT * Math.sin(TAU * e), -NECK_TURN, NECK_TURN);
 }
+const NECK_TURN = 1.0; // rad: the most the head turns on the chest in a whirl (it reached 76°)
+const SPIN_SPOT = 0.6; // rad: how far the head turns back toward the target (and then ahead of the body) in a whirl
 
 const FOOT_CH = [P.rF, P.rF + 1, P.rF + 2, P.lF, P.lF + 1, P.lF + 2, P.rFy, P.lFy];
 const FOOT_KEEP = new Float32Array(FOOT_CH.length);
@@ -1247,13 +1064,21 @@ function chargePose(p, A) {
   // (the hands and the blade are there at once: the clip's cross-fade carries them up from the
   // light swing's coil, where the blade already stands behind the right shoulder; easing them in
   // from the ready stance as well swung the steel up through the sword arm)
-  v3(p, P.rH, -0.04, 0.06 + 0.02 * k, 0.11);
-  v3(p, P.rP, -0.85, -0.5, -0.15);
+  // The grip is held OUT from him, a forearm's length before the right shoulder, the sword elbow
+  // lifted out to the side: both forearms come in across the upright grip, so the wrists sit square
+  // to the steel. (Session 26, owner: "while charging the right hand makes an unnatural angle": the
+  // hands were 0.11 m before the shoulder. The sword elbow was folded to 18°, the forearm stood up
+  // under the hilt in one line with the blade, and the off hand was inside his chest.)
+  v3(p, P.rH, 0.0, -0.05 + 0.02 * k, 0.26);
+  // (the elbow lifts out once the blade is up: lifted at once, the upper arm stood in the way of the
+  // steel coming up from a light swing's coil)
+  const lift = smoothstep(0.12, 0.36, A.t);
+  v3(p, P.rP, lerp(-0.85, -0.92, lift), lerp(-0.5, -0.06, lift), lerp(-0.15, -0.3, lift));
   const az = CHARGE_SW[0] * SW_DEG, el = lerp(CHARGE_SW[1], CHARGE_SW[2], k) * SW_DEG;
   v3(p, P.swD, Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
   v3(p, P.swF, 0.8, 0.3, -0.5);
   p[P.twoHand] = smoothstep(0.1, 0.7, s);
-  v3(p, P.lP, 0.55, -0.8, 0.15);
+  v3(p, P.lP, 0.8, -0.45, 0.35);
   if (k >= 0.999) {
     const q = Math.sin(A.time * 47) * 0.012;
     p[P.bodyX] += q;
@@ -2140,6 +1965,15 @@ const STREAM_A = 2.6, STREAM_B = 1.3;
 // soft reach: where the arm's reach starts to give / the most it opens, as fractions of its length
 // (0.955: the elbow keeps ~35° at a full stretch)
 const ARM_SOFT = [0.78, 0.955];
+// joint limits (ADR-078): the least angle an elbow / a knee closes to, as the nearest a hand / a foot
+// may come to its shoulder / hip (the law of cosines on the two bones)
+const ARM_FOLD = 40 * (Math.PI / 180), LEG_FOLD = 32 * (Math.PI / 180);
+const ARM_NEAR = Math.sqrt(DIM.upperArm ** 2 + DIM.foreArm ** 2 - 2 * DIM.upperArm * DIM.foreArm * Math.cos(ARM_FOLD));
+const LEG_NEAR = Math.sqrt(DIM.thigh ** 2 + DIM.shin ** 2 - 2 * DIM.thigh * DIM.shin * Math.cos(LEG_FOLD));
+const TORSO_R = [0.15, 0.115]; // m: the ribs' half-width and half-depth round the chest's axis (a hand stays outside)
+const WRIST_BACK = 128 * (Math.PI / 180); // the most the blade folds back from the forearm's line (0 = in line with it, a point)
+const WRIST_COS = Math.cos(WRIST_BACK), WRIST_SIN = Math.sin(WRIST_BACK);
+const WRIST_CLEAR_COS = Math.cos(70 * (Math.PI / 180)); // … and, there, the least angle round the forearm between the steel and the upper arm
 const ELBOW_RATE = 14; // rad/s: the most an elbow swings round its shoulder → hand line (~13° a frame)
 const _eA = new THREE.Vector3(), _eW = new THREE.Vector3(), _eP = new THREE.Vector3(), _eC = new THREE.Vector3();
 const TWO_HAND_GRIP = DIM.offGrip; // m down the grip from the sword hand to the off hand (two-handed)
@@ -2877,6 +2711,7 @@ export class HeroAnimator {
       this._tipFloor(r);
       this._bladeClear(r, false);
     }
+    this._wristLimit(r);
     this._tipFloor(r);
     _by.set(p[P.swF], p[P.swF + 1], p[P.swF + 2]);
     _by.addScaledVector(_bz, -_by.dot(_bz));
@@ -2898,6 +2733,38 @@ export class HeroAnimator {
     const f = clamp(p[P.flask], 0, 1);
     r.flask.visible = f > 0.03;
     r.flask.scale.setScalar(Math.max(0.01, f));
+  }
+
+  /** The sword wrist's limit (ADR-078): the blade (_bz, body space) never folds back along the
+   *  forearm further than WRIST_BACK from the forearm's own line. A pose or a cross-fade that asks
+   *  for more (the charge coming up from a low coil: the blade pointed straight back over the elbow
+   *  for three frames, 170°) gets the blade at the limit, on the same side. */
+  _wristLimit(r) {
+    const A = r.arms.R;
+    // the forearm's line, elbow → wrist, in body space (the arm hangs along -Y; chest → body)
+    _v.set(0, -1, 0).applyQuaternion(_q1.copy(A.upper.quaternion).multiply(A.fore.quaternion)).applyQuaternion(_q2.copy(_qBC).invert());
+    const c = clamp(_v.dot(_bz), -1, 1);
+    if (c >= WRIST_COS) return;
+    // the part of the blade's direction square to the forearm
+    _w.copy(_bz).addScaledVector(_v, -c);
+    if (_w.lengthSq() < 1e-6) _w.set(0, 1, 0).addScaledVector(_v, -_v.y);
+    if (_w.lengthSq() < 1e-6) return;
+    _w.normalize();
+    // … and at the limit it stays clear of his own upper arm: folded back that far the steel lies
+    // near the elbow, so round the forearm's line it keeps WRIST_CLEAR from the side the upper arm
+    // is on (it turns away on the side it is already on)
+    _G.set(0, 1, 0).applyQuaternion(A.upper.quaternion).applyQuaternion(_q2); // elbow → shoulder, body space
+    _G.addScaledVector(_v, -_G.dot(_v));
+    if (_G.lengthSq() > 1e-6) {
+      _G.normalize();
+      const cu = clamp(_w.dot(_G), -1, 1);
+      if (cu > WRIST_CLEAR_COS) {
+        _TL.crossVectors(_v, _G); // square to both: the way round the forearm
+        const side = _w.dot(_TL) < 0 ? -1 : 1;
+        _w.copy(_G).multiplyScalar(WRIST_CLEAR_COS).addScaledVector(_TL, side * Math.sqrt(1 - WRIST_CLEAR_COS * WRIST_CLEAR_COS)).normalize();
+      }
+    }
+    _bz.copy(_v).multiplyScalar(WRIST_COS).addScaledVector(_w, WRIST_SIN).normalize();
   }
 
   /** Keep the blade tip out of the ground: raise _bz's world pitch just enough. */
@@ -3015,6 +2882,26 @@ export class HeroAnimator {
         _T.copy(_S).addScaledVector(_v, lerp(d2, d, lock) / d);
       }
     }
+    // … and it never folds flatter than ARM_FOLD at the elbow: a hand asked for nearer its shoulder
+    // than that is held out along the same line (the off hand on the grip keeps the grip)
+    {
+      _v.subVectors(_T, _S);
+      const d = _v.length();
+      if (d < ARM_NEAR && lock < 1) {
+        if (d > 1e-4) _T.copy(_S).addScaledVector(_v, lerp(ARM_NEAR, d, lock) / d);
+        else _T.set(_S.x, _S.y, _S.z + ARM_NEAR);
+      }
+    }
+    // … and a hand never passes through the chest: inside the ribs' outline (an ellipse round the
+    // chest's axis, from the shoulders down) it is moved out to the surface, the way it was heading
+    if (lock < 1 && _T.y < _S.y + 0.02 && _T.y > _S.y - 0.5) {
+      const e = (_T.x / TORSO_R[0]) ** 2 + (_T.z / TORSO_R[1]) ** 2;
+      if (e < 1) {
+        const k = e > 1e-4 ? lerp(1 / Math.sqrt(e), 1, lock) : 1;
+        _T.x *= k;
+        _T.z = e > 1e-4 ? _T.z * k : TORSO_R[1];
+      }
+    }
     // hands never reach into the ground
     this.rig.chest.localToWorld(_w.copy(_T));
     if (_w.y < HAND_FLOOR) {
@@ -3073,6 +2960,10 @@ export class HeroAnimator {
     _T.set(p[fi], Math.max(FOOT_FLOOR, p[fi + 1]), p[fi + 2]); // model y == height above ground
     r.root.localToWorld(_T);
     r.pelvis.worldToLocal(_T);
+    // a knee never closes past LEG_FOLD (the roll's tuck asked for a heel against the hip, 10°)
+    _v.subVectors(_T, _S);
+    const dl = _v.length();
+    if (dl < LEG_NEAR && dl > 1e-4) _T.copy(_S).addScaledVector(_v, LEG_NEAR / dl);
     _pole.set(p[ki], p[ki + 1], p[ki + 2]).applyQuaternion(_qBP);
     const beta = solveTwoBone(_S, _T, _pole, DIM.thigh, DIM.shin, -1, leg.thigh.quaternion, _end);
     leg.shin.rotation.set(beta, 0, 0);

@@ -298,7 +298,7 @@ function build(opts = {}) {
 const DT = 1 / 60;
 // s between clicks that walks the light chain hit by hit: each click lands in the recovery of the hit
 // before it, after its chain window opens (combat.js `chain`) and before the attack ends
-const CHAIN_EVERY = 0.48;
+const CHAIN_EVERY = 0.36;
 const cls = (c) => ui.find((e) => e.classList?.contains(c));
 const aimAt = (G) => { const d = G.game.dragon; G.game.mouseGround.set(d.position.x, 0, d.position.z); };
 
@@ -2604,7 +2604,7 @@ async function scenarioHeroLife() {
     // foot leads as each hit of a chain ends
     const inv = new THREE.Matrix4(), aNow = [0, 1, 2, 3].map(() => new THREE.Vector3()), aWas = [0, 1, 2, 3].map(() => new THREE.Vector3());
     const e0 = new THREE.Vector3(), e1 = new THREE.Vector3();
-    const snap = {}, leads = [];
+    const snap = {}, snapAt = {}, leads = [];
     let armKey = null, leadDef = null;
     const arms = () => {
       const a = p.atk, def = a?.def;
@@ -2618,7 +2618,13 @@ async function scenarioHeroLife() {
         aNow[k * 2 + 1].subVectors(e0, e1).normalize();
       });
       if (key && key === armKey) {
-        for (let k = 0; k < 4; k++) snap[key] = Math.max(snap[key] ?? 0, Math.acos(Math.min(1, Math.max(-1, aNow[k].dot(aWas[k])))) * 57.3);
+        for (let k = 0; k < 4; k++) {
+          const turn = Math.acos(Math.min(1, Math.max(-1, aNow[k].dot(aWas[k])))) * 57.3;
+          if (turn > (snap[key] ?? 0)) {
+            snap[key] = turn;
+            snapAt[key] = `${a.t < def.windup ? 'W' : a.t < def.windup + def.active ? 'A' : 'R'} ${a.t.toFixed(2)} ${['R upper', 'R fore', 'L upper', 'L fore'][k]}`;
+          }
+        }
       }
       for (let k = 0; k < 4; k++) aWas[k].copy(aNow[k]);
       armKey = key;
@@ -2685,8 +2691,10 @@ async function scenarioHeroLife() {
       `the heavy blows are two-handed: the slam and the cleave with twoHand > 0.95, the off hand within 3.5 cm of its place and closed round the grip (${heavies.join(', ')})`);
     {
       const worst = Object.entries(snap).sort((x, y) => y[1] - x[1])[0];
-      out(`   arms: ${Object.entries(snap).map(([n, v]) => `${n} ${v.toFixed(0)}°`).join(' · ')}`);
-      assert(Object.keys(snap).length >= 13 && worst[1] < 45, `no arm snaps: an upper arm or forearm turns at most ${worst[1].toFixed(0)}° in a frame (${worst[0]}; < 45°) through every light swing`);
+      out(`   arms: ${Object.entries(snap).map(([n, v]) => `${n} ${v.toFixed(0)}° (${snapAt[n]})`).join(' · ')}`);
+      // (a cut is 0.12 s, seven frames: the upper arm's throw into it is up to ~55° a frame. The flips
+      // the elbow limiter stops were 50-135° a frame on swings half as fast)
+      assert(Object.keys(snap).length >= 13 && worst[1] < 60, `no arm snaps: an upper arm or forearm turns at most ${worst[1].toFixed(0)}° in a frame (${worst[0]}; < 60°) through every light swing`);
       // he walks through the chain: the lead foot changes from each hit to the next (hits 1-5)
       let pairs = 0, same = 0;
       for (let i = 1; i < leads.length; i++) {
@@ -2755,33 +2763,40 @@ async function scenarioHeroLife() {
     assert(whip.length >= 8 && whip.every(([, v]) => v >= 20 && v <= 45), `the blade whips: at mid-cut it still hangs 20°-45° short of pointing ahead (${whip.filter(([, v]) => !(v >= 20 && v <= 45)).map(([n, v]) => `${n} ${v}°`).join(', ') || 'all'})`);
   }
 
-  // (1e) the sword arc (fx.js trail): a blade that turns leaves an edge line and a veil, with no
-  // letter glyphs; a blade only carried along (the cleave's dash) leaves nothing
+  // (1e) the sword arc (fx.js trail, ADR-077): fine strokes that hug the steel, a faint veil close
+  // inside the edge; no letter glyphs; a blade only carried along (the cleave's dash) leaves nothing.
+  // And the thrusts rise (a level one, seen from the game camera, looked planted in the ground)
   {
+    const { ARC_LOOK } = await imp('src/entities/player/fx.js');
+    const { SWINGS } = await imp('src/entities/player/swings.js');
     const fxa = p.fx.add, spawn0 = fxa.spawn, made = [];
     fxa.spawn = (o) => { made.push(o); };
     const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
     try {
-      // a quarter turn of a 1.9 m blade about a still hilt
+      // a quarter turn of the 1.9 m hit segment about a still hilt
       p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0), V3(1.75, 1, 0.74), 'light', false);
       const turned = made.splice(0);
       // the same blade moved 0.4 m sideways without turning
       p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0.4), V3(1.9, 1, 0.4), 'cleave', false);
       const carried = made.splice(0);
-      const glyphs = new Set(turned.map((o) => o.glyph));
-      const edge = turned.filter((o) => o.glyph === '•'), veil = turned.filter((o) => o.glyph === '|');
-      out(`   arc: a turning blade ${turned.length} particles (${edge.length} edge, ${veil.length} veil; glyphs ${[...glyphs].join(' ')}), a carried blade ${carried.length}; veil alpha ${Math.min(...veil.map((o) => o.alpha)).toFixed(2)}-${Math.max(...veil.map((o) => o.alpha)).toFixed(2)}`);
-      assert(edge.length >= 2 && veil.length >= 6 && ![...glyphs].some((g) => /[A-Za-z0-9+]/.test(g)),
-        `the sword arc is an edge line and a veil of streaks, no letters (${[...glyphs].join(' ')})`);
-      assert(Math.max(...veil.map((o) => o.alpha)) <= 0.8 && Math.min(...veil.map((o) => o.alpha)) < 0.25, 'the veil is see-through and fades toward the hilt');
-      assert(carried.length === 0, `a blade carried along without turning leaves no arc (${carried.length} particles)`);
+      const strokes = turned.filter((o) => o.glyph === '|');
+      const far = Math.max(...turned.map((o) => Math.hypot(o.x, o.y - 1, o.z)));
+      const size = Math.max(...strokes.map((o) => o.size)), faint = Math.min(...strokes.map((o) => o.alpha)), bright = Math.max(...strokes.map((o) => o.alpha));
+      out(`   arc: ${strokes.length} strokes (≤ ${size.toFixed(2)} m, out to ${far.toFixed(2)} m, opacity ${faint.toFixed(2)}-${bright.toFixed(2)}), ${turned.length - strokes.length} motes; a carried blade ${carried.length}`);
+      assert(strokes.length >= 10 && !turned.some((o) => /[A-Za-z0-9+]/.test(o.glyph)), 'the sword arc is drawn in strokes, with no letters');
+      assert(size <= 0.14 && far <= 1.9 * ARC_LOOK.at + 0.08 && far <= 1.3, `the arc is fine and hugs the steel: strokes at most 0.14 m, none further than 1.3 m from the hilt (the reach ends at 1.9 m; furthest ${far.toFixed(2)} m)`);
+      assert(ARC_LOOK.veil.length >= 3 && faint < 0.2 && bright > 0.8, 'a bright edge with a faint veil inside it');
+      assert(carried.length === 0, 'a blade carried along without turning leaves no arc');
     } finally {
       fxa.spawn = spawn0;
     }
+    const thrusts = Object.entries(SWINGS).filter(([, C]) => C.line === 'point').map(([n, C]) => [n, Math.max(...C.keys.filter((k) => k.u > 1.5 && k.u <= 2.001).map((k) => k.a[1]))]);
+    assert(thrusts.length >= 2 && thrusts.every(([, el]) => el >= 30), `the thrusts drive upward: the point ≥ 30° above level at full reach (${thrusts.map(([n, el]) => `${n} ${el}°`).join(', ')})`);
   }
 
-  // (1c) the pace: mashing the button, the next light waits for the cut to carry through (`chain` of
-  // the recovery): a hit every ~0.42 s, not one every 0.25 s
+  // (1c) the pace (Session 26, owner: "speed up the attack speed ... its too slow"): mashing the
+  // button, a light every ~0.3 s (it was 0.42 s; 0.25 s before Session 25). The next light still
+  // waits for the cut to carry through (`chain` of the recovery)
   {
     go(1.0);
     const starts = [];
@@ -2798,8 +2813,155 @@ async function scenarioHeroLife() {
     const gaps = [];
     for (let i = 1; i < starts.length; i++) if (starts[i].combo === starts[i - 1].combo + 1 && starts[i].combo <= 4) gaps.push(starts[i].t - starts[i - 1].t);
     out(`   mashed chain: hits start ${gaps.map((g) => g.toFixed(2)).join(', ')} s apart`);
-    assert(gaps.length >= 3 && Math.min(...gaps) >= 0.36 && Math.max(...gaps) <= 0.52, `a mashed chain lands a light every 0.36-0.52 s (${gaps.map((g) => g.toFixed(2)).join(', ')})`);
+    assert(gaps.length >= 3 && Math.min(...gaps) >= 0.26 && Math.max(...gaps) <= 0.4, `a mashed chain lands a light every 0.26-0.40 s (${gaps.map((g) => g.toFixed(2)).join(', ')})`);
     go(1.6);
+  }
+
+  // (1f) the flow of one swing, the finisher's weight, the Lab's attack speed (Session 26). Points are
+  // tracked in the hero's own frame, a step = how far one moves in a frame.
+  {
+    const inv = new THREE.Matrix4(), tip = new THREE.Vector3(), tipWas = new THREE.Vector3(), wr = new THREE.Vector3(), wrWas = new THREE.Vector3();
+    let have = false, tipStep = 0, wrStep = 0;
+    const track = () => {
+      inv.copy(r.root.matrixWorld).invert();
+      tip.set(0, 0, 0.9).applyMatrix4(r.sword.matrixWorld).applyMatrix4(inv).multiplyScalar(1 / p.drawScale);
+      wr.set(0, -HD.foreArm, 0).applyMatrix4(r.arms.R.fore.matrixWorld).applyMatrix4(inv).multiplyScalar(1 / p.drawScale);
+      tipStep = have ? tip.distanceTo(tipWas) : 0;
+      wrStep = have ? wr.distanceTo(wrWas) : 0;
+      tipWas.copy(tip);
+      wrWas.copy(wr);
+      have = true;
+    };
+    // one falling cut from rest, left to finish: the follow-through runs into the way home. (The
+    // blade stood still for two frames after its last key and then came home in 0.12 s, as fast as it
+    // had cut: 60 cm a frame at the point.)
+    go(1.2);
+    A.forceVariant = 0;
+    have = false;
+    input.click(0);
+    let cut = 0;
+    const rec = [];
+    for (let i = 0; i < 60 && (i < 2 || p.state === 'attack'); i++) {
+      G.tick(DT);
+      track();
+      const a = p.atk, d = a?.def;
+      if (!d || p.state !== 'attack') continue;
+      if (a.t >= d.windup && a.t <= d.windup + d.active) cut = Math.max(cut, tipStep);
+      else if (a.t > d.windup + d.active) rec.push(tipStep);
+    }
+    const back = Math.max(...rec.slice(3));
+    const lastFast = rec.reduce((b, v, i) => (v > 0.08 ? i : b), -1);
+    const still = rec.slice(0, Math.max(0, lastFast)).filter((v) => v < 0.01).length;
+    out(`   one cut: the point's fastest frame ${(cut * 100).toFixed(0)} cm in the cut, ${(back * 100).toFixed(0)} cm on the way home; ${still} still frame(s) between them`);
+    assert(cut > 0.5 && back < cut * 0.62 && still <= 1, `a cut's follow-through runs into the way home: no stop of two frames, and the point comes home at under 0.62 of the cut's speed (${(back / cut).toFixed(2)}, ${still} still frames)`);
+    go(0.8);
+    // the finisher, mashed: its hands never cover more than 0.36 m in a frame (the old slam's did
+    // 0.54 m), and the next chain waits for the landing (`chain`)
+    let hands = 0, slamEnd = -1, nextStart = -1, lastDef = null;
+    have = false;
+    for (let i = 0; i < Math.round(2.6 / DT); i++) {
+      if (i % 3 === 0) input.click(0);
+      G.tick(DT);
+      track();
+      const a = p.atk, d = a?.def;
+      if (d?.kind === 'slam' && p.state === 'attack') {
+        hands = Math.max(hands, wrStep);
+        if (slamEnd < 0 && a.t >= d.windup + d.active) slamEnd = game.time;
+      } else if (slamEnd >= 0 && nextStart < 0 && d && d !== lastDef && p.state === 'attack') nextStart = game.time;
+      lastDef = d;
+    }
+    A.forceVariant = null;
+    out(`   the finisher: hands at most ${(hands * 100).toFixed(0)} cm a frame; the next chain starts ${(nextStart - slamEnd).toFixed(2)} s after the blow lands`);
+    assert(slamEnd > 0 && hands > 0.1 && hands < 0.36, `the finisher's hands move at most ${(hands * 100).toFixed(0)} cm in a frame (< 36)`);
+    assert(nextStart > 0 && nextStart - slamEnd >= 0.1, `a mashed button does not cut the finisher's landing off: the next chain starts ${(nextStart - slamEnd).toFixed(2)} s after the blow (≥ 0.10 s)`);
+    go(1.4);
+    // the Lab's attack speed: at x1.5 a swing takes 1/1.5 as long and its step covers the same ground
+    const once = (k) => {
+      p.debug.attackSpeed = k;
+      A.forceVariant = 0;
+      go(0.8);
+      const x0 = p.position.x, z0 = p.position.z, t0 = game.time;
+      input.click(0);
+      let n = 0;
+      do { G.tick(DT); n++; } while (n < 120 && (n < 3 || p.state === 'attack'));
+      p.debug.attackSpeed = 1;
+      A.forceVariant = null;
+      return { dur: game.time - t0, dist: Math.hypot(p.position.x - x0, p.position.z - z0) };
+    };
+    const a1 = once(1), a2 = once(1.5);
+    out(`   attack speed: x1 ${a1.dur.toFixed(2)} s over ${a1.dist.toFixed(2)} m; x1.5 ${a2.dur.toFixed(2)} s over ${a2.dist.toFixed(2)} m`);
+    assert(Math.abs(a2.dur - a1.dur / 1.5) < 0.05 && Math.abs(a2.dist - a1.dist) < 0.12, `player.debug.attackSpeed 1.5: a swing takes 1/1.5 as long (${a2.dur.toFixed(2)} vs ${a1.dur.toFixed(2)} s) and steps as far (${a2.dist.toFixed(2)} vs ${a1.dist.toFixed(2)} m)`);
+    go(1.0);
+  }
+
+  // (1g) anatomy (ADR-078; Session 26, owner: "while charging the right hand makes an unnatural
+  // angle ... make sure the anatomy and motion is all natural"). Joint angles measured in the hero's
+  // own frame (the drawn one is sheared toward the camera), through a held charge and its cleave, a
+  // mashed chain, a roll and the guard: no elbow closes past 38°, no knee past 30°, and the blade
+  // never folds back on the sword forearm past 130°. In the held charge the sword wrist is square
+  // to the steel and the off hand is outside the chest.
+  {
+    const invR = new THREE.Matrix4(), invC = new THREE.Matrix4();
+    const V = () => new THREE.Vector3();
+    const sh = V(), el = V(), wr = V(), a = V(), b = V(), bl = V(), o = V();
+    const ang = (x, y) => Math.acos(Math.max(-1, Math.min(1, x.dot(y) / ((x.length() * y.length()) || 1)))) * 57.2958;
+    const worst = { elbow: 180, knee: 180, wrist: 0 }, at = { elbow: '', knee: '', wrist: '' };
+    const now = {};
+    const measure = () => {
+      invR.copy(p.object3d.matrixWorld).invert();
+      invC.copy(r.chest.matrixWorld).invert();
+      o.set(0, 0, 0).applyMatrix4(r.sword.matrixWorld).applyMatrix4(invR);
+      bl.set(0, 0, 1).applyMatrix4(r.sword.matrixWorld).applyMatrix4(invR).sub(o);
+      const tag = `${p.state}${p.atk?.def ? ' ' + p.atk.def.name : ''}`;
+      [r.arms.R, r.arms.L].forEach((arm, k) => {
+        sh.setFromMatrixPosition(arm.upper.matrixWorld).applyMatrix4(invR);
+        el.setFromMatrixPosition(arm.fore.matrixWorld).applyMatrix4(invR);
+        wr.set(0, -HD.foreArm, 0).applyMatrix4(arm.fore.matrixWorld);
+        now[k ? 'handL' : 'handR'] = (() => { a.copy(wr).applyMatrix4(invC); return Math.hypot(a.x, a.z) / p.drawScale; })();
+        wr.applyMatrix4(invR);
+        a.subVectors(el, sh);
+        b.subVectors(wr, el);
+        const e = 180 - ang(a, b), w = ang(b, bl);
+        now[k ? 'elbowL' : 'elbowR'] = e;
+        now[k ? 'wristL' : 'wristR'] = w;
+        if (e < worst.elbow) { worst.elbow = e; at.elbow = tag; }
+        if (k === 0 && w > worst.wrist) { worst.wrist = w; at.wrist = tag; }
+      });
+      for (const leg of [r.legs.R, r.legs.L]) {
+        sh.setFromMatrixPosition(leg.thigh.matrixWorld).applyMatrix4(invR);
+        el.setFromMatrixPosition(leg.shin.matrixWorld).applyMatrix4(invR);
+        wr.setFromMatrixPosition(leg.foot.matrixWorld).applyMatrix4(invR);
+        const e = 180 - ang(a.subVectors(el, sh), b.subVectors(wr, el));
+        if (e < worst.knee) { worst.knee = e; at.knee = tag; }
+      }
+    };
+    go(1.0);
+    input.press(0);
+    go(1.3, measure);
+    const held = { ...now };
+    input.up(0);
+    go(1.0, measure);
+    for (let look = 0; look < 3; look++) {
+      A.forceVariant = look;
+      for (let k = 0; k < 5; k++) { input.click(0); go(k === 4 ? 0.9 : CHAIN_EVERY, measure); }
+      go(0.8, measure);
+    }
+    A.forceVariant = null;
+    input.axis = { x: 0, y: 1 };
+    go(0.3, measure);
+    input.tap('Space');
+    go(0.8, measure);
+    input.axis = { x: 0, y: 0 };
+    input.press(2);
+    go(0.6, measure);
+    input.up(2);
+    go(0.6, measure);
+    out(`   anatomy: tightest elbow ${worst.elbow.toFixed(0)}° (${at.elbow}), tightest knee ${worst.knee.toFixed(0)}° (${at.knee}), the blade back on the forearm at most ${worst.wrist.toFixed(0)}° (${at.wrist}); held charge: sword wrist ${held.wristR.toFixed(0)}°, elbows ${held.elbowR.toFixed(0)}° / ${held.elbowL.toFixed(0)}°, off wrist ${held.wristL.toFixed(0)}°, off hand ${(held.handL * 100).toFixed(0)} cm from the chest's axis`);
+    assert(worst.elbow >= 38 && worst.knee >= 30, `no joint folds flat: elbows ≥ 38° (${worst.elbow.toFixed(0)}°, ${at.elbow}), knees ≥ 30° (${worst.knee.toFixed(0)}°, ${at.knee})`);
+    assert(worst.wrist <= 130, `the blade never folds back along the sword forearm (at most ${worst.wrist.toFixed(0)}° from its line, ${at.wrist}; ≤ 130°)`);
+    assert(held.wristR >= 70 && held.wristR <= 125 && held.elbowR >= 45 && held.elbowL >= 42 && held.wristL >= 35 && held.handL >= 0.105,
+      `the held charge is a guard a body can hold: the sword wrist square to the steel (${held.wristR.toFixed(0)}°), open elbows (${held.elbowR.toFixed(0)}° / ${held.elbowL.toFixed(0)}°), the off hand outside the chest (${(held.handL * 100).toFixed(0)} cm from its axis)`);
+    go(1.0);
   }
 
   // (2) the guard, the cross ward (Session 25): both hands, the blade slanting up across the body

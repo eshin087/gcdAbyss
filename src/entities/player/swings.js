@@ -5,8 +5,10 @@
 //   u  0 … 1  the windup      (0 = the pose he was in when the swing started: the clip always
 //                               starts from there, whatever it was)
 //      1 … 2  the active frames (the hit test reads the drawn blade: it must cross his front here)
-//      2 … 3  the recovery     (from `home`, default 0.5 of it, anim.js eases him back to the ready
-//                               stance: keys past that are not needed)
+//      2 … 3  the recovery     (from `home`, default 0.3 of it, anim.js eases him back to the ready
+//                               stance while the last keys are still moving, so the follow-through
+//                               runs into the way home without a stop; a clip that HOLDS its finish
+//                               gives a later `home` and keys up to it)
 // A held attack button freezes the clip at u = 1 (the coil), so that key is a pose worth holding.
 //
 // Key fields (body axes: +x his LEFT, +y up, +z forward; metres, radians). A field missing from a
@@ -170,27 +172,62 @@ export const SWINGS = {
   },
 
   // ---- hit 4: along the line ------------------------------------------------------------------
-  /** The lunge: the hand drawn back to the ribs, then one long line from the rear heel to the
-   *  point, the free hand drawn back to the hip as the sword arm drives out. */
+  // Both thrusts RISE: the point is driven up at 35-45°, at a tall foe's chest. (They were level. The
+  // game camera looks down at 58° on a hero drawn leaned upright: a level blade pointed toward that
+  // camera is drawn straight down the screen from his hand to the grass between his feet, as if he
+  // had planted it in the ground. Session 26, owner: "the 4th poke on the sword combo is like
+  // clipping through the ground".)
+  /** The lunge: the hand drawn back to the ribs with the point already up, then one long line from
+   *  the rear heel through the arm to the point, driven forward and up; the free hand drawn back to
+   *  the hip as the sword arm drives out. */
   lunge: {
     line: 'point',
     lF: [0.14, 0.46],
     keys: [
-      { u: 1.0, h: [-0.03, -0.16, -0.08], a: [3, 2], l: [0.0, -0.12, 0.32], by: -0.17, bz: -0.07, hip: -0.34, sy: -0.5, sx: 0.08 },
-      { u: 1.45, h: [0.08, -0.1, 0.26], a: [1, 1], l: [0.12, -0.16, 0.14], by: -0.22, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.28 },
-      { u: 1.9, h: [0.15, -0.05, 0.51], a: [0, -1], l: [0.24, -0.16, -0.08], by: -0.27, bz: 0.13, hip: 0.24, sy: 0.34, sx: 0.47 },
-      { u: 2.45, h: [0.14, -0.07, 0.47], a: [0, -2], l: [0.26, -0.14, -0.14], by: -0.25, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.42 },
+      { u: 1.0, h: [-0.03, -0.2, -0.08], a: [3, 20], l: [0.0, -0.12, 0.32], by: -0.17, bz: -0.07, hip: -0.34, sy: -0.5, sx: 0.08 },
+      { u: 1.45, h: [0.08, -0.08, 0.26], a: [1, 28], l: [0.12, -0.16, 0.14], by: -0.22, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.26 },
+      { u: 1.9, h: [0.15, 0.1, 0.48], a: [0, 35], l: [0.24, -0.16, -0.08], by: -0.25, bz: 0.13, hip: 0.24, sy: 0.34, sx: 0.4 },
+      { u: 2.45, h: [0.14, 0.08, 0.44], a: [0, 33], l: [0.26, -0.14, -0.14], by: -0.23, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.36 },
     ],
   },
-  /** The rising thrust: out of a crouch, the point driven up into the target. */
+  /** The rising thrust: out of a crouch, the whole body rising behind the point as it drives up
+   *  steeply into the target. */
   risingThrust: {
     line: 'point',
     lF: [0.14, 0.46],
     keys: [
-      { u: 1.0, h: [-0.04, -0.34, -0.06], a: [4, 12], l: [0.0, -0.2, 0.32], by: -0.32, bz: -0.07, hip: -0.34, sy: -0.46, sx: 0.3 },
-      { u: 1.45, h: [0.07, -0.16, 0.26], a: [2, 18], l: [0.12, -0.22, 0.14], by: -0.24, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.26 },
-      { u: 1.9, h: [0.15, 0.08, 0.5], a: [0, 24], l: [0.24, -0.26, -0.08], by: -0.1, bz: 0.12, hip: 0.24, sy: 0.32, sx: 0.16 },
-      { u: 2.45, h: [0.14, 0.04, 0.45], a: [0, 20], l: [0.26, -0.26, -0.12], by: -0.12, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.16 },
+      { u: 1.0, h: [-0.04, -0.34, -0.06], a: [4, 24], l: [0.0, -0.2, 0.32], by: -0.32, bz: -0.07, hip: -0.34, sy: -0.46, sx: 0.3 },
+      { u: 1.45, h: [0.07, -0.14, 0.26], a: [2, 34], l: [0.12, -0.22, 0.14], by: -0.24, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.24 },
+      { u: 1.9, h: [0.14, 0.18, 0.46], a: [0, 45], l: [0.24, -0.26, -0.08], by: -0.08, bz: 0.12, hip: 0.24, sy: 0.32, sx: 0.12 },
+      { u: 2.45, h: [0.13, 0.14, 0.42], a: [0, 42], l: [0.26, -0.26, -0.12], by: -0.1, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.12 },
+    ],
+  },
+
+  // ---- hit 5: the finisher ---------------------------------------------------------------------
+  /** The slam (combat.js LIGHT[4], kind 'slam'), both hands on the grip. The windup is its own
+   *  anticipation: he GATHERS (dips and coils right, the hands drawing the blade down-back past the
+   *  right hip), then rises off the ground (combat.js `hop`) as the blade sweeps up his right side,
+   *  where the camera behind him sees it, and cocks back over the right shoulder. The blow is one
+   *  diagonal from there down across his front into the ground ahead and a little left, the hands
+   *  leading and the steel whipping over after them; he lands folded over the planted blade and holds
+   *  it (the shards burst at the point: player.js).
+   *  (Until Session 26 the slam was its own code: the blade went over the top of his head in an
+   *  upright plane leaned 24°, and the hands covered half a metre in one frame of the blow.) */
+  slam: {
+    line: 'down',
+    home: 0.55,
+    step: [0.45, 1.5],
+    drag: 0.25,
+    keys: [
+      { u: 0.3, h: [-0.15, -0.33, -0.02], a: [-140, -20], two: 1, lp: [0.7, -0.6, 0.3], by: -0.2, hip: -0.2, sy: -0.34, sx: 0.32, sz: 0.06, hx: 0.12, hy: 0.38 },
+      { u: 0.7, h: [-0.06, 0.1, 0.2], a: [-102, 67], two: 1, by: -0.05, hip: -0.24, sy: -0.3, sx: -0.06, sz: 0.04, hx: -0.16, hy: 0.3 },
+      { u: 1.0, h: [-0.06, 0.22, 0.16], a: [-146, 46], two: 1, by: -0.03, bz: -0.06, hip: -0.3, sy: -0.42, sx: -0.14, sz: 0.05, hx: -0.2, hy: 0.5 },
+      { u: 1.25, h: [0.06, 0.22, 0.3], a: [-104, 42] },
+      { u: 1.5, h: [0.13, 0.1, 0.45], a: [-34, 22], two: 1, by: -0.14, bz: 0.05, hip: 0.04, sy: 0.0, sx: 0.28, sz: 0.0, hx: 0.0, hy: 0.0 },
+      { u: 1.75, h: [0.19, -0.16, 0.46], a: [8, -18] },
+      { u: 2.0, h: [0.2, -0.36, 0.36], a: [16, -48], two: 1, by: -0.34, bz: 0.12, hip: 0.22, sy: 0.26, sx: 0.62, sz: -0.05, hx: 0.1, hy: -0.3 },
+      { u: 2.2, h: [0.2, -0.38, 0.35], a: [16, -50], two: 1, by: -0.38, bz: 0.12, hip: 0.22, sy: 0.26, sx: 0.68, sz: -0.05, hx: 0.26, hy: -0.3 },
+      { u: 2.55, h: [0.2, -0.38, 0.35], a: [16, -50], two: 1, by: -0.36, bz: 0.12, hip: 0.22, sy: 0.26, sx: 0.66, sz: -0.05, hx: 0.2, hy: -0.3 },
     ],
   },
 
@@ -204,9 +241,9 @@ export const SWINGS = {
     line: 'right',
     home: 0.55,
     keys: [
-      { u: 0.9, h: [-0.04, 0.08, 0.1], a: [-145, 74], two: 1, by: -0.26, bz: 0.05, hip: -0.34, sy: -0.5, sx: 0.4 },
-      { u: 1.4, h: [-0.03, 0.12, 0.03], a: [-158, 50], two: 1, by: -0.23, bz: 0.06, hip: -0.32, sy: -0.52, sx: 0.44 },
-      { u: 1.55, h: [0.04, 0.12, 0.2], a: [-110, 40] },
+      { u: 0.9, h: [-0.03, 0.02, 0.24], a: [-145, 74], two: 1, lp: [0.7, -0.6, 0.3], by: -0.26, bz: 0.05, hip: -0.34, sy: -0.5, sx: 0.4 },
+      { u: 1.4, h: [-0.07, 0.1, 0.18], a: [-148, 50], two: 1, by: -0.23, bz: 0.06, hip: -0.32, sy: -0.52, sx: 0.44 },
+      { u: 1.55, h: [0.05, 0.1, 0.28], a: [-110, 40] },
       { u: 1.7, h: [0.14, -0.03, 0.44], a: [-38, 16], by: -0.26, hip: 0.1, sy: 0.0, sx: 0.4 },
       { u: 1.86, h: [0.24, -0.24, 0.4], a: [28, -18] },
       { u: 2.0, h: [0.3, -0.36, 0.3], a: [68, -36], two: 1, by: -0.32, bz: 0.08, hip: 0.36, sy: 0.4, sx: 0.5 },

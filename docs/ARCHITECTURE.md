@@ -368,6 +368,8 @@ respawn(x, z)                          // full restore, idle, facing north, clea
 restAtBonfire()                        // refill hp/flasks (no teleport)
 update(dt)
 debug: { god: boolean, infiniteFlasks: boolean, heal(), teleport(x, z), kill(),   // used by the Lab
+         attackSpeed: number,          // × the attack clock (1 in play): every swing's windup, cut and recovery run this
+                                       //   much faster, its step covering the same ground (the Lab's "atk" slider)
          plunge(execution = false) }   // Lab / captures: start the plunge on the dragon now (any range, in the air too)
 ```
 Module-private state the animator reads (anim.js): `plungeAnim { phase, u, t, exec, h }` (the plunge
@@ -575,12 +577,22 @@ alone. Feet: `lungeFeet`: the foot that is behind as the swing starts steps thro
 (so the lead foot alternates down a chain) while the other holds its spot, its heel peeling; or
 `dashFeet` with `feet: 'dash'` (`dashW: true` starts the dash at the windup's end). In `apply()`,
 `_elbow` limits how fast either elbow swings round its shoulder → hand line (`ELBOW_RATE`, 14 rad/s:
-the hand still reaches its target), for every clip. A light def's `chain` (0..1) is the fraction of
+the hand still reaches its target), for every clip. **Joint limits** (ADR-078), also in `apply()`
+and so for every pose and every cross-fade: `_arm` / `_leg` hold a hand / a foot at least
+`ARM_NEAR` / `LEG_NEAR` from its shoulder / hip (an elbow never closes past 40°, a knee past 32°)
+and move a hand out of the ribs' outline (`TORSO_R`); `_wristLimit` keeps the blade within
+`WRIST_BACK` (128°) of the sword forearm's line. The off hand on the grip keeps the grip. A light def's `chain` (0..1) is the fraction of
 its recovery after which the next light may start (`player.js` `_tickAttack`). Options on the
 anim block: `spin` (±1, a full turn through the active frames: `spinTurn`), `turn` (rad, a partial
 pivot from mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`),
-`hop` (m, a skip off the ground from the windup into the strike). The other kinds are `slam` (the
-finisher: `slamSwing`, which takes `hop`) and `thrust` (the execution's lunge).
+`hop` (m, a skip off the ground from the windup into the strike; `tuck`: how far the feet lift
+with it, × the hop: over 1 the knees draw up, a leap). The finisher (def kind `slam`) is a clip too
+(`slam`, ADR-076: a gather, a leap, one two-handed diagonal into the ground); the only other anim
+kind is `thrust` (the execution's lunge). **The way home:** from a clip's `home` (default
+`SW_HOME` 0.3 of the recovery; the slam and the cleave 0.55, they hold their finish) `attackPose`
+blends the pose toward the ready stance while the clip's last keys are still moving, so the
+follow-through runs into the return without a stop. `spinTurn` (the whirl) also drops and leans
+him into the turn and turns his head back toward the target, then ahead of the body (`SPIN_SPOT`).
 **Attack variants** (ADR-055): a `LIGHT` def may carry `variants` (more `anim` blocks for the same
 hit: same timing, damage, reach and lunge). `HeroAnimator.play('attack')` calls `_pickVariant()`:
 `anim` or one of `variants` at random with the animator's own noise, never the same one twice in a
@@ -634,13 +646,16 @@ FX helpers that changed shape: `PlayerFx.gemTick(dt, x, y, z, k, vx, vz, vy)` an
 gem joint each frame) so glints ride the hilt; `gemTick` also keeps an always-on 0.22–0.26 m violet
 glow point at the gem; `bladeHalo(dt, k, far)` grows its dots with distance and lays a short bright
 `|` streak 0.06–0.26 m past the drawn point. `trail(pa, pb, a, b, kind, crit, gate = true)`
-sub-steps by the outer point's travel (one per 0.24 m, up to 8) and slerps the blade round the hilt
-between frames, so a sweep reads as one curved arc. Since ADR-074 the arc is an EDGE (one bright
-line of stretched `•` strokes along the point's path, which thins as it fades), a VEIL (3–5 rows of
-faint `|` streaks inside it, fainter toward the hilt) and a mote or two; its strength follows how
-far the blade TURNED this frame, so a blade only carried along (a dash) leaves none (`gate: false`
-for the plunge's dive). `arcGlint(x, y, z, dx, dy, dz, heavy, crit)`: a small star and sparks on the
-point, once a swing as the cut comes through (`player.js` `_combat`). New: `skid(dt, slot, x, z, dx, dz, sp,
+sub-steps by the edge's travel (one per 0.11 m, up to 14) and slerps the blade round the hilt
+between frames, so a sweep reads as one curved arc. Since ADR-077 the arc hugs the STEEL: its EDGE
+is one fine line of overlapping `|` strokes laid along the path of a point just past the steel's
+point (`arcAt(kind)`: 0.64 of the hit segment, × 1.22 for the slam and the cleave; the steel
+ends at 0.44, the reach at 1), white-hot when drawn and cooling to indigo as it thins to nothing.
+A VEIL of four faint rows runs close inside it (a thin crescent; the numbers are the exported
+`ARC_LOOK`). Its strength follows how far the blade TURNED this frame, so a blade only carried
+along (a dash) leaves none (`gate: false` for the plunge's dive). `arcGlint(x, y, z, dx, dy, dz,
+heavy, crit)`: a small star and sparks on the arc's edge, once a swing as the cut comes through
+(`player.js` `_combat`). New: `skid(dt, slot, x, z, dx, dz, sp,
 k)` (dust and torn grass off a sliding contact; `slot` 0 / 1 keeps a rate accumulator each) and
 `scrape(dt, x, y, z, dx, dz, sp)` (cold sparks off the dragging point). 2026-11-09: `parry(x, y, z,
 blue, chain = 1, dx = 0, dz = 0)` (the clash grows with the deflect chain, crossed streaks from the
@@ -678,7 +693,7 @@ Animator ↔ player hooks (`anim.js` is private to the player module):
   come from `BODY`. The build is not bit-identical on active frames (ADR-024): the hit segment moved
   by ≤ 2.5 cm on some of them (light 1 on 57 of 73 frames, light 2 on 9 of 29, the slam on 15 of 36;
   the thrust is identical), and the REACH table is unchanged. (ADR-071 / ADR-072 replaced the light
-  swings and the charged attack outright; of these clips only the slam's remains.)
+  swings and the charged attack outright, ADR-076 the slam: none of these clips remains.)
 - **Coat vs blade** (round 3): every frame the grip and 12 points along the drawn blade are tested
   against each coat panel segment in that segment's frame. With the sword hand outside the cloth the
   panel hangs inside the hand and the blade (they cap its flare; the legs still win); with the hand

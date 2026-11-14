@@ -5,8 +5,8 @@ import { DIM } from './model.js';
 // Attack data + the blade sweep used for hit detection. No stamina: pacing comes from windup /
 // recovery only (docs/COMBAT.md). Moveset (ADR-041; owner concept sheet "Combat key poses"):
 //   LMB tap ×5  a cut from the right → a backhand → a whirl (a full turn) → a lunge, all one-handed
-//               (ADR-071), → the two-handed overhead SLAM (combo finisher: ground shard burst, more
-//               damage + posture)
+//               (ADR-071), → the two-handed SLAM (combo finisher: a leap and one diagonal into the
+//               ground, a shard burst, more damage + posture)
 //   LMB while sprinting      SPRINT_ATK: a bounding rising slash that keeps the run's momentum
 //   LMB out of a forward roll ROLL_ATK: a low cut rising out of the crouch
 //               (both count as hit 1: the next tap is the rising backhand)
@@ -15,20 +15,16 @@ import { DIM } from './model.js';
 //               the blade carves one diagonal through the target as the dash arrives)
 //
 // Swing shapes (`anim`) are read by anim.js:
-//   kind 'clip'   — a keyframed clip from swings.js (`clip`: its name): the light swings and the
-//                   cleave. The clip's keys run over this attack's windup / active frames / recovery,
+//   kind 'clip'   — a keyframed clip from swings.js (`clip`: its name): the light swings, the
+//                   slam and the cleave. The clip's keys run over this attack's windup / active frames / recovery,
 //                   and its blade crosses the front of the hero inside the active frames, exactly
 //                   while it can hit. Options: `spin` (±1: the whole body turns once through the
 //                   active frames, − = to his right), `turn` (rad, + = to his left: a partial body
 //                   pivot through the cut that turns back in the recovery), `hop` (m: a skip off the
-//                   ground through the windup into the cut), `feet: 'dash'` (bounding steps for a
+//                   ground through the windup into the cut; `tuck`: how far the feet lift with it,
+//                   × the hop, over 1 = the knees draw up), `feet: 'dash'` (bounding steps for a
 //                   long root travel instead of one lunge step; `dashW`: the dash starts at the
 //                   windup's end).
-//   kind 'slam'   — two-handed vertical slam; a0/a1/a2 = blade elevation (π/2 = straight up,
-//                   0 = ahead, − = into the ground, > π/2 = back over the head) at the overhead
-//                   coil / impact / follow-through; ready → raise = the windup's path to a0. Takes
-//                   `hop` (a leap through the raise, landing on the impact) and `tilt` (rad: the
-//                   swing's plane leans toward his right).
 //   kind 'thrust' — the execution's lunge: blade level along the facing line, hands driven forward.
 //
 // `variants` (Session 16, owner: "I don't want him to show the same pattern over and over"): other
@@ -44,18 +40,22 @@ import { DIM } from './model.js';
 // through before the next one winds up (it was 0: a mashed chain cut each swing off as its active
 // frames ended, 4 hits a second).
 //
-// Pace (Session 25, owner: the swings were "too fast to follow"): a light's windup and active
-// frames are 0.16 / 0.18 s (they were 0.14 / 0.11) and a mashed chain lands a hit every ~0.42 s (it
-// was 0.25 s); the lights' damage and posture went up x1.4 with it, so a chain's damage per second
-// is about what it was.
+// Pace (Session 26, owner: "speed up the attack speed ... its too slow right now"): a light is a
+// short gather, a QUICK cut and a held finish: windup 0.11 s, active 0.12 s, and the next light may
+// start 30 % into the recovery, so a mashed chain lands a hit every ~0.30 s. (History: 0.25 s a hit
+// until Session 25, where the owner found the swings "too fast to follow" and they went to 0.42 s
+// with a 0.18 s cut; the cut itself is now as quick as it was then, and what makes it readable is the
+// pose held at each end and the arc that hangs in the air behind the blade, ADR-074.) The lights'
+// damage and posture are back to what they were at the old pace (the x1.4 that paid for the slow
+// chain is gone), so a mashed chain's damage per second is about what it has been.
 
 export const LIGHT = [
   {
     // 1, a cut from the right. The falling cut: cocked beside the head (blade up-back-right) → a
     // diagonal down across the front → low past the left hip
-    name: 'fallingCut', kind: 'light', combo: 1, damage: 42, poise: 17, heavy: false,
-    windup: 0.16, active: 0.18, recovery: 0.26, chain: 0.3, lunge: 0.55, reach: 2.2,
-    hitstop: 0.06, shake: 0.12,
+    name: 'fallingCut', kind: 'light', combo: 1, damage: 30, poise: 12, heavy: false,
+    windup: 0.11, active: 0.12, recovery: 0.24, chain: 0.3, lunge: 0.55, reach: 2.2,
+    hitstop: 0.05, shake: 0.12,
     anim: { kind: 'clip', clip: 'fallingCut' }, // high right → low left
     variants: [
       { kind: 'clip', clip: 'drawCut', turn: 0.3 }, // low and flat from the right hip, pivoting into it
@@ -65,9 +65,9 @@ export const LIGHT = [
   {
     // 2, a backhand from the left. The rising backhand: from low at the left hip up across the front
     // to high right
-    name: 'risingCut', kind: 'light', combo: 2, damage: 45, poise: 17, heavy: false,
-    windup: 0.16, active: 0.18, recovery: 0.26, chain: 0.3, lunge: 0.55, reach: 2.2,
-    hitstop: 0.06, shake: 0.12,
+    name: 'risingCut', kind: 'light', combo: 2, damage: 32, poise: 12, heavy: false,
+    windup: 0.11, active: 0.12, recovery: 0.24, chain: 0.3, lunge: 0.55, reach: 2.2,
+    hitstop: 0.05, shake: 0.12,
     anim: { kind: 'clip', clip: 'risingBackhand' }, // low left → high right
     variants: [
       { kind: 'clip', clip: 'flatBackhand', turn: -0.4 }, // level at chest height, pivoting round with it
@@ -77,9 +77,9 @@ export const LIGHT = [
   {
     // 3, the whirl: he follows the backhand round to his right, a full turn with the sword arm thrown
     // out level; the blade crosses the front two thirds of the way round, inside the active frames
-    name: 'whirl', kind: 'light', combo: 3, damage: 50, poise: 22, heavy: false,
-    windup: 0.18, active: 0.2, recovery: 0.28, chain: 0.3, lunge: 0.7, reach: 2.2,
-    hitstop: 0.07, shake: 0.16,
+    name: 'whirl', kind: 'light', combo: 3, damage: 36, poise: 16, heavy: false,
+    windup: 0.13, active: 0.15, recovery: 0.26, chain: 0.3, lunge: 0.7, reach: 2.2,
+    hitstop: 0.06, shake: 0.16,
     anim: { kind: 'clip', clip: 'whirl', spin: -1 },
     variants: [
       { kind: 'clip', clip: 'risingWhirl', spin: -1 }, // the same turn out of a crouch, the blade spiralling up
@@ -89,9 +89,9 @@ export const LIGHT = [
   {
     // 4, the lunge (def name `stab`): the hand draws back to the right ribs, then one long line from
     // the rear heel to the point
-    name: 'stab', kind: 'light', combo: 4, damage: 42, poise: 19, heavy: false,
-    windup: 0.15, active: 0.12, recovery: 0.26, chain: 0.3, lunge: 0.8, reach: 2.3,
-    hitstop: 0.065, shake: 0.14,
+    name: 'stab', kind: 'light', combo: 4, damage: 30, poise: 14, heavy: false,
+    windup: 0.11, active: 0.1, recovery: 0.24, chain: 0.3, lunge: 0.8, reach: 2.3,
+    hitstop: 0.055, shake: 0.14,
     anim: { kind: 'clip', clip: 'lunge' },
     variants: [
       { kind: 'clip', clip: 'risingThrust' }, // out of a crouch, the point driving up into the target
@@ -99,19 +99,18 @@ export const LIGHT = [
   },
   {
     // 5, the combo finisher: raise two-handed overhead, slam down, crystal shards burst from the ground
-    name: 'slam', kind: 'slam', combo: 5, damage: 58, poise: 40, heavy: true,
-    windup: 0.4, active: 0.12, recovery: 0.48, lunge: 0.75, reach: 2.1,
+    name: 'slam', kind: 'slam', combo: 5, damage: 66, poise: 44, heavy: true,
+    // (`chain`: a mashed button no longer cuts the landing off as the blade meets the ground; the
+    // blow's damage is up from 58 to pay for the beat it holds)
+    windup: 0.28, active: 0.13, recovery: 0.42, chain: 0.3, lunge: 0.75, reach: 2.1,
     hitstop: 0.11, shake: 0.42,
     up: 1.0, // reach band above the blade: lower than the sweeps' so the raise can't tag the neck overhead
     shards: { radius: 1.7, height: 3.2 }, // ground burst at the impact point (hits if the blade missed)
-    // windup: blade low ahead (ready) → up-back 33° past the head (raise, mid-windup) → hanging
-    // down the back at the apex (a0, the wrists coil); active: over the top into the ground ahead
-    // `tilt` (rad): the whole swing leans toward his right, so the blow comes down from over the
-    // right shoulder to the ground ahead and a little left: a diagonal, not straight down the middle
-    anim: { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, tilt: 0.42 },
+    // a clip like the lights (swings.js `slam`): a gather at the right hip, a leap as the blade
+    // sweeps up his right side and cocks over the shoulder, one diagonal down into the ground ahead
+    anim: { kind: 'clip', clip: 'slam', hop: 0.26, tuck: 1.2 }, // a leap through the raise, the knees drawn up, landing on the blow
     variants: [
-      // a leap through the raise, landing on the blow
-      { kind: 'slam', ready: -0.86, raise: 2.54, a0: 3.75, a1: -0.72, a2: -0.8, tilt: 0.42, hop: 0.16 },
+      { kind: 'clip', clip: 'slam', hop: 0.09 }, // nearly grounded: he rises onto his toes and stamps into it
     ],
   },
 ];
@@ -121,7 +120,7 @@ export const LIGHT = [
  *  hit 1 of the combo. */
 export const SPRINT_ATK = {
   name: 'sprintSlash', kind: 'light', combo: 1, damage: 40, poise: 18, heavy: false,
-  windup: 0.14, active: 0.16, recovery: 0.36, chain: 0.25, lunge: 0, travel: 2.4, keepYaw: true, reach: 2.3,
+  windup: 0.11, active: 0.13, recovery: 0.32, chain: 0.25, lunge: 0, travel: 2.4, keepYaw: true, reach: 2.3,
   hitstop: 0.07, shake: 0.2,
   anim: { kind: 'clip', clip: 'sprintSlash', feet: 'dash' },
 };
@@ -130,7 +129,7 @@ export const SPRINT_ATK = {
  *  of the combo. */
 export const ROLL_ATK = {
   name: 'rollCut', kind: 'light', combo: 1, damage: 34, poise: 14, heavy: false,
-  windup: 0.12, active: 0.14, recovery: 0.28, chain: 0.3, lunge: 0.9, reach: 2.2,
+  windup: 0.1, active: 0.11, recovery: 0.26, chain: 0.3, lunge: 0.9, reach: 2.2,
   hitstop: 0.06, shake: 0.14,
   anim: { kind: 'clip', clip: 'rollCut' },
 };

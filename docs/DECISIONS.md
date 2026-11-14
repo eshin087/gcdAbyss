@@ -1575,3 +1575,176 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
   him instead of bars. The letters and the halftone lattice are gone from the hero's arc. The
   plunge's dive passes `gate: false` (its blade is carried, not turned, and keeps its band). The
   Ash Disciple's and the Starless Lord's sweep trails are their own code and unchanged.
+
+## ADR-075 — The chain's pace: a quick cut between two held ends, a hit every ~0.32 s (2026-11-14)
+
+**Context.** Session 25 slowed the light chain from a hit every 0.25 s to one every 0.42 s (windup
+0.16 s, a 0.18 s cut) because the owner found the swings "too fast to follow", and raised the
+lights' damage ×1.4 to pay for it. On the merged build the owner wrote: "speed up the attack speed
+on the character. its too slow right now". So 0.25 s was too fast to read and 0.42 s too slow to
+play. The swings of Session 25's first build were also stiff and had no arc worth the name: what
+was hard to follow then was not only the speed.
+
+**Decision.**
+- **A light is a short gather, a quick cut and a held finish:** windup 0.11 s, active 0.12 s
+  (the lunge 0.10, the whirl 0.13 / 0.15), recovery 0.24 s with `chain` 0.3. A mashed chain lands a
+  hit every ~0.32 s (measured 0.32, 0.32, 0.37). The cut itself is as quick as before Session 25;
+  readability comes from the poses at its two ends and from the arc that hangs behind the blade
+  (ADR-074), not from a slow blade.
+- **Damage follows the pace:** the lights are 30 / 32 / 36 / 30 again (posture 12 / 12 / 16 / 14).
+  The slam is 66 (was 58) and has a `chain` of its own (0.3): a mashed button used to cut its
+  landing off the frame the blade met the ground. Mashed, the chain deals ~104 a second (109 on the
+  slow chain, 120 before Session 25). The crit window stays 2.2 s.
+- **The sprint slash and the roll cut** speed up with them (0.11 / 0.13 / 0.32 and 0.10 / 0.11 /
+  0.26 s); the slam's windup is 0.28 s (was 0.4), its blow 0.13 s. The cleave is unchanged: its
+  charge is its windup.
+- **`player.debug.attackSpeed`** (the Lab's "atk" slider, ×0.6 – ×1.6): a multiplier on the attack
+  clock, so the owner can try other paces on the preview (the Lab's button works on a phone) and
+  name a number instead of "faster" or "slower". 1 in play; the root's speeds are scaled back so a
+  swing's step covers the same ground at any pace.
+
+**Rejected.** Going back to 0.25 s (the owner called that too fast, twice). Keeping the 0.18 s cut
+and only shortening the windup and the wait between hits (the slow blade is what reads as slow).
+Scaling every timing by one factor in code (the timings are data, per hit: combat.js).
+
+**Consequences.** The fastest frame of an arm in a cut is larger (the upper arm's throw into the
+falling cut and the lunge: ~55° in a frame, was 42°): the test's limit is 60° (it was 45°; the
+elbow flips it guards against were 50–135° on swings half as fast). Tests that walk the chain click
+every 0.36 s (`CHAIN_EVERY`).
+
+## ADR-076 — The finisher is a clip; a recovery flows into the way home; the whirl drops and spots (2026-11-14)
+
+**Context.** The owner, with the pace: "think of ways to make the character, animation, and motion
+better". Session 25's lesson was to measure motion before tuning it, so the hero was run through
+every state (idle, run, sprint, the chain in each look, single hits, roll and sprint attacks,
+block, charge and cleave, heal) with nine points tracked in his own frame, and the frames where a
+point's motion changed most abruptly were listed. Three things stood out:
+- **The slam**, the last swing still on its own code (`slamSwing`): its hands covered 0.54 m in
+  one frame of the blow, the point reversed in a single frame at the top, and the blade went over
+  the top of his head (an upright plane leaned 24°).
+- **Every recovery:** the clip's last key is at ~40 % of the recovery and the way home started at
+  50 %, so the blade stood still for two frames and then came home in 0.12 s at 60 cm a frame at the
+  point, as fast as it had cut: cut, freeze, snap.
+- The roll out of a swing and the guard's raise are also abrupt (the point moves 0.4–0.8 m in a
+  frame), but both are reactions that must be instant; they are left alone.
+Filmed close up, the whirl turned bolt upright, like a figure on a turntable.
+
+**Decision.**
+- **The slam is a swings.js clip** (`slam`, line `down`, two-handed) like every other swing: a
+  gather (he dips and coils right, the blade drawn down-back past the right hip), a leap (`hop`
+  0.26 m with `tuck` 1.2: the knees draw up) as the blade sweeps up his right side, where the camera
+  behind him sees it, and cocks over the right shoulder (46° up), then one diagonal down across his
+  front into the ground ahead and a little left, the hands leading and the steel whipping after
+  them. He lands folded over the planted blade and holds it (`home` 0.55). The second look is the
+  same clip nearly grounded (`hop` 0.09). The shards, the reach band, the hit test and the events
+  are the def's and unchanged. `slamPose`, `slamWindup`, `slamSwing`, `slamTilt` and the path
+  splines they used are removed (about 190 lines).
+- **The way home starts while the follow-through is still moving:** a clip's `home` defaults to 0.3
+  of the recovery (`SW_HOME`; it was 0.5). The blade turns round without standing still and comes
+  home over 0.17 s at about half the cut's speed.
+- **The whirl** drops 7 cm into its turn and leans to the inside of it, and his head spots: it stays
+  on the target while the body turns away, comes round ahead of the body and finds the target again
+  before the shoulders do (`spinTurn`, `SPIN_SPOT`).
+
+**Rejected.** Smoothing the old slam's easing (its plane and its own windup code would have stayed
+a second system). Letting the way home finish after the attack state ends, in the cross-fade to the
+ready stance (the cross-fade routes the blade by the carry's rules, not the recovery's: a finish
+over the left shoulder could come home behind his head). A slower raise of the guard (a block must
+read as instant).
+
+**Consequences.** Every swing of the hero is clip data now; the only attack pose still in code is
+the execution's thrust. Tests: the finisher's hands move < 36 cm in a frame (33); a cut's
+follow-through runs into the way home (no two still frames, the point home at < 0.62 of the cut's
+speed); a mashed button leaves the slam's landing ≥ 0.1 s.
+
+## ADR-077 — The sword arc hugs the steel: a fine line in three looks; the thrusts rise (2026-11-14)
+
+**Context.** The owner on Session 26's preview: "the 4th poke on the sword combo is like clipping
+through the ground. make the sword trail effect look way cooler and more subtle".
+- **The poke.** Measured, the lunge's steel never came within 0.8 m of the ground. Filmed from the
+  game camera with the hero facing it, the level blade is drawn straight down the screen from his
+  hand to the grass between his feet: the camera looks down at 58° on a hero whose drawing is
+  leaned upright, so "toward the camera and level" reads as "down". The swing's glint made it
+  worse: it flashed at the end of the gameplay reach, 1.9 m from the hilt and a metre past the
+  steel, which from that camera is on the ground in front of him.
+- **The trail** (ADR-074's line and veil) ran at the end of that reach too: a crescent twice the
+  sword's length, with a veil half the reach wide that still read as a glowing band, an edge of
+  stretched dots that showed as dashes, and an end that dipped under the grass on low cuts (0.26 m
+  under on the falling cut, 0.63 m on the slam).
+
+**Decision.**
+- **Both thrusts rise:** the lunge's point is driven up at 35° (20° in the coil), the rising
+  thrust's at 45°, at a tall foe's chest. Facing the camera the blade now ends at his hip, pointed
+  at the viewer; from behind it stands long above his head; from the side it is a rising line. The
+  hit test is unchanged (the reach band is vertical; REACH passes at every distance).
+- **The arc is drawn off the steel:** its edge runs just past the steel's point (`arcAt`: 0.64 of
+  the hit segment for the default look, the steel ends at 0.44), and the glint sits on that edge.
+- **The edge is a fine unbroken line:** overlapping `|` strokes 0.11 m in size (a sliver wide),
+  one per 0.11 m of travel, white-hot as drawn and cooling to indigo as each thins away, so the tail
+  tapers to a hair. No dots, no dashes.
+- **The look is a thin crescent** (`ARC_LOOK`): the edge with four faint rows close inside it, the
+  faintest at 6 %. It was chosen from three: a trail is a taste call and it moves, so three looks
+  were built behind a Lab button (`line`: the edge alone; `crescent`; `ghost`: afterimages of the
+  steel fanned behind it), rendered as a sheet and put on the preview. The owner answered
+  "Crescent"; the other two, the button and `debug.arcStyle` were deleted.
+
+**Rejected.** Keeping the thrust level and selling it with a long streak along the ground (it would
+still point at the grass). Shrinking the old veil's opacity only (the band's width and the dashes
+were the problem). One look chosen by me with nothing to compare it to (the last two rounds of
+this effect both came back).
+
+**Consequences.** The crescent no longer shows the full gameplay reach (hits land up to 0.7 m past
+the drawn arc, in the player's favour). Tests (HEROLIFE 1e): a turning blade is drawn in strokes
+of at most 0.14 m no further than 1.3 m from the hilt, a bright edge over a faint veil, with no
+letters, and nothing for a carried blade; the thrusts' points are at least 30° above level at full
+reach.
+
+## ADR-078 — Joint limits in the solver; the charge is a guard held out from the body (2026-11-14)
+
+**Context.** The owner, with a screenshot of the held charge: "while charging the right hand makes
+an unnatural angle. review all the characters animation and make sure the anatomy and motion is all
+natural and legit". Poses are authored as hand and foot targets and a blade direction; nothing
+stopped a pose, or a cross-fade between two good poses, from asking for what a body cannot do. The
+hero was run through every state (idle, run, sprint, every look of the chain, single hits, roll and
+sprint attacks, block, charge and cleave, heal) and his joint angles were measured in his own frame
+(the drawn hero is sheared toward the camera, which bends angles by up to ~15°). Found:
+- **The held charge:** the hands were 0.11 m before the right shoulder. The sword elbow was folded
+  to 18°, the forearm stood up under the hilt in one line with the blade, the off hand was inside
+  the chest and the off forearm ran 15° off the steel.
+- **Elbows** closed to 18–20° in the charge and the falling cut's coil; **knees** to 10° in the
+  roll's tuck.
+- **The sword wrist** folded the blade back along the forearm to 170° for three frames as the
+  charge came up from a low coil, and to 139–150° in the slam's gather.
+- **The slam's and the cleave's cocked position** put the grip level with the shoulders beside the
+  head: the off arm's elbow went up behind the back to reach it.
+- **The free hand** passed 2 cm inside the chest on its way to a backhand's coil; **the neck**
+  turned 76° in the whirl (Session 26's own head spotting).
+- In range everywhere: the shoulders of the sword arm, knees bending forward, the spine (54° at
+  most, in the roll), run / sprint / stop / turn / heal / idle.
+
+**Decision.** Limits live in the solver, so no pose and no blend between poses can pass them:
+- **Elbows never close past 40°, knees past 32°** (`ARM_FOLD`, `LEG_FOLD`): a hand or a foot asked
+  for nearer its shoulder or hip than that is held out along the same line (`_arm`, `_leg`).
+- **The sword wrist** (`_wristLimit`, `WRIST_BACK` 128°): the blade never folds back along the
+  forearm further than that from the forearm's own line; a pose that asks for more gets the blade
+  at the limit, on the same side.
+- **A hand never passes through the chest** (`TORSO_R`): inside the ribs' outline it is moved out
+  to the surface. The off hand on the grip is exempt from the first and the last (it keeps the
+  grip): two-handed poses are fixed in their data instead.
+- **The charge** is a high guard held out from him: the grip a forearm's length before the right
+  shoulder, the sword elbow lifted out to the side, the off forearm across the chest. Sword wrist
+  103° to the steel, elbows 58° / 49°, the off hand 18 cm from the chest's axis.
+- **The slam and the cleave** cock the grip 0.16–0.24 m before the shoulder line, and their off
+  elbow is keyed down and out (`lp`); the slam's gather draws the hand behind the hip line.
+- **The whirl's head** turns 0.6 rad (`SPIN_SPOT`) and is clamped to 1.0 rad on the chest.
+
+**Rejected.** Fixing only the charge's numbers (the next pose would repeat it; the transitions
+cannot be fixed in data at all). A full biomechanical model (shoulder cones, forearm twist): the
+rig has no hand bones and the audit found the sword-side shoulder in range everywhere.
+
+**Consequences.** The wrist limit turns the blade by up to ~10° in the first active frame of the
+falling cut; REACH passes at every distance. Tests (HEROLIFE 1g): through a held charge and its
+cleave, three chains, a roll and the guard, elbows ≥ 38°, knees ≥ 30°, the blade at most 130° back
+on the forearm; the held charge's wrist, elbows and off hand in range. Not covered: the off hand's
+wrist (it runs 4–40° off the steel in two-handed cuts), the free arm's elbow drawn behind the back
+in two backhands' recoveries, hit reactions and the death fall (not driven by the audit).

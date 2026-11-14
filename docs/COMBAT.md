@@ -146,20 +146,20 @@ hit. The slam and the charged cleave are two-handed.
 
 | Move | Input | Timing (windup / active / recovery) | Damage | Posture | Notes |
 |---|---|---|---|---|---|
-| 1 — falling cut | LMB tap | 0.16 / 0.18 / 0.26 s (0.60 s) | 42 | 7 | one-handed: cocked beside the head (blade up-back-right), the free hand out toward the target; a diagonal down across the front as the hips turn through and the body sinks, ending low past the left hip; cyan crescent |
-| 2 — backhand | LMB tap in the recovery | 0.16 / 0.18 / 0.26 s | 45 | 7 | back across his front from the left: rising from the left hip to high right, the body rising with it (or level at chest height with a pivot, or falling from over the left shoulder) |
-| 3 — whirl | 3rd tap | 0.18 / 0.20 / 0.28 s (0.66 s) | 50 | 9 | he follows the backhand round to his right: one full turn with the sword arm thrown out level and the free arm flung wide; the blade crosses the front about two thirds of the way round, inside the active frames, and carries on round to his right |
-| 4 — lunge | 4th tap | 0.15 / 0.12 / 0.26 s (0.53 s) | 42 | 8 | one-handed: the hand draws back to the right ribs with the free hand out along the line, then one long line from the rear heel to the point, the free arm thrown straight back |
-| 5 — slam (finisher) | 5th tap | 0.40 / 0.12 / 0.48 s (1.0 s) | 58 | 16 | two-handed: the blade rises past the head and hangs down the back at the apex (torso arched), then slams into the ground; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
-| Sprint slash | LMB while sprinting (faster than a run) | 0.14 / 0.16 / 0.36 s | 40 | 7 | a bounding rising slash, low right → high left; carries 2.4 m along the RUN direction (it does not snap to the aim); counts as hit 1 (the next tap is the rising backhand) |
-| Roll cut | LMB out of a forward roll | 0.12 / 0.14 / 0.28 s | 34 | 6 | a low cut rising out of the crouch, right → left; counts as hit 1. A backstep (Space with no direction) starts the plain chain |
-| Cleave — charged | hold LMB ≥ 0.3 s, release | 0.08 / 0.24 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | a deep stance coiled away from the target, both hands on the grip beside the right ear, the blade standing nearly upright beside his head (moves at ×0.4; lightning crawls on the blade past half charge); the release dashes 2.2–3.6 m along the facing with the blade still cocked and carves one two-handed diagonal, high right to past the left hip, as the dash dies out (the blade crosses his front over the last 45 % of the active frames), sinking into a long low lunge that he holds; a wide crescent that hangs in the air, and on a hit a 0.15–0.2 s freeze, a ring and a fan of streaks (ADR-072; it was a lunging thrust) |
+| 1 — falling cut | LMB tap | 0.11 / 0.12 / 0.24 s (0.47 s) | 30 | 5 | one-handed: cocked beside the head (blade up-back-right), the free hand out toward the target; a diagonal down across the front as the hips turn through and the body sinks, ending low past the left hip; cyan crescent |
+| 2 — backhand | LMB tap in the recovery | 0.11 / 0.12 / 0.24 s | 32 | 5 | back across his front from the left: rising from the left hip to high right, the body rising with it (or level at chest height with a pivot, or falling from over the left shoulder) |
+| 3 — whirl | 3rd tap | 0.13 / 0.15 / 0.26 s (0.54 s) | 36 | 6 | he follows the backhand round to his right: one full turn with the sword arm thrown out level and the free arm flung wide, dropping into the turn and leaning to the inside of it, his head staying on the target and coming round ahead of the body; the blade crosses the front about two thirds of the way round, inside the active frames, and carries on round to his right |
+| 4 — lunge | 4th tap | 0.11 / 0.10 / 0.24 s (0.45 s) | 30 | 6 | one-handed: the hand draws back to the right ribs with the point already up and the free hand out along the line, then one long line from the rear heel to the point, driven forward and UP at 35° (the rising thrust: 45°), the free arm thrown straight back. Both thrusts rise (ADR-077): a level blade pointed toward the game camera is drawn straight down the screen to the grass at his feet, as if planted in the ground |
+| 5 — slam (finisher) | 5th tap | 0.28 / 0.13 / 0.42 s (0.83 s) | 66 | 18 | two-handed (ADR-076): he gathers (dips and coils right, the blade drawn down-back past the right hip), leaps as the blade sweeps up his right side and cocks over the shoulder, and brings it down in one diagonal across his front into the ground ahead and a little left, landing folded over the planted blade and holding it; a crystal-shard burst (r 1.7 m) at the point hits if the blade missed |
+| Sprint slash | LMB while sprinting (faster than a run) | 0.11 / 0.13 / 0.32 s | 40 | 7 | a bounding rising slash, low right → high left; carries 2.4 m along the RUN direction (it does not snap to the aim); counts as hit 1 (the next tap is the rising backhand) |
+| Roll cut | LMB out of a forward roll | 0.10 / 0.11 / 0.26 s | 34 | 6 | a low cut rising out of the crouch, right → left; counts as hit 1. A backstep (Space with no direction) starts the plain chain |
+| Cleave — charged | hold LMB ≥ 0.3 s, release | 0.08 / 0.24 / 0.45 s | 70–110 by charge (full at 1.2 s) | 12–20 | a deep stance coiled away from the target, both hands on the grip held out a forearm's length before the right shoulder, the sword elbow lifted out to the side and the off forearm across the chest (ADR-078), the blade standing nearly upright beside his head (moves at ×0.4; lightning crawls on the blade past half charge); the release dashes 2.2–3.6 m along the facing with the blade still cocked and carves one two-handed diagonal, high right to past the left hip, as the dash dies out (the blade crosses his front over the last 45 % of the active frames), sinking into a long low lunge that he holds; a wide crescent that hangs in the air, and on a hit a 0.15–0.2 s freeze, a ring and a fan of streaks (ADR-072; it was a lunging thrust) |
 
 - **Variants** (ADR-055, ADR-071): hits 1–5 each have 2–3 looks, picked at random as the hit starts
   (never the same one twice in a row, and never along the line the swing before it cut, so two hits
   in a row are never in the same plane): 1 falling cut / low draw cut / rising slash with a skip;
   2 rising backhand / flat backhand with a pivot / falling backhand; 3 whirl / rising whirl / a
-  crouching low sweep; 4 lunge / rising thrust out of a crouch; 5 slam / leaping slam (both come down from over the right shoulder: a diagonal). A variant
+  crouching low sweep; 4 lunge / rising thrust out of a crouch; 5 the slam with a leap / nearly grounded (one clip; both come down from over the right shoulder: a diagonal). A variant
   changes only the look: the timing, damage, posture, reach and lunge in the table are the hit's,
   and every variant connects from the front at contact, 2 m and 3.5 m (the REACH test). The sprint
   slash, the roll cut and the cleave have one look each.
@@ -174,10 +174,19 @@ hit. The slam and the charged cleave are two-handed.
   mid-active (the low sweep later, at ~65 %: a low blade reaches less far under a tall target): a
   cut that crossed earlier swung past the front before the step-in assist closed the gap and lost
   the 3–3.5 m REACH cases.
-- Pacing: the next light starts after 30 % of the recovery (`chain`: the cut carries through
-  first), so a mashed chain lands a hit every ~0.42 s (it started right after the active frames: a
-  hit every 0.25 s, "too fast to follow"); a roll / flask cancels a recovery after 35 %, movement
-  after 60 %; RMB raises the guard out of any windup (not the active frames).
+- Pacing (ADR-075): a light is a short gather, a quick cut and a held finish (0.11 / 0.12 s, then
+  the next light may start 30 % into the recovery: `chain`), so a mashed chain lands a hit every
+  ~0.32 s. History: 0.25 s a hit until Session 25, where the owner found the swings "too fast to
+  follow" and they went to 0.42 s with a 0.18 s cut; then "its too slow right now" (Session 26). The
+  cut is now as quick as the old one; what makes it readable is the pose at each end and the arc
+  that hangs behind the blade (ADR-074). The slam has a `chain` too: a mashed button no longer cuts
+  its landing off (the next chain starts ≥ 0.13 s after the blow). A roll / flask cancels a recovery
+  after 35 %, movement after 60 %; RMB raises the guard out of any windup (not the active frames).
+- **The recovery flows** (ADR-076): he starts back to the ready stance 30 % into the recovery (a
+  clip's `home`), while the follow-through is still moving, so the blade never stands still between
+  the cut and the way home and comes home at about half the cut's speed (it stopped for two frames
+  and then snapped home in 0.12 s, as fast as it had cut). The slam and the cleave hold their finish
+  (`home` 0.55).
 - **Reach against giant targets** (`REACH`): the wyrm's chest hangs 2–4 m above the grass, above a
   sword swung at a 1.75 m hero's chest, so the blade hits through a **vertical band**: a hurt sphere
   counts when it overlaps the blade's swept wall extended `up` 2.6 m above (the slam: 1.0 m) and
@@ -185,10 +194,11 @@ hit. The slam and the charged cleave are two-handed.
   in** toward a hurt surface within 4.8 m and 0.8 rad of the facing (lunge stretched by ≤ 1.3 m).
   Result (`npm test` → scenario REACH): all five chain hits and the cleave connect from the front
   of an idle wyrm from contact out to 3.5 m from its chest surface.
-- **Chain pacing (ADR-041, ADR-071):** the five hits deal 237 damage in 3.79 s of full swings (63
-  per second; before the slower swings 186 in 2.94 s, also 63). Mashed, the four lights land 179
-  damage in ~1.7 s (it was 128 in ~1.0 s): each light hits ×1.4 harder and comes ~1.7× later, so a
-  mashed chain deals about 15 % less per second than it did. The old three dealt 120 in 1.94 s.
+- **Chain pacing (ADR-041, ADR-071, ADR-075):** the five hits deal 194 damage in 2.76 s of full
+  swings (70 per second; at the slow pace 237 in 3.79 s, 63). Mashed, the whole chain lands 194 in
+  ~1.86 s, about 104 per second (the slow chain: 237 in ~2.17 s, 109): the lights' ×1.4 of the slow
+  pace is gone (30 / 32 / 36 / 30 again) and the slam went from 58 to 66 for the beat its landing
+  now holds. The old three dealt 120 in 1.94 s.
 - The broad build (2026-11-09) kept the bones: the REACH table is unchanged; the hit segment moved
   by ≤ 2.5 cm on some active frames (ARCHITECTURE.md, animator).
 - Not in the table: **the plunge** (a perfect dodge of the wyrm) and **the execution** (an attack
@@ -599,7 +609,7 @@ S = `SCALE` 1.875 (model units → metres).
 
 **Player:** HP 160, 5 flasks (+70 HP, 0.85 s), roll 0.6 s (i-frames 0.04–0.4 s), backstep 0.4 s
 (0.03–0.22 s), the moveset above. Parry window 0.22 s (perfect within 0.08 s: a bullet returns),
-re-arm 0.25 s (skipped right after a deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 2.2 s at ×1.8 (1.6 s before the chain slowed to a hit every ~0.42 s).
+re-arm 0.25 s (skipped right after a deflect), perfect-dodge window 0.2 s, slow-mo ×0.3 for 0.6 s, crit window 2.2 s at ×1.8 (1.6 s until Session 25; kept at 2.2 s when the chain sped up again, ADR-075).
 
 **The wyrm:**
 - HP 4500. Phase gates at 66 % (2970 HP) and 33 % (1485 HP).
@@ -687,7 +697,7 @@ phases, every attack's damage, the posture meter (120 / 140 → 560 / 640 / 720)
 a string). The geometry and timing measurements below (reaches, AI ranges, first contact against
 the flash) still describe the single attacks; they are kept as history.*
 - Player: HP 160, 5 flasks (+70 HP), roll 0.6 s with i-frames 0.04–0.4 s, light combo 30/32 + slam
-  58, charged cleave 70–110 by charge (moveset table above).
+  66, charged cleave 70–110 by charge (moveset table above).
 - Cinder Wyrm: HP 1500, see `src/entities/dragon/tuning.js` for every attack's tell and timings.
   Size ×1.875 (`SCALE`): reaches, radii, hurt spheres and AI ranges scale with it, windups / tells
   / flash timing do not. v0.4 four-legged rebuild (docs/art/dragon.md): every ability keeps its
