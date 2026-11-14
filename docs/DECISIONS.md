@@ -1752,19 +1752,28 @@ in two backhands' recoveries, hit reactions and the death fall (not driven by th
 - **Context:** the owner asked to improve the boss's "character detail" and to make him look like a
   famous film villain in black armour, a helmet and a cape. He had been built from the Wanderer's
   coat, pauldron, boots and half-cape under a horned helm, at the Ash Disciple's size.
-- **Decision:** the archetype, not the character. He gets a harness of his own (gear.js): a closed
-  helm with a prow faceplate, one slit of red light and a ribbed breather; a cuirass with a gorget, a
-  standing collar and a ring of red light on the breastbone; a plate yoke on the chest joint with a
-  lamed pauldron on each arm; plate arms and thighs; hip plates over a war-skirt; and a cape of five
-  sheets to the ankles on the streamer springs. Nothing is copied from another work's design: the
-  helm is a crested sallet with a lamed tail, there is no chest panel, and the names stay his own.
-  Three helms were rendered for the owner (sallet, crown, hood: `LORD_LOOKS`); `?lordLook=` picks one
-  on a preview build until the pick is made. He is drawn at 1.32 (`kit.scale`; the hero is 1.08, Shen
-  Hui 1.2): a head taller, visual only.
+- **Decision:** the archetype, not the character. He gets a harness of his own (gear.js): a deep
+  hood over a prow faceplate with one slit of red light and a ribbed breather; a cuirass with a
+  gorget and a ring of red light on the breastbone; a plate yoke on the chest joint with a lamed
+  pauldron on each arm; plate arms and thighs; hip plates over a war-skirt; and a cape of five sheets
+  to the ankles on the streamer springs. Nothing is copied from another work's design: the faceplate
+  is his own, there is no chest panel, and the names stay his own. He is drawn at 1.32 (`kit.scale`;
+  the hero is 1.08, Shen Hui 1.2): a head taller, visual only.
+- **His head, the owner's pick:** three heads were rendered in game on one sheet over the same
+  harness (A a crested sallet with a lamed tail, B the same helm under a crown of swept-back spikes,
+  C the faceplate in a deep hood) and A was built first. The owner picked C ("the hood",
+  2026-11-14). The two helms and the `?lordLook=` switch that showed them on the preview were
+  removed, and the hood was finished as his head (`HOOD_RINGS`, a ring per row as [y, half-width,
+  front edge, back edge, opening]): a round crown, a brow that hangs forward over the faceplate and
+  closes just above it, a rim in the cloth's ember red round the opening, a drape pooled on the
+  yoke. As first rendered it read from the side as a flat-topped box. The standing collar behind the
+  head went with the helms: it poked through the hood's sides.
 - **Consequences:** the game is public, so a look-alike of a film character was not built; the owner
   was told so with the sheet. The yoke is rigid on the chest, so a raised arm passes under it (as the
-  hero's mantle). His drawn body is 32 % larger than his hurt spheres (was 20 %). The unpicked helms
-  and the URL switch are to be removed once the owner has chosen.
+  hero's mantle). The hood is rigid on the head joint (no springs): its drape turns with his head
+  over the yoke. The hero is hooded too; his hood is pushed back off a face and gold hair, the
+  lord's is closed over the brow round a faceplate. His drawn body is 32 % larger than his hurt
+  spheres (was 20 %).
 
 ## ADR-080 — How the Starless Lord moves: the glide, strings that walk, three more spells (2026-11-14)
 - **Context:** the owner asked for better animation, movesets, spell and force effects and motion. On
@@ -1785,6 +1794,6 @@ in two backhands' recoveries, hit reactions and the death fall (not driven by th
   brain's and went back to the walking clip): both bosses now wait in their clip (he sits, Shen Hui
   kneels).
 - **Consequences:** the grip is the pin, not the "lifted and held, mash to break free" grab the
-  roadmap sketched: that needs a hero state of its own. 37 moves (was 31); with the hero's new
-  swings (ADR-071) the 85 % bot takes 340 damage (was 325 at his release) and the 70 % bot 846 (was
+  roadmap sketched: that needs a hero state of its own. 37 moves (was 31); with the hero's faster
+  chain (ADR-075) the 85 % bot takes 262 damage (was 325 at his release) and the 70 % bot 825 (was
   740): about as hard, not re-tuned against a human. No sounds of their own for any of it yet.

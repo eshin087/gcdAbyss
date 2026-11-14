@@ -151,13 +151,15 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] The reference's density of small bright detail
 
 ## M1.26 — The Starless Lord: black plate, motion, three more spells (2026-11-14, `enemies/starless-lord-armour`, ADR-079, ADR-080)
-- [x] A harness of his own (helm, cuirass, yoke and pauldrons, plate limbs, war-skirt, cape), drawn at 1.32
-- [x] Three helms rendered for the owner's pick (sallet, crown, hood); `?lordLook=` on the preview
+- [x] A harness of his own (hood and faceplate, cuirass, yoke and pauldrons, plate limbs, war-skirt, cape), drawn at 1.32
+- [x] Three heads rendered for the owner's pick (sallet, crown, hood): the owner picked the hood
 - [x] New guards, the glide, strings that walk, hop spins, a cartwheel and a backflip, flourishes
 - [x] Six new moves (37): Starless Dirge, Crushing Dark, Pinwheel, The Rift, Parting Light, Dark Star
 - [x] Every Void effect redrawn; the glide's wake, the blink's afterimage
 - [x] Fixed: a waiting duelist stood in his guard (he sits; Shen Hui kneels)
-- [ ] Owner: pick the helm; then remove the other two and the URL switch
+- [x] The hood is his head: the two helms and the `?lordLook=` switch removed; the hood finished (a
+      round crown, the brow over the faceplate, an ember rim, the drape on the yoke); the standing
+      collar removed (it poked through the hood)
 - [ ] A human fight, and on the phone; re-tune for the new moves
 - [ ] Follow-ups:
   - [ ] Watch the glide, the cartwheel and the flourishes in motion at 60 fps (reviewed as strips)
@@ -200,7 +202,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] A human playtest: is form 4's 0.36 s rhythm readable, is the blink fair, is he too long?
 - [ ] Follow-ups:
   - [ ] Look at every move frame by frame up close (the somersault, the off-hand cuts, the staff)
-  - [x] His look as options for the owner (M1.26: three helms on one harness)
+  - [x] His look as options for the owner (M1.26: three heads on one harness; the owner picked the hood)
   - [ ] Sounds of his own: a blade hum and swing, thunder for the lightning, the ignition
   - [ ] The Void grip (lifted and held: mash to break free), designed and left out (M1.26 ships the
         Crushing Dark instead: a pin, no new hero state)

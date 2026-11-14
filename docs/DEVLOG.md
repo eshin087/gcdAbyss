@@ -9,14 +9,21 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 **Owner:** "improve the new bosses animation, movesets, spell effects, force effects, character detail
 and motion. make him look like a darth vader look alike". Branch `enemies/starless-lord-armour` from
-`main` (PR #24 merged the day before; rebased over PR #23, the hero's new swings).
+`main` (PR #24 merged the day before; rebased over PR #23 and PR #25, the hero's new swings and his
+faster chain).
 
 **Done:**
-- **His look** (ADR-079): a harness of his own in gear.js (helm, cuirass and gorget, plate yoke and
-  pauldrons, plate arms and thighs, hip plates over a war-skirt, a cape to the ankles), drawn at 1.32.
-  Three helms rendered in game as one sheet for the owner (A sallet, B crown, C hood); built with A.
-  An original design in that archetype: a film character's own look was not copied, and the owner
-  was told so.
+- **His look** (ADR-079): a harness of his own in gear.js (a hood over a faceplate, cuirass and
+  gorget, plate yoke and pauldrons, plate arms and thighs, hip plates over a war-skirt, a cape to the
+  ankles), drawn at 1.32. Three heads rendered in game as one sheet for the owner (A sallet, B crown,
+  C hood); built with A. An original design in that archetype: a film character's own look was not
+  copied, and the owner was told so.
+- **The owner's pick: "the hood".** The two helms and the `?lordLook=` switch are gone (`lord.hood`
+  is his one head item, `LORD_LOADOUT` a constant). Up close the hood as first rendered read from
+  the side as a flat-topped box, and the standing collar behind the head poked through its sides.
+  It is now given as a front and a back edge per ring: a round crown, the brow hanging forward over
+  the faceplate and closing just above it, a rim in the cloth's ember red round the opening, the
+  drape pooled on the yoke. The collar is removed.
 - **How he moves** (ADR-080): four new guards (the blade hung at his side, twin blades as wings, the
   staff level across him, the cross-hilt upright before his face); he glides instead of running; cuts
   alternate feet; spins hop and carry the feet round; a cartwheel cut and a backflip; a flourish per
@@ -27,7 +34,7 @@ and motion. make him look like a darth vader look alike". Branch `enemies/starle
   push's burst, the pull's vortex, the grip's talons and crush, the Rift, the Dark Star, called
   lightning's wheel in the sky, stones that turn round him, the glide's wake, form 4's wheel of marks,
   the blink's afterimage, the ignition's pillar.
-- **Tests:** lord.mjs LEVEL (the harness, every helm builds, seated) and SPELLS (the grip, the Rift,
+- **Tests:** lord.mjs LEVEL (the harness, one head item: the hood, seated) and SPELLS (the grip, the Rift,
   the Dark Star, Parting Light, the glide); duel.mjs (Shen Hui waits in his meditation clip).
 
 **Found on the way:** both duelists stood in their guard while they waited (on the throne's seat, in
@@ -40,17 +47,19 @@ inlay: it draws its reach in violet too.
 helms, four angles and a close-up each), the four guards from two sides, film strips of the dirge,
 the backflip, the pinwheel, the gale, the grip, the Rift, the Dark Star, lightning, the push, the
 glide, the intro from the door, him seated, Shen Hui kneeling; 88 s of the AI across the four forms
-against an idle hero: no console errors, 1879 particles at most. Bots (seed 4242, on main's new
-swings): every tell answered 93 s; 85 % 22 hits / 340 damage; 70 % 47 hits / 846.
+against an idle hero: no console errors, 1879 particles at most. After the pick: the hood from six
+sides close up (ASCII and solid), a turnaround, him seated, the backflip and the grip with it on.
+Bots (seed 4242, on main's faster chain): every tell answered 95 s; 85 % 16 hits / 262 damage; 70 %
+43 hits / 825.
 
-**Not checked / open:** no human has fought him; not tried on a phone. The helm is my pick (A): the
-owner has the sheet and `?lordLook=crown|hood` on the PR preview; the two not picked and the switch
-then come out. The glide, the cartwheel and the flourishes were reviewed as strips, not in motion at
+**Not checked / open:** no human has fought him; not tried on a phone. The hood was checked in the
+model view and in strips, not in a whole fight at the game camera. The glide, the cartwheel and the
+flourishes were reviewed as strips, not in motion at
 60 fps. The hop spin's legs are hidden by the war-skirt and the cape: not checked bare. The numbers
 were not re-tuned for the six new moves. No sounds of their own. His drawn body is now 32 % larger
 than his hurt spheres.
 
-**Next:** the owner's pick of the helm and a first human fight; then tuning.
+**Next:** a first human fight; then tuning.
 
 ---
 ## 2026-11-14 — Session 26: a faster chain, the finisher as a clip, a recovery that flows

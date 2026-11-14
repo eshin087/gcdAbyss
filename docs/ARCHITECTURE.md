@@ -1554,12 +1554,12 @@ _glide(dt)                     // in footwork past TUNING.glide.on m/s: the anim
                                // lifted TUNING.glide.hover m, a wake under him; a backstep / sidestep likewise
 debug.phase4(), debug.setForm(n), debug.form
 ```
-**His gear** (gear.js, ADR-079): `lord.*` items registered into the hero's gear registry: a helm
-(`lord.helm.sallet` | `.crown` | `.hood`: `LORD_LOOKS`; `?lordLook=` in the page's URL picks one, the
-first by default), `lord.plate` (cuirass, gorget, the sigil), `lord.yoke` (a plate yoke on the chest
+**His gear** (gear.js, ADR-079): `lord.*` items registered into the hero's gear registry: `lord.hood`
+(a deep hood over a faceplate with one slit of red light: `HOOD_RINGS`; `hidesHair`, `shadowsFace`;
+the owner's pick of three heads), `lord.plate` (cuirass, gorget, the sigil), `lord.yoke` (a plate yoke on the chest
 joint, a pauldron on each upper arm), `lord.arms`, `lord.legs` (the Wanderer's boots under cuisses),
 `lord.skirt` (hip plates; `LORD_PANELS` on the coat springs), `lord.cape` (`LORD_CAPE`: five sheets
-on the streamer springs), `lord.saber`. `lordLoadout(look)` → the loadout; `TUNING.scale` 1.32.
+on the streamer springs), `lord.saber`. `LORD_LOADOUT` is what he wears; `TUNING.scale` 1.32.
 Four stances (poses.js `GUARDS`, one pose set each; the animator's pilot carries `form`) and
 `glidePose` (the animator key `glide`); reaction clips are compiled per form (`CLIPS_BY_FORM`, the
 brain's `C`). Moves (moves.js): `weight` is per FORM `[1, 2, 3, 4]`; a string's cuts alternate the

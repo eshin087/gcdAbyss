@@ -503,8 +503,8 @@ across red). Target: 1.5–2.5 min for a player who knows him. No human has play
 
 ## The Starless Lord (2026-11-13, ADR-068 – ADR-070; `?level=starless`)
 Varr Nihil, a dark lord who fell out of the night sky and took the Obsidian Throne: a full harness
-of black plate, a closed helm with one slit of red light, a cape to his ankles, blades of red light,
-and the Void in his free hand (his look and motion: ADR-079, ADR-080). The owner's
+of black plate, a deep hood over a faceplate with one slit of red light, a cape to his ankles, blades
+of red light, and the Void in his free hand (his look and motion: ADR-079, ADR-080). The owner's
 brief: very fast, acrobatic and fluid, strings of six with variations, jump and flip attacks, spells
 between the cuts, four blade forms. He runs on the duelist engine (the Ash Disciple's: the guard, the
 deflect chain, the blade lock, the mikiri, the full deflect, the Ghostep behind him, pressure and
@@ -608,13 +608,13 @@ his harness, that he waits seated), DATA (224 realisations: a tell per hit, firs
 blows ≥ 0.34 s apart, each flash after the blow before it, a six-hit string that varies in every
 form, faster form by form), TIMING (53 move × form runs: every contact within 23 ms of its flash +
 0.26 s, every move's first hit lands), FORMS (the whole four-bar flow through the hero's own attack
-press), SPELLS (every answer in the table above, and the glide), BOUNDS (never off the floor; 34
+press), SPELLS (every answer in the table above, and the glide), BOUNDS (never off the floor; 32
 blows reach a cornered hero in 45 s), FLOW (the door, the throne intro, a death and the reset), WIN.
 **Difficulty (measured, seed 4242, god-mode fencing bots; 2026-11-14, with the moves above and the
-hero's swings of ADR-071):** a bot that answers every tell wins in 93 s with 65 parries (forms at 0 /
-22 / 42 / 64 s); answering 85 % it takes 22 hits for 340 damage in 103 s (the hero has 160 HP and
-five flasks of 70: he would live); answering 70 % it takes 47 hits for 846 damage in 123 s (he would
-not). At his first release (31 moves, the hero's old swings): 75 s, 18 hits / 325, 44 hits / 740.
+hero's faster chain of ADR-075):** a bot that answers every tell wins in 95 s with 66 parries (forms
+at 0 / 20 / 42 / 67 s); answering 85 % it takes 16 hits for 262 damage in 101 s (the hero has 160 HP
+and five flasks of 70: he would live); answering 70 % it takes 43 hits for 825 damage in 129 s (he
+would not). At his first release (31 moves, the hero's old swings): 75 s, 18 hits / 325, 44 hits / 740.
 Shen Hui's 85 % bot takes 7 – 8 hits. Target: 3 – 5 min for a player who knows him. No human has
 played him yet, and the bots never use the blade lock or the mikiri and stand inside his reach the
 whole fight.

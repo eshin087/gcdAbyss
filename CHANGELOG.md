@@ -6,9 +6,10 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 ## [Unreleased]
 Nineteen pieces of work since 0.4.0:
 - **The Starless Lord in black plate, and how he moves** (2026-11-14, ADR-079, ADR-080): he wears a
-  harness of his own now: a closed helm with a slit of red light, a cuirass with a ring of red light
-  on the breastbone, a plate yoke and pauldrons, plate arms and legs, hip plates over a war-skirt and
-  a cape to his ankles, and he stands a head taller. Each form has a new guard. He no longer runs: out
+  harness of his own now: a deep hood over a faceplate with a slit of red light (the owner's pick of
+  three heads), a cuirass with a ring of red light on the breastbone, a plate yoke and pauldrons,
+  plate arms and legs, hip plates over a war-skirt and a cape to his ankles, and he stands a head
+  taller. Each form has a new guard. He no longer runs: out
   of reach he glides over the floor with his cape streaming. His strings walk forward on alternating
   feet, his spins leave the floor, he cartwheels over your guard and backflips away throwing red
   crescents, and each form ends its strings with a flourish (your opening). Six new moves, among them
