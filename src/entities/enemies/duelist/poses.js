@@ -62,7 +62,8 @@ export function azEl(x, y, z, out = _az) {
   out[1] = Math.atan2(y, Math.hypot(x, z));
   return out;
 }
-function setSw(p, az, el) {
+/** Point the blade along [az, el] (body axes). */
+export function setSw(p, az, el) {
   const c = Math.cos(el);
   v3(p, P.swD, c * Math.sin(az), Math.sin(el), c * Math.cos(az));
 }
@@ -124,10 +125,12 @@ function offArm(p, w, ext, lead, az, el) {
 /**
  * The pose functions round one guard stance. `GUARD`: every SCALAR and VEC field, `sw` [az, el], and
  * optionally `lsw` [az, el] (an off-hand blade). `opt.run`: how the blade is carried at a run
- * ({ hand, pole, blade [az, el], flat }).
+ * ({ hand, pole, blade [az, el], flat }). `opt.breath`: { k (the breath's size, 1 = the default),
+ * period (s) }: a heavier, slower breath for a bigger man.
  */
 export function createDuelPoses(GUARD, opt = {}) {
   const RUN = { hand: [-0.13, -0.42, -0.1], pole: [-0.8, -0.3, -0.5], blade: [-2.55, -0.42], flat: [0.2, 1, 0], ...(opt.run ?? {}) };
+  const BR = { k: 1, period: 2.8, ...(opt.breath ?? {}) };
   const OFF = Array.isArray(GUARD.lsw) ? GUARD.lsw : null;
   const api = {};
 
@@ -142,14 +145,15 @@ export function createDuelPoses(GUARD, opt = {}) {
   /** Write the guard into p (with a slow breath when `A` has a time). */
   function duelStance(p, A) {
     const G = GUARD;
-    const ph = (A?.time ?? 0) * (TAU / 2.8);
-    const br = Math.sin(ph), sw = Math.sin(ph * 0.5 + 0.7);
+    const ph = (A?.time ?? 0) * (TAU / BR.period);
+    const br = Math.sin(ph) * BR.k, sw = Math.sin(ph * 0.5 + 0.7);
     for (const k in SCALAR) p[SCALAR[k]] = G[k];
     for (const k in VEC) v3(p, VEC[k], G[k][0], G[k][1], G[k][2]);
     p[P.bodyY] += 0.006 * br;
     p[P.spX] += 0.012 * br;
     p[P.bodyX] += 0.006 * sw;
     p[P.lH + 1] += 0.008 * br;
+    p[P.rH + 1] += 0.004 * (BR.k - 1) * Math.sin(ph); // (a heavier breath lifts the sword hand too)
     setSw(p, G.sw[0] + 0.012 * sw, G.sw[1] + 0.01 * br);
     if (OFF) setOff(A, OFF[0] - 0.012 * sw, OFF[1] + 0.01 * br);
     p[P.rFf] = 1;

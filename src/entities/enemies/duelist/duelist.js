@@ -29,6 +29,7 @@ import { DuelFx } from './fx.js';
 //   loadout              his gear (player/gear slots → item ids)
 //   poses                the pose table HeroAnimator takes ({ loco, duel })
 //   blade                { guard, tip }: the blade's ends along the weapon joint's +Z (m)
+//   scale                his drawn size (model metres → world; default HERO_SCALE). Visual only
 //   REACT, OPEN          extra reaction clips' root motion / which of them leave him open (optional)
 // }
 // Subclass hooks: _tint(M) (his colours), _setup() (extra meshes, before batching), _bladeMaterials(dt),
@@ -101,7 +102,10 @@ export class Duelist {
       groundVel: { x: 0, z: 0 }, kb: { x: 0, z: 0 }, chargeK: 0, releaseK: 0, recoil: 0, lockOn: false, guardHold: 0,
     };
     this.anim = new HeroAnimator(this.rig, this.pilot, kit.poses);
-    this.lean = installLean(this.object3d);
+    // his drawn size (kit.scale; HERO_SCALE by default): visual only, as the hero's
+    this.drawScale = kit.scale > 0 ? kit.scale : HERO_SCALE;
+    this.pilot.drawScale = this.drawScale;
+    this.lean = installLean(this.object3d, this.drawScale);
     this.fx = this._makeFx();
     this.brain = this._makeBrain();
 
@@ -407,12 +411,15 @@ export class Duelist {
     this.warn = 0;
     this.object3d.visible = true;
     this.fx.reset();
-    this.brain.reset();
+    // (the animator first: its reset goes back to the walking clip, and the brain's then starts the
+    // clip he waits in: kneeling, enthroned. The other way round he stood in his guard until woken)
     this.anim.reset();
+    this.brain.reset();
     this.hurtSpheres.length = 0;
     this.bodyCircles.length = 0;
     this.emitPosture(true);
-    this._animate(0);
+    // (one short step, not zero: the waiting clip's cross-fade from the reset pose completes now)
+    this._animate(0.02);
   }
 
   update(dt) {
