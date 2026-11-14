@@ -3,7 +3,7 @@
 // Events) wired like src/main.js for `?level=ash`; the world is a light mock on the real Colliders
 // with the courtyard's ring of pillars. A bot drives the input.
 // usage: node duel.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI)
-//   scenario: levels | data | timing | guard | deflect | ghostep | execute | phase | flow | win | all
+//   scenario: levels | data | timing | guard | clash | deflect | ghostep | execute | phase | flow | win | all
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ui, AUDIO, resetWindow } from './shim.mjs';
@@ -429,7 +429,8 @@ async function scenarioGuard() {
   let countered = false;
   for (let i = 0; i < 4 && !countered; i++) {
     d.takeHit({ damage: 30, part: 'body', heavy: false, poise: 5, point: { x: d.position.x, y: 1.2, z: d.position.z } });
-    countered = d.brain.counter.pending || d.brain.act?.name === 'riposte';
+    // (he beats the strike away, the deflect, and the Riposte comes straight out of it)
+    countered = d.brain.react?.kind === 'deflect' || d.brain.act?.name === 'riposte';
     run(G, 0.05);
   }
   run(G, 0.6, null, () => d.brain.act?.name === 'riposte');
@@ -458,6 +459,150 @@ async function scenarioGuard() {
   input.up(0);
   run(G, 0.6);
   assert(d.hp < hp3, `the hero's own full thrust breaks through the guard (hp ${hp3} → ${d.hp})`);
+  return G;
+}
+
+// ================================================================== scenario: clash
+// (2026-11-14) Steel on steel: his guard read from him (raised as the hero swings, a ward on the
+// strike's side, the deflect that throws the hero's blade back and brings the Riposte), the hero's
+// cancels (a guard or a dodge out of any point of a swing), the blades meeting in a parry, the lock.
+async function scenarioClash() {
+  out('\n== scenario CLASH (the guard read from him, the deflect and the bounce, cancels, blades that meet) ==');
+  const G = build();
+  duel(G, { dist: 1.9 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.god = true;
+  run(G, 0.5);
+  const rise = () => d._tip.y - d._hilt.y; // how far the point stands over the grip
+  const en = rise();
+  // (1) the guard comes up as the hero swings, before the strike lands
+  let upAt = -1, guardAt = -1, riseUp = 0;
+  const c0 = G.counts['dragon:guard'] ?? 0;
+  input.click(0);
+  const t0 = game.time;
+  run(G, 0.6, () => {
+    if (upAt < 0 && d.brain.wardK > 0.6) { upAt = game.time - t0; riseUp = rise(); }
+    if (guardAt < 0 && (G.counts['dragon:guard'] ?? 0) > c0) guardAt = game.time - t0;
+  }, () => guardAt >= 0);
+  assert(upAt >= 0 && guardAt > upAt, `his guard is up ${upAt.toFixed(2)} s into the hero's swing, before the strike is on it (${guardAt.toFixed(2)} s)`);
+  assert(riseUp > en + 0.3, `the raised guard is a different picture from his stance: the point stands ${riseUp.toFixed(2)} m over the grip (en garde ${en.toFixed(2)} m)`);
+  assert(['ward', 'wardR', 'wardHigh'].includes(d.brain.react?.kind) && d.mode === 'react', `the strike is met by a ward (${d.brain.react?.kind})`);
+  assert(p.state === 'attack', `a held strike does not stop the hero's chain (${p.state})`);
+  // the ward's contact pose is on screen in the freeze: his blade stands up in the frame of the hit
+  assert(rise() > en + 0.3 && game.hitstopTimer > 0, `the ward's contact pose is the frozen frame (point ${rise().toFixed(2)} m up, freeze ${game.hitstopTimer.toFixed(3)} s)`);
+  settle(G);
+  // (2) the deflect: his guard beats the strike away, the hero bounces, the Riposte follows; a guard cancels the bounce
+  home(G);
+  place(G, 1.9);
+  run(G, 0.3);
+  d.debug.setAI(true);
+  d.brain.gapT = 99;
+  d.brain.counter.n = 3; // (the 4th guarded strike in a row: he deflects for certain)
+  d.brain.counter.t = d.time;
+  const seen = [];
+  G.watch = (n, e) => { if (n === 'dragon:guard') seen.push(e?.deflect ? 'deflect' : 'ward'); if (n === 'player:bounced') seen.push('bounced'); if (n === 'dragon:windup') seen.push(e?.name); };
+  input.click(0);
+  run(G, 0.7, () => { d.brain.gapT = 99; }, () => p.state === 'bounce');
+  assert(seen.includes('deflect') && seen.includes('bounced') && p.state === 'bounce', `his guard deflects the strike and the hero's blade is thrown back (${seen.join(', ')}; hero ${p.state})`);
+  assert(d.brain.react?.kind === 'deflect', `he beats it away (${d.brain.react?.kind})`);
+  // an attack does not come out of the bounce at once; a guard does
+  input.click(0);
+  run(G, 0.05);
+  assert(p.state === 'bounce', `an attack press does not cancel the bounce (${p.state})`);
+  input.press(2);
+  run(G, 0.04);
+  assert(p.state === 'block', `a guard press cancels the bounce at once (${p.state})`);
+  const h0 = G.hits.length;
+  run(G, 1.6, () => { d.brain.gapT = 99; }, () => G.hits.length > h0);
+  assert(seen.includes('riposte'), `the Riposte comes out of the deflect (${seen.join(', ')})`);
+  assert(G.hits.length > h0 && G.hits[h0].r !== RESULT.HIT, `the guard raised out of the bounce answers its first cut (${G.hits[h0]?.r})`);
+  input.up(2);
+  G.watch = null;
+  d.debug.setAI(false);
+  settle(G, 8);
+  // (3) the hero's cancels: a dodge out of a windup and out of the cut itself, a guard out of the cut
+  home(G);
+  place(G, 6);
+  run(G, 0.3);
+  input.click(0);
+  run(G, 0.05);
+  const w = p.atk?.t ?? -1, W = p.atk?.def?.windup ?? 0;
+  input.tap('Space');
+  run(G, 0.04);
+  assert(w >= 0 && w < W && p.state === 'roll', `a dodge cancels a swing in its windup (${w.toFixed(2)} of ${W} s → ${p.state})`);
+  settle(G);
+  input.click(0);
+  run(G, 0.4, null, () => p.state === 'attack' && p.atk && p.atk.t >= p.atk.def.windup + 0.02);
+  const inCut = p.state === 'attack' && p.atk.t >= p.atk.def.windup && p.atk.t < p.atk.def.windup + p.atk.def.active;
+  input.tap('Space');
+  run(G, 0.04);
+  assert(inCut && p.state === 'roll', `... and in the cut itself (${p.state})`);
+  settle(G);
+  input.click(0);
+  run(G, 0.4, null, () => p.state === 'attack' && p.atk && p.atk.t >= p.atk.def.windup + 0.02);
+  const inCut2 = p.state === 'attack' && p.atk.t >= p.atk.def.windup && p.atk.t < p.atk.def.windup + p.atk.def.active;
+  input.press(2);
+  run(G, 0.04);
+  assert(inCut2 && p.state === 'block', `a guard cancels the cut itself (${p.state})`);
+  input.up(2);
+  settle(G);
+  // (4) the blades meet: every blow of two strings parried, the hero's blade lies on his
+  const gaps = [], backs = [], stops = [];
+  for (const mv of ['swallow', 'ashRain']) {
+    home(G);
+    place(G, 2.2);
+    run(G, 0.3);
+    G.watch = (n) => { if (n === 'player:parry') { gaps.push(p.deflect.gap); backs.push(d.brain.back.off); stops.push(game.hitstopTimer); } };
+    G.defend = makeDefender(G);
+    d.brain.trigger(mv);
+    run(G, 5, (GG) => { GG.game.mouseGround.set(d.position.x, 0, d.position.z); GG.defend.act(); }, () => d.mode !== 'act');
+    G.defend = null;
+    G.watch = null;
+    settle(G, 8);
+  }
+  const met = gaps.filter((g) => g <= 0.2).length;
+  assert(gaps.length === 10 && met >= 7, `the blades meet: ${met} of ${gaps.length} parried blows end with the two blades within 0.2 m (${gaps.map((g) => g.toFixed(2)).join(', ')})`);
+  assert(backs.filter((b) => b > 0).length >= 6, `his blade is held where it met the guard, not through the hero (stepped back on ${backs.filter((b) => b > 0).length} of ${backs.length} blows)`);
+  // (a string's blows freeze the frame briefly; its last, the one that recoils him, for longer)
+  assert(Math.max(...stops.slice(0, 2)) <= 0.08 && stops[2] >= 0.1, `the freeze is short inside a string and long on its last blow (${stops.slice(0, 3).map((x) => x.toFixed(3)).join(', ')} s)`);
+  // (5) his recovery: open at first, then he breaks it off into his guard
+  home(G);
+  place(G, 2.2);
+  run(G, 0.3);
+  d.brain.trigger('fallingAsh');
+  run(G, 3, null, () => d.brain.act && d.brain.act.t >= d.brain.act.recoveryStart + 0.02);
+  const A = d.brain.act, hpA = d.hp;
+  const early = d.takeHit({ damage: 30, part: 'body', heavy: false, poise: 5, point: { x: d.position.x, y: 1.2, z: d.position.z } });
+  assert(!!A && early > 0 && d.hp < hpA, `a strike early in his recovery lands (${early})`);
+  settle(G, 8);
+  home(G);
+  place(G, 2.2);
+  run(G, 0.3);
+  d.brain.trigger('fallingAsh');
+  run(G, 3, null, () => d.brain.act && d.brain.act.t >= d.brain.act.recoveryStart + (d.brain.act.end - d.brain.act.recoveryStart) * (TUNING.guard.recoverOpen + 0.1));
+  const hpB = d.hp, wasAct = d.mode === 'act';
+  const late = d.takeHit({ damage: 30, part: 'body', heavy: false, poise: 5, point: { x: d.position.x, y: 1.2, z: d.position.z } });
+  assert(wasAct && late === 0 && d.hp === hpB && d.mode === 'react' && ['ward', 'wardR', 'wardHigh'].includes(d.brain.react?.kind), `late in it he breaks the recovery off into his guard (${late} damage; ${d.brain.react?.kind})`);
+  settle(G, 8);
+  // (6) the blade lock: the two close to the lock's distance and the blades cross
+  home(G);
+  place(G, 2.2);
+  run(G, 0.3);
+  answerMove(G, 'fallingAsh', (left) => {
+    if (left > 0.05) return false;
+    input.up(2);
+    input.click(2);
+    return true;
+  }, 2);
+  const locked = p.state === 'lock';
+  let n = 0, far = 0;
+  run(G, 0.7, () => { if (n++ % 8 === 0) input.click(0); });
+  const dist = Math.hypot(p.position.x - d.position.x, p.position.z - d.position.z);
+  far = p.deflect.gap;
+  assert(locked && p.state === 'lock' && Math.abs(dist - 1.3) < 0.25 && far < 0.2, `blades locked: the two stand ${dist.toFixed(2)} m apart and the blades cross (${far.toFixed(2)} m between them)`);
+  run(G, 4, () => { if (n++ % 4 === 0) input.click(0); }, () => p.state !== 'lock');
+  settle(G, 8);
   return G;
 }
 
@@ -812,8 +957,9 @@ async function scenarioImpact() {
     G.watch = null;
     const ph = G.hits.slice(q0).find((h) => h.r === RESULT.PARRIED);
     const stop = ph?.stop ?? 0, flash = ph?.flash ?? 0;
-    if (perfect) assert(seen.includes('perfectParry') && stop >= 0.14 && flash > 0.6, `a perfect parry: freeze ${stop.toFixed(3)} s, flash ${flash.toFixed(2)}, slow motion (${seen.join(', ')})`);
-    else assert(stop >= 0.095 && flash > 0.2 && !seen.includes('perfectParry'), `a parry: freeze ${stop.toFixed(3)} s, a flash ${flash.toFixed(2)}, no slow motion`);
+    // (inside a string the freeze is short and the flash a flicker: the exchange keeps its rhythm)
+    if (perfect) assert(seen.includes('perfectParry') && stop >= 0.13 && flash > 0.4, `a perfect parry: freeze ${stop.toFixed(3)} s, flash ${flash.toFixed(2)}, slow motion (${seen.join(', ')})`);
+    else assert(stop >= 0.045 && stop <= 0.09 && flash > 0.1 && !seen.includes('perfectParry'), `a parry inside a string: a short freeze ${stop.toFixed(3)} s, a flash ${flash.toFixed(2)}, no slow motion`);
     settle(G);
   }
   return G;
@@ -1029,7 +1175,7 @@ async function scenarioProbe() {
   return G;
 }
 
-const SCENARIOS = { probe: scenarioProbe, moments: scenarioMoments, pressure: scenarioPressure, impact: scenarioImpact, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
+const SCENARIOS = { probe: scenarioProbe, moments: scenarioMoments, pressure: scenarioPressure, impact: scenarioImpact, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, clash: scenarioClash, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());

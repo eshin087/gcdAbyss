@@ -1,5 +1,6 @@
 import { TELL, TELL_STYLE, RESULT } from '../../../combat/rules.js';
 import { perPhase } from './realise.js';
+import { CLASH, clashBurst } from '../../../combat/clashFx.js';
 
 // A duelist's glyph FX (STYLE.md: everything is glyph particles from the world atlas + pooled lights),
 // shared by every boss on duelist.js. The tells look exactly like the wyrm's (COMBAT.md "Tell
@@ -125,14 +126,16 @@ export class DuelFx {
     }
     const add = this.add;
     this._spawn(add, {
-      x, y, z, life: 0.26, size: 0.95 * k, sizeEnd: 0.2 * k, glyph: GLINT_CORE,
-      color: [c[0] * 1.6 * k, c[1] * 1.6 * k, c[2] * 1.6 * k], colorEnd: [c[0] * 0.5, c[1] * 0.5, c[2] * 0.5], alpha: 1, alphaEnd: 0, rot: this.rand(0, 0.6), spin: 2.5,
+      // (the core is small: at 0.95 m and 1.6x it bloomed into a white disc as big as the hero,
+      // every 0.34 s of a string; the four rays carry the glint)
+      x, y, z, life: 0.2, size: 0.4 * k, sizeEnd: 0.12 * k, glyph: GLINT_CORE,
+      color: [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6], colorEnd: [c[0] * 0.3, c[1] * 0.3, c[2] * 0.3], alpha: 1, alphaEnd: 0, rot: this.rand(0, 0.6), spin: 2.5,
     });
     for (let i = 0; i < 4; i++) {
       const long = i < 2;
       this._spawn(add, {
-        x, y, z, life: long ? 0.24 : 0.18, size: (long ? 0.5 : 0.32) * k, sizeEnd: 0, glyph: GLINT_RAY, rot: SPARKLE_ROT[i], stretch: long ? 2.6 : 1.4,
-        color: [c[0] * 1.3 * k, c[1] * 1.3 * k, c[2] * 1.3 * k], colorEnd: c, alpha: 1, alphaEnd: 0.2,
+        x, y, z, life: long ? 0.24 : 0.18, size: (long ? 0.46 : 0.3) * k, sizeEnd: 0, glyph: GLINT_RAY, rot: SPARKLE_ROT[i], stretch: long ? 3.4 : 1.8,
+        color: [c[0] * 0.95 * k, c[1] * 0.95 * k, c[2] * 0.95 * k], colorEnd: [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6], alpha: 1, alphaEnd: 0.2,
       });
     }
     const U = this.game.U, Rg = U?.uCamRight?.value, Up = U?.uCamUp?.value;
@@ -146,14 +149,14 @@ export class DuelFx {
         color: [c[0] * k, c[1] * k, c[2] * k], colorEnd: [c[0] * 0.25, c[1] * 0.25, c[2] * 0.25], alpha: 1, alphaEnd: 0, drag: 7,
       });
     }
-    this._light({ x, y: Math.max(0.8, y), z, color: lightColor(c), intensity: 2 * k, radius: 3.5 * k, life: 0.22, fade: 0.2 });
+    this._light({ x, y: Math.max(0.9, y), z, color: lightColor(c), intensity: 1.5 * k, radius: 3.2 * k, life: 0.2, fade: 0.18 });
   }
 
   /** The red ground warning of a dodge-only area (call every frame of its windup): a ring of red
    *  dots with `!` marks, an inner ring closing in as the impact nears (`k` 0 → 1). */
   warnRing(x, z, r, k, dt) {
     if (!(r > 0) || !Number.isFinite(x + z)) return;
-    const c = TELL_STYLE.red.color, life = Math.max(0.02, dt * 1.6);
+    const c = TELL_STYLE.red.color, life = Math.max(0.02, (this.game.fxDt ?? dt) * 1.6);
     const n = Math.max(16, Math.round((Math.PI * 2 * r) / 0.75));
     const spin = (this.game.time ?? 0) * 0.6;
     const b = 0.45 + 0.55 * k;
@@ -203,48 +206,29 @@ export class DuelFx {
   }
 
   // ---------------------------------------------------------------- contact
-  /** His guard turns a strike: a white-gold clash at the steel. */
-  clash(x, y, z, heavy = false) {
+  /**
+   * His guard turns the hero's strike (combat/clashFx.js): dull steel sparks on the crossing of the
+   * blades, few and short for a light strike, a ring for a heavy one: a block, not an opening.
+   * `deflect`: he beats the strike away: a hot orange burst and two rings (the hero's blade is thrown
+   * back and his counter is coming: the colour is the warning). o: { heavy, deflect, e1, e2, spray }.
+   */
+  guard(x, y, z, o = {}) {
     if (!Number.isFinite(x + y + z)) return;
-    this._spawn(this.add, { x, y, z, life: 0.2, size: heavy ? 1.5 : 1.1, sizeEnd: 0.3, glyph: '*', color: [WHITE[0] * 1.4, WHITE[1] * 1.4, WHITE[2] * 1.4], colorEnd: GOLD, alpha: 1, alphaEnd: 0 });
-    const n = heavy ? 24 : 16;
-    for (let i = 0; i < n; i++) {
-      const a = this.rnd() * Math.PI * 2, sp = this.rand(4, heavy ? 12 : 9);
-      this._spawn(this.add, {
-        x, y, z, vx: Math.cos(a) * sp, vy: this.rand(0, 5), vz: Math.sin(a) * sp,
-        life: this.rand(0.18, 0.4), size: this.rand(0.2, 0.36), sizeEnd: 0.04, glyph: "*+x'`",
-        color: this.rnd() < 0.5 ? WHITE : GOLD, colorEnd: SPARK_END, alpha: 1, alphaEnd: 0, drag: 3, gravity: 8, stretch: 0.3,
-      });
-    }
-    this._light({ x, y: Math.max(0.8, y), z, color: [1, 0.9, 0.65], intensity: heavy ? 4.5 : 3.5, radius: heavy ? 6 : 5, life: 0.2, fade: 0.18 });
+    clashBurst(this.game, x, Math.max(0.6, y), z, {
+      pal: o.deflect ? CLASH.deflect : CLASH.guard,
+      power: o.deflect ? 1.4 : o.heavy ? 1.05 : 0.7,
+      spray: o.spray ?? null, e1: o.e1 ?? null, e2: o.e2 ?? null,
+      ring: o.deflect ? 2 : o.heavy ? 1 : 0,
+    });
   }
 
-  /** The hero parried his blow: the white-gold burst at the clash (blue: bigger). The core stays
-   *  compact: the hero's own parry flash lands on the same spot (player fx.parry), and two big
-   *  blooms read as a white blot on a human-sized duel, not a spark. */
+  /** (the old names) */
+  clash(x, y, z, heavy = false) {
+    this.guard(x, y, z, { heavy });
+  }
   parrySpark(x, y, z, tell = TELL.NORMAL) {
     if (!Number.isFinite(x + y + z)) return;
-    const big = tell === TELL.BLUE;
-    this._spawn(this.add, { x, y, z, life: big ? 0.14 : 0.1, size: big ? 0.7 : 0.55, sizeEnd: 0.15, glyph: '*', color: WHITE, colorEnd: GOLD, alpha: 1, alphaEnd: 0 });
-    for (let i = 0; i < (big ? 30 : 22); i++) {
-      const a = this.rnd() * Math.PI * 2, sp = this.rand(5, big ? 14 : 12);
-      const vx = Math.cos(a) * sp, vy = this.rand(-1, 6), vz = Math.sin(a) * sp, pre = this.rand(0.02, 0.045); // (mid-burst in the freeze)
-      this._spawn(this.add, {
-        x: x + vx * pre, y: y + vy * pre, z: z + vz * pre, vx, vy, vz,
-        life: this.rand(0.2, 0.45), size: this.rand(0.22, 0.4), sizeEnd: 0.05, glyph: "*+x'`",
-        color: this.rnd() < 0.5 ? WHITE : GOLD, colorEnd: SPARK_END, alpha: 1, alphaEnd: 0, drag: 3, gravity: 8, stretch: 0.3,
-      });
-    }
-    for (let i = 0; i < (big ? 14 : 10); i++) {
-      const a = this.rnd() * Math.PI * 2, sp = this.rand(2.5, 7);
-      const vx = Math.cos(a) * sp, vy = this.rand(3, 8), vz = Math.sin(a) * sp, pre = this.rand(0.02, 0.045);
-      this._spawn(this.add, {
-        x: x + vx * pre, y: y + vy * pre, z: z + vz * pre, vx, vy, vz,
-        life: this.rand(0.5, 0.9), size: this.rand(0.14, 0.24), sizeEnd: 0.04, glyph: ".'`•",
-        color: this.rnd() < 0.35 ? WHITE : GOLD, colorEnd: SPARK_END, alpha: 1, alphaEnd: 0, drag: 0.9, gravity: -17, flicker: 0.3,
-      });
-    }
-    this._light({ x, y: Math.max(0.8, y), z, color: [1, 0.88, 0.62], intensity: big ? 5.5 : 4.5, radius: big ? 7.5 : 6, life: 0.25, fade: 0.2 });
+    clashBurst(this.game, x, y, z, { pal: tell === TELL.BLUE ? CLASH.blue : CLASH.parry, ring: 1 });
   }
 
   /** Struck: a spray of ash and a few embers along the blow. */
@@ -278,7 +262,7 @@ export class DuelFx {
   /** Dazed stars round the hat while his posture is broken (every frame). */
   stunStars(head) {
     if (!head || !Number.isFinite(head.x + head.y + head.z)) return;
-    const t = this.game.time ?? 0, life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.6);
+    const t = this.game.time ?? 0, life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.6);
     for (let i = 0; i < 3; i++) {
       const a = t * 3.4 + (i / 3) * Math.PI * 2;
       const o = this._rec(head.x + Math.cos(a) * 0.55, head.y + 0.55 + Math.sin(a * 2) * 0.06, head.z + Math.sin(a) * 0.55, life, 0.3, 0.3, i % 2 ? '+' : '*', [2.6, 2.0, 0.6]);
@@ -464,7 +448,7 @@ export class DuelFx {
 
   _drawCrescent(c, ember) {
     // an arc of ')' strokes across the path, bulging forward, re-drawn each frame
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.7);
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.7);
     const px = -c.dz, pz = c.dx;
     const col = ember ? EMBER : [1.6, 1.5, 1.4];
     for (let i = -3; i <= 3; i++) {

@@ -56,7 +56,13 @@ export const TUNING = {
     countWindow: 2.5,
     crushPoise: 48,
     clashStop: 0.07,
+    deflectStop: 0.1,
+    recoverOpen: 0.5, // a recovery's punish window; after it he breaks it off into his guard or a step
+    evade: 0.5,
+    wardLinger: 0.6,
   },
+  // duel framing (main.js): the camera eases in within his reach (as the Ash Disciple's)
+  camera: { within: 6.5, fade: 4, zoom: -6 },
   flinch: { breakOff: 2, window: 1.6, hitStun: 0.22 },
   hitStun: { light: { stop: 0.065, jolt: 0.6, push: 0.12 }, heavy: { stop: 0.1, jolt: 1, push: 0.3 }, critStop: 0.12, joltDecay: 5 },
   parts: { head: 1.3, body: 1, leg: 0.9 },

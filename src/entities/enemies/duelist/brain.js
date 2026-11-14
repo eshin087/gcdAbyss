@@ -1,6 +1,7 @@
 import { clamp, wrapAngle, smoothstep, turnToward } from '../../../core/math.js';
 import { TELL, RESULT } from '../../../combat/rules.js';
 import { perPhase } from './realise.js';
+import { GUARD_TRAVEL, GUARD_KINDS } from './guard.js';
 
 // A duelist's mind and timeline: the Ash Disciple's (docs/specs/ash-disciple.md §3), shared by every
 // human boss built on duelist.js. Everything it knows about one boss comes from the actor's kit
@@ -13,7 +14,8 @@ import { perPhase } from './realise.js';
 //   act      a move (realise.js): per beat the tell at its windup start, the glint flashLead
 //            before its impact, root motion (travel / dash / leap), the zone tested through the
 //            active frames (one hit per beat); a `release` / `cast` beat hands its impact to the actor
-//   react    a reaction clip: clash, flinch, backstep, sidestep, stagger, recoil, executed
+//   react    a reaction clip: a ward (his guard meets a strike), deflect (he beats it away and
+//            counters), flinch, backstep, sidestep, stagger, recoil, executed
 //   broken   posture broken: on one knee for breakTime (state 'staggered')
 //   dying    the death clip, then the ash; finishDeath() → 'dead'
 // A phase's transition is the move kit.transitions[phase] (the disciple's 'kindle'), started as soon
@@ -42,8 +44,12 @@ function track(keys, u) {
   return keys[keys.length - 1][1];
 }
 
+// a parried blow's rebound (setBack): the pose shown runs back along the strike at `speed` × time for
+// `time` s (his blade thrown off the guard), then the move's own clip takes over through `blend` s
+const REBOUND = { time: 0.07, speed: 0.55, blend: 0.1 };
+
 const REACT_BASE = {
-  clash: { travel: -0.15 },
+  ...Object.fromEntries(Object.entries(GUARD_TRAVEL).map(([k, v]) => [k, { travel: v }])),
   flinch: { travel: -0.12 },
   sidestep: { side: 1.8 },
   stagger: { travel: -0.7 },
@@ -93,6 +99,12 @@ export class DuelBrain {
     this.modeT = 0;
     this.clip = this.C.meditate;
     this.clipT = 0;
+    // the pose shown runs `off` s behind the clip (a parried blow held at the contact, setBack)
+    this.back = { off: 0, t: 0 };
+    // the guard raised over his footwork (0..1: poses.js blends the wardHold clip in) and how long
+    // it stays up after a strike was met
+    this.wardK = 0;
+    this.wardT = 0;
     this.leap = null;
     this.zone = null;
     const d = this.d;
@@ -102,19 +114,32 @@ export class DuelBrain {
   }
 
   // ---------------------------------------------------------------- queries
-  /** His guard covers his front: in footwork (after the raise delay), through a clash, and through
-   *  the first part of each windup (until TUNING.guard.windupOpen of it: the blade is still between
-   *  you; past it he has committed to the strike and it can be traded). */
+  /** His guard covers his front: in footwork (after the raise delay), through a ward or a deflect,
+   *  through the first part of each windup (until TUNING.guard.windupOpen of it: the blade is still
+   *  between you; past it he has committed to the strike and it can be traded), and in the late part
+   *  of a move's recovery (past TUNING.guard.recoverOpen of it: the punish window comes first, then
+   *  he breaks the recovery off into his guard). */
   guardUp() {
-    const d = this.d;
+    const d = this.d, G = this.T.guard;
     if (d.broken) return false;
     if (d.mode === 'foot') return this.raiseT <= 0;
     if (d.mode === 'act') {
       const a = this.act;
-      const b = a?.beats.find((x) => a.t < x.end + 1e-6);
-      return !!b && a.t < b.impact && uAt(b, a.t) < this.T.guard.windupOpen && !a.def.transition;
+      if (!a || a.def.transition) return false;
+      if (a.t >= a.recoveryStart) return a.t - a.recoveryStart >= (G.recoverOpen ?? 1) * Math.max(0.05, a.end - a.recoveryStart);
+      const b = a.beats.find((x) => a.t < x.end + 1e-6);
+      return !!b && a.t < b.impact && uAt(b, a.t) < G.windupOpen;
     }
-    return d.mode === 'react' && (this.react?.kind === 'clash' || this.react?.kind === 'backstep');
+    return d.mode === 'react' && (GUARD_KINDS.has(this.react?.kind) || this.react?.kind === 'backstep');
+  }
+
+  /** The hero is swinging at him from his front, in reach (the guard comes up to meet it). */
+  threatened() {
+    const d = this.d, pl = d.game.player, p = pl?.position;
+    if (!p || pl.alive === false || (pl.state !== 'attack' && pl.state !== 'heavy')) return false;
+    const dx = d.position.x - p.x, dz = d.position.z - p.z, dist = Math.hypot(dx, dz);
+    if (!(dist < 4.4) || !d._fromFront()) return false;
+    return Math.abs(wrapAngle(Math.atan2(dx, dz) - fin(pl.yaw))) < 1.1; // the hero faces him
   }
 
   _sense() {
@@ -151,6 +176,21 @@ export class DuelBrain {
     if (this.backCool > 0) this.backCool -= dt;
     if (this.sideCool > 0) this.sideCool -= dt;
     for (const k in this.cooldowns) if (this.cooldowns[k] > 0) this.cooldowns[k] -= dt;
+    // the guard raised over his footwork: up in ~0.07 s as the hero swings at him, held a moment
+    // after a strike was met, down in ~0.25 s
+    if (this.wardT > 0) this.wardT -= dt;
+    const up = d.mode === 'foot' && this.raiseT <= 0 && !d.broken && (this.wardT > 0 || this.threatened());
+    this.wardK = clamp(this.wardK + clamp((up ? 1 : 0) - this.wardK, -dt * 4.5, dt * 15), 0, 1);
+    // a parried blow's rebound: the pose runs back along the strike, then the clip takes over again
+    const B = this.back;
+    if (B.t > 0) {
+      B.t -= dt;
+      B.off += dt * (1 + REBOUND.speed);
+      if (B.t <= 0) {
+        B.off = 0;
+        if (d.mode === 'act') d.anim.play('duel', REBOUND.blend);
+      }
+    }
     d.warn = Math.max(0, d.warn - dt * 6.4 * (d.warn > 0.4 ? 1 : 0));
     this.zone = null;
     switch (d.mode) {
@@ -201,7 +241,16 @@ export class DuelBrain {
   _play(clip, blend = 0.12) {
     this.clip = clip;
     this.clipT = 0;
+    this.back.off = this.back.t = 0;
     this.d.anim.play('duel', blend, true);
+  }
+
+  /** The hero is parrying this blow (duelist.parryContact): the pose shown is held `off` s back on
+   *  the strike, where the blade meets his guard; `rebound`: the blow is only deflected (the move
+   *  goes on), so the blade is thrown back off the guard before the clip takes over again. */
+  setBack(off, rebound) {
+    this.back.off = Math.max(0, fin(off));
+    this.back.t = rebound ? REBOUND.time : 0;
   }
 
   startIntro() {
@@ -245,6 +294,7 @@ export class DuelBrain {
     this.gapT = gap ?? G[0] + (G[1] - G[0]) * Math.random();
     this.clip = null;
     this.clipT = 0;
+    this.back.off = this.back.t = 0;
     d.anim.play('loco', 0.18);
     if (this.pendingBreak) {
       this.pendingBreak = false;
@@ -299,7 +349,8 @@ export class DuelBrain {
     const R = this.R[kind] ?? {};
     this.react = { kind, clip, t: 0, travel: R.travel ?? 0, side: R.side ? R.side * (Math.random() < 0.5 ? -1 : 1) : 0, moved: 0 };
     this.modeT = 0;
-    this._play(clip, kind === 'clash' || kind === 'flinch' ? 0.05 : 0.08);
+    // (a guard's contact pose is its first frame, which a hit-stop holds: no cross-fade into it)
+    this._play(clip, GUARD_KINDS.has(kind) ? 0 : kind === 'flinch' ? 0.05 : 0.08);
     return true;
   }
 
@@ -314,6 +365,9 @@ export class DuelBrain {
       this.startReact('recoil');
       return false;
     }
+    // he steps in his half of the way to the lock's distance (the hero closes the other: player.js)
+    const s = this._sense();
+    if (s && this.react) this.react.travel = clamp((s.dist - (L.dist ?? 1.3)) * 0.5, -0.5, 0.9);
     d.emit('dragon:windup', { name: 'bladeLock' });
     // the camera closes in on the crossed blades (no slow motion: the push is in real time); the
     // lock's end (won: the reeling moment) replaces it, a loss lets it ease out over the counter
@@ -394,15 +448,9 @@ export class DuelBrain {
       this.startAct(this.K.counterMove?.(d.phase) ?? 'riposte');
       return;
     }
-    // a charged thrust levelled at him: sometimes he steps out of its line
+    // a heavy blow levelled at him: sometimes he steps out of it
     const pl = d.game.player;
-    if (pl?.state === 'charge' && fin(pl.chargeK) > 0.55 && this.sideCool <= 0 && s.dist < 6) {
-      this.sideCool = 3;
-      if (Math.random() < 0.45) {
-        this.startReact('sidestep');
-        return;
-      }
-    }
+    if (this._evade(s)) return;
     // a hero drinking a flask is punished: no breather, the moves that close distance favoured
     const punish = pl?.state === 'heal';
     this.gapT -= dt;
@@ -452,6 +500,21 @@ export class DuelBrain {
     // pressed against a wall while circling: circle the other way
     if (speed > 0 && speed <= M.walk && Math.hypot(d.position.x - x0, d.position.z - z0) < speed * dt * 0.3) this.strafeDir = -this.strafeDir;
     d.groundVelSet((d.position.x - x0) / dt, (d.position.z - z0) / dt);
+  }
+
+  /** A heavy blow is coming (a charge well under way, the cleave in flight, the finisher's raise):
+   *  once per 3 s he may step out of it (TUNING.guard.evade): a sidestep out of a charge's line, a
+   *  backstep from a blow already on its way. From his footwork, or breaking off the late part of a
+   *  recovery (_act). True if he went. */
+  _evade(s) {
+    const d = this.d, pl = d.game.player;
+    if (!pl || this.sideCool > 0 || !s || !(s.dist < 6)) return false;
+    const charging = pl.state === 'charge' && fin(pl.chargeK) > 0.55;
+    const coming = pl.state === 'heavy' || (pl.state === 'attack' && !!pl.atk?.def?.heavy && !pl.atk.exec);
+    if (!charging && !coming) return false;
+    this.sideCool = 3;
+    if (!(Math.random() < (this.T.guard.evade ?? 0.45))) return false;
+    return this.startReact(coming && s.dist < 3 ? 'backstep' : 'sidestep');
   }
 
   /** A weighted pick of the moves he can use from `dist` (phase, band, cooldown; recent picks damped).
@@ -537,6 +600,8 @@ export class DuelBrain {
       }
     }
     if (cur) this._motion(cur, t, dt, s);
+    // the late part of his recovery (his guard is back): he may break it off to step out of a heavy blow
+    if (!cur && this.aiEnabled && !a.def.transition && this.guardUp() && this._evade(s)) return;
     // the hits: the zone through the active frames, one result per beat
     for (const b of a.beats) {
       if (b.feint || b.done || t < b.impact) continue;
@@ -725,25 +790,42 @@ export class DuelBrain {
       return;
     }
     if (R.t >= R.clip.dur) {
-      this._toFoot(R.kind === 'clash' || R.kind === 'backstep' || R.kind === 'sidestep' ? 0.25 : null);
-      // a clash or a flinch: the guard is straight back up (a cut does not open him for the next one)
-      if (R.kind === 'clash' || R.kind === 'flinch' || R.kind === 'backstep' || R.kind === 'sidestep') this.raiseT = 0;
+      const guard = GUARD_KINDS.has(R.kind);
+      // the deflect: his counter comes straight out of the beat (no footwork between)
+      if (R.kind === 'deflect' && this.aiEnabled && this.startAct(this.K.counterMove?.(d.phase) ?? 'riposte')) return;
+      this._toFoot(guard || R.kind === 'backstep' || R.kind === 'sidestep' ? 0.25 : null);
+      // a ward or a flinch: the guard is straight back up (a cut does not open him for the next one)
+      if (guard || R.kind === 'flinch' || R.kind === 'backstep' || R.kind === 'sidestep') this.raiseT = 0;
+      if (guard) this.wardK = 1; // (the ward's clip ends raised: his footwork carries it on)
     }
   }
 
-  /** A strike his guard turned: counter likelier with each one in a row. */
-  onGuarded() {
+  /**
+   * A strike his guard turned (duelist._guardClash; `clip`: the ward that meets it: 'ward' on his
+   * left, 'wardR', 'wardHigh'). Returns what he did with it:
+   *   'armor'    in a windup (or a backstep): the blade turns it in passing, his own move goes on
+   *   'ward'     he holds it (from footwork, a ward, or breaking off a recovery); each one in a row
+   *              makes the next more likely to be a
+   *   'deflect'  he beats the strike away: the hero's blade is thrown back and his counter follows.
+   */
+  onGuarded(heavy, clip = 'ward') {
     const d = this.d, C = this.counter, G = this.T.guard;
-    if (d.mode === 'act') return; // turned aside in his windup: his own strike goes on
+    const a = this.act;
+    if (d.mode === 'act' && a && a.t < a.recoveryStart) return 'armor';
+    if (d.mode === 'react' && !GUARD_KINDS.has(this.react?.kind)) return 'armor';
+    if (d.mode !== 'foot' && d.mode !== 'act' && d.mode !== 'react') return 'armor';
     if (d.time - C.t > G.countWindow) C.n = 0;
     C.t = d.time;
     C.n++;
+    this.wardT = G.wardLinger ?? 0.6;
     const p = G.counterChance[Math.min(G.counterChance.length - 1, C.n - 1)] ?? 1;
     if (this.aiEnabled && Math.random() < p) {
-      C.pending = true;
       C.n = 0;
+      if (this.startReact('deflect')) return 'deflect';
     }
-    if (d.mode === 'foot' || (d.mode === 'react' && this.react?.kind === 'clash')) this.startReact('clash');
+    if (!this.startReact(this.C[clip] ? clip : 'ward')) return 'armor';
+    if (heavy) this.react.travel *= 1.7; // a heavy strike drives him back
+    return 'ward';
   }
 
   /** A strike landed on him outside his guard: in footwork he flinches, and breaks off after a few. */
@@ -755,7 +837,7 @@ export class DuelBrain {
       this.startReact(heavy ? 'stagger' : 'flinch');
       return;
     }
-    if (d.mode !== 'foot' && !(d.mode === 'react' && (this.react?.kind === 'flinch' || this.react?.kind === 'clash'))) return;
+    if (d.mode !== 'foot' && !(d.mode === 'react' && (this.react?.kind === 'flinch' || GUARD_KINDS.has(this.react?.kind)))) return;
     if (d.time - S.t > F.window) S.n = 0;
     S.t = d.time;
     S.n++;

@@ -73,13 +73,18 @@ async function boot() {
     mouseGround: new THREE.Vector3(),
     state: 'title',
     settings: { quality: CONFIG.defaultQuality, showFps: false },
-    /** Freeze-frame on impacts: time runs at `scale` for `seconds` of real time. */
+    /** Freeze-frame on impacts: time runs at `scale` for `seconds` of real time. The fighters hold
+     *  the impact's pose; sparks and lights run on at CONFIG.render.fxLive of real time (fxDt). */
     hitstop(seconds, scale = 0.04) {
       this.hitstopTimer = Math.max(this.hitstopTimer, seconds);
       this.hitstopScale = Math.min(this.hitstopScale, scale);
     },
     shake(amount) {
       this.cameraRig.addTrauma(amount);
+    },
+    /** A zoom punch: the camera jumps `m` metres closer and springs back (a blade's clash). */
+    punch(m) {
+      this.cameraRig.punch(m);
     },
   };
   pipeline.registerParticles(game.fx.alpha);
@@ -151,6 +156,15 @@ async function boot() {
       const o = game.flow.cameraOverride;
       focus.lerp(o.focus, o.weight);
       zoomOut = Math.max(zoomOut, o.zoom ?? 0);
+    }
+    // duel framing (after the flow's boss framing, which only ever pulls out): within a duelist's
+    // reach the camera eases in (its TUNING.camera: `zoom` m at the desktop distance, scaled for the
+    // phone's closer camera; gone `fade` m past `within`)
+    const DC = d?.T?.camera;
+    if (DC && game.state === 'boss' && d.isTargetable?.() && game.player.alive !== false) {
+      const dist = Math.hypot(d.position.x - p.x, d.position.z - p.z);
+      const k = 1 - clamp((dist - DC.within) / Math.max(0.5, DC.fade ?? 4), 0, 1);
+      zoomOut += DC.zoom * k * (game.cameraRig.defaultDistance / CONFIG.camera.distance);
     }
     game.cameraRig.extraZoom = damp(game.cameraRig.extraZoom, zoomOut, 2.5, dt);
     game.cameraRig.update(dt, focus);
@@ -225,15 +239,22 @@ async function boot() {
 
   const tick = (realDt) => {
     let scale = game.timeScale;
+    let fxScale = scale;
     if (game.hitstopTimer > 0) {
       game.hitstopTimer -= realDt;
       scale *= game.hitstopScale;
+      // a freeze-frame holds the fighters, not the sparks: particles and lights run on (never
+      // slower than the game, never while the game itself stands still: a pause)
+      fxScale = Math.max(scale, fxScale * CONFIG.render.fxLive);
       if (game.hitstopTimer <= 0) game.hitstopScale = 1;
     }
-    const dt = realDt * scale * (game.debugTimeScale ?? 1);
+    const dbg = game.debugTimeScale ?? 1;
+    const dt = realDt * scale * dbg;
+    const fxDt = realDt * fxScale * dbg;
     game.realTime += realDt;
     game.time += dt;
     game.dt = dt;
+    game.fxDt = fxDt;
     game.realDt = realDt;
 
     if (game.input.wheel) game.cameraRig.zoom(game.input.wheel);
@@ -251,9 +272,9 @@ async function boot() {
     safe('view', () => (viewAt = applyViewOverride()));
     updateSharedUniforms(viewAt);
     safe('world', () => game.world.update(dt));
-    game.lights.update(dt, viewAt ?? game.player.position);
-    game.fx.alpha.update(dt, game.time);
-    game.fx.add.update(dt, game.time);
+    game.lights.update(fxDt, viewAt ?? game.player.position);
+    game.fx.alpha.update(fxDt, game.time);
+    game.fx.add.update(fxDt, game.time);
     safe('hud', () => game.hud.update(realDt));
     safe('audio', () => game.audio.update(realDt));
 

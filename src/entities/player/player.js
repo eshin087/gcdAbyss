@@ -8,6 +8,7 @@ import { buildHero, setHeroGlyphScale, installLean, LEAN, PLAYER_SCALE, BLADE_BA
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
 import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CLEAVE, CHARGE, REACH, chargeStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
+import { CLASH, clashBurst, clashGrind, closestOnSegments } from '../../combat/clashFx.js';
 
 // The Wanderer. Owns input → state machine → movement/collision → animation → sword hits → FX.
 // Contract: docs/ARCHITECTURE.md (Player). Combat rules: docs/COMBAT.md + src/combat/rules.js.
@@ -45,7 +46,10 @@ export const TUNE = {
   pusherRoll: 1.3,
   pusherDown: 1.0,
   windupSteer: 9, // rad/s of steering allowed during attack windups
-  rollCancel: 0.35, // fraction of attack recovery after which a roll / heal may cancel it
+  // a roll (and a guard) cancels a swing at ANY point: its windup, the cut itself, the recovery
+  // (owner, 2026-11-14: "being able to animation cancel from a swing to a guard or dodge instantly").
+  // A flask still waits for this fraction of the recovery
+  rollCancel: 0.35,
   moveCancel: 0.6, // fraction of attack recovery after which movement input ends it
   // --- v0.2 defence (the windows themselves live in combat/rules.js DEFENSE)
   blockTurn: 12, // rad/s-ish damp toward the aim while blocking
@@ -54,7 +58,7 @@ export const TUNE = {
   blockEventGap: 0.4, // s: blocked stream ticks are reported at most this often (summed damage)
   parryDur: 0.3, // s of the deflect flick
   returnStop: 0.05, // s hit-stop of a perfectly parried bullet (light 0.03 < this < melee 0.08)
-  parryCancel: 0.12, // s into the parry after which an attack / roll may cancel it (riposte)
+  parryCancel: 0.07, // s into the parry after which an attack / roll may cancel it (riposte; was 0.12)
   // the deflect chain (parries in rhythm against a multi-hit string): parries at most this far
   // apart count up (sparks, the clang's pitch, the snap side); each one slides the hero back a little
   deflectChainGap: 1.1,
@@ -78,8 +82,24 @@ export const TUNE = {
   // blade's parry freezes the frame (normal / blue / perfect, s at ×0.02), throws a shockwave ring and
   // kicks the camera; a PERFECT one adds a short slow motion (flow.cinematic) and a white flash. A
   // blow that lands on the hero freezes it too (hurtStop / hurtStopBig).
-  parryStop: [0.1, 0.12, 0.15],
+  // (2026-11-14: the freeze is short inside a string, so a seven-cut exchange keeps its rhythm, and
+  // long only where the exchange turns: the last blow, a heavy one, a perfect parry. The fighters hold
+  // the contact pose while the sparks fly on, game.fxDt; the camera punches in `parryPunch` m.)
+  parryStop: { chain: 0.05, normal: 0.075, blue: 0.095, last: 0.11, perfect: 0.14 },
+  parryPunch: { normal: 1.5, blue: 2.2, last: 2.6, perfect: 3.6 },
   perfectParry: { slowmo: 0.35, dur: 0.36, zoom: -2.5, weight: 0.25 },
+  // the bounce: a duelist's guard DEFLECTS the hero's strike (attacker → onGuarded { deflect }): the
+  // blade is thrown back and he gives ground. A guard or a dodge cancels it at once (his counter is
+  // coming); an attack only after bounceAttack s
+  bounceDur: 0.42,
+  bounceAttack: 0.28,
+  bouncePush: 0.9, // m
+  // the blade lock (startBladeLock): the two close to `lockDist` m, blades crossed between them
+  // (the hero's grip follows the crossing, `lockFit` of the gap a frame); the pair slides `lockSlide`
+  // m toward whoever is losing over the meter's whole range
+  lockDist: 1.3,
+  lockSlide: 0.9,
+  lockFit: 0.35,
   hurtStop: 0.085,
   hurtStopBig: 0.13,
   plungeFade: 7, // 1/s: the plunge's reappear above the head resolves faster (it hangs only briefly)
@@ -182,7 +202,11 @@ export class Player {
     };
     this.plungeAnim = { phase: PL.VANISH, u: 0, t: 0, exec: false, h: 0 }; // read by anim.js
     // the parry chain (TUNE.deflectChainGap); perfect = the last parry was within DEFENSE.perfectParryWindow
-    this.deflect = { n: 0, t: -Infinity, side: 1, perfect: false };
+    // side / high / nudge: where the deflect pose puts the blade (anim.js deflectPose): on the side
+    // the blow's steel is, raised for a blow from above (high > 0) or hung point-down for a low cut
+    // (high < 0), the grip moved (nx, ny, nz, body axes, model metres) until the two blades touch
+    this.deflect = { n: 0, t: -Infinity, side: 1, perfect: false, high: 0, nx: 0, ny: 0, nz: 0, gap0: 0, gap: 0 };
+    this._cp = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
     this.bladeLock = null; // { att, meter, push, decay, dur } while blades are locked (startBladeLock)
 
@@ -328,7 +352,7 @@ export class Player {
       this._inArc(DEFENSE.parryArc, hasFrom, fx, fz, hasAtk ? ap : null)
     ) {
       const perfect = this.time - this.rmb.parryT <= DEFENSE.perfectParryWindow;
-      this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN, !!hit.light, perfect);
+      this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN, !!hit.light, perfect, hit);
       return RESULT.PARRIED;
     }
     // (e) block / (f) guard break
@@ -725,7 +749,8 @@ export class Player {
     return fallback;
   }
 
-  /** Can a guard (block / parry) be raised right now? Not mid-swing, mid-roll, drinking or down. */
+  /** Can a guard (block / parry) be raised right now? Not mid-roll, drinking or down; a swing is
+   *  cancelled by it at once. */
   _canGuard() {
     switch (this.state) {
       case 'idle':
@@ -736,12 +761,12 @@ export class Player {
       case 'charge':
       case 'ghostep':
         return true;
+      case 'bounce':
+        return true;
       case 'attack':
-      case 'heavy': {
-        const a = this.atk;
-        if (!a || a.pending) return true;
-        return a.t < a.def.windup || a.t >= a.def.windup + a.def.active;
-      }
+      case 'heavy':
+        // any point of a swing: its windup, the cut itself, the recovery (not the execution's thrust)
+        return !this.atk?.exec;
       default:
         return false;
     }
@@ -826,6 +851,9 @@ export class Player {
         break;
       case 'mikiri':
         this._tickMikiri();
+        break;
+      case 'bounce':
+        this._tickBounce();
         break;
       case 'plunge':
         this._tickPlunge(dt);
@@ -935,13 +963,20 @@ export class Player {
 
   /**
    * A parry (deflect). Parries in rhythm (≤ TUNE.deflectChainGap apart: a multi-hit string, Sekiro
-   * style) count up the chain: the blade snaps to alternate sides, the clash sparks grow, the clang
-   * rises in pitch (player:parry `chain`). No lockout: the next tap can parry the next hit at once
-   * (the state allows a guard), and the guard lingers between taps (guardHold). `perfect`: pressed
-   * within DEFENSE.perfectParryWindow (stored on deflect.perfect for the attacker to read; a light
-   * perfect parry is a perfectly parried bullet, which flies back as a shot: a gold burst, 0.05 s stop).
+   * style) count up the chain: the clash sparks grow, the clang rises in pitch (player:parry `chain`).
+   * No lockout: the next tap can parry the next hit at once (the state allows a guard), and the guard
+   * lingers between taps (guardHold). `perfect`: pressed within DEFENSE.perfectParryWindow (stored on
+   * deflect.perfect for the attacker to read; a light perfect parry is a perfectly parried bullet,
+   * which flies back as a shot: a gold burst, 0.05 s stop).
+   *
+   * The blades MEET (2026-11-14): a blow of steel (`hit.steel`) from an attacker that can say where
+   * its blade met the guard (`attacker.parryContact(chest, last)` → the segment a → b and its tip's
+   * travel v, drawn space; a duelist poses himself there) is met on that side (raised for a blow from
+   * above), posed at once, and the grip nudged until the hero's blade lies on the blow's; the clash
+   * is drawn at that crossing. The freeze-frame then shows two crossed blades. Without it (the wyrm's
+   * claws, bullets, thrown things) the sides alternate as before.
    */
-  _parry(tell, attack, sx, sz, light = false, perfect = false) {
+  _parry(tell, attack, sx, sz, light = false, perfect = false, hit = null) {
     const g = this.game, p = this.position;
     let nx = -Math.sin(this.yaw), nz = -Math.cos(this.yaw); // the pushback: away from the blow
     if (Number.isFinite(sx) && Number.isFinite(sz)) {
@@ -958,39 +993,151 @@ export class Player {
     D.n = this.time - D.t <= TUNE.deflectChainGap ? Math.min(99, D.n + 1) : 1;
     D.t = this.time;
     D.side = D.n & 1 ? 1 : -1;
+    D.high = 0;
+    D.nx = D.ny = D.nz = 0;
     D.perfect = !!perfect;
     this.atk = null;
     this.chargeK = 0;
     this.blockStunT = 0;
     // light: a deflected bullet (hit.light). The same clash, without the weight of a claw behind it
     this._setKb(nx, nz, TUNE.deflectPush * (tell === TELL.BLUE ? 1.6 : 1) * (light ? 0.25 : 1));
-    this._enter('parry', 'parry', 0.03);
-    // the clash: in front of the guard, toward the blow, on the side the blade snaps to (the sampled
-    // blade point is still the pose before the parry, often the idle blade hanging at the hip, and a
-    // duelist's own burst at his blade then lands a body-width away: two blooms, not one clash)
-    this.getChestPos(this._v, true);
-    this._v.x += -nx * 0.42 + nz * D.side * 0.12;
-    this._v.z += -nz * 0.42 - nx * D.side * 0.12;
-    if (!Number.isFinite(this._v.x + this._v.y + this._v.z)) this._bladePoint(0.62, this._v);
-    this.fx.parry(this._v.x, this._v.y, this._v.z, tell === TELL.BLUE, D.n, -nx, -nz);
+    // the blow's steel (a duelist's blade, held where it met the guard: attacker.parryContact):
+    // which side of the hero it is on, how high
+    const C = this._cp, cv = this._v;
+    this.getChestPos(cv, true);
+    const att = hit?.attacker;
+    let B = null;
+    if (!light && hit?.steel && typeof att?.parryContact === 'function') {
+      try {
+        B = att.parryContact(cv, hit.last !== false);
+      } catch (err) {
+        console.error('[player] attacker.parryContact failed', err);
+      }
+    }
+    if (B) {
+      // the point of his blade nearest the hero's chest (from mid-blade to the tip)
+      C[0].set(B.ax + (B.bx - B.ax) * 0.4, B.ay + (B.by - B.ay) * 0.4, B.az + (B.bz - B.az) * 0.4);
+      C[1].set(B.bx, B.by, B.bz);
+      closestOnSegments(C[0], C[1], cv, cv, C[2], C[3]);
+      // (+x of the body is his left: left = (cos yaw, −sin yaw))
+      const lat = (C[2].x - cv.x) * Math.cos(this.yaw) - (C[2].z - cv.z) * Math.sin(this.yaw);
+      if (Math.abs(lat) > 0.06) D.side = lat < 0 ? 1 : -1;
+      // above the chest: the overhead ward (high 0..1); below it: the hanging parry (high −1..0)
+      const dy = C[2].y - cv.y;
+      D.high = dy >= 0 ? smoothstep(0.12, 0.42, dy) : -smoothstep(0.12, 0.42, -dy);
+    }
+    this.object3d.rotation.y = this.yaw;
+    this._enter('parry', 'parry', 0); // no cross-fade: the contact pose IS this frame (it is frozen)
+    this._poseNow();
+    // the clash: on the crossing of the two blades; without his blade, in front of the guard toward
+    // the blow, on the side the blade snapped to
+    let e1 = null, e2 = null, spray = null, met = false;
+    if (B && this.sweep.valid) {
+      const sw = this.sweep;
+      let gap = closestOnSegments(sw.a, sw.b, C[0], C[1], C[2], C[3]);
+      D.gap0 = gap;
+      if (gap > 0.04) {
+        // move the grip by the gap (body axes: x his left, z ahead; model metres) and pose again
+        const S = this.drawScale || 1, c = Math.cos(this.yaw), sn = Math.sin(this.yaw);
+        const gx = C[3].x - C[2].x, gy = C[3].y - C[2].y, gz = C[3].z - C[2].z;
+        D.nx = clamp((gx * c - gz * sn) / S, -0.34, 0.34);
+        D.ny = clamp(gy / S, -0.34, 0.34);
+        D.nz = clamp((gx * sn + gz * c) / S, -0.3, 0.34);
+        this._poseNow();
+        gap = closestOnSegments(sw.a, sw.b, C[0], C[1], C[2], C[3]);
+      }
+      D.gap = gap; // (gap0 → gap: how far apart the blades were before / after the nudge, m)
+      // (still apart: his blade is out of the arm's reach; the sparks sit on the hero's steel)
+      const w = gap < 0.5 ? 0.5 : 0;
+      cv.set(C[2].x + (C[3].x - C[2].x) * w, C[2].y + (C[3].y - C[2].y) * w, C[2].z + (C[3].z - C[2].z) * w);
+      e1 = C[0].set(sw.b.x - sw.a.x, sw.b.y - sw.a.y, sw.b.z - sw.a.z);
+      e2 = C[1].set(B.bx - B.ax, B.by - B.ay, B.bz - B.az);
+      // the turned blade's way: where its point was going, thrown back off the guard and up
+      if (Number.isFinite(B.vx + B.vy + B.vz) && B.vx * B.vx + B.vy * B.vy + B.vz * B.vz > 1e-6) {
+        const vl = Math.hypot(B.vx, B.vy, B.vz);
+        spray = C[2].set(B.vx / vl + nx * 0.6, B.vy / vl + 0.25, B.vz / vl + nz * 0.6);
+      }
+      met = true;
+    } else {
+      cv.x += -nx * 0.42 + nz * D.side * 0.12;
+      cv.z += -nz * 0.42 - nx * D.side * 0.12;
+      if (!Number.isFinite(cv.x + cv.y + cv.z)) this._bladePoint(0.62, cv);
+    }
+    const last = hit?.last !== false; // (a string's non-final blow says `last: false`)
+    const big = tell === TELL.BLUE;
     const ret = light && !!perfect; // a bullet sent back (bullets.js reads deflect.perfect)
-    if (ret) this.fx.perfectParry?.(this._v.x, this._v.y, this._v.z, -nx, -nz);
+    this.fx.parry(cv.x, cv.y, cv.z, big, D.n, -nx, -nz, { e1, e2, spray, perfect: !!perfect && !light, light, ring: light ? 0 : perfect || big ? 2 : last ? 1 : 0, met });
+    if (ret) this.fx.perfectParry?.(cv.x, cv.y, cv.z, -nx, -nz);
     if (light) {
       this._hitstop(ret ? TUNE.returnStop : 0.03);
       g.shake?.(ret ? 0.16 : 0.1);
     } else {
-      // a blade met: a freeze-frame, a shockwave ring through the clash, a camera kick; perfect: a
-      // beat of slow motion on top (the blade lock's own moment replaces it when he locks)
-      const S = TUNE.parryStop, big = tell === TELL.BLUE;
-      this._hitstop(perfect ? S[2] : big ? S[1] : S[0], 0.02);
+      // a blade met: a freeze-frame on the crossed blades (short inside a string, longer where the
+      // exchange turns), a camera kick and punch; perfect: a beat of slow motion on top (the blade
+      // lock's own moment replaces it when he locks)
+      const S = TUNE.parryStop, Pn = TUNE.parryPunch;
+      this._hitstop(perfect ? S.perfect : big ? Math.max(S.blue, last ? S.last : 0) : last ? S.last : D.n > 1 ? S.chain : S.normal, 0.02);
       g.shake?.(Math.min(0.5, (perfect ? 0.42 : big ? 0.36 : 0.3) + 0.03 * (D.n - 1)));
-      this.fx.shockwave?.(this._v.x, this._v.y, this._v.z, big || perfect, perfect);
+      g.punch?.(perfect ? Pn.perfect : last ? Pn.last : big ? Pn.blue : Pn.normal);
       if (perfect) {
         const P = TUNE.perfectParry;
-        g.flow?.cinematic?.({ x: this._v.x, z: this._v.z, slowmo: P.slowmo, dur: P.dur, zoom: P.zoom, weight: P.weight, kind: 'perfectParry' });
+        g.flow?.cinematic?.({ x: cv.x, z: cv.z, slowmo: P.slowmo, dur: P.dur, zoom: P.zoom, weight: P.weight, kind: 'perfectParry' });
       }
     }
-    this._emit('player:parry', { tell, attack, chain: D.n, light, perfect: !!perfect });
+    this._emit('player:parry', { tell, attack, chain: D.n, light, perfect: !!perfect, last });
+  }
+
+  /** Pose the body NOW (outside the frame's own animator step): an impact's contact pose must be on
+   *  screen in the frame the freeze holds, and the blade's points read from it. */
+  _poseNow() {
+    this.lean.on = false;
+    this.anim.update(0); // (no time passes: the cross-fade is none, the elbows are not rate-limited)
+    this.lean.on = true;
+    this.object3d.updateMatrixWorld(true);
+    this.sweep.sample();
+  }
+
+  /**
+   * The hero's strike met a duelist's guard (the duelist calls it from takeHit). `o.deflect`: he did
+   * not just hold it, he threw the blade back (his counter follows): the bounce, which a guard or a
+   * dodge cancels at once. A plain guard lets the chain go on (each blow still wears his posture).
+   */
+  onGuarded(o = {}) {
+    if (!this.alive) return;
+    const a = this.atk;
+    if (a) a.guarded = true;
+    if (!o.deflect || this.state === 'plunge' || this.state === 'lock' || a?.exec) return;
+    const ap = o.attacker?.position, p = this.position;
+    let nx = -Math.sin(this.yaw), nz = -Math.cos(this.yaw);
+    if (ap && Number.isFinite(ap.x + ap.z)) {
+      const dx = p.x - ap.x, dz = p.z - ap.z, l = Math.hypot(dx, dz);
+      if (l > 1e-3) {
+        nx = dx / l;
+        nz = dz / l;
+        this.yaw = Math.atan2(-nx, -nz);
+      }
+    }
+    this.atk = null;
+    this.chargeK = 0;
+    this.releaseK = 0;
+    this.lmb.held = false;
+    if (this.buf.action === 'light') this.buf.action = null;
+    this._setKb(nx, nz, TUNE.bouncePush);
+    this._enter('bounce', 'bounce', 0.04);
+    this.anim.kickCoat(0.5, this.anim.noise);
+    this._emit('player:bounced', { heavy: !!o.heavy });
+  }
+
+  _tickBounce() {
+    this.want.x = this.want.z = 0;
+    const t = this.stateT;
+    // (a guard: update() raises it on the press; held, it comes up here)
+    if (this.rmb.held) {
+      this._startBlock(0.06);
+      return;
+    }
+    if (this._tryAction(true, t >= TUNE.bounceAttack, false)) return;
+    if (t >= TUNE.bounceDur) this._toLoco(0.14);
   }
 
   _block(dmg, tell, attack, chip, nx, nz) {
@@ -1169,10 +1316,34 @@ export class Player {
     this.object3d.rotation.y = this.yaw;
     this.vel.x = this.vel.z = this.kb.x = this.kb.z = 0;
     this.lmb.held = false;
-    this._enter('lock', 'block', 0.05);
+    // (the cross-fade runs after the perfect parry's freeze, which holds the contact it was won on)
+    const D = this.deflect;
+    D.high = D.nx = D.ny = D.nz = 0;
+    this.bladeLock.slid = this.bladeLock.meter;
+    this.bladeLock.cross = new THREE.Vector3(NaN, NaN, NaN);
+    this._enter('lock', 'lock', 0.1);
     this.recoil = 1;
     this._emit('player:lock', { phase: 'start' });
     return true;
+  }
+
+  /** The crossing of the locked blades (drawn space), found each frame from the two blades as they
+   *  are posed: the hero's grip is moved toward it (deflect.nx / ny / nz: the lock pose reads them),
+   *  the sparks of the grind fall from it. */
+  _lockCross() {
+    const B = this.bladeLock, sw = this.sweep, seg = B?.att?.bladeSegment?.();
+    if (!B || !seg || !sw.valid) return null;
+    const C = this._cp;
+    const gap = closestOnSegments(sw.a, sw.b, seg.a, seg.b, C[2], C[3]);
+    if (!Number.isFinite(gap)) return null;
+    const S = this.drawScale || 1, c = Math.cos(this.yaw), sn = Math.sin(this.yaw), D = this.deflect, k = TUNE.lockFit;
+    const gx = C[3].x - C[2].x, gy = C[3].y - C[2].y, gz = C[3].z - C[2].z;
+    D.nx = clamp(D.nx + (k * (gx * c - gz * sn)) / S, -0.3, 0.3);
+    D.ny = clamp(D.ny + (k * gy) / S, -0.25, 0.3);
+    D.nz = clamp(D.nz + (k * (gx * sn + gz * c)) / S, -0.25, 0.3);
+    D.gap = gap;
+    const w = gap < 0.5 ? 0.5 : 0;
+    return B.cross.set(C[2].x + gx * w, C[2].y + gy * w, C[2].z + gz * w);
   }
 
   _tickLock(dt) {
@@ -1196,14 +1367,37 @@ export class Player {
     if (pushed) {
       B.meter += B.push;
       this.recoil = 1;
-      // steel grinding on steel: the block's sparks, not a full parry flare per press (a mashed
-      // flare every 0.1 s whites out the crossed blades)
-      this._bladePoint(0.7, this._v);
-      this.fx.block(this._v.x, Math.max(0.9, this._v.y), this._v.z, -Math.sin(this.yaw), -Math.cos(this.yaw), (B.pushes = (B.pushes ?? 0) + 1) % 3 === 0);
+      // a shove: a spit of sparks off the crossing (small: a mashed flare every 0.1 s would white
+      // the crossed blades out)
+      const x = B.cross;
+      if (Number.isFinite(x.x + x.y + x.z)) clashBurst(this.game, x.x, x.y, x.z, { pal: CLASH.parry, power: 0.5, embers: false, light: (B.pushes = (B.pushes ?? 0) + 1) % 3 === 0 });
       this.game.shake?.(0.08);
+      this.game.punch?.(0.35);
       this._emit('player:lock', { phase: 'push' });
     }
     B.meter -= B.decay * dt;
+    // the pair closes to the lock's distance, then slides with the push: toward him as the hero
+    // gains, back onto the hero as he loses
+    const ap = B.att?.position, p = this.position;
+    if (ap && Number.isFinite(ap.x + ap.z)) {
+      const dx = ap.x - p.x, dz = ap.z - p.z, dist = Math.hypot(dx, dz);
+      if (dist > 1e-3) {
+        const fx = dx / dist, fz = dz / dist;
+        this.yaw = Math.atan2(dx, dz);
+        const sl = (B.meter - B.slid) * TUNE.lockSlide;
+        B.slid = B.meter;
+        // (half the closing is the hero's: the attacker steps in the other half, brain.startLock)
+        const close = clamp((dist - TUNE.lockDist) * 0.5, -0.5, 0.5) * Math.min(1, dt * 9);
+        p.x += fx * (sl + close);
+        p.z += fz * (sl + close);
+        this._collide();
+        try {
+          B.att.moveBy?.(fx * sl, fz * sl);
+        } catch (err) {
+          console.error('[player] attacker.moveBy failed', err);
+        }
+      }
+    }
     this._lockPrompt(B);
     if (B.meter >= 1) this._endLock(true);
     else if (B.meter <= 0) this._endLock(false);
@@ -1224,6 +1418,13 @@ export class Player {
     this.bladeLock = null;
     this.game.hud?.prompt?.(null);
     this._emit('player:lock', { phase: won ? 'won' : 'lost' });
+    const x = B?.cross;
+    if (x && Number.isFinite(x.x + x.y + x.z)) {
+      // the blades break apart: gold when the hero throws him off, hot orange when he is thrown
+      clashBurst(this.game, x.x, x.y, x.z, { pal: won ? CLASH.perfect : CLASH.deflect, power: 1.5, ring: 2, spray: { x: Math.sin(this.yaw) * (won ? 1 : -1), y: 0.4, z: Math.cos(this.yaw) * (won ? 1 : -1) } });
+      this.game.punch?.(won ? 3 : 2);
+    }
+    this.deflect.nx = this.deflect.ny = this.deflect.nz = 0;
     if (won) {
       this.critTimer = DEFENSE.ghostep.critWindow;
       this.iframeT = 0.3;
@@ -1261,6 +1462,7 @@ export class Player {
     this.iframeT = TUNE.mikiriDur;
     this.critTimer = DEFENSE.ghostep.critWindow;
     this.deflect.side = -this.deflect.side;
+    this.deflect.high = this.deflect.nx = this.deflect.ny = this.deflect.nz = 0;
     this._enter('mikiri', 'parry', 0.03);
     this.anim.kickCoat(1, this.anim.noise);
     this._bladePoint(0.5, this._v);
@@ -1854,6 +2056,11 @@ export class Player {
         return;
       }
     }
+    // a dodge cancels a swing at any point (TUNE.rollCancel's note): the windup, the cut, the recovery
+    if (this.buf.action === 'roll' && !a.exec) {
+      this.buf.action = null;
+      if (this._startRoll()) return;
+    }
     a.t = a.pending ? Math.min(W, a.t + dt) : a.t + dt; // a held light waits at the coil
     const t = a.t;
     if (t < W && !d.keepYaw) this.yaw = turnToward(this.yaw, this._aimYaw(this.yaw), TUNE.windupSteer * dt);
@@ -1886,9 +2093,6 @@ export class Player {
         if (this._tryExecution()) return;
         const next = d.kind === 'light' ? LIGHT[d.combo % LIGHT.length] : LIGHT[0];
         if (this._startAttack(next)) return;
-      } else if (b === 'roll' && r >= TUNE.rollCancel) {
-        this.buf.action = null;
-        if (this._startRoll()) return;
       } else if (b === 'heal' && r >= TUNE.rollCancel) {
         this.buf.action = null;
         if (this._startHeal()) return;
@@ -2042,6 +2246,7 @@ export class Player {
       case 'knockdown':
       case 'guardBreak':
       case 'parry':
+      case 'bounce':
       case 'ghostep':
       case 'plunge':
       case 'dead':
@@ -2286,9 +2491,13 @@ export class Player {
     } catch (err) {
       console.error('[player] dragon.takeHit failed', err);
     }
-    this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit, kind: d.kind });
+    const guarded = !!a.guarded && dealt === 0; // (this.atk may be gone: a deflect bounced him)
+    this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit, kind: d.kind, guarded });
+    // turned by a guard: the guard draws the clash and sets its own freeze; no cut, no sparks of his
+    if (guarded) return;
     this._hitstop(d.hitstop * (crit ? 1.4 : 1) * (d.kind === 'cleave' ? 1 + 0.3 * a.charge : 1));
     this.game.shake?.(d.shake * (crit ? 1.3 : 1));
+    if (heavy || crit) this.game.punch?.(heavy ? 1.6 : 1.0);
     this.fx.sparks(h.x, h.y, h.z, dir.x, dir.z, heavy, crit);
     if (d.kind === 'cleave') this.fx.cleaveImpact(h.x, h.y, h.z, dir.x, dir.z, a.charge, crit);
   }
@@ -2316,6 +2525,10 @@ export class Player {
       else this.healLight.set?.(p.x, 1.3, p.z);
     }
     const sw = this.sweep;
+    if (this.state === 'lock' && dt > 0) {
+      const x = this._lockCross();
+      if (x && this.stateT > 0.12) clashGrind(this.game, x.x, x.y, x.z, 0.4 + 0.6 * this.recoil);
+    }
     const armed = !!this.rig.loadout?.weapon; // no weapon equipped: no blade halo, no gem glow
     // the roll's sliding kneel (the root still carries 4-6 m/s through it): dust and torn grass
     // off the shin and the planted foot, cold sparks off the point dragging behind

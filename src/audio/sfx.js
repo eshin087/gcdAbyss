@@ -563,6 +563,48 @@ export const SFX = {
     },
   },
 
+  /**
+   * dragon:guard — a duelist's guard holds the hero's strike: steel on steel, DRY. A hard clack with
+   * a short dull ring (no bell, no sparkle: nothing was won), heavier for a heavy strike. It has to
+   * tell a blocked blow from one that landed by ear alone.
+   */
+  guard: {
+    prio: 5, rev: 0.14, gap: 0.05,
+    play(v, t, o) {
+      const k = o.heavy ? 1.3 : 1;
+      const f0 = (o.heavy ? 520 : 640) * rnd(0.96, 1.04);
+      for (const [r, a, d] of [[1, 0.16, 0.16], [2.41, 0.1, 0.11], [3.9, 0.06, 0.08]]) ping(v, t, 'triangle', f0 * r, a * k, d, 0.001);
+      burst(v, t, 'white', 'bandpass', 3200, 1.4, 0.42 * k, 0.03, 0.0005);
+      burst(v, t, 'pink', 'lowpass', 1100, 0.8, 0.3 * k, 0.07);
+      thump(v, t, 150, 70, 0.06, 0.45 * k, 0.11);
+    },
+  },
+
+  /**
+   * dragon:guard { deflect } — he beats the hero's strike away: a harsh clang that BENDS DOWN (the
+   * blade thrown off line), a tearing scrape and a low hit. A warning, not a reward: his counter is
+   * on its way.
+   */
+  deflected: {
+    prio: 7, rev: 0.35, gap: 0.1,
+    play(v, t) {
+      const f0 = 700 * rnd(0.97, 1.03);
+      for (const [r, a, d] of [[1, 0.2, 0.5], [1.5, 0.12, 0.4], [2.76, 0.12, 0.3], [4.1, 0.07, 0.2]]) {
+        const s = v.osc('sawtooth', f0 * r, t, t + d + 0.05);
+        const lp = v.filter('lowpass', 3600, 0.7);
+        const g = v.gain(0);
+        perc(g.gain, t, a * 0.5, 0.001, d);
+        glide(s.frequency, t, f0 * r, f0 * r * 0.72, d);
+        s.connect(lp).connect(g).connect(v.out);
+      }
+      burst(v, t, 'white', 'bandpass', 2600, 1.1, 0.6, 0.06, 0.0005);
+      burst(v, t, 'white', 'highpass', 6000, 0.7, 0.25, 0.1, 0.0005);
+      const bp = swish(v, t + 0.01, 'white', 'bandpass', 5200, 3, [[0, 0], [0.02, 0.2], [0.28, 0]]);
+      glide(bp.frequency, t + 0.01, 5200, 1500, 0.28);
+      thump(v, t, 130, 45, 0.12, 0.8, 0.26);
+    },
+  },
+
   /** player:guardBreak — crunch: saturated fracture + crackle, a bent falling clank, heavy thump. */
   guardBreak: {
     prio: 6, rev: 0.3, gap: 0.3,
