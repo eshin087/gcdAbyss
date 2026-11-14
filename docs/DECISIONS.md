@@ -1748,3 +1748,107 @@ cleave, three chains, a roll and the guard, elbows ≥ 38°, knees ≥ 30°, the
 on the forearm; the held charge's wrist, elbows and off hand in range. Not covered: the off hand's
 wrist (it runs 4–40° off the steel in two-handed cuts), the free arm's elbow drawn behind the back
 in two backhands' recoveries, hit reactions and the death fall (not driven by the audit).
+
+## ADR-078 — A clash is two blades that meet: the contact is posed, held and drawn once (2026-11-14)
+
+**Context.** The owner: "Make the parries and deflect more epic. the clash is buggy and doesnt feel
+like a sword clash." Filmed frame by frame at the game camera (side on, the Ash Disciple):
+- A parry's freeze-frame (0.1 – 0.15 s, the picture the player keeps) showed **two white blots**
+  and no blades: the hero's burst and the attacker's own, each with a 0.55 – 0.7 m `*` core at HDR
+  3 – 4 and a 4.5 light, a body-width apart, both blooming.
+- The hero's deflect pose snapped out over the clip's first 0.045 s. The parry's own hit-stop runs
+  time at 2 %, so through the whole freeze he stood in the guard he started from; the snap came
+  after it. The sides alternated, whatever side the blow was on.
+- At the frame a blow lands, the attacker's blade is not at the hero's guard. Measured over three
+  moves: a cut travels ~0.4 m a frame, so the impact frame has it 0.25 – 0.55 m PAST the hero; a
+  thrust's blade runs down his centre line with the hilt at his chest.
+- The same white core every 0.34 s as the tell's glint, the size of the hero.
+
+**Decision.**
+- **FX time runs on through a freeze** (`game.fxDt`, `CONFIG.render.fxLive` 0.6): particles and the
+  light pool advance at 0.6 of real time while a hit-stop holds the actors. The fighters freeze on
+  the contact; its sparks fly.
+- **One clash, of lines** (`combat/clashFx.js`, STYLE.md → "Steel on steel"): streaks in the screen's
+  plane along the turned blade's way, a cross along the two edges, a two-frame core, embers, a ring
+  where the exchange turns. The attacker's own parry burst is gone. The duelist's tell glint keeps
+  its four rays and loses the disc.
+- **The contact is posed** (`duelist.parryContact`, `player._parry`): for a hit marked `steel` the
+  attacker steps his own pose back along the strike to the last frame before the blade crossed the
+  hero in which it is 0.34 m clear of him (a thrust is set 0.4 m aside by turning him), and stays
+  posed there (`brain.back.off`: the pose shown runs behind the timeline; the timeline, the tells
+  and the hits do not move). The hero's deflect goes to that side, up for a blow from above, hung
+  for a low cut, with no cross-fade and in the same call, and the grip is nudged until the blades
+  touch. A blow that is only deflected rebounds for 0.07 s before the clip takes over again.
+- **The freeze is context:** 0.05 – 0.075 s inside a string, 0.11 s on its last blow, 0.14 s
+  perfect; a camera punch (`cameraRig.punch`) carries the weight the long freeze used to.
+
+**Alternatives.** Resolving the hit when the blades first touch (a geometric parry): it would move
+every contact off its flash + lead, which the timing tests and the player's rhythm rest on.
+Animating the sparks only (leaving the poses): the freeze-frame still shows no contact. Slowing
+the strike so its impact frame is at the guard: his cuts are a 0.1 s snap by the owner's brief.
+
+**Consequences.** Nine extra pose evaluations of the attacker and two of the hero per parry (once,
+not per frame). The step back can show him up to 0.06 s behind his timeline for 0.07 s. A thrust
+turns him up to 0.5 rad for one beat; the next windup's tracking takes it back. Seeded sims shift
+(fewer particles draw on `Math.random`). Checked by `duel.mjs` CLASH: 7 of 10 parried blows end
+with the blades ≤ 0.2 m apart, all 10 held back off the hero, the freeze short inside a string.
+Not checked: how it reads on a phone.
+
+## ADR-079 — His guard is read from him; a swing can be cancelled into a guard or a dodge (2026-11-14)
+
+**Context.** The owner: "improve the combat mechanics of enemy guarding, being able to animation
+cancel from a swing to a guard or dodge instantly. right now i cant tell animation or feel wise that
+the enemy is guarding." Filmed: his guard was his en-garde stance (nothing changed when it was
+up); a strike into it drew a white blot and a clip whose blade reached its block 0.06 s in, behind
+a 0.07 s freeze; the hero's swing went on through him; the counter was a roll of the dice the
+player could not see coming; and the hero could not leave a swing (a guard only out of windups and
+recoveries, a dodge only after 35 % of a recovery). The sentence reads two ways (who cancels), and
+both were missing, so both are built.
+
+**Decision.**
+- **The hero cancels:** a guard press or a dodge ends a swing at any point (not the execution).
+- **His guard has three pictures** (`duelist/guard.js`, shared by every duelist): **raised** as
+  the hero swings at him (the blade stands across his body; `brain.wardK`); **a ward** on the
+  strike's side whose contact pose is the clip's first frame (dull steel sparks, a dry clack,
+  GUARDED); **a deflect** (he beats the strike away: orange, a harsh clang, DEFLECTED in red), which
+  throws the hero's blade back (`player.onGuarded`: the bounce, cancelled at once by a guard or a
+  dodge) and starts his counter as the 0.24 s beat ends. The counter's odds per guarded strike in a
+  row are unchanged (0 / 35 / 70 / 100 %); what is new is that it is announced.
+- **He cancels too:** past half of a move's recovery he breaks it off into his guard when struck,
+  and once per 3 s he may step out of a heavy blow (45 %; from footwork or that late recovery).
+
+**Alternatives.** A guard icon or a bar over him: tells are read from the attacker, never from the
+HUD (COMBAT.md rule 2). Bouncing the hero off every guarded strike: attacking a guard is how its
+posture is worn (Sekiro's rule), and a bounce per hit would stop the chain dead. Letting him abort
+a windup into a guard: a mashed light would then cancel his attacks.
+
+**Consequences.** Attack commitment is gone from the hero's side by design; what keeps mashing in
+check is the deflect. His punish window is the first half of a recovery (it was all of it, though
+a flinch already raised his guard after one hit). Measured (`duel.mjs` WIN, seed 4242, a fencing bot
+that answers every tell): 55 s, 42 parries, 22 guarded swings, 5 breaks; before: about a minute.
+No human has played it; whether 45 % of heavy blows dodged feels fair is the owner's call.
+
+## ADR-080 — The blade lock is two crossed blades; a duel is framed closer (2026-11-14)
+
+**Context.** "The clash" may also have meant the blade lock. Filmed from the side: the two stood
+1.5 m apart, his blade standing up, the hero's in his ordinary guard: nothing crossed. Every press
+drew a white bloom in the air between them. And at the default camera (36 m, 32°) two duelists are
+~60 px tall at 720p: no clash reads at that size.
+
+**Decision.**
+- **The lock:** the two close to 1.3 m (half each), a lock pose for the hero (both hands driven
+  forward, the blade up and across), his grip servoed onto the crossing of the two blades every
+  frame (`_lockCross`), sparks grinding out of it, a small spit per press, and the pair sliding
+  0.9 m with the meter. The blades break apart in gold or orange.
+- **Duel framing:** a duelist's `TUNING.camera` (`within` 6.5 m, `zoom` −6 m, `fade` 4 m) eases the
+  camera in while the hero is in his reach, applied after the flow's boss framing (which only ever
+  pulls out) and scaled for the phone's closer camera.
+
+**Alternatives.** A fixed closer camera for the whole level: the approach, the leaps and the thrown
+qi want the wide view. A scripted side-on camera for the lock: the fixed-yaw camera is the game's
+look (ADR-005), and the X reads from above once the blades truly cross.
+
+**Consequences.** In reach the fighters are drawn 20 % larger; the wheel's zoom still applies on
+top. The lock moves the boss (`moveBy`, inside his bound). Checked by `duel.mjs` CLASH (1.3 m apart,
+blades within 0.2 m). The closer camera is a taste call that was not put to the owner as options:
+it is one number to change.

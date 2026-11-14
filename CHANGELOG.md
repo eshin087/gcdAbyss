@@ -4,7 +4,27 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Eighteen pieces of work since 0.4.0:
+Nineteen pieces of work since 0.4.0:
+- **Steel on steel** (2026-11-14, ADR-078 – ADR-080; both duelists):
+  - **Parries where the blades meet.** A parried blow is now shown stopped on your guard, your blade
+    snapped to the side and height it came from, the two edges crossed, and it is that picture the
+    freeze holds while the sparks keep flying: thin streaks thrown the way the blade was going, a
+    cross of light on the edges, falling embers. The white glare that used to cover both fighters is
+    gone. The freeze is short inside a string (a seven-cut exchange keeps its rhythm) and long only
+    on the blow that ends it; the camera punches in on every clash; a deflected blade rebounds.
+  - **A guard you can read.** The boss raises his blade across his body as you swing at him. A
+    strike he holds: dull steel sparks, a dry clack, GUARDED, and your chain goes on (it wears his
+    posture). A strike he beats away: an orange burst, a harsh clang, DEFLECTED in red, your blade
+    thrown back, and his Riposte is coming. He also breaks off the late half of his recoveries to
+    guard, and sometimes steps out of a charged cleave or the finisher.
+  - **Cancel anything.** A guard press or a dodge now ends your swing at any point: its windup, the
+    cut itself, the recovery. Bounced off a deflect, guard or roll at once.
+  - **Blade lock.** The two step in, the blades cross between you, sparks grind at the crossing and
+    every press shoves him back a little.
+  - **A closer camera in a duel:** within a duelist's reach it eases 6 m closer.
+  - Added: `combat/clashFx.js`, `enemies/duelist/guard.js`, `game.fxDt`, `game.punch` /
+    `cameraRig.punch`, `player:bounced`, `dragon:guard {deflect}`, the sounds `guard` and
+    `deflected`, the DEFLECTED call-out, the test scenario CLASH (`duel.mjs`).
 - **A faster chain, a new finisher, swings that flow home** (2026-11-14, ADR-075, ADR-076): the
   attack chain is quicker: a hit every ~0.32 s when you mash (it was 0.42 s), each cut over in 0.12
   s. The light hits deal 30 / 32 / 36 / 30 again (the ×1.4 that paid for the slow chain is gone),

@@ -150,6 +150,19 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.26 — Steel on steel: blades that meet, a guard you can read, cancels (2026-11-14, `combat/epic-clash`, ADR-078 – ADR-080)
+- [x] The clash: one effect of lines on the crossing of the blades; sparks fly through the freeze; a camera punch (ADR-078)
+- [x] A parried blow is held where it met the guard and rebounds; the hero's deflect goes to its side and height (ADR-078)
+- [x] A short freeze inside a string, a long one where the exchange turns (ADR-078)
+- [x] His guard: raised as you swing, a ward on the strike's side, the deflect that bounces the hero and brings the Riposte (ADR-079)
+- [x] Cancels: the hero's guard or dodge out of any point of a swing; his guard or step out of a late recovery (ADR-079)
+- [x] The blade lock: the two close, the blades cross, the pair slides with the push (ADR-080)
+- [x] Duel framing: the camera 6 m closer within a duelist's reach (ADR-080)
+- [ ] Follow-ups:
+  - [ ] The owner's play on the preview (both duelists, the phone): the closer camera, the deflect's odds, the 45 % step out of heavy blows
+  - [ ] Ideas not built (the owner's pick): a **trade clash** (the hero's cut meeting his cut at the impact turns both aside); a **counter cut** (the first light after a deflect comes out in half the time); a deathblow camera that orbits; the posture bar glowing as it nears the break; the wyrm's claws met by the same contact pose
+  - [ ] A thrust set aside still shows the blades ~0.4 m apart; his hilt is at the hero's chest at the impact (his dash stops 1 m short)
+
 ## M1.25 — A faster chain, the finisher as a clip, a recovery that flows (2026-11-14, `player/faster-flow`, ADR-075, ADR-076)
 - [x] The pace: a light every ~0.32 s (was 0.42), a 0.12 s cut; the lights' damage back to 30 / 32 / 36 / 30 (ADR-075)
 - [x] The Lab's attack-speed slider (`player.debug.attackSpeed`) for trying other paces on the preview (ADR-075)

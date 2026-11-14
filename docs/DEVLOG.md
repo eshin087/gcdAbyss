@@ -5,6 +5,68 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-14 — Session 27: steel on steel (the clash, his guard, cancels, the blade lock)
+
+**Owner:** "improve the combat mechanics of enemy guarding, being able to animation cancel from a
+swing to a guard or dodge instantly. right now i cant tell animation or feel wise that the enemy is
+guarding. Make the parries and deflect more epic. the clash is buggy and doesnt feel like a sword
+clash. what other combat improvements can you think of? i still feel like the combat is a bit slow
+and dont feel the sekiro phantom blade zero epic moments."
+Branch `combat/epic-clash`, stacked on `player/faster-flow` (PR #25, still open: its faster chain is
+half of "the combat is a bit slow", and the preview should carry both).
+
+**Diagnosis first (filmed frame by frame, side on, the Ash Disciple):**
+- A parry's freeze-frame showed two white blots and no blades (two bursts with 0.6 m HDR cores, a
+  body-width apart); the hero's deflect snap ran in game time, so the freeze (time × 0.02) held the
+  guard he started from; at the impact frame the boss's blade was already 0.25 – 0.55 m past the
+  hero (a cut moves ~0.4 m a frame), a thrust ran down his centre line.
+- A strike into the boss's guard: a white blot over both; his block pose arrived 0.06 s into a clip
+  that a 0.07 s freeze held at its start; his raised guard was his ordinary stance; the hero's swing
+  passed through with no reaction; the counter came unannounced.
+- The blade lock: the two 1.5 m apart, nothing crossed, a bloom per press.
+- The hero could not leave a swing: no guard in the cut, no dodge before 35 % of the recovery.
+- Seven hit-stops of 0.1 s in a seven-cut string: 0.7 s of standstill. At the default camera the two
+  are ~60 px tall.
+
+**Done:**
+- **The clash (ADR-078):** `combat/clashFx.js` (one effect of lines for every blade on blade);
+  `game.fxDt` (particles and lights run on through a hit-stop); `duelist.parryContact` holds a
+  parried blow where it met the guard and lets a deflected one rebound; the hero's deflect goes to
+  the blow's side and height, is posed in the parry's own frame and nudged onto the steel; a short
+  freeze inside a string, a long one on its last blow; `cameraRig.punch`; the tell glint without its
+  disc; a riposte 0.07 s into a parry.
+- **His guard and the cancels (ADR-079):** `duelist/guard.js` (raised, three wards, the deflect);
+  `brain.wardK`, `onGuarded` → armor / ward / deflect, the counter out of the deflect's beat; the
+  hero's bounce (`player.onGuarded`, state `bounce`, `player:bounced`); the recovery's late half
+  cancels into a guard or a step out of a heavy blow; the hero's guard / dodge out of any point of a
+  swing; sounds `guard` and `deflected`, the DEFLECTED call-out.
+- **The lock and the camera (ADR-080):** the lock pose, the servo onto the crossing, the grind, the
+  slide; duel framing (−6 m in his reach).
+- **Tests:** `duel.mjs` CLASH (20 checks); IMPACT's parry numbers; GUARD's counter check.
+
+**Found on the way:** the first contact search stopped at the impact frame because the blade was
+already "clear" of the hero, on the far side: it now finds the crossing first and takes the last
+clear pose before it. The duel framing was cancelled by the flow's boss camera (`max(zoomOut,
+o.zoom)`): it is applied after it. The first lock tile I grabbed showed the hero at ease with a
+glowing blade: the lock had been won a moment before (the crit window), not a bug.
+
+**Verification:** `npm test` and `npm run build` (see the PR). In the dev server: film strips of a
+parry, a seven-cut string, a guarded chain, the deflect → bounce → guard → Riposte, the lock, at
+60 fps side on; one sheet of six moments at the game camera; the Starless Lord's four forms (a ward
+and a parry each: the blades 0 – 3 cm apart). No console errors.
+
+**Not checked / open:**
+- No human has played it and nothing ran on a phone (frame rate with the closer camera, the punch on
+  a small screen, the cancels on touch).
+- No sound was heard: the two new sounds are written to the house recipe and unverified by ear.
+- The closer duel camera, the deflect's odds and the 45 % step out of heavy blows are taste calls
+  made without options put to the owner.
+- A thrust set aside still shows the blades ~0.4 m apart. The hero's cut still passes through a
+  ward that only holds it. The wyrm's claws get the new sparks and freeze, not a contact pose.
+- Proposed, not built: a trade clash, a counter cut after a deflect (ROADMAP M1.26).
+
+---
+
 ## 2026-11-14 — Session 26: a faster chain, the finisher as a clip, a recovery that flows
 
 **Owner (on the merged build of Session 25):** "speed up the attack speed on the character. its too
