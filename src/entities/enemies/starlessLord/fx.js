@@ -160,7 +160,7 @@ export class LordFx extends DuelFx {
       }
     }
     // the wheel on the floor: twelve marks turning slowly, re-drawn every frame
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.6), t = this.d.time ?? 0;
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.6), t = this.d.time ?? 0;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * TAU + t * 0.7, r = 1.25 + 0.06 * Math.sin(t * 3 + i);
       const o = this._rec(fx + Math.cos(a) * r, 0.07, fz + Math.sin(a) * r, life, 0.3, 0.3, i & 1 ? '+' : 'x', RED_DIM, null);
@@ -442,7 +442,7 @@ export class LordFx extends DuelFx {
       this.add?.spawn(o);
     }
     // the line: a few strokes along it, flickering
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.6);
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.6);
     for (let i = 0; i < 6; i++) {
       const u0 = (i + this.rnd() * 0.4) / 6, u1 = u0 + 0.1;
       const o = this._stroke(px + dx * u0, py + dy * u0, pz + dz * u0, px + dx * u1, py + dy * u1, pz + dz * u1, life, 0.1, [1.6 + 1.6 * k, 0.1, 0.3], null);
@@ -460,7 +460,7 @@ export class LordFx extends DuelFx {
   gripClaw(x, y, z, k) {
     const add = this.add;
     if (!add || !Number.isFinite(x + y + z)) return;
-    const life = Math.max(0.02, (this.game.dt ?? 0.016) * 1.6), t = this.d.time ?? 0;
+    const life = Math.max(0.02, (this.game.fxDt ?? this.game.dt ?? 0.016) * 1.6), t = this.d.time ?? 0;
     const R = 1.75 - 0.85 * k, col = [1.2 + 2.2 * k, 0.1, 0.16 + 0.3 * k];
     for (let f = 0; f < 5; f++) {
       const a = (f / 5) * TAU + t * 1.4;
@@ -511,7 +511,7 @@ export class LordFx extends DuelFx {
     for (const c of this.crushes) {
       if (!c.alive) continue;
       c.t += dt;
-      const k = clamp01(c.t / c.dur), life = Math.max(0.02, dt * 1.6);
+      const k = clamp01(c.t / c.dur), life = Math.max(0.02, (this.game.fxDt ?? dt) * 1.6);
       // three rings closing on him, strokes driven down onto him from above
       for (let ring = 0; ring < 3; ring++) {
         const r = (1.5 - ring * 0.42) * (1 - 0.75 * k) + 0.16, n = 12 - ring * 2;
@@ -791,7 +791,7 @@ export class LordFx extends DuelFx {
    *  a wheel of light turning faster, leaders reaching down as the strike nears. */
   _drawMark(s, k, dt) {
     if (this.rnd() < 0.35) this.arc(s.x + this.rand(-s.r, s.r) * 0.6, 0.1, s.z + this.rand(-s.r, s.r) * 0.6, s.x + this.rand(-0.4, 0.4), this.rand(0.6, 1.6), s.z + this.rand(-0.4, 0.4), 0.22, VOID, VOID_END, 3);
-    const life = Math.max(0.02, dt * 1.6), H = 8.5, t = s.t;
+    const life = Math.max(0.02, (this.game.fxDt ?? dt) * 1.6), H = 8.5, t = s.t;
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * TAU + t * (2 + 6 * k), r = 1.3 - 0.5 * k;
       const o = this._rec(s.x + Math.cos(a) * r, H, s.z + Math.sin(a) * r, life, 0.42, 0.42, ')', VOID, null);
@@ -809,7 +809,7 @@ export class LordFx extends DuelFx {
   /** The Dark Star gathering over its ring: a heart that drinks the light inside a turning rim, the
    *  air spiralling in to it, arcs from it to the floor. */
   _drawStar(s, k, dt) {
-    const life = Math.max(0.02, dt * 1.6), y = 1.3 + 0.1 * Math.sin(s.t * 5), R = 0.6 + 0.55 * k;
+    const life = Math.max(0.02, (this.game.fxDt ?? dt) * 1.6), y = 1.3 + 0.1 * Math.sin(s.t * 5), R = 0.6 + 0.55 * k;
     for (let i = 0; i < 4; i++) {
       const o = this._rec(s.x + this.rand(-0.1, 0.1) * R, y + this.rand(-0.1, 0.1) * R, s.z + this.rand(-0.1, 0.1) * R, life, R * 1.9, R * 1.9, '@#8M'[i], DARK, null);
       o.alphaEnd = 1;
