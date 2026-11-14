@@ -239,6 +239,13 @@ const CSS = `
   text-shadow: 0 1px 2px #000, 0 0 10px rgba(0, 0, 0, 0.9);
   white-space: nowrap;
 }
+.ab-boss-lives { display: inline-flex; gap: 7px; margin: 0 auto 3px 14px; align-self: center; }
+.ab-boss-lives .life {
+  width: 7px; height: 7px; transform: rotate(45deg);
+  background: #ff3b2f; box-shadow: 0 0 7px rgba(255, 70, 50, 0.8);
+  transition: background 0.4s, box-shadow 0.4s;
+}
+.ab-boss-lives .life.gone { background: transparent; box-shadow: inset 0 0 0 1px rgba(207, 214, 230, 0.3); }
 .ab-boss-dmg {
   font-size: 12px;
   color: #f4e8d0;

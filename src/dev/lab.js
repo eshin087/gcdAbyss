@@ -727,6 +727,8 @@ export class Lab {
     button(grid, 'Reset', () => this._resetFight()).title = 'dragon back to sleep at the nest (mid-fight: flow -> explore, player to the bonfire)';
     button(grid, 'Phase 2', () => this._fightAction('phase2'));
     button(grid, 'Phase 3', () => this._fightAction('phase3')).title = 'the phase-3 transition roar: hotter, faster wyrm (opens with the nova when the AI runs)';
+    // a boss with a fourth phase (the Starless Lord's blade forms)
+    if (typeof this.game.dragon?.debug?.phase4 === 'function') button(grid, 'Phase 4', () => this._fightAction('phase4')).title = 'the next blade form (each button works from the form before it)';
     button(grid, 'Stagger', () => this._fightAction('stagger'));
     button(grid, 'Posture break', () => this._fightAction('postureBreak'));
     button(grid, 'Kill', () => this._fightAction('kill'), 'danger');

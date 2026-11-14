@@ -759,7 +759,8 @@ export class AudioEngine {
       this._last.set('roar', now);
       if (this.musicMode === 'boss' || this.game.state === 'boss') this._autoMusic('boss2');
     });
-    on('dragon:phase3', () => {
+    // (phase 4: a boss with four forms, the Starless Lord: the same sting)
+    for (const name of ['dragon:phase3', 'dragon:phase4']) on(name, () => {
       // the white-hot phase: the enraged sting again (it claims the roar slot like phase 2), and the
       // phase-2 music if the Lab jumped straight here
       const now = this.ctx.currentTime;

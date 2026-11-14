@@ -1,6 +1,7 @@
 import { CONFIG } from '../core/config.js';
 import { CINDERWOOD } from './cinderwood.js';
 import { ASHFALL } from './ashfall.js';
+import { STARLESS } from './starless.js';
 
 // Levels (docs/specs/ash-disciple.md §1, ARCHITECTURE.md → Levels). One level is built per page
 // load; `?level=<id>` picks it and switching level reloads the page, so nothing is ever torn down.
@@ -11,9 +12,9 @@ import { ASHFALL } from './ashfall.js';
 //   buildSet(U, colliders)  the static environment (world.js; createForest's shape)
 //   createBoss(game)   the boss that fills the boss slot (game.dragon === game.boss)
 //   text               the flow's lines: arrive[], stir, phase2, phase3, victory, fallen, restReset,
-//                      again, rise (GameFlow falls back to Cinderwood's)
+//                      phase4, again, rise (GameFlow falls back to Cinderwood's)
 
-export const LEVELS = Object.freeze([CINDERWOOD, ASHFALL]);
+export const LEVELS = Object.freeze([CINDERWOOD, ASHFALL, STARLESS]);
 export const DEFAULT_LEVEL = CINDERWOOD;
 
 /** The level with this id or alias (case-insensitive), or null. */
