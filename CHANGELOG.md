@@ -15,6 +15,11 @@ Eighteen pieces of work since 0.4.0:
   used to stop dead for a moment and then snap back as fast as it had cut). The whirl drops into
   its turn and his head stays on the target through it. For tuning: the Lab (`?lab`, the LAB
   button) has an **atk** slider that runs the hero's swings at ×0.6 to ×1.6 of this pace.
+  The **4th hit** (the poke) now drives upward: level, it looked from the game camera as if he
+  planted the sword in the ground at his feet. The **sword trail** is finer (ADR-077): one thin
+  unbroken line just past the blade's point, white-hot and cooling to indigo as it tapers away,
+  with a faint veil inside it, instead of a wide band a metre past the steel. The Lab has three
+  looks for it to choose from (**arc**: Line / Crescent / Ghost).
 - **Wuxia-flow swings, a dashing cleave, a deeper guard, a narrower cloak, a new sword arc**
   (2026-11-13, ADR-071 – ADR-074): the hero's attack chain is new. Every swing is now a one-handed cut driven by the whole
   body: the hips turn through it, the sword arm opens to full reach as the blade crosses his front,

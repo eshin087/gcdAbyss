@@ -1656,3 +1656,43 @@ read as instant).
 the execution's thrust. Tests: the finisher's hands move < 36 cm in a frame (33); a cut's
 follow-through runs into the way home (no two still frames, the point home at < 0.62 of the cut's
 speed); a mashed button leaves the slam's landing ≥ 0.1 s.
+
+## ADR-077 — The sword arc hugs the steel: a fine line in three looks; the thrusts rise (2026-11-14)
+
+**Context.** The owner on Session 26's preview: "the 4th poke on the sword combo is like clipping
+through the ground. make the sword trail effect look way cooler and more subtle".
+- **The poke.** Measured, the lunge's steel never came within 0.8 m of the ground. Filmed from the
+  game camera with the hero facing it, the level blade is drawn straight down the screen from his
+  hand to the grass between his feet: the camera looks down at 58° on a hero whose drawing is
+  leaned upright, so "toward the camera and level" reads as "down". The swing's glint made it
+  worse: it flashed at the end of the gameplay reach, 1.9 m from the hilt and a metre past the
+  steel, which from that camera is on the ground in front of him.
+- **The trail** (ADR-074's line and veil) ran at the end of that reach too: a crescent twice the
+  sword's length, with a veil half the reach wide that still read as a glowing band, an edge of
+  stretched dots that showed as dashes, and an end that dipped under the grass on low cuts (0.26 m
+  under on the falling cut, 0.63 m on the slam).
+
+**Decision.**
+- **Both thrusts rise:** the lunge's point is driven up at 35° (20° in the coil), the rising
+  thrust's at 45°, at a tall foe's chest. Facing the camera the blade now ends at his hip, pointed
+  at the viewer; from behind it stands long above his head; from the side it is a rising line. The
+  hit test is unchanged (the reach band is vertical; REACH passes at every distance).
+- **The arc is drawn off the steel:** its edge runs just past the steel's point (`arcAt`: 0.64 of
+  the hit segment for the default look, the steel ends at 0.44), and the glint sits on that edge.
+- **The edge is a fine unbroken line:** overlapping `|` strokes 0.11 m in size (a sliver wide),
+  one per 0.11 m of travel, white-hot as drawn and cooling to indigo as each thins away, so the tail
+  tapers to a hair. No dots, no dashes.
+- **Three looks, one default** (`ARC_STYLES`; `player.debug.arcStyle`, the Lab's "arc" buttons):
+  `line` (the edge alone), `crescent` (the default: four faint rows close inside the edge, the
+  faintest at 6 %), `ghost` (afterimages of the steel fanned behind it). A trail is a taste call
+  and it moves: the owner can try all three on the preview and say which stays; the other two then
+  go.
+
+**Rejected.** Keeping the thrust level and selling it with a long streak along the ground (it would
+still point at the grass). Shrinking the old veil's opacity only (the band's width and the dashes
+were the problem). One look chosen by me (the last two rounds of this effect both came back).
+
+**Consequences.** The crescent no longer shows the full gameplay reach (hits land up to 0.7 m past
+the drawn arc, in the player's favour). Tests (HEROLIFE 1e): each look draws a turning blade in
+strokes of at most 0.14 m no further than 1.3 m from the hilt, with no letters, and nothing for a
+carried blade; the thrusts' points are at least 30° above level at full reach.

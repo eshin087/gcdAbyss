@@ -58,7 +58,22 @@ badge follow) and back.
   dash; a strafing guard-up stance while locked on; a second finisher (a spinning smash); a flick
   of the blade as a chain ends. The whirl's feet still turn on the ground with the spin.
 
-**Next:** the owner's look at the preview.
+**Round 2, the owner on the preview:** "the 4th poke on the sword combo is like clipping through
+the ground. make the sword trail effect look way cooler and more subtle" (ADR-077).
+- **The poke:** its steel never came within 0.8 m of the ground; filmed at the game camera with the
+  hero FACING it, the level blade is drawn straight down the screen to the grass at his feet, and
+  the swing's glint flashed on the ground a metre past the point (it sat at the end of the 1.9 m
+  reach). Both thrusts now rise (35° and 45°); the glint sits on the arc's edge.
+- **The trail:** drawn off the steel now (its edge just past the point, not at the end of the
+  reach), as one fine unbroken line of overlapping `|` strokes that cools to indigo and tapers to a
+  hair. Three looks behind `player.debug.arcStyle` and the Lab's **arc** buttons: Line, Crescent
+  (the default), Ghost. Rendered as a sheet for the owner (game camera and close up) to pick from.
+- Found on the way: port 5187 was another session's server (the `epic-clash` worktree): the first
+  page I loaded was not this branch. Served this one on 5191.
+- Verified: `npm test` ALL PASSED (947 checks, DUEL and LORD too), build ok. REACH passes at every distance with the rising thrusts. The Lab's arc buttons
+  switch the look and light up.
+
+**Next:** the owner's pick of the arc's look, and the pace.
 
 ## 2026-11-13 — Session 25: wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape, a shorter sword, a new sword arc
 
