@@ -28,8 +28,7 @@ const { StarlessLord } = await imp('src/entities/enemies/starlessLord/lord.js');
 const { Duelist } = await imp('src/entities/enemies/duelist/duelist.js');
 const { MOVES, MOVE_NAMES, CLIPS_BY_FORM, COUNTERS, TRANSITIONS, realise } = await imp('src/entities/enemies/starlessLord/moves.js');
 const { TUNING } = await imp('src/entities/enemies/starlessLord/tuning.js');
-const { LORD_LOOKS, LORD_CAPE, LORD_PANELS, lordLoadout } = await imp('src/entities/enemies/starlessLord/gear.js');
-const { buildHero } = await imp('src/entities/player/model.js');
+const { LORD_ITEMS, LORD_LOADOUT, LORD_CAPE, LORD_PANELS } = await imp('src/entities/enemies/starlessLord/gear.js');
 const { Hud } = await imp('src/ui/hud.js');
 const { Bindings, installActions } = await imp('src/core/bindings.js');
 const { TouchControls } = await imp('src/ui/touch.js');
@@ -344,20 +343,15 @@ async function scenarioLevel() {
     assert(d.anim.key === 'duel' && d.brain.clip?.name === 'meditate' && v.y - d.position.y < 0.85, `he waits in the throne clip, seated (hips ${(v.y - d.position.y).toFixed(2)} m over the root)`);
   }
   assert(d.lives.total === 4 && d.lives.left === 4 && d.hp === TUNING.hp && d.phase === 1, 'four forms, a full bar each');
-  // the harness: black plate, a helm, the yoke, the war-skirt and the cape, drawn a head taller
+  // the harness: black plate, the hood, the yoke, the war-skirt and the cape, drawn a head taller
   {
     const L = d.rig.loadout;
-    assert(L.head === `lord.helm.${LORD_LOOKS[0]}` && L.chest === 'lord.plate' && L.shoulders === 'lord.yoke' && L.arms === 'lord.arms' && L.legs === 'lord.legs' && L.waist === 'lord.skirt' && L.back === 'lord.cape' && L.weapon === 'lord.saber', `he wears his own harness (${Object.values(L).join(', ')})`);
+    assert(L.head === 'lord.hood' && L.chest === 'lord.plate' && L.shoulders === 'lord.yoke' && L.arms === 'lord.arms' && L.legs === 'lord.legs' && L.waist === 'lord.skirt' && L.back === 'lord.cape' && L.weapon === 'lord.saber', `he wears his own harness (${Object.values(L).join(', ')})`);
     assert(d.rig.streamers.length === LORD_CAPE.length && d.rig.coat.length === LORD_PANELS.length && d.rig.offHand?.open && d.rig.offHand?.grip, `the cape hangs on ${d.rig.streamers.length} springs, the war-skirt on ${d.rig.coat.length}`);
     assert(d.drawScale === TUNING.scale && d.anim.drawScale === TUNING.scale && TUNING.scale > 1.2, `he is drawn at ${TUNING.scale} (the animator's gait with it)`);
-    // every helm offered builds clean
-    let nan = 0;
-    for (const look of LORD_LOOKS) {
-      const rig = buildHero(createSharedUniforms(), lordLoadout(look));
-      rig.root.traverse((m) => { const pos = m.geometry?.attributes?.position; if (pos) for (const x of pos.array) if (!Number.isFinite(x)) nan++; });
-      if (rig.loadout.head !== `lord.helm.${look}`) nan++;
-    }
-    assert(nan === 0, `every helm builds (${LORD_LOOKS.join(', ')})`);
+    // one head: the hood over the faceplate (the owner's pick of three; the two helms are gone)
+    const heads = LORD_ITEMS.filter((it) => it.slot === 'head');
+    assert(heads.length === 1 && heads[0].id === 'lord.hood' && heads[0].hidesHair && heads[0].shadowsFace && LORD_LOADOUT.head === 'lord.hood', `one head item: ${heads.map((h) => `${h.id} "${h.name}"`).join(', ')}`);
   }
   bad = 0;
   d.object3d.traverse((m) => { const pos = m.geometry?.attributes?.position; if (pos) for (const v of pos.array) if (!Number.isFinite(v)) bad++; });

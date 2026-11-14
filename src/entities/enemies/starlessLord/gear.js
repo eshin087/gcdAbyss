@@ -3,20 +3,21 @@ import { ellipsoidGeometry, limbGeometry } from '../../../render/glyphGeometry.j
 import { registerItem, getItem } from '../../player/gear/index.js';
 import {
   gridGeometry, shellGeometry, skirtSheet, arcPlate, boxGeometry, bandGeometry, kiteGeometry, mergeGeometries, sub, foldLines, spike, wedge,
-  limb, gripFist, looseHand, lerp, sheetOffset, partGeometry, sheetEdge, ring,
+  limb, gripFist, looseHand, lerp, sheetOffset, sheetEdge, ring,
 } from '../../player/heroGeo.js';
 
 // The Starless Lord's outfit: gear items on the hero's skeleton, so he is built by the same
 // buildHero(U, loadout) and driven by the same animator. An armoured dark lord (the owner: black
 // plate, a closed helm, a long cape): a full harness of black plate over a black undersuit, a broad
-// plate yoke over the shoulders with a lamed pauldron on each arm, a closed helm whose faceplate
+// plate yoke over the shoulders with a lamed pauldron on each arm, a deep hood over a faceplate that
 // carries one slit of red light, a war-skirt under hip plates, a cape to the ankles lined in crimson,
 // and the blades of red light. His own design: nothing here is copied from another work's character.
+// (The hood is the owner's pick of three rendered heads: a crested sallet, a crowned helm, the hood.)
 // The colours are his own material instances (lord.js _tint): `armor` / `spike` = black plate,
 // `bevel` = the plates' bright edges, `trim` = gunmetal (the hilt, clasps), `coat` = black cloth (the
 // cape, the skirt), `lining` = crimson inside them, `hem` = the cloth's ember-red lower edge,
-// `shirt` / `pants` = the undersuit, `leather` = belts, `flask` = red light (the blades, the visor,
-// the sigil on his chest).
+// `shirt` / `pants` = the undersuit, `leather` = belts, `flask` = red light (the blades, the slit
+// in his faceplate, the sigil on his chest).
 //
 // The blades (weapon space: origin = the grip centre, the main blade along +Z). One hilt carries
 // every form's steel; lord.js shows what the current form ignites:
@@ -68,27 +69,7 @@ export function saberParts() {
   return { hilt, grip: mergeGeometries(grip), bladeA: blade(1), bladeB: blade(-1), hiltB, quillons: mergeGeometries([q(-1), q(1)]) };
 }
 
-// ---------------------------------------------------------------- his look
-/**
- * The three helms rendered for the owner's pick (`?lordLook=sallet|crown|hood` in the page's URL;
- * the rest of the harness is the same):
- *   sallet  a smooth black helm with a bladed crest and a lamed tail down the nape (the default)
- *   crown   the same helm under a crown of swept-back spikes that echoes the throne's
- *   hood    the faceplate alone in the shadow of a deep hood
- */
-export const LORD_LOOKS = Object.freeze(['sallet', 'crown', 'hood']);
-function lookFromUrl() {
-  try {
-    const q = new URLSearchParams(globalThis.location?.search ?? '').get('lordLook');
-    if (q && LORD_LOOKS.includes(q.toLowerCase())) return q.toLowerCase();
-  } catch {
-    // (no page: the headless tests)
-  }
-  return LORD_LOOKS[0];
-}
-export const LORD_LOOK = lookFromUrl();
-
-// ---------------------------------------------------------------- head: the helm
+// ---------------------------------------------------------------- head: the hood and the faceplate
 /** A point on the faceplate (head space): `s` 0..1 across it (0 = his right edge), `t` 0..1 from the
  *  brow down to the chin, `off` m proud of the plate. A prow down the middle, the cheeks swept back. */
 function maskPt(DIM, s, t, off, o) {
@@ -127,94 +108,57 @@ function buildMask(head, M, DIM, mesh) {
   mesh(head, mergeGeometries(slots), M.shirt);
 }
 
-/** The helm's shell (head space): open over the face, closed over the brow, round to the crown. */
-function helmShell(DIM) {
-  const [, sy, sz] = DIM.skull;
-  return shellGeometry([
-    { y: sy - 0.05, rx: 0.107, rz: 0.12, cz: sz - 0.014, gap: 0.09 },
-    { y: sy - 0.005, rx: 0.11, rz: 0.123, cz: sz - 0.013, gap: 0.092 },
-    { y: sy + 0.036, rx: 0.109, rz: 0.122, cz: sz - 0.012, gap: 0.07 },
-    { y: sy + 0.058, rx: 0.103, rz: 0.116, cz: sz - 0.011, gap: 0.004 },
-    { y: sy + 0.094, rx: 0.086, rz: 0.098, cz: sz - 0.01, gap: 0.004 },
-    { y: sy + 0.122, rx: 0.052, rz: 0.06, cz: sz - 0.01, gap: 0.004 },
-    { y: sy + 0.134, rx: 0.01, rz: 0.012, cz: sz - 0.01, gap: 0.003 },
-  ], { sub: 2, cols: 24 });
-}
+/**
+ * The hood's profile (head space: y above the neck-base joint, before BODY.headScale), a ring per
+ * row: [y, half-width, its front edge z, its back edge z, the face opening's half-chord]. From the
+ * drape pooled on the yoke, up round the faceplate (the opening widest at the cheeks), to a brow that
+ * hangs forward over the slit of red light and closes just above it, and a round crown.
+ */
+const HOOD_RINGS = [
+  [-0.045, 0.198, 0.126, -0.186, 0.05],
+  [0.0, 0.166, 0.118, -0.162, 0.056],
+  [0.045, 0.144, 0.12, -0.148, 0.068],
+  [0.092, 0.136, 0.15, -0.15, 0.094],
+  [0.15, 0.14, 0.172, -0.16, 0.1],
+  [0.2, 0.137, 0.182, -0.166, 0.074],
+  [0.243, 0.126, 0.158, -0.162, 0.014],
+  [0.272, 0.106, 0.112, -0.148, 0.005],
+  [0.294, 0.078, 0.058, -0.122, 0.004],
+  [0.308, 0.044, 0.008, -0.086, 0.004],
+  [0.314, 0.012, -0.03, -0.056, 0.003],
+].map(([y, rx, front, back, gap]) => ({ y, rx, rz: (front - back) / 2, cz: (front + back) / 2, gap }));
 
-/** A lame round the back of the head (head space): from yT down to yB, ±half rad about straight back. */
-const napeLame = (yT, yB, rxT, rzT, rxB, rzB, cz, half, cols = 12) => gridGeometry(cols, 1, (s, t, o) => {
-  const a = Math.PI + (s - 0.5) * 2 * half, rx = lerp(rxT, rxB, t), rz = lerp(rzT, rzB, t);
-  o[0] = Math.sin(a) * rx;
-  o[1] = lerp(yT, yB, t);
-  o[2] = Math.cos(a) * rz + cz;
-  o[3] = (a - Math.PI) * 0.12;
-  o[4] = o[1];
-}, true);
-
-/** The sallet: the shell, a bladed crest from the brow over the crown to the nape, three lames
- *  stepping down the back of the neck and sweeping out behind. */
-function buildSallet({ head, M, DIM, mesh }) {
-  const [sx, sy, sz] = DIM.skull;
-  mesh(head, helmShell(DIM), M.armor);
-  buildMask(head, M, DIM, mesh);
-  // the crest: a thin blade standing on the helm's midline, tallest behind the crown
-  const crest = gridGeometry(14, 1, (s, t, o) => {
-    const ph = lerp(0.42, 2.95, s);
-    const h = t * (0.014 + 0.062 * Math.pow(Math.sin(Math.PI * Math.min(1, s * 1.05)), 0.8) * (0.35 + 0.65 * s));
-    o[0] = sx;
-    o[1] = sy + 0.014 + Math.sin(ph) * (0.118 + h);
-    o[2] = sz - 0.01 + Math.cos(ph) * (0.122 + h * 1.5);
-    o[3] = s * 0.3;
-    o[4] = t * 0.05;
-  });
-  mesh(head, crest, M.spike);
-  const tail = [], edge = [];
-  for (let i = 0; i < 3; i++) {
-    const yT = sy - 0.02 - i * 0.038, yB = yT - 0.056, g = 0.011 * i;
-    tail.push(sub(napeLame(yT, yB, 0.112 + g, 0.126 + g * 1.5, 0.12 + g, 0.14 + g * 1.9, sz - 0.016 - i * 0.008, 1.95 - i * 0.12), i & 1));
-    edge.push(napeLame(yB + 0.007, yB - 0.002, 0.1215 + g, 0.1415 + g * 1.9, 0.1215 + g, 0.1415 + g * 1.9, sz - 0.016 - i * 0.008, 1.95 - i * 0.12));
-  }
-  mesh(head, mergeGeometries(tail), M.armor);
-  mesh(head, mergeGeometries(edge), M.bevel);
-}
-
-/** The crowned helm: the shell and one nape lame under a crown of five swept-back spikes. */
-function buildCrown({ head, M, DIM, mesh }) {
-  const [sx, sy, sz] = DIM.skull;
-  mesh(head, helmShell(DIM), M.armor);
-  buildMask(head, M, DIM, mesh);
-  mesh(head, sub(napeLame(sy - 0.02, sy - 0.1, 0.112, 0.126, 0.118, 0.136, sz - 0.016, 1.9), 1), M.armor);
-  mesh(head, bandGeometry(0.108, 0.121, 0.016, 22).translate(sx, sy + 0.05, sz - 0.011), M.bevel);
-  const horns = [];
-  for (const s of [-1, 1]) {
-    horns.push(spike(0.2, 0.024, [sx + s * 0.07, sy + 0.07, sz - 0.01], [s * 0.42, 0.72, -0.55], [0, 0.2, -1], 0.3, 5, 0.6));
-    horns.push(spike(0.14, 0.02, [sx + s * 0.094, sy + 0.012, sz - 0.03], [s * 0.7, 0.35, -0.62], [0, 0.2, -1], 0.3, 5, 0.6));
-  }
-  horns.push(spike(0.24, 0.024, [sx, sy + 0.1, sz + 0.01], [0, 0.82, -0.57], [0, 0.2, -1], 0.34, 5, 0.5));
-  mesh(head, mergeGeometries(horns), M.spike);
-}
-
-/** The hooded lord: the faceplate in the shadow of a deep hood that falls onto the yoke. */
+/** The hooded lord: the faceplate in the shadow of a deep hood that falls onto the yoke, the rim
+ *  round its opening in the cloth's ember red. */
 function buildHood({ head, M, DIM, mesh }) {
-  const [, sy, sz] = DIM.skull;
   buildMask(head, M, DIM, mesh);
-  const g = foldLines(shellGeometry([
-    { y: -0.02, rx: 0.176, rz: 0.14, cz: -0.022, gap: 0.062 },
-    { y: 0.04, rx: 0.142, rz: 0.13, cz: -0.014, gap: 0.064 },
-    { y: sy - 0.05, rx: 0.132, rz: 0.146, cz: sz - 0.004, gap: 0.094 },
-    { y: sy + 0.01, rx: 0.136, rz: 0.158, cz: sz + 0.002, gap: 0.1 },
-    { y: sy + 0.062, rx: 0.13, rz: 0.156, cz: sz - 0.002, gap: 0.078 },
-    { y: sy + 0.108, rx: 0.108, rz: 0.134, cz: sz - 0.012, gap: 0.034 },
-    { y: sy + 0.14, rx: 0.072, rz: 0.098, cz: sz - 0.03, gap: 0.006 },
-    { y: sy + 0.158, rx: 0.014, rz: 0.03, cz: sz - 0.05, gap: 0.003 },
-  ], { sub: 2, cols: 26 }), (x, y, z, u) => 0.5 + 0.6 * Math.sin(u * 60 + y * 8) - 1.3 * Math.max(0, (y - sy - 0.07) / 0.09));
+  const g = foldLines(shellGeometry(HOOD_RINGS, { sub: 2, cols: 28 }), (x, y, z, u) => 0.5 + 0.6 * Math.sin(u * 60 + y * 8) - 1.3 * Math.max(0, (y - 0.2) / 0.08));
   mesh(head, g, M.coat);
   mesh(head, g, M.lining);
+  // the rim: a strip laid along each side of the opening, from the throat up to where it closes
+  // over the brow
+  const rim = [];
+  const pt = (R, s) => {
+    const a = Math.asin(Math.min(0.95, R.gap / R.rx));
+    return [s * Math.sin(a) * (R.rx + 0.003), R.y, Math.cos(a) * (R.rz + 0.003) + R.cz];
+  };
+  for (const s of [-1, 1]) {
+    for (let k = 1; k < 6; k++) {
+      const P = pt(HOOD_RINGS[k], s), Q = pt(HOOD_RINGS[k + 1], s);
+      const len = Math.hypot(Q[0] - P[0], Q[1] - P[1], Q[2] - P[2]);
+      const strip = boxGeometry(0.012, len + 0.006, 0.006, 0, 0, 0);
+      strip.rotateX(Math.atan2(Q[2] - P[2], Q[1] - P[1]));
+      strip.rotateZ(-Math.asin((Q[0] - P[0]) / len));
+      strip.translate((P[0] + Q[0]) / 2, (P[1] + Q[1]) / 2, (P[2] + Q[2]) / 2);
+      rim.push(strip);
+    }
+  }
+  mesh(head, mergeGeometries(rim), M.hem);
 }
 
 // ---------------------------------------------------------------- chest: the cuirass
 /** A black cuirass with a drawn chevron across the chest and the shoulder blades, three lames down
- *  the belly, a gorget and a standing collar plate, a belt, and the sigil: a ring of red light. */
+ *  the belly, a gorget, a belt, and the sigil: a ring of red light. */
 function buildPlate({ spine, chest, M, BODY, REST, mesh }) {
   const ySp = (h) => h - REST.spine, yCh = (h) => h - REST.chest;
   const SHELL = BODY.shell, top = SHELL[SHELL.length - 1];
@@ -263,14 +207,12 @@ function buildPlate({ spine, chest, M, BODY, REST, mesh }) {
     mesh(spine, ring(0.031, 0.031, 0.005, 14).rotateX(Math.PI / 2).translate(0, y, z), M.flask);
     mesh(spine, sub(ring(0.02, 0.02, 0.007, 12).rotateX(Math.PI / 2).translate(0, y, z + 0.002), 1), M.armor);
   }
-  // the gorget round the throat and the standing collar plate behind the head (on the chest joint)
+  // the gorget round the throat (on the chest joint); the hood's drape lies over it behind
   mesh(chest, mergeGeometries([
     sub(bandGeometry(0.104, 0.098, 0.066, 20).translate(0, yCh(1.502), 0.004), 1),
     sub(bandGeometry(0.12, 0.11, 0.03, 20).translate(0, yCh(1.474), 0.006), 0),
   ]), M.armor);
   mesh(chest, bandGeometry(0.1055, 0.0995, 0.008, 20).translate(0, yCh(1.535), 0.004), M.bevel);
-  mesh(chest, partGeometry('collar'), M.armor);
-  mesh(chest, partGeometry('collar.rim'), M.bevel);
 }
 
 // ---------------------------------------------------------------- shoulders: the yoke and the pauldrons
@@ -552,9 +494,7 @@ export function buildOffSaber(M) {
 
 /** The set (registered into the hero's gear registry on import: gear/index.js registerItem). */
 export const LORD_ITEMS = [
-  { id: 'lord.helm.sallet', slot: 'head', name: 'Starless Sallet', hidesHair: true, shadowsFace: true, build: buildSallet },
-  { id: 'lord.helm.crown', slot: 'head', name: 'Starless Crown', hidesHair: true, shadowsFace: true, build: buildCrown },
-  { id: 'lord.helm.hood', slot: 'head', name: 'Starless Hood', hidesHair: true, shadowsFace: true, build: buildHood },
+  { id: 'lord.hood', slot: 'head', name: 'Starless Hood', hidesHair: true, shadowsFace: true, build: buildHood },
   { id: 'lord.plate', slot: 'chest', name: 'Void Cuirass', build: buildPlate },
   { id: 'lord.yoke', slot: 'shoulders', name: 'Plate Yoke', build: buildYoke },
   { id: 'lord.arms', slot: 'arms', name: 'Void Gauntlets', build: buildArms },
@@ -565,9 +505,9 @@ export const LORD_ITEMS = [
 ];
 for (const item of LORD_ITEMS) registerItem(item);
 
-/** What the Starless Lord wears (`look`: one of LORD_LOOKS). */
-export const lordLoadout = (look = LORD_LOOK) => Object.freeze({
-  head: `lord.helm.${LORD_LOOKS.includes(look) ? look : LORD_LOOKS[0]}`,
+/** What the Starless Lord wears. */
+export const LORD_LOADOUT = Object.freeze({
+  head: 'lord.hood',
   chest: 'lord.plate',
   shoulders: 'lord.yoke',
   arms: 'lord.arms',
@@ -576,4 +516,3 @@ export const lordLoadout = (look = LORD_LOOK) => Object.freeze({
   back: 'lord.cape',
   weapon: 'lord.saber',
 });
-export const LORD_LOADOUT = lordLoadout();
