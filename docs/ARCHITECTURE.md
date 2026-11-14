@@ -334,7 +334,7 @@ batch                                  // his rigid batches (render/rigidBatch.j
 name = 'Wanderer'
 hp, maxHp, flasks, maxFlasks: number   // (v0.2: NO stamina) TUNE: 160 HP, 5 flasks of +70 HP
 state: string   // 'idle'|'run'|'sprint'|'roll'|'attack'|'charge'|'heavy'|'block'|'parry'|'ghostep'|'plunge'|'heal'|'stagger'|'guardBreak'|'knockdown'|'lock'|'mikiri'|'dead'
-                //  ('attack' = light sweeps + the slam finisher, 'heavy' = the released charge thrust,
+                //  ('attack' = the light chain + the slam finisher, 'heavy' = the released charge's cleave (and the execution's thrust),
                 //   'ghostep' = a perfect dodge without the plunge, 'plunge' = the head-stab, contract 2,
                 //   'lock' = blades crossed with a duelist, 'mikiri' = stepping on a perilous thrust)
 blocking: boolean                      // RMB held and able to block
@@ -376,9 +376,10 @@ the lift), `deflect { n, t, side, perfect }` (the parry chain; `perfect` = the l
 within `DEFENSE.perfectParryWindow`, read by an attacker that answers a perfect parry: bullets.js), `guardHold` 0..1 (the guard lingering between
 parries), `rmb { held, upT, parryT, edge, chain }`.
 Controls (only while `game.state` ∈ {`explore`,`bossIntro`,`boss`}): WASD move · mouse aim · LMB tap =
-light chain of five (falling cut → rising backhand → whirl → stab → two-handed slam finisher; ADR-041),
+light chain of five (a cut from the right → a backhand → a whirl → a lunge → the two-handed slam finisher,
+each with other looks; ADR-041, ADR-071),
 LMB while sprinting = the sprint slash, LMB out of a forward roll = the roll cut (`SPRINT_ATK`,
-`ROLL_ATK`; both count as hit 1), LMB hold ≥ 0.3 s then release = charged lunging thrust · LMB tap with a posture-broken wyrm's head within 9 m = the execution
+`ROLL_ATK`; both count as hit 1), LMB hold ≥ 0.3 s then release = the charged dashing cleave (`CLEAVE`, ADR-072) · LMB tap with a posture-broken wyrm's head within 9 m = the execution
 (a broken **duelist** within its `execRange`: the execution thrust, `_startExecuteThrust`: a full
 thrust that lunges to him; its first active frame calls `onExecute({ damage: DEFENSE.plunge.execDamage })`
 instead of the sweep test and emits `player:plunge` / `player:plungeHit {execution: true}` and
@@ -455,11 +456,11 @@ module (nothing outside reads the rig). It is drawn as ink-line ASCII art (ADR-0
 carries a `HERO_INK` entry (the `heroArt` source and its per-part pass data, see Render helpers).
 Three sword lengths (sword space, m from the grip centre):
 - `DIM.bladeBase → DIM.bladeTip` (0.16 → 1.5, + `REACH.tipExt`): the **hit segment** (gameplay).
-- `DIM.steelTip` 1.17: the point the **animator** poses with. `anim.js` keeps it off the grass and out
-  of the legs, and the `hero` integration scenario checks it. Unchanged, so every attack's hit
-  segment is unchanged. It now lies a little past the drawn point.
-- `DIM.drawnTip` 1.06: the **drawn** point (a 1.25 m sword with the pommel, ADR-038; was 1.45 /
-  1.64 m; visual only, inside the hit segment). FX that sit on the point use `DIM.drawnTip ??
+- `DIM.steelTip` 1.04: the point the **animator** poses with. `anim.js` keeps it off the grass and out
+  of the legs, and the `hero` integration scenario checks it. It lies a little past the drawn point
+  and moves with it; the hit segment does not.
+- `DIM.drawnTip` 0.93: the **drawn** point (a 1.12 m sword with the pommel, ADR-073; was 1.25 m,
+  ADR-038, and 1.45 / 1.64 m before; visual only, inside the hit segment). FX that sit on the point use `DIM.drawnTip ??
   DIM.steelTip` (`PlayerFx.bladeHalo`'s dots and tip streak); the swing crescent and the dot halo
   past the point carry the rest of the reach. The blade parts in `heroParts.js` are built to this
   length (`npm run hero-parts`). `BLADE_BASE` (exported) is the blade core's unlit colour;
@@ -494,7 +495,7 @@ The animator (`player/anim.js`) drives: `coat` = 6 panels (`COAT_PANELS`, above)
 segments (the lower one is two meshes: `coat` above, the lavender torn zone `hem` over its last
 60 %) plus `strips` (12 torn strips, one spring each, kept above the grass; per-panel `BREEZE` /
 `IDLE_FLARE` follow the panel order); `streamers` (two-segment spring sheets: the Shrouded set's
-cloak, seven sheets on the chest and the upper arms, `SHROUD_SHEETS` in `gear/shroud.js`, ADR-043;
+cloak, five sheets on the chest and the upper arms (a narrow cape, ADR-073), `SHROUD_SHEETS` in `gear/shroud.js`, ADR-043;
 or the Wanderer's torn cape, four sheets behind the right shoulder, `CAPE_SHEETS`, ADR-037; each
 record `{ segs, len, out, lag?, max?, w?, arm? }`, `out` = its own outward flare, `lag` = how much
 it trails the motion (default 1 = a light ribbon, the cloak 0.5), `max` = how far it may swing from
@@ -555,24 +556,48 @@ forearm (palm, four curled fingers, thumb). An `arms` item may return `offHand: 
 (`rig.offHand`, else null): the free hand open on the forearm, and the same hand closed round the grip
 `DIM.offGrip` (0.08 m) below the sword hand on the `sword` joint; `apply()` shows `grip` while the
 pose's `twoHand` > 0.6 and `open` otherwise (the Shrouded set's bare hands do; the Wanderer's arms
-do not). **Attack variants** (ADR-055): a `LIGHT` def may carry `variants` (more `anim` blocks for
-the same hit: same timing, damage, reach and lunge). `HeroAnimator.play('attack')` calls
-`_pickVariant()`: `anim` or one of `variants` at random with the animator's own noise, never the
-same one twice in a row for one def (`varLast`); the result is `anim.atkDef` / `anim.atkAnim` /
-`anim.atkVar` (0 = `anim`), and `attackPose` reads `atkAnim` for its def. `anim.forceVariant` (an
-index, or null) pins the pick (tests). New swing options: `turn` (rad, a partial pivot from
-mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`), `hop` (m, a
-skip off the ground from the windup into the strike); `stab` takes `rise` and `low`; `slam` takes
-`hop`. Every light sweep without a spin also gets `FLOW`: the hips lead the blade (and the chest
-trails), the weight crosses from the coil's side to the finish's, the body dips and leans into the
-strike. The blade is still the hit test, so each variant is swung at the wyrm in REACH.
-**Two hands** (ADR-046): every light swing (the chain, the sprint slash, the roll cut) and
-the stab hold the grip with both hands (`twoHand` 1, the off hand IK'd to the grip point): `slashH`
-moves the grip off the sword shoulder onto a circle round the chest's centre line in front of it
-(`TWO_R`, `TWO_Z`) and turns the chest less to the left; the slam, the charge and the thrust already
-were two-handed. The block is two-handed too: the grip before the chest, the blade raised ~50°
-across the body past the left shoulder, the flat to the enemy; `locoGuard` carries `twoHand` in
-`GUARD_CH`. At rest and on the move he carries the sword in one hand.
+do not). **Swing clips** (ADR-071, `player/swings.js`): every light swing (the chain's hits 1–4 and
+their looks, the sprint slash, the roll cut) and the charged cleave is a keyframed clip. An attack's
+`anim: { kind: 'clip', clip: '<name>' }` names a `SWINGS` entry: a list of keys over the attack's own
+phases (`u` 0–1 the windup, 1–2 the active frames, 2–3 the recovery, so a clip follows its def's
+timing; a held attack button freezes it at `u` = 1, the coil). A key holds the sword hand (`h`, an
+offset from the right shoulder), the blade's direction (`a`: [azimuth, elevation] in degrees), the
+free hand (`l`), the hips and the chest (`by bx bz hip sy sx sz`), the head, `two` / `offAt`, elbow
+poles and the flat's normal; a field missing from a key is interpolated (Catmull-Rom through the
+keys that have it). `swingPose` (anim.js) plays it over the fighting stance: the attack's time maps
+to the phase through `swingPhase` (a monotone cubic through the three parts, so the rate does not
+kink where the cut ends); key 0 is the pose he was in (`A.from`), so a cut runs straight on out of
+the last one; the blade turns from there to the first key (the coil, one key at `u` = 1) round his
+front and is still moving as it gets there (`swingDir`); elbow poles follow the hands
+(`swingPoles`), the head stays on the target, the flat turns into the plane the blade is swinging
+in; and the clip hands its channels to `update()` (`A.pathCh`), so the cross-fade leaves them
+alone. Feet: `lungeFeet`: the foot that is behind as the swing starts steps through to the front
+(so the lead foot alternates down a chain) while the other holds its spot, its heel peeling; or
+`dashFeet` with `feet: 'dash'` (`dashW: true` starts the dash at the windup's end). In `apply()`,
+`_elbow` limits how fast either elbow swings round its shoulder → hand line (`ELBOW_RATE`, 14 rad/s:
+the hand still reaches its target), for every clip. A light def's `chain` (0..1) is the fraction of
+its recovery after which the next light may start (`player.js` `_tickAttack`). Options on the
+anim block: `spin` (±1, a full turn through the active frames: `spinTurn`), `turn` (rad, a partial
+pivot from mid-strike through the follow-through, turning back late in the recovery: `pivotYaw`),
+`hop` (m, a skip off the ground from the windup into the strike). The other kinds are `slam` (the
+finisher: `slamSwing`, which takes `hop`) and `thrust` (the execution's lunge).
+**Attack variants** (ADR-055): a `LIGHT` def may carry `variants` (more `anim` blocks for the same
+hit: same timing, damage, reach and lunge). `HeroAnimator.play('attack')` calls `_pickVariant()`:
+`anim` or one of `variants` at random with the animator's own noise, never the same one twice in a
+row for one def (`varLast`) and never a clip along the `line` the swing before it cut (`SWINGS`
+entries carry `line`; `anim.lastLine`; a chain's first hit follows nothing), so two hits in a row
+are never in the same plane. The result is `anim.atkDef` / `anim.atkAnim` / `anim.atkVar` (0 =
+`anim`), and `attackPose` reads `atkAnim` for its def. `anim.forceVariant` (an index, or null) pins
+the pick (tests). The blade is still the hit test, so each look is swung at the wyrm in REACH.
+**One hand, two hands** (ADR-071; it was two hands on every swing, ADR-046): the chain, the sprint
+slash and the roll cut are one-handed, the free hand keyed against the sword hand; the slam, the
+charge and the cleave hold the grip with both (`twoHand` 1, the off hand IK'd to the grip point;
+the cleave lets go in its follow-through). The block (ADR-073, the cross ward) is two-handed: sunk
+and side-on, the grip low outside the right hip, the blade slanting ~38° up across the body to past
+the left shoulder, the flat to the enemy; `locoGuard` carries `twoHand` and `offAt` in `GUARD_CH`.
+Pose channel `offAt` (m): with `twoHand`, how far up the blade from the grip the off hand sits (0 =
+on the grip; above 0.04 the hand stays open: a palm braced on the flat; no clip uses it yet). At
+rest and on the move he carries the sword in one hand.
 **Idle life** (ADR-047): in the loco clip, standing still in the `idle` state, not locked on, with no
 guard held, for `IDLE_LIFE.after` (2.5 s), `HeroAnimator._idleLife` starts an action from `FIDGETS`
 every `IDLE_LIFE.gap` (2–4.5 s after the last one ends), picked with the animator's own noise (never
@@ -623,7 +648,7 @@ basis is the fallback), so they stay right in Lab views.
 
 Animator ↔ player hooks (`anim.js` is private to the player module):
 - `anim.onFootstep(side, dust?)` → `player._footstep(side, dust = 0)`: emits `player:footstep`;
-  `dust` > 0 kicks up a puff of that size (the thrust dash's two touchdowns).
+  `dust` > 0 kicks up a puff of that size (a dash's two touchdowns: the cleave, the execution's thrust).
 - `ROLL_SLIDE` (exported, `[0.42, 0.58]` s of the forward roll's `stateT`): the sliding kneel. In it
   `_updateFx` calls `fx.skid` for the right shin (slot 0) and the planted left foot (slot 1), and
   `fx.scrape` while the blade point is below 0.14 m. The root speed is unchanged.
@@ -647,7 +672,8 @@ Animator ↔ player hooks (`anim.js` is private to the player module):
   the leg capsules before the ground clamp (ADR-023). Since the broad build (ADR-031) the clearances
   come from `BODY`. The build is not bit-identical on active frames (ADR-024): the hit segment moved
   by ≤ 2.5 cm on some of them (light 1 on 57 of 73 frames, light 2 on 9 of 29, the slam on 15 of 36;
-  the thrust is identical), and the REACH table is unchanged.
+  the thrust is identical), and the REACH table is unchanged. (ADR-071 / ADR-072 replaced the light
+  swings and the charged attack outright; of these clips only the slam's remains.)
 - **Coat vs blade** (round 3): every frame the grip and 12 points along the drawn blade are tested
   against each coat panel segment in that segment's frame. With the sword hand outside the cloth the
   panel hangs inside the hand and the blade (they cap its flare; the legs still win); with the hand
@@ -1302,7 +1328,7 @@ hold timings are the real device's. Play states (everything but `title` and `pau
 | button (standard index), default binding | feeds | behaviour |
 |---|---|---|
 | LS (axes 0, 1), fixed | `setPadAxis` | radial dead zone `CONFIG.gamepad.deadZone` 0.2, full run at `runAt` 0.9; stick up = north |
-| RB 5 / RT 7 | `@attack` | tap = light combo, hold = charge, release = thrust (triggers 6 / 7: on ≥ 0.5, off < 0.3, whatever they are bound to) |
+| RB 5 / RT 7 | `@attack` | tap = light combo, hold = charge, release = the cleave (triggers 6 / 7: on ≥ 0.5, off < 0.3, whatever they are bound to) |
 | LB 4 / LT 6 | `@block` | hold = block, tap = parry |
 | A 0 · B 1 · X 2 · R3 11 | `@dodge` · `@sprint` · `@flask` · `@lockOn` | dodge · hold to sprint · flask · lock-on |
 | L3 10 | `@sprint` | a stick click (10 / 11) bound to sprint latches it until the stick returns to centre |
@@ -1342,7 +1368,7 @@ timings are the real device's):
 | control | feeds | behaviour |
 |---|---|---|
 | stick (left thumb, floats under the thumb in the left 42 % × lower 74 %) | `setVirtualAxis` | analog: dead zone 0.16, full run at 0.62 of the 52 px travel; ≥ 0.94 (rim) holds `@sprint` (off below 0.86) |
-| ATTACK | `@attack` | tap = light combo, hold ≥ 0.3 s = charge, release = thrust; shows an ASCII charge meter `[###...]` |
+| ATTACK | `@attack` | tap = light combo, hold ≥ 0.3 s = charge, release = the cleave; shows an ASCII charge meter `[###...]` |
 | BLOCK | `@block` | hold = block, tap just before impact = parry |
 | DODGE | `@dodge` | roll / perfect dodge |
 | FLASK · LOCK · PAUSE (glyph `\|\|`) | `@flask` · `@lockOn` · `@pause` | flask count, LOCK lit while locked on |
@@ -1435,7 +1461,7 @@ guarding: boolean        // his guard covers his front (±TUNING.guard.arc): foo
                          // delay, a clash, and the first TUNING.guard.windupOpen of each windup
 takeHit(o): number       // a strike into his guarded front: 0 damage, guard posture, 'dragon:guard',
                          // a counter likelier (footwork only); heavy with poise >= TUNING.guard.crushPoise
-                         // (a ~full charged thrust) crushes it: lands + stagger. Otherwise as the wyrm's
+                         // (a ~full charged cleave) crushes it: lands + stagger. Otherwise as the wyrm's
                          // (part multipliers, ×breakCritMult while broken, the 50 % phase gate)
 onExecute({ damage })    // a broken disciple: final damage, the break spent, 'dragon:plunged {execution: true}'
 onParried({ attack, tell })   // the deflect chain (as the wyrm's): a move's non-final hit deflected, the
@@ -1513,9 +1539,9 @@ ignites and he leaps to the seal; a skipped intro puts him where the leap lands.
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:
-- `player:attack {kind:'light'|'slam'|'thrust', combo, charge}` (swing starts; combo 1–5 = the chain hit, slam = hit 5, the sprint slash and the roll cut report 1; thrust = charge release),
+- `player:attack {kind:'light'|'slam'|'cleave'|'thrust', combo, charge}` (swing starts; combo 1–5 = the chain hit, slam = hit 5, the sprint slash and the roll cut report 1; cleave = the charge's release, thrust = the execution against a duelist),
   `player:charge {t}` (charge start; t = seconds to full charge), `player:slam {x, z}` (the slam meets the ground: shard burst),
-  `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / thrust / plunge; kind 'plunge' = the
+  `player:hitDragon {damage, part, point, heavy, crit, kind}` (heavy = slam / cleave / thrust / plunge; kind 'plunge' = the
   head-stab, crit on an execution), `player:hurt {damage, kind, hp}`,
   `player:block {damage, tell}`, `player:parry {tell, attack, chain, light, perfect}` (chain = the hero's parries in rhythm, ≤ 1.1 s
   apart, 1 = single; it can run across two strings; light = a deflected bullet: a lighter clash; perfect = pressed within
@@ -1526,7 +1552,7 @@ Player → hud/audio/fx/flow:
   `player:plunge {execution}` (the dive starts; also an execution), `player:plungeHit {damage, execution}` (the blade
   meets the head, once per plunge; damage = what onPlunge returned; also a `player:hitDragon` with kind 'plunge' when
   it dealt damage), `player:roll {backstep}`, `player:heal {amount, flasks}`, `player:noFlask`, `player:died`,
-  `player:footstep {x, z, sprint}` (a planted foot's touchdown while moving, and the thrust dash's
+  `player:footstep {x, z, sprint}` (a planted foot's touchdown while moving, and a dash's
   two bounding steps), `player:lockOn {on}`,
   `player:lock {phase}` (the blade lock with a duelist: phase start / push / won / lost),
   `player:mikiri {attack}` (a roll into a perilous thrust stepped on the blade)

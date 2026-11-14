@@ -5,6 +5,118 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-13 — Session 25: wuxia-flow swings, the dashing cleave, the cross ward, a narrow cape, a shorter sword
+
+**Owner:** "we need to improve the characters animations. something about the way he swings the
+sword looks unnatural and not good. focus on making his animations look natural, fluid, awesome,
+dynamic, and varied different patterns instead of being the same pattern over and over. when he
+charges the sword the arm bend is all messed up and make his charged attack be an impactful slash
+with a cool weightful hit instead of a poke. make his guard stance have a deeper angle. i want his
+cloak to be thinner in the back." Answers: the charged attack a **dashing cleave**; the chain
+**wuxia flow** (one-handed cuts linked by steps, pivots and spins, each hit in a different plane,
+two hands only on the heavy hits); the guard "blade and stance"; the cloak "narrower from behind".
+Branch `player/wuxia-flow-swings` from `main`, rebased onto #21 / #22.
+
+**Diagnosis (the old chain filmed frame by frame, solid look):** in every light swing both fists
+stayed at the sternum while only the blade turned (the two-handed `slashH` circle), the body stood
+upright, and each hit was the same flat arc one way or the other. The charge held both hands at the
+right hip: the sword elbow out level, the free arm folded across the belly.
+
+**Done:**
+- **Swing clips (ADR-071):** `player/swings.js` (data) + `swingPose` in `anim.js`. 13 one-handed
+  clips: falling cut / draw cut / leaping cut; rising / flat / falling backhand; whirl / rising whirl
+  / low sweep; lunge / rising thrust; sprint slash; roll cut. A clip starts from the pose he was in;
+  the picker never repeats a line. `slashH`, `stabPose`, the windup loop and `FLOW` are removed.
+- **The cleave (ADR-072):** a new charge stance (both hands by the right shoulder, the blade up and
+  back) and `CLEAVE`: the thrust's dash, then one two-handed diagonal as it arrives, a held low
+  finish; `fx.cleaveImpact`, a longer freeze, a lingering crescent. The thrust stays as the
+  execution's. Event kind `cleave`; audio, feed, control hints and README follow.
+- **Guard and cloak (ADR-073):** the cross ward; `SHROUD_SHEETS` 7 → 5 (a narrow cape). Three guards
+  and three cloaks were rendered and sent to the owner; no pick came back during the session, so the
+  ones I recommended (guard A, cloak B) are in as defaults.
+- **Tests:** HEROLIFE (one hand through every look of the chain, the arm opening, two hands on the
+  slam and the cleave, the line rule over 40 chains, the cross ward's angle and stance); HEROLOOK
+  swings every look; REACH / BLOCK / TOUCH / PAD say `cleave`; HERO counts 5 sheets.
+
+**Found on the way:**
+- A windup sent the blade the long way round behind him (through the torso for a frame) when a
+  backhand started out of the last cut's recovery: `dirLerp`'s rules are for the carry at the hip.
+  A clip's blade now turns round his front to its coil.
+- The low sweep missed at 3.5 m: a low blade's reach band tops out lower, so it reaches less far
+  under the wyrm's chest. It crosses his front at ~65 % of the active frames now, when the step in
+  is nearly done.
+- Fewer cloak sheets = fewer `Math.random` draws in a coat kick = a different seeded meteor layout
+  in FIRE's Armageddon run: two meteors came down on the standing hero 0.19 s apart and the second
+  hit registered 69 ms into its blast. The test assumed the first frame; it now allows that for a
+  blow chained within 0.3 s of another (the blast is active 0.12 s). Not a change to the wyrm.
+
+**Round 2, the owner on the first preview:** "when the character is charging, it looks like the
+sword is piercing through him. make the sword a little bit shorter as the longness doesnt seem
+right. have the character raise its hand up more during the block angle. the new cape seems fine.
+something still seems off during the attack animations". Asked what is off (too fast to follow /
+the body looks stiff / the arms look wrong / the hits don't flow), the owner ticked all four.
+- **Charge:** the blade leaned 34–44° back over the shoulder; from the camera behind him a blade
+  leaning toward the camera is drawn DOWN across his back. It now stands nearly upright beside his
+  head (hands beside the right ear), clear of his body from all four sides.
+- **Sword:** `DIM.drawnTip` 1.06 → 0.93 (12 % shorter), the blade rebuilt in Blender
+  (`npm run hero-parts`: only the three blade parts changed). The hit segment is untouched.
+- **Guard:** the hands before the chest (13 cm under the shoulder; they were at the hip).
+- **Too fast:** lights 0.16 / 0.18 / 0.26 s, the next light after 30 % of the recovery (`chain`):
+  a hit every ~0.42 s mashed (was 0.25 s). Lights' damage and posture ×1.4; crit window 2.2 s.
+- **Stiff body:** `lungeFeet` steps the foot that is behind, so the lead foot alternates down a
+  chain and the holding heel peels; the keys shift the weight back, then into the front foot.
+- **Arms:** a motion audit (a scratch scenario: per-frame turn of each arm segment in the body's
+  frame, wrist angle, hand speeds) found elbows flipping 50–135° in ONE frame (the lunge's free
+  forearm 135°, the leaping cut's sword arm 113°) and the free hand thrown ~0.7 m front to back
+  every hit at up to 15 m/s. `_elbow` limits an elbow's swing round its shoulder → hand line
+  (14 rad/s, every clip); the free hand's keys stay before the chest and beside the hip.
+- **Flow:** one coil key instead of two (a dead stop before every cut), the blade still moving
+  into it; `swingPhase` (the straight time → phase map halved the rate in one frame as a cut
+  ended); the cut carries through before the next windup starts from it.
+
+**Found on the way (round 2):**
+- With every look forced, a hit 1 started out of the last chain's finish ran the sword hand
+  straight through the chest (left hip → right ear) and the blade with it (17.5 cm deep for a
+  frame). The hand's way to a coil now bulges forward round the chest, and the blade turns to its
+  coil round the side away from his spine (not "always round his front": out of a roll, with the
+  hand behind the hip, that ran it through his hips).
+- The slower chain no longer reached the wyrm inside the 1.6 s crit window after a plunge (the
+  PLUNGE test): 2.2 s holds about the five swings it used to.
+- The idle-life test asks for three different idle actions; the picks are random and the animator's
+  noise is shared with the variant picks, so more picks earlier moved it to two in 25 s. It watches
+  45 s now.
+
+**Verification:** `npm test` ALL PASSED (859 checks; the DUEL suite too), glyph check clean, `npm run build` ok. In the dev server (a scratch film
+helper saving frame strips): every clip every frame from the front three-quarter (solid look), the
+chain's flow with each look and with the animator's own picks, the charge and the guard from four
+sides close up and four at the game camera, the cleave front and back, the cloak from behind; at
+the phone preset (852 x 393, LOW, touch) the chain, the cleave and the guard at the real game
+camera (round 1's build).
+
+**Measured (round 2's build):** an arm segment turns at most 42° in a frame through any light swing
+(the lunge; 20–34° for the others; before the limiter up to 135°); the lead foot changed on 12 of 12
+consecutive hits; a mashed chain's hits start 0.43, 0.43, 0.47 s apart; the sword hand reaches
+0.45–0.56 m from its shoulder in every look; 0 of 120 consecutive pairs on the same line, all 13
+looks seen; the drawn blade ≤ 1.3 cm into his body over 1563 frames of every look (the limit is 2;
+the charge's first frames against the sword arm); the guard's blade 38° up and 72 % across him, hips
+0.17 m down, turned 28°, the grip 13 cm under the shoulder; REACH: the five hits, the cleave and all
+24 variant trials connect from contact to 3.5 m. Round 1's build at the phone preset: 57 draw calls
+a frame. The duel's fencing bot wins in 46 s (41 s with round 1's faster chain).
+
+**Not checked / open:**
+- No human has played round 2; nothing ran on a phone. I judged poses from stills and motion from
+  numbers, not from watching it move.
+- The pace changed the balance on purpose: a mashed chain deals ~15 % less per second than before
+  (each light ×1.4, ~1.7× later). The wyrm `win` bot and the duel's bots still win; fight lengths
+  were not compared one to one.
+- The finisher is still the old slam code (its elbows turn up to 54° in a frame). The whirl's feet
+  turn on the ground with the spin. The lunge's elbow still turns 42° in a frame.
+- The cloak's arm drapes flick up for a few frames when the arm whips home out of a swing.
+- The cleave's blade is behind him for the first 55 % of its active frames: something that only
+  crosses his path early in the dash is not cut (the thrust's point was out the whole way).
+- `docs/art/hero.md` still describes the two-handed swings and the thrust.
+
+**Next:** the owner's second look at the preview; then the finisher and the whirl's footwork.
 ## 2026-11-13 — Session 24: the Starless Lord, a third level
 
 **Owner:** "lets do a new level but this time its a master sith jedi with a red lightsaber and evil

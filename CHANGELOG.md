@@ -4,7 +4,22 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Sixteen pieces of work since 0.4.0:
+Seventeen pieces of work since 0.4.0:
+- **Wuxia-flow swings, a dashing cleave, a deeper guard, a narrower cloak** (2026-11-13, ADR-071 –
+  ADR-073): the hero's attack chain is new. Every swing is now a one-handed cut driven by the whole
+  body: the hips turn through it, the sword arm opens to full reach as the blade crosses his front,
+  and he walks through the chain, the lead foot changing with every hit. Each hit has two or three
+  looks (falling, flat and leaping cuts; rising, flat and falling backhands; a whirl, a rising
+  whirl and a crouching low sweep; a long lunge and a rising thrust), picked at random, and two
+  hits in a row are never in the same plane. The chain is slower and each hit heavier: a hit every
+  ~0.42 s instead of 0.25 s, each light dealing ×1.4, so you can see the swings; the crit window
+  after a perfect dodge is 2.2 s (was 1.6). The **charged attack** is no longer a poke: he holds
+  the sword upright beside his head in both hands, bursts forward and carves one big diagonal
+  through the target as the dash arrives, with a longer freeze on the hit, a wide crescent that
+  hangs in the air and a low finish he holds; same damage and reach as before. The **guard** is a
+  deeper, side-on stance with the hands before the chest and the blade slanted across his whole
+  body, so it reads from behind as well as from the front. The **cloak** is a narrow cape down the
+  middle of his back: his arms, waist and legs show beside it. The **sword** is 12 % shorter.
 - **The Starless Lord, a third level** (2026-11-13, ADR-068 – ADR-070; `?level=starless`, or pick
   The Obsidian Throne on the title screen): a black hall lit red, and on its throne a dark lord from
   the stars with a blade of red light. He fights in four forms, each with its own health bar: one
@@ -128,6 +143,16 @@ Sixteen pieces of work since 0.4.0:
   That work left gameplay as it was (attack timings, hitboxes, damage and parry windows).
 
 ### Added
+- **Swing clips** (ADR-071, `player/swings.js`): the hero's swings as key poses over each attack's
+  windup, active frames and recovery (the sword hand, the blade's direction, the free hand, hips and
+  chest), played by `swingPose` with splines through the keys. 13 clips: three looks each for hits
+  1–3, two for hit 4, the sprint slash, the roll cut; plus the cleave. Each clip has a `line`, and
+  the animator never follows a swing with another along the same line.
+- **The dashing cleave** (ADR-072, `CLEAVE`): the charged attack's release. Event kind `cleave` on
+  `player:attack` / `player:hitDragon`; `fx.cleaveImpact` (a ring and a fan of streaks), a crescent
+  that hangs twice as long, a 0.15–0.2 s freeze on the hit.
+- Pose channel `offAt`: with `twoHand`, how far up the blade the off hand sits (a palm braced on the
+  flat). Built for the guard options; not used by the guard that was kept.
 - **The Obsidian Throne** (`?level=starless`, ADR-069, ADR-070): the throne hall set
   (`world/throneHall.js`), the Starless Lord (`enemies/starlessLord/`: 31 moves across four forms, eight
   Void spells, four stances), four health bars with pips on the boss bar, the DEATHBLOW call-out,
@@ -201,6 +226,25 @@ Sixteen pieces of work since 0.4.0:
   thuds onto its side, the head slaps down last and the wings crumple).
 
 ### Changed
+- **The light chain is one-handed** (ADR-071; it was two hands on every swing, ADR-046): the hips
+  lead each cut, the sword arm opens to full reach across his front, the free hand moves against it.
+  Hit 4 is a long lunge (was a two-handed stab); the low sweep replaces hit 3's cross-cut. Reach and
+  lunges are unchanged.
+- **The chain's pace** (ADR-071): lights 0.16 / 0.18 / 0.26 s of windup / active / recovery (were
+  0.14 / 0.11 / 0.22), the next light after 30 % of the recovery (`chain`), damage 42 / 45 / 50 / 42
+  (were 30 / 32 / 36 / 30) and posture ×1.4; `DEFENSE.ghostep.critWindow` 1.6 → 2.2 s.
+- **Footwork** (ADR-071): `lungeFeet` steps whichever foot is behind, so the lead foot alternates
+  down a chain; `_elbow` limits how fast an elbow swings round its shoulder → hand line (all clips).
+- **The sword is 12 % shorter** (ADR-073): `DIM.drawnTip` 0.93, `steelTip` 1.04; the hit segment is
+  unchanged.
+- **The charge stance** (ADR-072): both hands beside the right ear, the blade standing nearly upright
+  beside his head (was both hands at the right hip, the blade out to his side).
+- **The guard is the cross ward** (ADR-073): sunk and side-on, the hands before the chest, the blade
+  ~38° up across the whole body (was upright, the blade ~50° up).
+- **The cloak is a narrow cape** (ADR-073): five sheets (was seven): three down the middle of his
+  back, 0.24 m at the hem, and the drapes on the arms.
+- `thrustStats` is `chargeStats(holdT, def)`; `THRUST` is only the execution's lunge now; dashing
+  heavies carry `dash: true`. On-screen control hints say "cleave".
 - **One duelist engine** (ADR-068): `enemies/duelist/` (`Duelist`, `DuelBrain`, `createDuelPoses`,
   `makeRealise`, `DuelFx`); the Ash Disciple is a kit on it and plays exactly as before.
 - **Bullets are breathed** (ADR-050): every bullet spawns at the wyrm's mouth along its head's aim
@@ -296,6 +340,9 @@ Sixteen pieces of work since 0.4.0:
   its strike; a parry throws the head back on an arc; the tail is carried in the painting's arch.
 
 ### Fixed
+- The charge pose's arms: the sword elbow stuck out level and the free arm folded across the belly.
+- Tests: the Armageddon timing check assumed a standing hero is hit on a blast's first frame; a blow
+  chained within 0.3 s of another now may land inside the blast's 0.12 s.
 - The blade's tip streak stops at the point (its far end still reached past it).
 - No blade halo or gem glow when no weapon is equipped.
 - A light attack's recovery no longer swings the blade home behind his head.
@@ -319,6 +366,9 @@ Sixteen pieces of work since 0.4.0:
   feet, the blade's glow sitting short of its point.
 
 ### Removed
+- The lunging thrust as the charged attack (it stays as the execution against a broken duelist).
+- The old swing model: `slashH`, `stabPose`, light 1's windup loop, `FLOW`, the `h` and `stab` kinds.
+- The cloak's wing over his left side and the sheet behind the sword shoulder.
 - The Meteor rain (replaced by Armageddon under the same key); the old spiral storm, wing fans and
   evenly spaced fire wheel; the red ground rings, `!` marks, closing inner rings and `>` chevrons.
 - The blink behind the wyrm on a perfect dodge (enemies without a head to stab keep it).

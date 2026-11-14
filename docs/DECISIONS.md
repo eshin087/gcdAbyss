@@ -1430,3 +1430,116 @@ Template: **Context** (why decide) · **Decision** · **Consequences**.
 - **Consequences:** the two losing prototypes were deleted. Six brazier lights compete with combat
   lights for the eight visible slots (the pool keeps the ones nearest the camera focus). The hall's
   frame cost on a phone is not measured.
+## ADR-071 — The hero's swings are keyframed clips: a one-handed chain, each hit in its own plane (2026-11-13)
+- **Context:** the owner, for the third time, on the swings: "something about the way he swings the
+  sword looks unnatural and not good ... natural, fluid, awesome, dynamic, and varied different
+  patterns instead of being the same pattern over and over". Answer to the style question: **wuxia
+  flow** (fast one-handed cuts linked by steps, pivots and spins, each hit in a different plane;
+  both hands only on the heavy hits). Filmed frame by frame, the cause was the swing model itself:
+  every light swing was `slashH`, the hands on a small circle before the chest (ADR-046's two hands)
+  with the blade radial to it. Through a whole cut both fists stayed at the sternum while only the
+  steel turned; the body stood upright; and every hit was the same flat arc run one way or the
+  other. Tuning its numbers (ADR-044, ADR-055, the rejected PR #19) could not change that.
+- **Decision:**
+  - Each light swing and the charged attack is a **clip**: key poses over the attack's own phases
+    (`player/swings.js`, data only; `anim: { kind: 'clip', clip }` in `combat.js`). A key places the
+    sword hand, the blade's direction, the free hand, the hips and the chest; `swingPose` runs
+    Catmull-Rom splines through them, so the point travels one smooth arc and the arm opens and folds
+    because the keys say so. Timing, damage, reach and lunge stay the hit's own (`combat.js`).
+  - A clip starts from the pose he was in and drives its channels itself, so a cut runs on out of
+    the last one's follow-through instead of cross-fading to a stop.
+  - The chain is one-handed (it reverses ADR-046 for the chain): the free hand reaches for the
+    target in the coil and is thrown against the cut. The slam and the cleave stay two-handed.
+  - 13 clips: three looks each for hits 1–3 (falling cut / draw cut / leaping cut; rising / flat /
+    falling backhand; whirl / rising whirl / low sweep), two for hit 4 (lunge / rising thrust), the
+    sprint slash and the roll cut. Each has a `line`; the animator never follows a swing with one
+    along the same line, so two hits in a row are never in the same plane (before, hit 2 retraced
+    hit 1's diagonal).
+  - The old model is removed: `slashH`, `stabPose`, the windup loop, `FLOW`, the `h` and `stab` kinds.
+  - **After the owner's look at the first preview** ("something still seems off during the attack
+    animations"; asked which: too fast to follow, the body looks stiff, the arms look wrong, the hits
+    don't flow: all four):
+    - *Pace:* a light's windup / active frames 0.16 / 0.18 s (were 0.14 / 0.11) and the next light
+      waits for `chain` (30 %) of the recovery, so a mashed chain lands a hit every ~0.42 s (was
+      0.25 s). The lights' damage and posture ×1.4 with it; the crit window 1.6 → 2.2 s.
+    - *Legs:* `lungeFeet` steps the foot that is BEHIND as the swing starts, so he walks through a
+      chain (left, right, left …) and the holding foot's heel peels; it was the same left-foot lunge
+      every hit. The keys shift the weight from the back foot (hips up) into the front one.
+    - *Arms:* a motion audit (per-frame turn of each arm segment in the body's frame) found elbows
+      flipping 50–135° in ONE frame where a pole switched or a hand passed the shoulder, and the
+      free hand thrown ~0.7 m front-to-back every hit (15 m/s). `_elbow` now limits an elbow's swing
+      round its shoulder → hand line to 14 rad/s for every clip (the hand still reaches); the free
+      hand stays before the chest in the coil and comes back to hang beside the hip.
+    - *Flow:* the coil is ONE key (two made a dead stop before every cut) and the blade is still
+      moving when it gets there; `swingPhase` maps time to phase with a monotone cubic (the straight
+      map halved the motion's rate in one frame as the cut ended); the cut carries through before
+      the next windup starts from it.
+- **Consequences:** a new swing is a few lines of data and can be filmed and tuned on its own. The
+  keys are authored by hand: a bad key shows as a bad pose, so HEROLIFE measures every look (the
+  sword hand ≥ 0.40 m from its shoulder at some active frame, the free hand off the grip, no arm
+  segment turning ≥ 45° in a frame, the lead foot changing with every hit, the line rule over 40
+  chains, the mashed pace) and HEROLOOK keeps the drawn blade out of his body through every look.
+  A windup's blade turns to its coil round the side of the hand away from his spine, and the hand
+  comes round in front of his chest (`dirLerp`'s carry rules sent the blade behind him out of a
+  recovery; a straight hand path from one hip to the far shoulder ran through the torso). Reach is
+  untouched; the pace is slower and each light hits harder (a mashed chain deals ~15 % less per
+  second); the low sweep crosses his front later in its active frames, because a low blade reaches
+  less far under a tall target. The finisher still uses the older slam code; the whirl's feet still
+  turn on the ground with the spin.
+
+## ADR-072 — The charged attack is a dashing cleave (2026-11-13)
+- **Context:** the owner: "when he charges the sword the arm bend is all messed up and make his
+  charged attack be an impactful slash with a cool weightful hit instead of a poke". The charge held
+  both hands down at the right hip with the blade out to his side: the sword elbow stuck out level
+  and the free arm folded across the belly. The release was a lunging thrust. Of four options
+  (dashing cleave, rising launcher, spinning cleave, leaping chop) the owner picked the first.
+- **Decision:**
+  - **The charge:** a deep, wide stance coiled away from the target, both hands on the grip beside
+    the right ear, the blade standing nearly upright beside his head (80° up, 74° at full charge).
+    Both elbows bend the way a raised two-handed guard does; the blade stands clear of the cloak.
+    (The first version leaned it 34–44° back over the shoulder. The owner: "it looks like the sword
+    is piercing through him": from the camera behind him a blade leaning toward the camera is drawn
+    DOWN across his back. Upright, it stands above his shoulder from every side.)
+  - **The release (`CLEAVE`, kind `cleave`):** the thrust's dash (2.2–3.6 m by charge, front-loaded
+    through 0.24 s of active frames), the blade winding back over the shoulder; over the last 45 %
+    of the active frames the whole body unwinds into one two-handed diagonal, high right to past the
+    left hip, and he sinks into a long low lunge that he holds while the off hand lets go.
+  - **The hit:** a 0.15–0.2 s freeze (was 0.1), a harder shake, a ring and a fan of streaks at the
+    contact (`fx.cleaveImpact`), a wide crescent that hangs ~2× as long as a light swing's, and a
+    second gust and dust where the cut ends.
+  - Same damage (70–110), posture, travel and recovery as the thrust (0.08 / 0.24 s of windup /
+    active frames for its 0.07 / 0.2 s). The thrust stays as the execution against a broken duelist
+    (`THRUST`, `_startExecuteThrust`); both are `dash: true`.
+- **Consequences:** `player:attack` / `player:hitDragon` report kind `cleave` for the charged attack
+  (audio, the combat feed, tests and docs follow). The cut happens late in the dash on purpose: a
+  target reached at any point of the dash is still in front when the blade comes through; REACH
+  connects from contact to 3.5 m. Unlike the thrust the blade is behind him for the first 60 % of
+  the active frames, so something that only crosses his path early in the dash is not hit.
+
+## ADR-073 — The guard is a cross ward; the cloak is a narrow cape; a shorter sword (2026-11-13)
+- **Context:** the owner: "make his guard stance have a deeper angle" (asked: the blade and the
+  stance both) and "i want his cloak to be thinner in the back" (asked: narrower from behind).
+  Three guards and three cloaks were rendered close up and at the game camera and the recommended
+  ones put in; on the preview the owner said "the new cape seems fine", "have the character raise
+  its hand up more during the block", and "make the sword a little bit shorter as the longness
+  doesnt seem right".
+- **Decision:**
+  - **Guard, the cross ward:** sunk 0.17 m and side-on (the left foot well forward, hips and chest
+    turned ~28° away), both hands on the grip before the chest (13 cm under the shoulder; the first
+    version held them at the hip), the blade slanting ~38° up across the whole body to past the left
+    shoulder, its point above his head. From the camera behind him ADR-046's guard (hands before
+    the chest, the blade ~50° up) showed only its point over his head; the flatter slant shows as a
+    bar across his back, and across his front from ahead. The others rendered: a hanging guard and
+    a braced diagonal, both with the free palm on the flat (pose channel `offAt`, kept).
+  - **Cloak, a narrow cape:** three sheets down the middle of his back, 0.24 m at the hem in the
+    middle and the two beside it turned only 0.3 rad out, plus the drapes on the arms; the wing over
+    his left side and the sheet behind the sword shoulder are gone (7 sheets → 5). Arms, waist and
+    legs show beside it from the game camera. The others rendered: "slim" (the old cloak ~30 %
+    narrower) and "scarf tails" (three thin tatters down the spine). Kept by the owner.
+  - **Sword:** the drawn blade 12 % shorter (`DIM.drawnTip` 1.06 → 0.93: a 1.12 m sword with the
+    pommel; `steelTip` 1.17 → 1.04), rebuilt with `npm run hero-parts`. Swung in one hand the 1.25 m
+    sword looked too long. Visual only: the hit segment and every reach are unchanged.
+- **Consequences:** the parry flicks the blade up out of a lower guard (a bigger move). Fewer sheets
+  means a coat kick draws fewer random numbers, which moved the seeded meteor layout in one wyrm
+  test and showed that test assumed a standing hero is always hittable on a blast's first frame; it
+  now allows a blow chained within 0.3 s of another to land inside the blast's 0.12 s.
