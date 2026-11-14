@@ -3059,6 +3059,112 @@ async function scenarioHeroLife() {
     assert(A.fidget.count === c1, 'locked on, no idle action starts');
     p.lockOn = false;
   }
+
+  // (7) hit reactions and the death fall (ADR-083; Session 28, the owner's go-ahead to audit them).
+  // Measured without the camera lean. Through a flinch from each side, a knockdown from the front
+  // and from behind, the standing death and a death on the ground:
+  //   - no knee or elbow sinks into the grass (the death's collapse put both knees 15 cm under);
+  //   - a blow from behind folds him FORWARD, and knocks him down onto his FRONT without turning him
+  //     round (he used to spin 180° in one frame to fall on his back);
+  //   - struck in the whirl, no hand is thrown more than 40 cm in a frame (57 cm: the body whipped
+  //     square in the cross-fade);
+  //   - killed lying down he stays down (the death clip stood him on his feet first).
+  {
+    const { BODY } = await imp('src/entities/player/model.js');
+    p.lean.on = false;
+    p.debug.god = false;
+    p.debug.teleport(d.position.x + 15, d.position.z + 15);
+    go(0.6);
+    const S = p.drawScale;
+    const at = (dx, dz) => { const sn = Math.sin(p.yaw), cs = Math.cos(p.yaw); return { x: p.position.x + sn * dz + cs * dx, z: p.position.z + cs * dz - sn * dx }; };
+    const hit = (o = {}) => { const { dir = [0, 3], ...rest } = o; p.hp = rest.damage >= 999 ? 1 : p.maxHp; return p.takeHit({ damage: 10, tell: TELL.NORMAL, attack: 'test', from: at(dir[0], dir[1]), knockback: 0, ...rest }); };
+    const JOINTS = [['knee R', r.legs.R.shin, BODY.thigh[1]], ['knee L', r.legs.L.shin, BODY.thigh[1]], ['elbow R', r.arms.R.fore, BODY.upperArm[1]], ['elbow L', r.arms.L.fore, BODY.upperArm[1]]];
+    let sunk = 0, sunkAt = '';
+    const ground = () => {
+      for (const [name, j, rad] of JOINTS) {
+        const dep = (rad * S - v.setFromMatrixPosition(j.matrixWorld).y) / S;
+        if (dep > sunk) { sunk = dep; sunkAt = `${name}, ${p.state} t ${p.stateT.toFixed(2)}`; }
+      }
+    };
+    // the head's place along his facing (model metres) and its height; the chest's facing (world y:
+    // + = turned to the sky)
+    const headZ = () => { v.setFromMatrixPosition(r.head.matrixWorld).sub(p.position); return (v.x * Math.sin(p.yaw) + v.z * Math.cos(p.yaw)) / S; };
+    const headY = () => v.setFromMatrixPosition(r.head.matrixWorld).y / S;
+    const chestUp = () => { v.set(0, 0, 0).applyMatrix4(r.chest.matrixWorld); return w.set(0, 0, 1).applyMatrix4(r.chest.matrixWorld).sub(v).normalize().y; };
+
+    // the flinch gives the way the blow drives it
+    const z0 = headZ();
+    hit({ knockback: 1 });
+    let back = 0;
+    go(0.5, () => { ground(); back = Math.min(back, headZ() - z0); });
+    go(0.6);
+    hit({ dir: [0, -3], knockback: 1 });
+    let fwd = 0;
+    go(0.5, () => { ground(); fwd = Math.max(fwd, headZ() - z0); });
+    go(0.6);
+    out(`   flinch: a blow from the front throws his head ${(-back * 100).toFixed(0)} cm back, one from behind ${(fwd * 100).toFixed(0)} cm forward`);
+    assert(back < -0.1 && fwd > 0.12, `the flinch gives the way the blow drives it: head ${(-back * 100).toFixed(0)} cm back from a blow in front, ${(fwd * 100).toFixed(0)} cm forward from one behind`);
+
+    // struck in the whirl (hit 3): the body finishes its turn instead of snapping square
+    A.forceVariant = 0;
+    for (let k = 0; k < 2; k++) { input.click(0); go(CHAIN_EVERY); }
+    input.click(0);
+    go(0.17);
+    const hands = [[r.arms.R.fore, new THREE.Vector3(), 0], [r.arms.L.fore, new THREE.Vector3(), 0]];
+    const handAt = (H) => q.set(0, -HD.foreArm, 0).applyMatrix4(H[0].matrixWorld).sub(p.position).multiplyScalar(1 / S);
+    for (const H of hands) H[1].copy(handAt(H));
+    hit({ knockback: 2 });
+    let handStep = 0;
+    go(0.6, () => { ground(); for (const H of hands) { handAt(H); handStep = Math.max(handStep, q.distanceTo(H[1])); H[1].copy(q); } });
+    A.forceVariant = null;
+    go(0.8);
+    assert(handStep < 0.4, `struck in the whirl, no hand is thrown more than 40 cm in a frame (${(handStep * 100).toFixed(0)} cm)`);
+
+    // knocked down from the front: onto his back, and up again
+    const fall = (dir) => {
+      const y0 = p.yaw;
+      hit({ dir, damage: 20, knockback: 2, knockdown: true });
+      let turn = 0, prev = p.yaw, up = 0, n = 0, round = 0;
+      go(1.7, () => {
+        ground();
+        if (p.state !== 'knockdown') return; // (on his feet again he turns to the aim)
+        turn = Math.max(turn, Math.abs(Math.atan2(Math.sin(p.yaw - prev), Math.cos(p.yaw - prev))));
+        prev = p.yaw;
+        round = Math.abs(Math.atan2(Math.sin(p.yaw - y0), Math.cos(p.yaw - y0)));
+        if (p.stateT > 0.4 && p.stateT < 0.75) { up += chestUp(); n++; }
+      });
+      go(0.5);
+      return { turn, up: up / Math.max(1, n), round, state: p.state };
+    };
+    const f1 = fall([0, 3]);
+    assert(!p.kdProne && f1.up > 0.7 && f1.state === 'idle', `knocked down from the front he lands on his back (chest to the sky ${f1.up.toFixed(2)}) and gets up (${f1.state})`);
+    const f2 = fall([0, -3]);
+    out(`   knockdown: from the front the chest faces ${f1.up.toFixed(2)} up; from behind ${f2.up.toFixed(2)}, his facing turned ${(f2.round * 57.3).toFixed(0)}° in all (${(f2.turn * 57.3).toFixed(0)}° at most in a frame)`);
+    assert(p.kdProne && f2.up < -0.7 && f2.state === 'idle', `knocked down from behind he lands on his front (chest to the sky ${f2.up.toFixed(2)}) and gets up (${f2.state})`);
+    assert(f2.round < 0.3 && f2.turn < 0.25 && f1.turn < 0.25, `a knockdown never spins him round: ${(f2.round * 57.3).toFixed(0)}° in all from behind, ${(Math.max(f1.turn, f2.turn) * 57.3).toFixed(0)}° at most in one frame`);
+    const f3 = fall([3, 0]);
+    assert(f3.turn < 0.25 && f3.round > 1.2 && f3.round < 1.9, `knocked down from the side his facing eases square to the blow (${(f3.round * 57.3).toFixed(0)}° in all, ${(f3.turn * 57.3).toFixed(0)}° at most in a frame)`);
+
+    // the death fall, standing: to a knee on the sword, then forward onto his front
+    go(0.5);
+    hit({ damage: 999, knockback: 1 });
+    go(2.6, ground);
+    assert(p.state === 'dead' && !p.deadDown && A.key === 'dead' && chestUp() < -0.7 && headY() < 0.4, `the standing death ends on his front (chest ${chestUp().toFixed(2)}, head ${headY().toFixed(2)} m up)`);
+    // … and on the ground: killed lying in a knockdown he stays where he lies
+    game.flow.debug.toState('boss');
+    p.respawn(p.position.x, p.position.z);
+    go(1.0);
+    hit({ damage: 20, knockback: 2, knockdown: true });
+    go(0.55);
+    const lyingHead = headY();
+    hit({ damage: 999, knockback: 1 });
+    let rose = 0;
+    go(2.6, () => { ground(); rose = Math.max(rose, headY()); });
+    out(`   death on the ground: head ${lyingHead.toFixed(2)} m up as the blow lands, ${rose.toFixed(2)} m at most after; joints: deepest ${(sunk * 100).toFixed(1)} cm under the grass (${sunkAt || 'none'})`);
+    assert(p.state === 'dead' && p.deadDown && A.key === 'deadDown' && rose < 0.6, `killed lying down he stays down (clip ${A.key}; his head never rises past ${rose.toFixed(2)} m, it stood up to 1.4 m)`);
+    assert(sunk < 0.02, `no knee or elbow sinks into the grass through the reactions and both deaths (deepest ${(sunk * 100).toFixed(1)} cm: ${sunkAt || 'none'})`);
+    p.lean.on = true;
+  }
   return G;
 }
 
