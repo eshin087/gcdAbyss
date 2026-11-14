@@ -7,7 +7,7 @@ import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/r
 import { buildHero, setHeroGlyphScale, installLean, LEAN, PLAYER_SCALE, BLADE_BASE } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
 import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CLEAVE, CHARGE, REACH, chargeStats, bandHit, SwordSweep } from './combat.js';
-import { PlayerFx } from './fx.js';
+import { PlayerFx, ARC_DEFAULT } from './fx.js';
 
 // The Wanderer. Owns input → state machine → movement/collision → animation → sword hits → FX.
 // Contract: docs/ARCHITECTURE.md (Player). Combat rules: docs/COMBAT.md + src/combat/rules.js.
@@ -193,6 +193,8 @@ export class Player {
       // a multiplier on the attack clock: every swing's windup, cut and recovery run this much
       // faster (its lunge covers the same ground). 1 in play; the Lab's slider tries other paces
       attackSpeed: 1,
+      // the sword arc's look (fx.js ARC_STYLES: 'line' | 'crescent' | 'ghost'); the Lab's buttons try them
+      arcStyle: ARC_DEFAULT,
       heal: () => this._debugHeal(),
       teleport: (x, z) => this._teleport(x, z),
       kill: () => this._debugKill(), // used by flow.debug.toState('dead') when present
@@ -2163,11 +2165,16 @@ export class Player {
       const crit = this.critTimer > 0;
       // any overlap of this frame with the active window counts (robust to long frames)
       if (t >= W && prevT <= end + 0.04) {
+        this.fx.arcStyle = this.debug.arcStyle;
         this.fx.trail(sw.pa, sw.pb, sw.a, sw.b, d.kind, crit);
-        // a glint on the point as the cut comes through (the cleave cuts late in its dash)
+        // a glint on the arc's edge as the cut comes through (the cleave cuts late in its dash). The
+        // edge runs just past the steel's point (fx.arcAt), not at the end of the reach
         if (!a.glint && d.kind !== 'thrust' && t >= W + d.active * (d.kind === 'cleave' ? 0.82 : 0.6)) {
           a.glint = true;
-          this.fx.arcGlint(sw.b.x, sw.b.y, sw.b.z, sw.b.x - sw.pb.x, sw.b.y - sw.pb.y, sw.b.z - sw.pb.z, !!d.heavy, crit);
+          const f = this.fx.arcAt(d.kind);
+          this._tip.lerpVectors(sw.a, sw.b, f);
+          this._tipPrev.lerpVectors(sw.pa, sw.pb, f);
+          this.fx.arcGlint(this._tip.x, this._tip.y, this._tip.z, this._tip.x - this._tipPrev.x, this._tip.y - this._tipPrev.y, this._tip.z - this._tipPrev.z, !!d.heavy, crit);
         }
         if (!a.hit && prevT <= end) this._tryHit(a);
         // the sweep's snap flares the coat tails (cosmetic: the animator's own noise, not the RNG)

@@ -2763,29 +2763,41 @@ async function scenarioHeroLife() {
     assert(whip.length >= 8 && whip.every(([, v]) => v >= 20 && v <= 45), `the blade whips: at mid-cut it still hangs 20°-45° short of pointing ahead (${whip.filter(([, v]) => !(v >= 20 && v <= 45)).map(([n, v]) => `${n} ${v}°`).join(', ') || 'all'})`);
   }
 
-  // (1e) the sword arc (fx.js trail): a blade that turns leaves an edge line and a veil, with no
-  // letter glyphs; a blade only carried along (the cleave's dash) leaves nothing
+  // (1e) the sword arc (fx.js trail, ADR-077): fine strokes that hug the steel, in each of its
+  // looks; no letter glyphs; a blade only carried along (the cleave's dash) leaves nothing. And the
+  // thrusts rise (a level one, seen from the game camera, looked planted in the ground)
   {
-    const fxa = p.fx.add, spawn0 = fxa.spawn, made = [];
+    const { ARC_STYLES, ARC_DEFAULT } = await imp('src/entities/player/fx.js');
+    const { SWINGS } = await imp('src/entities/player/swings.js');
+    const fxa = p.fx.add, spawn0 = fxa.spawn, made = [], style0 = p.fx.arcStyle;
     fxa.spawn = (o) => { made.push(o); };
     const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
     try {
-      // a quarter turn of a 1.9 m blade about a still hilt
-      p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0), V3(1.75, 1, 0.74), 'light', false);
-      const turned = made.splice(0);
-      // the same blade moved 0.4 m sideways without turning
-      p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0.4), V3(1.9, 1, 0.4), 'cleave', false);
-      const carried = made.splice(0);
-      const glyphs = new Set(turned.map((o) => o.glyph));
-      const edge = turned.filter((o) => o.glyph === '•'), veil = turned.filter((o) => o.glyph === '|');
-      out(`   arc: a turning blade ${turned.length} particles (${edge.length} edge, ${veil.length} veil; glyphs ${[...glyphs].join(' ')}), a carried blade ${carried.length}; veil alpha ${Math.min(...veil.map((o) => o.alpha)).toFixed(2)}-${Math.max(...veil.map((o) => o.alpha)).toFixed(2)}`);
-      assert(edge.length >= 2 && veil.length >= 6 && ![...glyphs].some((g) => /[A-Za-z0-9+]/.test(g)),
-        `the sword arc is an edge line and a veil of streaks, no letters (${[...glyphs].join(' ')})`);
-      assert(Math.max(...veil.map((o) => o.alpha)) <= 0.8 && Math.min(...veil.map((o) => o.alpha)) < 0.25, 'the veil is see-through and fades toward the hilt');
-      assert(carried.length === 0, `a blade carried along without turning leaves no arc (${carried.length} particles)`);
+      const counts = {};
+      for (const name of Object.keys(ARC_STYLES)) {
+        p.fx.arcStyle = name;
+        // a quarter turn of the 1.9 m hit segment about a still hilt
+        p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0), V3(1.75, 1, 0.74), 'light', false);
+        const turned = made.splice(0);
+        // the same blade moved 0.4 m sideways without turning
+        p.fx.trail(V3(0, 1, 0), V3(1.9, 1, 0), V3(0, 1, 0.4), V3(1.9, 1, 0.4), 'cleave', false);
+        const carried = made.splice(0);
+        const strokes = turned.filter((o) => o.glyph === '|');
+        const far = Math.max(...turned.map((o) => Math.hypot(o.x, o.y - 1, o.z)));
+        counts[name] = { n: turned.length, strokes: strokes.length, far, size: Math.max(...strokes.map((o) => o.size)), carried: carried.length, letters: turned.some((o) => /[A-Za-z0-9+]/.test(o.glyph)), faint: Math.min(...strokes.map((o) => o.alpha)) };
+      }
+      out(`   arc: ${Object.entries(counts).map(([n, c]) => `${n} ${c.strokes} strokes (≤ ${c.size.toFixed(2)} m, out to ${c.far.toFixed(2)} m), carried ${c.carried}`).join(' · ')}; default ${ARC_DEFAULT}`);
+      const all = Object.values(counts);
+      assert(all.length === 3 && ARC_STYLES[ARC_DEFAULT] && all.every((c) => c.strokes >= 3 && !c.letters), 'the sword arc has three looks, each drawn in strokes with no letters');
+      assert(all.every((c) => c.size <= 0.14 && c.far <= 1.3), `the arc is fine and hugs the steel: strokes at most 0.14 m, none further than 1.3 m from the hilt (the reach ends at 1.9 m; furthest ${Math.max(...all.map((c) => c.far)).toFixed(2)} m)`);
+      assert(counts.crescent.strokes > counts.line.strokes && counts.crescent.faint < 0.2, 'the crescent adds a faint veil inside the line');
+      assert(all.every((c) => c.carried === 0), 'a blade carried along without turning leaves no arc');
     } finally {
       fxa.spawn = spawn0;
+      p.fx.arcStyle = style0;
     }
+    const thrusts = Object.entries(SWINGS).filter(([, C]) => C.line === 'point').map(([n, C]) => [n, Math.max(...C.keys.filter((k) => k.u > 1.5 && k.u <= 2.001).map((k) => k.a[1]))]);
+    assert(thrusts.length >= 2 && thrusts.every(([, el]) => el >= 30), `the thrusts drive upward: the point ≥ 30° above level at full reach (${thrusts.map(([n, el]) => `${n} ${el}°`).join(', ')})`);
   }
 
   // (1c) the pace (Session 26, owner: "speed up the attack speed ... its too slow"): mashing the

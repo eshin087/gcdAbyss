@@ -12,7 +12,8 @@ const R = (a, b) => a + Math.random() * (b - a);
 const COL = {
   trail: [0.4, 1.25, 2.3], trailEnd: [0.02, 0.14, 0.45], // icy cyan arcs
   trailHeavy: [0.55, 1.6, 2.9], trailCore: [1.1, 2.1, 3.1],
-  arcCore: [1.5, 2.5, 3.5], arcGlint: [3.0, 3.5, 4.3], // the sword arc's edge line and its glint
+  arcCore: [1.5, 2.1, 2.8], arcGlint: [3.0, 3.5, 4.3], // the sword arc's edge line (white-hot) and its glint
+  arcVeil: [0.3, 0.95, 2.2], arcEnd: [0.14, 0.1, 0.8], // its veil, and the indigo everything cools to as it fades
   shard: [0.9, 1.9, 4.2], shardEnd: [0.1, 0.25, 1.0], // blue crystal burst
   gem: [1.7, 0.5, 3.4], gemEnd: [0.45, 0.08, 0.9], gemCore: [3.4, 2.2, 4.6], // violet
   spark: [3.4, 2.7, 1.6], sparkEnd: [1.4, 0.45, 0.1],
@@ -37,14 +38,29 @@ const COL = {
   gemGlow: [0.6, 0.15, 1.4], // the gem's always-on glow point
 };
 
-// the sword arc's veil: rows along the hit segment (0 = hilt … 1 = the tip of the reach, where the
-// edge line runs) and each row's opacity: faint, and fainter toward the hilt
-const ARC_VEIL = [[0.91, 0.7], [0.81, 0.48], [0.7, 0.3], [0.59, 0.15]];
-const ARC_VEIL_HEAVY = [[0.92, 0.8], [0.83, 0.6], [0.73, 0.42], [0.63, 0.26], [0.53, 0.13]];
-const ARC_EDGE = [0.15, 0.2]; // the edge line's stroke size: light, heavy (its width is ~0.4 of it)
+// The sword arc's looks (ADR-077). The arc is drawn off the STEEL: `at` is where its edge line runs
+// along the hit segment (0 = the hilt … 1 = the end of the gameplay reach, 1.9 m out; the drawn
+// steel's point is at ARC_STEEL). It ran at 1: a crescent twice the sword's length, whose end dipped
+// under the grass on a low cut and whose glint flashed on the ground a metre past the point.
+//   edge   the edge line's stroke size (m; the stroke is a sliver of it wide)
+//   life   s the edge hangs in the air
+//   veil   rows inside the edge: [fraction of `at`, opacity]
+//   ghost  opacity of the blade's afterimages (0 = none): faint copies of the steel left behind it
+//   motes  specks of light shed off the point per frame (at most)
+export const ARC_STYLES = {
+  // one fine line of light off the point, and nothing else
+  line: { at: 0.6, edge: 0.11, life: [0.22, 0.3], veil: [], ghost: 0, motes: 1 },
+  // the line with a short faint veil inside it: a thin crescent, pointed at both ends
+  crescent: { at: 0.64, edge: 0.11, life: [0.2, 0.27], veil: [[0.94, 0.3], [0.88, 0.2], [0.82, 0.12], [0.76, 0.06]], ghost: 0, motes: 1 },
+  // afterimages of the blade itself fanned out behind it, under a faint line
+  ghost: { at: 0.5, edge: 0.08, life: [0.14, 0.2], veil: [], ghost: 0.34, motes: 0 },
+};
+export const ARC_DEFAULT = 'crescent';
+const ARC_STEEL = 0.44; // the drawn steel's point along the hit segment (heroDims: drawnTip / bladeTip + REACH.tipExt)
+const ARC_HEAVY = 1.22; // the slam's and the cleave's arc reaches this much further out
 const ARC_TURN = [0.03, 0.2]; // rad the blade turns in a frame: below, no arc; above, the full one
-const TRAIL_SUB_LEN = 0.24; // m of outer-point travel per trail sub-step …
-const TRAIL_SUB_MAX = 8; // … up to this many sub-steps a frame
+const TRAIL_SUB_LEN = 0.11; // m of the edge's travel per trail sub-step (short: the line bends smoothly) …
+const TRAIL_SUB_MAX = 14; // … up to this many sub-steps a frame
 // the swept blade between two frames: hilt lerped, direction slerped round it, length lerped
 const ARC = { ax: 0, ay: 0, az: 0, dx: 0, dy: 0, dz: 0, n0: [0, 0, 1], n1: [0, 0, 1], l0: 1, l1: 1, th: 0, s: 1 };
 const ARC_P = [0, 0, 0], ARC_Q = [0, 0, 0];
@@ -105,6 +121,7 @@ const RING = { white: [1.5, 1.55, 1.75], warm: [1.6, 1.3, 0.8], gold: [2.0, 1.45
 
 export class PlayerFx {
   constructor(game, rig) {
+    this.arcStyle = ARC_DEFAULT; // the sword arc's look (ARC_STYLES); player.js sets it from debug.arcStyle
     this.game = game;
     this.rig = rig;
     this._v = new THREE.Vector3();
@@ -150,59 +167,68 @@ export class PlayerFx {
     }
   }
 
+  /** Where the arc's edge runs along the hit segment for a swing of `kind` (0 hilt … 1 reach end). */
+  arcAt(kind = 'light') {
+    const S = ARC_STYLES[this.arcStyle] ?? ARC_STYLES[ARC_DEFAULT];
+    return Math.min(1, S.at * (kind === 'slam' || kind === 'cleave' ? ARC_HEAVY : 1));
+  }
+
   /**
-   * The sword arc. Fills the gap between last frame's blade (pa→pb) and this one's (a→b) with:
-   *  - the EDGE: one thin bright line along the point's path (round strokes laid end to end), which
-   *    thins and cools as it fades, so the cut hangs in the air for a moment as a drawn line;
-   *  - the VEIL: a few rows of faint streaks inside it, each fainter toward the hilt and gone in a
-   *    few frames: the sweep reads as a crescent without a slab of light;
-   *  - MOTES: a speck or two of light shed off the point, drifting on along the cut.
+   * The sword arc (ADR-077; its look: ARC_STYLES[this.arcStyle]). Fills the gap between last
+   * frame's blade (pa→pb) and this one's (a→b) with:
+   *  - the EDGE: one fine line of light just past the steel's point, laid along its path in strokes
+   *    that overlap, white-hot as it is drawn and cooling to indigo as it thins away: the cut hangs
+   *    in the air for a moment as a drawn line, its tail tapering to nothing;
+   *  - the VEIL (crescent): two or three faint rows inside the line, close to it;
+   *  - GHOSTS (ghost): faint copies of the steel itself where it was a moment ago;
+   *  - MOTES: a speck of light shed off the point now and then.
    * The arc is the blade TURNING: its strength follows how far the blade turned this frame (`gate`),
-   * so it tapers in and out with the cut and a blade merely carried along (a dash, a lunge) leaves
-   * none. kind: 'light' | 'slam' (a wider veil, longer-lived) | 'cleave' (the slam's, hanging twice
-   * as long) | 'thrust' (the edge only: thrustStreak draws the beam).
-   * (Session 25, owner: "make the sword arc glow effect be more subtle and way more epic cooler
-   * looking". It was four or five rows of bright strokes under a rim of 'A' / '8' letters with a
-   * halftone of '+' behind: a solid glowing band as wide as half the blade, and during the cleave's
-   * dash a wall of light as tall as the sword.)
+   * so it swells and tapers with the cut and a blade merely carried along (a dash, a lunge) leaves
+   * none. kind: 'light' | 'slam' | 'cleave' (both reach further and hang longer) | 'thrust' (the
+   * edge only: thrustStreak draws the beam).
+   * (Session 25: a line at the end of the reach with a four-row veil, in place of a slab of bright
+   * strokes under a rim of letters. Session 26, owner: "make the sword trail effect look way cooler
+   * and more subtle": that veil was still a glowing band half the reach wide, its edge was a row of
+   * dashes, and it ran a metre past the steel.)
    */
   trail(pa, pb, a, b, kind = 'light', crit = false, gate = true) {
     const fx = this.add;
     if (!fx) return;
+    const S = ARC_STYLES[this.arcStyle] ?? ARC_STYLES[ARC_DEFAULT];
     const cleave = kind === 'cleave';
     const heavy = kind === 'slam' || cleave;
     const thrust = kind === 'thrust';
     arcSetup(pa, pb, a, b);
     const turn = gate ? Math.min(1, Math.max(0, (ARC.th - ARC_TURN[0]) / (ARC_TURN[1] - ARC_TURN[0]))) : 1;
     if (!(turn > 0.02) || !Number.isFinite(turn)) return;
-    // sub-steps follow the outer point's travel (a fast frame sweeps 1.5 m), each stroke covering
-    // its own, so the line is continuous at any speed
-    const tipStep = Math.hypot(b.x - pb.x, b.y - pb.y, b.z - pb.z);
+    const at = this.arcAt(kind);
+    // sub-steps follow the edge's travel (a fast frame sweeps a metre), each stroke covering its own
+    // and a little of the next, so the line is unbroken at any speed
+    const tipStep = Math.hypot(b.x - pb.x, b.y - pb.y, b.z - pb.z) * at;
     const nSub = Math.min(TRAIL_SUB_MAX, Math.max(2, Math.ceil(tipStep / TRAIL_SUB_LEN)));
-    const core = crit ? COL.crit : COL.arcCore, veil = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
-    const end = crit ? COL.critEnd : COL.trailEnd;
-    const linger = cleave ? 2 : heavy ? 1.35 : 1;
-    const rows = thrust ? TRAIL_NONE : heavy ? ARC_VEIL_HEAVY : ARC_VEIL;
+    const core = crit ? COL.crit : COL.arcCore, veil = crit ? COL.crit : COL.arcVeil;
+    const end = crit ? COL.critEnd : COL.arcEnd;
+    const linger = cleave ? 1.7 : heavy ? 1.3 : 1;
+    const rows = thrust ? TRAIL_NONE : S.veil;
     for (let s = 1; s <= nSub; s++) {
       const t = s / nSub, t0 = (s - 1) / nSub;
       // the edge
-      arcPoint(t, 1, ARC_P);
-      arcPoint(t0, 1, ARC_Q);
+      arcPoint(t, at, ARC_P);
+      arcPoint(t0, at, ARC_Q);
       let dx = ARC_P[0] - ARC_Q[0], dy = ARC_P[1] - ARC_Q[1], dz = ARC_P[2] - ARC_Q[2];
       let step = Math.hypot(dx, dy, dz);
       if (step > 0.01) {
-        const size = (heavy ? ARC_EDGE[1] : ARC_EDGE[0]) * (0.55 + 0.45 * turn);
+        const size = S.edge * (heavy ? 1.25 : 1) * (0.6 + 0.4 * turn);
         fx.spawn({
           x: (ARC_P[0] + ARC_Q[0]) / 2, y: (ARC_P[1] + ARC_Q[1]) / 2, z: (ARC_P[2] + ARC_Q[2]) / 2,
-          life: R(0.2, 0.26) * linger, size, sizeEnd: size * 0.3,
-          // (the dot fills ~0.4 of its cell: stretched so that one stroke meets the next)
-          glyph: '•', rot: alongRot(dx, dy, dz), stretch: Math.min(18, (step / size) * 3),
-          color: core, colorEnd: end, alpha: 0.5 + 0.5 * turn, alphaEnd: 0, drag: 2,
+          life: R(S.life[0], S.life[1]) * linger, size, sizeEnd: size * 0.15,
+          glyph: '|', rot: alongRot(dx, dy, dz), stretch: Math.min(30, (step / size) * 1.7),
+          color: core, colorEnd: end, alpha: 0.45 + 0.55 * turn, alphaEnd: 0, drag: 2,
         });
       }
       // the veil
       for (let k = 0; k < rows.length; k++) {
-        const f = rows[k][0] + R(-0.03, 0.03);
+        const f = at * (rows[k][0] + R(-0.015, 0.015));
         arcPoint(t, f, ARC_P);
         arcPoint(t0, f, ARC_Q);
         dx = ARC_P[0] - ARC_Q[0];
@@ -210,48 +236,66 @@ export class PlayerFx {
         dz = ARC_P[2] - ARC_Q[2];
         step = Math.hypot(dx, dy, dz);
         if (!(step > 0.02)) continue;
-        const size = (heavy ? 0.24 : 0.19) * (0.6 + 0.4 * f);
+        const size = heavy ? 0.12 : 0.1;
         fx.spawn({
           x: (ARC_P[0] + ARC_Q[0]) / 2, y: (ARC_P[1] + ARC_Q[1]) / 2, z: (ARC_P[2] + ARC_Q[2]) / 2,
-          life: R(0.09, 0.15) * linger, size, sizeEnd: size * 0.5,
-          glyph: '|', rot: alongRot(dx, dy, dz), stretch: Math.min(6, (step / size) * 1.4),
+          life: R(0.08, 0.13) * linger, size, sizeEnd: size * 0.4,
+          glyph: '|', rot: alongRot(dx, dy, dz), stretch: Math.min(24, (step / size) * 1.5),
           color: veil, colorEnd: end, alpha: rows[k][1] * turn, alphaEnd: 0, drag: 2.5,
         });
       }
+      // the blade's afterimages: the steel where it was, from the guard to the point
+      if (S.ghost > 0 && !thrust && (s & 1) === (nSub & 1)) {
+        arcPoint(t, 0.04, ARC_Q);
+        arcPoint(t, ARC_STEEL * (heavy ? 1.1 : 1), ARC_P);
+        dx = ARC_P[0] - ARC_Q[0];
+        dy = ARC_P[1] - ARC_Q[1];
+        dz = ARC_P[2] - ARC_Q[2];
+        step = Math.hypot(dx, dy, dz);
+        if (step > 0.05) {
+          const size = 0.1;
+          fx.spawn({
+            x: (ARC_P[0] + ARC_Q[0]) / 2, y: (ARC_P[1] + ARC_Q[1]) / 2, z: (ARC_P[2] + ARC_Q[2]) / 2,
+            life: R(0.1, 0.15) * linger, size, sizeEnd: size * 0.6,
+            glyph: '|', rot: alongRot(dx, dy, dz), stretch: Math.min(30, (step / size) * 1.5),
+            color: veil, colorEnd: end, alpha: S.ghost * turn, alphaEnd: 0, drag: 3,
+          });
+        }
+      }
     }
     // motes off the point, carried on along the cut
-    const n = thrust ? 0 : cleave ? 3 : heavy ? 2 : 1;
+    const n = thrust ? 0 : S.motes + (heavy ? 1 : 0);
     const tx = b.x - pb.x, ty = b.y - pb.y, tz = b.z - pb.z, tl = Math.hypot(tx, ty, tz) || 1;
     for (let i = 0; i < n; i++) {
-      if (Math.random() > turn) continue;
-      arcPoint(Math.random(), R(0.82, 1), ARC_P);
-      const sp = R(0.6, 2.4);
+      if (Math.random() > turn * 0.7) continue;
+      arcPoint(Math.random(), at * R(0.9, 1), ARC_P);
+      const sp = R(0.5, 2);
       fx.spawn({
         x: ARC_P[0], y: ARC_P[1], z: ARC_P[2],
         vx: (tx / tl) * sp + R(-0.3, 0.3), vy: (ty / tl) * sp + R(-0.1, 0.5), vz: (tz / tl) * sp + R(-0.3, 0.3),
-        life: R(0.28, 0.5) * Math.sqrt(linger), size: R(0.07, 0.11), sizeEnd: 0.03,
-        glyph: "·'`.", color: core, colorEnd: end, alpha: 0.9, alphaEnd: 0, drag: 3, gravity: -1.2,
+        life: R(0.26, 0.46) * Math.sqrt(linger), size: R(0.06, 0.1), sizeEnd: 0.03,
+        glyph: "·'`.", color: core, colorEnd: end, alpha: 0.85, alphaEnd: 0, drag: 3, gravity: -1.2,
       });
     }
   }
 
-  /** The glint as a cut comes through: a small star on the point for a few frames and a pinch of
-   *  sparks thrown on along the cut (dx, dy, dz: the point's travel). Once a swing (player.js). */
+  /** The glint as a cut comes through: a small four-point star on the arc's edge for a few frames
+   *  and a pinch of sparks thrown on along the cut (dx, dy, dz: the point's travel). Once a swing
+   *  (player.js, at the arc's edge: arcAt). */
   arcGlint(x, y, z, dx = 0, dy = 0, dz = 0, heavy = false, crit = false) {
     const fx = this.add;
     if (!fx || !Number.isFinite(x + y + z)) return;
-    const core = crit ? COL.ghostCore : COL.arcGlint, c1 = crit ? COL.critEnd : COL.trailEnd;
-    const size = heavy ? 0.5 : 0.32;
-    fx.spawn({ x, y, z, life: 0.1, size, sizeEnd: size * 0.25, glyph: '+', rot: R(0.5, 1.1), color: core, colorEnd: c1, alpha: 1, alphaEnd: 0 });
-    fx.spawn({ x, y, z, life: 0.07, size: size * 0.6, sizeEnd: size * 0.15, glyph: '×', color: core, colorEnd: c1, alpha: 0.9, alphaEnd: 0 });
-    const l = Math.hypot(dx, dy, dz) || 1, n = heavy ? 7 : 4;
+    const core = crit ? COL.ghostCore : COL.arcGlint, c1 = crit ? COL.critEnd : COL.arcEnd;
+    const size = heavy ? 0.4 : 0.26;
+    fx.spawn({ x, y, z, life: 0.09, size, sizeEnd: size * 0.2, glyph: '+', rot: R(0.5, 1.1), color: core, colorEnd: c1, alpha: 0.95, alphaEnd: 0 });
+    const l = Math.hypot(dx, dy, dz) || 1, n = heavy ? 5 : 3;
     for (let i = 0; i < n; i++) {
-      const sp = R(2.5, 6.5);
+      const sp = R(2.5, 6);
       fx.spawn({
         x, y, z,
         vx: (dx / l) * sp + R(-1.2, 1.2), vy: (dy / l) * sp + R(-0.6, 1.4), vz: (dz / l) * sp + R(-1.2, 1.2),
-        life: R(0.16, 0.3), size: R(0.08, 0.13), sizeEnd: 0.03, glyph: "·'*", color: core, colorEnd: c1,
-        alpha: 1, alphaEnd: 0, drag: 4, gravity: -2,
+        life: R(0.14, 0.26), size: R(0.07, 0.11), sizeEnd: 0.03, glyph: "·'", color: core, colorEnd: c1,
+        alpha: 0.95, alphaEnd: 0, drag: 4, gravity: -2,
       });
     }
   }

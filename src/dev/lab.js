@@ -788,6 +788,18 @@ export class Lab {
       setText(this.ui.atkSpeedVal, `x${v.toFixed(2)}`);
     });
     this.ui.atkSpeedVal = el('span', 'lab-val', 'x1.00', sp);
+    // the sword arc's look (player.debug.arcStyle; fx.js ARC_STYLES)
+    const ar = el('div', 'lab-row', null, body);
+    el('span', 'lab-lbl', 'arc', ar).title = 'the look of the sword arc behind a cut';
+    const ag = el('div', 'lab-grid', null, ar);
+    ag.style.flex = '1';
+    this.ui.arcBtns = ['line', 'crescent', 'ghost'].map((name) => ({
+      name,
+      el: button(ag, name[0].toUpperCase() + name.slice(1), () => {
+        const pd = this.game.player?.debug;
+        if (pd) pd.arcStyle = name;
+      }),
+    }));
   }
 
   _buildTime(root) {
@@ -1010,6 +1022,7 @@ export class Lab {
     // controls that mirror live values
     setClass(u.godBtn, 'on', !!pd?.god);
     setClass(u.flaskBtn, 'on', !!pd?.infiniteFlasks);
+    if (u.arcBtns) for (const b of u.arcBtns) setClass(b.el, 'on', pd?.arcStyle === b.name);
     setClass(u.godBtn, 'na', !pd);
     setClass(u.flaskBtn, 'na', !pd);
     setClass(u.aiBtn, 'on', ai === true);

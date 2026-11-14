@@ -172,27 +172,34 @@ export const SWINGS = {
   },
 
   // ---- hit 4: along the line ------------------------------------------------------------------
-  /** The lunge: the hand drawn back to the ribs, then one long line from the rear heel to the
-   *  point, the free hand drawn back to the hip as the sword arm drives out. */
+  // Both thrusts RISE: the point is driven up at 35-45°, at a tall foe's chest. (They were level. The
+  // game camera looks down at 58° on a hero drawn leaned upright: a level blade pointed toward that
+  // camera is drawn straight down the screen from his hand to the grass between his feet, as if he
+  // had planted it in the ground. Session 26, owner: "the 4th poke on the sword combo is like
+  // clipping through the ground".)
+  /** The lunge: the hand drawn back to the ribs with the point already up, then one long line from
+   *  the rear heel through the arm to the point, driven forward and up; the free hand drawn back to
+   *  the hip as the sword arm drives out. */
   lunge: {
     line: 'point',
     lF: [0.14, 0.46],
     keys: [
-      { u: 1.0, h: [-0.03, -0.16, -0.08], a: [3, 2], l: [0.0, -0.12, 0.32], by: -0.17, bz: -0.07, hip: -0.34, sy: -0.5, sx: 0.08 },
-      { u: 1.45, h: [0.08, -0.1, 0.26], a: [1, 1], l: [0.12, -0.16, 0.14], by: -0.22, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.28 },
-      { u: 1.9, h: [0.15, -0.05, 0.51], a: [0, -1], l: [0.24, -0.16, -0.08], by: -0.27, bz: 0.13, hip: 0.24, sy: 0.34, sx: 0.47 },
-      { u: 2.45, h: [0.14, -0.07, 0.47], a: [0, -2], l: [0.26, -0.14, -0.14], by: -0.25, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.42 },
+      { u: 1.0, h: [-0.03, -0.2, -0.08], a: [3, 20], l: [0.0, -0.12, 0.32], by: -0.17, bz: -0.07, hip: -0.34, sy: -0.5, sx: 0.08 },
+      { u: 1.45, h: [0.08, -0.08, 0.26], a: [1, 28], l: [0.12, -0.16, 0.14], by: -0.22, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.26 },
+      { u: 1.9, h: [0.15, 0.1, 0.48], a: [0, 35], l: [0.24, -0.16, -0.08], by: -0.25, bz: 0.13, hip: 0.24, sy: 0.34, sx: 0.4 },
+      { u: 2.45, h: [0.14, 0.08, 0.44], a: [0, 33], l: [0.26, -0.14, -0.14], by: -0.23, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.36 },
     ],
   },
-  /** The rising thrust: out of a crouch, the point driven up into the target. */
+  /** The rising thrust: out of a crouch, the whole body rising behind the point as it drives up
+   *  steeply into the target. */
   risingThrust: {
     line: 'point',
     lF: [0.14, 0.46],
     keys: [
-      { u: 1.0, h: [-0.04, -0.34, -0.06], a: [4, 12], l: [0.0, -0.2, 0.32], by: -0.32, bz: -0.07, hip: -0.34, sy: -0.46, sx: 0.3 },
-      { u: 1.45, h: [0.07, -0.16, 0.26], a: [2, 18], l: [0.12, -0.22, 0.14], by: -0.24, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.26 },
-      { u: 1.9, h: [0.15, 0.08, 0.5], a: [0, 24], l: [0.24, -0.26, -0.08], by: -0.1, bz: 0.12, hip: 0.24, sy: 0.32, sx: 0.16 },
-      { u: 2.45, h: [0.14, 0.04, 0.45], a: [0, 20], l: [0.26, -0.26, -0.12], by: -0.12, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.16 },
+      { u: 1.0, h: [-0.04, -0.34, -0.06], a: [4, 24], l: [0.0, -0.2, 0.32], by: -0.32, bz: -0.07, hip: -0.34, sy: -0.46, sx: 0.3 },
+      { u: 1.45, h: [0.07, -0.14, 0.26], a: [2, 34], l: [0.12, -0.22, 0.14], by: -0.24, bz: 0.04, hip: -0.04, sy: -0.06, sx: 0.24 },
+      { u: 1.9, h: [0.14, 0.18, 0.46], a: [0, 45], l: [0.24, -0.26, -0.08], by: -0.08, bz: 0.12, hip: 0.24, sy: 0.32, sx: 0.12 },
+      { u: 2.45, h: [0.13, 0.14, 0.42], a: [0, 42], l: [0.26, -0.26, -0.12], by: -0.1, bz: 0.1, hip: 0.22, sy: 0.3, sx: 0.12 },
     ],
   },
 
