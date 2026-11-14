@@ -396,7 +396,7 @@ all glyph particles in the dragon's `add` / `alpha` pools.
   every second one), and one red point light that follows it and lights the floor round him. The
   sweep trail is the duelist's, in red. Void lightning is the only other colour he owns: violet-white
   jagged strokes with a light of the same hue, so a bolt never reads as a blade.
-- **The lord's harness** (2026-11-14, ADR-083): black plate reads in the hero-art pass as dim fill
+- **The lord's harness** (2026-11-14, ADR-084): black plate reads in the hero-art pass as dim fill
   inside bright ink lines, so every plate is its own piece (alternating ink sub-ids between lames) or
   a drawn fold line (the cuirass's chevrons, the yoke's bands). What carries him at the fight camera
   is the silhouette: a hooded head, a yoke wider than his shoulders, and the cape, a triangle of black

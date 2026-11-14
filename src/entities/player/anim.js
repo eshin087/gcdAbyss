@@ -1361,40 +1361,76 @@ function healPose(p, A) {
   p[P.flask] = smoothstep(0.0, 0.1, t) * (1 - smoothstep(0.74, 0.85, t));
 }
 
-/** Flinch: snap back, arms thrown out, recover. */
+/** A reaction entered mid-turn (struck in the whirl) finishes the turn over a third of a second
+ *  instead of snapping square in the cross-fade's few frames (ADR-083). */
+function carryYaw(p, A) {
+  if (A.yaw0) p[P.yaw] += A.yaw0 * (1 - smoothstep(0, 0.3, A.t));
+}
+
+/** Flinch: the body gives the way the blow drives it (player.hitPush, a unit vector in his own
+ *  axes: z − = driven back, z + = driven forward by a blow from behind, x + = toward his left),
+ *  the arms thrown out, a foot catching him on that side, then he recovers (ADR-083: every blow
+ *  snapped him BACK, also one that landed between his shoulder blades). */
 function staggerPose(p, A) {
   const t = A.t;
   guard(p, A);
+  carryYaw(p, A);
   const k = t < 0.08 ? easeOutCubic(t / 0.08) : 1 - smoothstep(0.08, 0.4, t);
-  p[P.spX] = lerp(p[P.spX], -0.4, k);
-  p[P.pitch] = -0.1 * k;
-  p[P.hdX] = lerp(p[P.hdX], -0.4, k);
+  const hp = A.player?.hitPush;
+  const pz = clamp(fin(hp?.z, -1), -1, 1), px = clamp(fin(hp?.x, 0), -1, 1);
+  const kb = k * Math.max(-pz, 0.4 * Math.abs(px), 0), kf2 = k * Math.max(pz, 0), ks = k * px;
+  p[P.spX] = lerp(lerp(p[P.spX], -0.4, kb), 0.5, kf2); // arched back, or folded forward over the blow
+  p[P.pitch] = -0.1 * kb + 0.12 * kf2;
+  p[P.hdX] = lerp(lerp(p[P.hdX], -0.4, kb), 0.45, kf2);
+  p[P.spZ] += FLINCH_LEAN * 0.22 * ks; // … and bent over to the side it drives him
+  p[P.hdZ] += FLINCH_LEAN * 0.16 * ks;
   p[P.bodyY] -= 0.07 * k;
-  p[P.bodyZ] -= 0.08 * k;
-  to3(p, P.rH, -0.25, -0.3, 0.3, k);
-  to3(p, P.lH, 0.3, -0.25, 0.25, k);
+  p[P.bodyZ] += -0.08 * kb + 0.1 * kf2;
+  p[P.bodyX] += 0.07 * ks;
+  to3(p, P.rH, -0.25, -0.3, 0.3 + 0.1 * Math.max(pz, 0), k);
+  to3(p, P.lH, 0.3, -0.25, 0.25 + 0.1 * Math.max(pz, 0), k);
   // the blow jolts the blade up and out from wherever the guard holds it (~40°): a fixed target
   // out to the right swung it ~110° across the legs and back with the low ready guard
   dirTo(p, P.swD, p[P.swD] - 0.45, p[P.swD + 1] + 0.5, p[P.swD + 2] + 0.25, k);
-  p[P.lF + 2] -= 0.2 * k;
+  // a foot catches him: the left one back, the right one forward, or the one on that side out
+  p[P.lF + 2] -= 0.2 * kb;
+  p[P.rF + 2] += 0.24 * kf2;
+  if (ks > 0) p[P.lF] += 0.18 * ks;
+  else p[P.rF] += 0.18 * ks;
 }
+const FLINCH_LEAN = -1; // the sign of a spine / head roll that leans toward his left (+X)
 
-// knockdown: fall back (0–0.3), lie (–0.8), sit up, crouch, stand (–1.3)
+// The knockdown falls AWAY from the blow (ADR-083). From the front or a side (KD): onto his back,
+// fall (0–0.3), lie (–0.8), sit up, crouch, stand (–1.3). From behind (KDP, player.kdProne): onto
+// his front, the hands thrown out to break it, lie, push up, a foot under him, stand.
 const KD = {
   pitch: [0, 0, 0.3, -1.45, 0.8, -1.45, 1.0, -0.55, 1.14, 0.18, 1.3, 0],
   y: [0, -0.035, 0.3, -0.85, 0.8, -0.85, 1.0, -0.6, 1.14, -0.34, 1.3, -0.035],
   z: [0, 0, 0.3, -0.5, 0.8, -0.5, 1.0, -0.34, 1.14, -0.12, 1.3, 0],
-  sp: [0, 0.1, 0.18, -0.3, 0.32, 0.05, 0.8, 0.05, 1.0, 0.55, 1.14, 0.45, 1.3, 0.1],
-  hd: [0, -0.05, 0.2, -0.5, 0.36, 0.25, 0.8, 0.15, 1.0, 0.3, 1.3, -0.05],
+  // the chest is thrown back, then he curls (the back rounded, the chin tucked) before he lands
+  sp: [0, 0.1, 0.1, -0.3, 0.22, 0.3, 0.34, 0.05, 0.8, 0.05, 1.0, 0.55, 1.14, 0.45, 1.3, 0.1],
+  hd: [0, -0.05, 0.1, -0.4, 0.22, 0.5, 0.38, 0.2, 0.8, 0.15, 1.0, 0.3, 1.3, -0.05],
   lie: [0.12, 0, 0.28, 1, 0.84, 1, 0.98, 0],
+  legOut: [0.16, 0, 0.4, 1, 0.84, 1, 0.98, 0], // the left leg slides out long
+  legUp: [0.08, 0, 0.3, 1, 0.84, 1, 0.98, 0], // the right foot stays planted: its knee up
   sit: [0.84, 0, 0.98, 1, 1.14, 1, 1.3, 0],
   arms: [0.05, 0, 0.25, 1, 0.8, 1, 0.95, 0],
+  fling: [0.02, 0, 0.12, 1, 0.3, 0], // the hands left behind as the chest goes
   push: [0.8, 0, 0.92, 1, 1.08, 1, 1.22, 0],
   blade: [0.05, 0, 0.22, 1, 1.12, 1, 1.3, 0], // held out at his right side until he is on his feet
 };
-function knockdownPose(p, A) {
-  const t = A.t;
+const KDP = {
+  pitch: [0, 0, 0.3, 1.5, 0.8, 1.5, 1.0, 0.85, 1.14, 0.3, 1.3, 0],
+  y: [0, -0.035, 0.3, -0.88, 0.8, -0.88, 1.0, -0.56, 1.14, -0.3, 1.3, -0.035],
+  z: [0, 0, 0.3, 0.42, 0.8, 0.42, 1.0, 0.24, 1.14, 0.08, 1.3, 0],
+  // the blow arches him, he folds as he goes down, and arches again pushing himself up
+  sp: [0, 0.1, 0.08, -0.35, 0.2, 0.2, 0.32, -0.05, 0.8, -0.05, 0.96, -0.4, 1.14, 0.3, 1.3, 0.1],
+  hd: [0, -0.05, 0.08, -0.45, 0.2, 0.2, 0.36, 0, 0.8, 0, 0.96, -0.45, 1.14, 0.1, 1.3, -0.05],
+};
+function knockdownAt(p, A, t, prone) {
   guard(p, A);
+  carryYaw(p, A);
+  const K = prone ? KDP : KD;
   p[P.bodyX] = 0;
   p[P.pelvX] = 0;
   p[P.pelvY] = 0;
@@ -1402,28 +1438,79 @@ function knockdownPose(p, A) {
   p[P.spY] = 0;
   p[P.spZ] = 0;
   p[P.hdZ] = 0;
-  p[P.pitch] = kf(t, KD.pitch);
-  p[P.bodyY] = kf(t, KD.y) + 0.05 * Math.sin(Math.PI * clamp((t - 0.3) / 0.12, 0, 1)); // bounce
-  p[P.bodyZ] = kf(t, KD.z);
-  p[P.spX] = kf(t, KD.sp);
-  p[P.hdX] = kf(t, KD.hd);
-  const sit = kf(t, KD.sit);
+  p[P.pitch] = kf(t, K.pitch);
+  p[P.bodyY] = kf(t, K.y) + 0.05 * Math.sin(Math.PI * clamp((t - 0.3) / 0.12, 0, 1)); // bounce
+  p[P.bodyZ] = kf(t, K.z);
+  p[P.spX] = kf(t, K.sp);
+  p[P.hdX] = kf(t, K.hd);
+  const lie = kf(t, KD.lie), sit = kf(t, KD.sit), arms = kf(t, KD.arms), push = kf(t, KD.push);
+  const fling = kf(t, KD.fling), bl = kf(t, KD.blade);
+  p[P.hdY] = lerp(p[P.hdY], prone ? 0.65 : 0.45, lie); // the head rolled to one side
+  if (prone) {
+    to3(p, P.rF, -0.16, ANK, -0.22, sit); // the get-up: the left foot comes under him first
+    to3(p, P.lF, 0.15, ANK, 0.22, sit);
+    bodyPointTo(p, P.rF, -0.12, -1.0, -0.06, lie); // the legs laid out behind, the left knee fallen out to the side
+    bodyPointTo(p, P.lF, 0.3, -0.76, -0.04, lie);
+    to3(p, P.lK, 1, 0, 0.25, lie);
+    p[P.footFlat] = lerp(0.9, 0.1, lie);
+    to3(p, P.rH, -0.42, 0.3, 0.1, arms); // lying: the arms up beside his head
+    to3(p, P.lH, 0.26, 0.24, 0.14, arms);
+    to3(p, P.rP, -1, -0.3, 0.1, arms); // the elbows out flat on the grass, not up in the air
+    to3(p, P.lP, 1, -0.3, 0.1, arms);
+    to3(p, P.rH, -0.26, 0.1, 0.45, fling); // the hands thrown out ahead to break the fall
+    to3(p, P.lH, 0.26, 0.12, 0.45, fling);
+    dirTo(p, P.swD, -0.55, 0.8, -0.05, bl); // the sword flat on the grass beside his head
+    to3(p, P.swF, 0, 0, 1, bl);
+    to3(p, P.rH, -0.26, -0.02, 0.3, push); // palms under the shoulders: he pushes himself up
+    to3(p, P.lH, 0.26, -0.02, 0.3, push);
+    return;
+  }
   to3(p, P.rF, -0.16, ANK, 0.08, sit);
   to3(p, P.lF, 0.15, ANK, 0.18, sit);
-  const lie = kf(t, KD.lie);
-  bodyPointTo(p, P.rF, -0.12, -1.0, 0.04, lie); // legs laid out along the body
-  bodyPointTo(p, P.lF, 0.12, -1.0, 0.08, lie);
-  p[P.footFlat] = lerp(0.9, 0.1, lie);
-  const arms = kf(t, KD.arms), push = kf(t, KD.push);
-  to3(p, P.rH, -0.36, -0.15, -0.02, arms);
-  to3(p, P.lH, 0.38, -0.15, 0.02, arms);
+  // the feet stay where they stood as the hips drop, so the knees buckle (he fell like a board, both
+  // legs straight); lying, the right knee stays up, its foot flat on the grass, the left leg out long
+  const out = kf(t, KD.legOut), up = kf(t, KD.legUp);
+  bodyPointTo(p, P.lF, 0.14, -0.98, 0.05, out);
+  to3(p, P.rF, -0.2, ANK, 0.1, up);
+  p[P.footFlat] = 0.9;
+  p[P.rFf] = 1;
+  p[P.lFf] = lerp(1, 0.1, out);
+  to3(p, P.rH, -0.5, 0.02, -0.02, arms); // flung out on the grass: the sword arm wide …
+  to3(p, P.rP, -1, -0.4, 0, arms);
+  to3(p, P.lH, 0.12, -0.2, 0.17, arms); // … the free hand fallen across his belly
+  to3(p, P.lP, 1, -0.3, -0.3, arms);
+  to3(p, P.rH, -0.3, 0.0, 0.42, fling); // left behind out ahead as the chest goes back
+  to3(p, P.lH, 0.3, 0.05, 0.42, fling);
   // the sword stays out at his right side (clear of the legs that fold up under him) until he
   // stands, then comes back to the ready stance
-  const bl = kf(t, KD.blade);
-  dirTo(p, P.swD, -0.92, 0.0, -0.38, bl);
+  dirTo(p, P.swD, -0.78, 0.55, -0.3, bl);
   to3(p, P.swF, 0, 1, 0, bl);
   to3(p, P.rH, -0.1, -0.48, -0.12, push); // hands push off the ground
   to3(p, P.lH, 0.1, -0.48, -0.12, push);
+}
+function knockdownPose(p, A) {
+  knockdownAt(p, A, A.t, !!A.player?.kdProne);
+}
+
+/** Killed on the ground (in the knockdown, player.downFrom s into it): he never gets up. The fall
+ *  carries on to the grass, one last arch runs through him and he goes limp where he lies
+ *  (ADR-083: the death clip stood a lying man on his feet in a tenth of a second, to kneel and
+ *  fall a second time). */
+function deathDownPose(p, A) {
+  const pl = A.player, t = A.t, prone = !!pl?.kdProne;
+  knockdownAt(p, A, Math.min(fin(pl?.downFrom, 0.5) + t, 0.62), prone);
+  const jolt = Math.sin(Math.PI * clamp(t / 0.5, 0, 1)), limp = smoothstep(0.3, 1.0, t);
+  p[P.spX] += (prone ? 0.2 : -0.24) * jolt; // the chest lifts off the grass once
+  p[P.hdX] -= 0.25 * jolt;
+  p[P.hdY] = lerp(p[P.hdY], 0.8, limp); // the head rolls over
+  if (prone) {
+    to3(p, P.lH, 0.3, 0.05, 0.14, limp); // the free arm slides down beside him
+    to3(p, P.lP, 1, -0.3, 0.1, limp);
+  } else {
+    bodyPointTo(p, P.rF, -0.24, -0.96, 0.05, limp); // the raised knee gives: the leg slides out
+    p[P.rFf] = lerp(1, 0.1, limp);
+    to3(p, P.lH, 0.36, -0.1, 0.0, limp); // the free arm falls to his side
+  }
 }
 
 // death: drop to one knee leaning on the sword (0–0.55), sway, collapse face down (0.95–1.4)
@@ -1441,6 +1528,7 @@ const DEATH = {
 function deathPose(p, A) {
   const t = A.t;
   guard(p, A);
+  carryYaw(p, A);
   p[P.bodyX] = 0;
   p[P.pelvY] = 0;
   p[P.spY] = 0.05;
@@ -1462,14 +1550,20 @@ function deathPose(p, A) {
   to3(p, P.lH, -0.06, -0.45, 0.24, kneel);
   const flat = kf(t, DEATH.flat);
   bodyPointTo(p, P.rF, -0.12, -1.0, -0.06, flat);
-  bodyPointTo(p, P.lF, 0.12, -1.0, -0.04, flat);
+  bodyPointTo(p, P.lF, 0.3, -0.76, -0.04, flat); // the left knee falls out to the side (both legs lay straight as a plank)
+  to3(p, P.lK, 1, 0, 0.25, flat);
   p[P.footFlat] = lerp(0.9, 0.1, flat);
   // face down: body +Z points into the ground, +Y toward the head
   const limp = kf(t, DEATH.limp);
+  p[P.hdY] = lerp(p[P.hdY], 0.7, limp); // his face to one side, not in the dirt
   to3(p, P.rH, -0.45, 0.05, 0.1, limp);
   dirTo(p, P.swD, -0.55, 0.8, -0.05, limp); // sword dropped flat beside the head
   to3(p, P.swF, 0, 0, 1, limp);
   to3(p, P.lH, 0.32, -0.05, 0.12, limp);
+  // both elbows fall out flat on the grass (the poles pointed behind him, which is UP once he lies
+  // on his front: the left elbow stood in the air like a wing and its sleeve's sheet with it)
+  to3(p, P.rP, -1, -0.3, 0.1, limp);
+  to3(p, P.lP, 1, -0.3, 0.1, limp);
 }
 
 // ================================================================ PLUNGE + DEFLECT (plunge agent)
@@ -1924,7 +2018,10 @@ const POSES = {
   stagger: staggerPose,
   knockdown: knockdownPose,
   dead: deathPose,
+  deadDown: deathDownPose,
 };
+// clips that lay him on the ground (the cloth obeys gravity there instead of wrapping the body)
+const LYING_KEYS = new Set(['knockdown', 'dead', 'deadDown']);
 // clips whose feet the foot planner holds on the ground (and whose touchdowns are footsteps)
 const WALK_KEYS = new Set(['loco', 'heal', 'block', 'charge', 'parry']);
 
@@ -1997,6 +2094,8 @@ const _cD = new THREE.Vector3();
 const _cE = new THREE.Vector3(), _cP = new THREE.Vector3(), _cQ = new THREE.Vector3();
 const HAND_FLOOR = 0.1; // grip / off-hand centre height floor
 const FOOT_FLOOR = 0.06; // ankle height floor
+const KNEE_FLOOR = 0.07, ELBOW_FLOOR = 0.055; // a knee's / an elbow's centre never sinks under this (ADR-083)
+const _hU = new THREE.Vector3(), _hW = new THREE.Vector3(), _hC = new THREE.Vector3(), _hA = new THREE.Vector3(), _hK = new THREE.Vector3();
 
 // coat skirt springs: [upper, lower] segment stiffness / damping / how much velocity swings them
 const COAT_K = [120, 85];
@@ -2250,6 +2349,8 @@ export class HeroAnimator {
     E[7] = c0[P.lFy];
     this.from.set(this.cur);
     for (const i of ANGLES) this.from[i] = wrapAngle(this.from[i]); // a finished roll is 2π ≡ 0
+    // how far round the body stood as this clip began (a whirl cut short): the reactions unwind it
+    this.yaw0 = Math.abs(this.from[P.yaw]) > 0.2 ? this.from[P.yaw] : 0;
     if (this.wantOK && WALK_KEYS.has(this.key) && WALK_KEYS.has(key)) {
       // the foot planner keeps running across this switch and re-applies its corrections (planted
       // spots, swing offsets) to whatever the clip wants: fade from what the old clip WANTED, not
@@ -2291,6 +2392,7 @@ export class HeroAnimator {
     this.releaseK = 0;
     this.recoil = 0;
     this.key = 'loco';
+    this.yaw0 = 0;
     this.accF = this.accS = this.bank = this.turnV = this.strafeYaw = this.turnLag = this.visYawV = 0;
     this.leanF = this.leanFV = this.leanS = this.leanSV = 0;
     this.updraft = 0;
@@ -3000,7 +3102,12 @@ export class HeroAnimator {
     }
     _pole.set(p[pi], p[pi + 1], p[pi + 2]).applyQuaternion(_qBC);
     this._elbow(arm, _S, _T, _pole);
-    const beta = solveTwoBone(_S, _T, _pole, DIM.upperArm, DIM.foreArm, 1, arm.upper.quaternion, _end);
+    let beta = solveTwoBone(_S, _T, _pole, DIM.upperArm, DIM.foreArm, 1, arm.upper.quaternion, _end);
+    // … and an elbow never sinks into the ground (lying on his back the poles point into it)
+    _hK.set(0, -DIM.upperArm, 0).applyQuaternion(arm.upper.quaternion).add(_S);
+    if (this._hingeFloor(this.rig.chest, _S, _end, _hK, ELBOW_FLOOR, _pole, arm === this.rig.arms.L ? 1 : -1)) {
+      beta = solveTwoBone(_S, _T, _pole, DIM.upperArm, DIM.foreArm, 1, arm.upper.quaternion, _end);
+    }
     arm.fore.rotation.set(-beta, 0, 0);
     if (holdsSword) {
       // grip = the reached wrist point, re-expressed in body space
@@ -3044,6 +3151,44 @@ export class HeroAnimator {
     st.ok = true;
   }
 
+  /** A knee / an elbow never sinks into the ground (ADR-083: the death's collapse pushed both knees
+   *  15 cm under the grass). `mid` is the joint as solved and S → end its limb's line, all in
+   *  `parent`'s space: when the joint is under `floor` (world height) it is swung round that line up
+   *  to the floor, the short way (near a tie: toward the limb's own outside, `outX` = which way that
+   *  is along the parent's X). Writes the new pole direction to `out`; false = nothing to do. */
+  _hingeFloor(parent, S, end, mid, floor, out, outX) {
+    const e = parent.matrixWorld.elements;
+    const gx = e[1], gy = e[5], gz = e[9]; // world height = g · (a point in parent space) + e[13]
+    if (!(gx * mid.x + gy * mid.y + gz * mid.z + e[13] < floor)) return false;
+    _hA.subVectors(end, S);
+    const al = _hA.length();
+    if (al < 1e-4) return false;
+    _hA.divideScalar(al);
+    _hU.subVectors(mid, S);
+    _hC.copy(S).addScaledVector(_hA, _hU.dot(_hA));
+    _hU.subVectors(mid, _hC);
+    const R = _hU.length();
+    if (R < 1e-3) return false;
+    _hU.divideScalar(R);
+    _hW.crossVectors(_hA, _hU);
+    // height round the line: hc + a·cos φ + b·sin φ (φ = 0: where the joint is now)
+    const a = R * (gx * _hU.x + gy * _hU.y + gz * _hU.z), b = R * (gx * _hW.x + gy * _hW.y + gz * _hW.z);
+    const need = floor - (gx * _hC.x + gy * _hC.y + gz * _hC.z + e[13]);
+    const A = Math.hypot(a, b);
+    if (A < 1e-5) return false;
+    const top = Math.atan2(b, a);
+    let phi = top; // the whole circle is under the floor: as high as the joint goes
+    if (A > Math.abs(need)) {
+      const half = Math.acos(need / A);
+      const p1 = wrapAngle(top - half), p2 = wrapAngle(top + half);
+      const c1 = Math.abs(p1) - 0.3 * outX * (_hU.x * Math.cos(p1) + _hW.x * Math.sin(p1));
+      const c2 = Math.abs(p2) - 0.3 * outX * (_hU.x * Math.cos(p2) + _hW.x * Math.sin(p2));
+      phi = c1 <= c2 ? p1 : p2;
+    }
+    out.copy(_hU).multiplyScalar(Math.cos(phi)).addScaledVector(_hW, Math.sin(phi));
+    return true;
+  }
+
   _leg(leg, p, fi, ki, yi, ffi) {
     const r = this.rig;
     _S.copy(leg.thigh.position);
@@ -3055,7 +3200,12 @@ export class HeroAnimator {
     const dl = _v.length();
     if (dl < LEG_NEAR && dl > 1e-4) _T.copy(_S).addScaledVector(_v, LEG_NEAR / dl);
     _pole.set(p[ki], p[ki + 1], p[ki + 2]).applyQuaternion(_qBP);
-    const beta = solveTwoBone(_S, _T, _pole, DIM.thigh, DIM.shin, -1, leg.thigh.quaternion, _end);
+    let beta = solveTwoBone(_S, _T, _pole, DIM.thigh, DIM.shin, -1, leg.thigh.quaternion, _end);
+    // … and a knee never sinks into the ground
+    _hK.set(0, -DIM.thigh, 0).applyQuaternion(leg.thigh.quaternion).add(_S);
+    if (this._hingeFloor(r.pelvis, _S, _end, _hK, KNEE_FLOOR, _pole, leg === r.legs.L ? 1 : -1)) {
+      beta = solveTwoBone(_S, _T, _pole, DIM.thigh, DIM.shin, -1, leg.thigh.quaternion, _end);
+    }
     leg.shin.rotation.set(beta, 0, 0);
     // ankle: keep the sole level with the ground by footFlat (0 = rigid with the shin)
     _q1.copy(_qPelvis).multiply(leg.thigh.quaternion).multiply(leg.shin.quaternion);
@@ -3431,6 +3581,7 @@ export class HeroAnimator {
     _d.set(-1, 0, 0).applyQuaternion(_q2);
     // how far the torso is from upright (0 standing … 1 at 70° or more)
     const tumble = smoothstep(0.75, 0.3, _e.set(0, 1, 0).applyQuaternion(r.chest.getWorldQuaternion(_q1)).y);
+    const lying = tumble >= 1 && LYING_KEYS.has(this.key);
     for (let i = 0; i < r.streamers.length; i++) {
       const S = r.streamers[i], st = this.streamState[i];
       const j0 = S.segs[0];
@@ -3477,7 +3628,10 @@ export class HeroAnimator {
         // the steel and the arms hold the sheet out (or in): the swing allowed, in [−mA, mA]
         this._sheetBound(S, st, s, c.x, mA);
         const lo = COL_BND[0], hi = COL_BND[1];
-        const tA = Math.min(Math.max(clamp(Math.atan2(-_v.z, -_v.y), -mA, mA), lo), hi);
+        let tA = Math.min(Math.max(clamp(Math.atan2(-_v.z, -_v.y), -mA, mA), lo), hi);
+        // lying on the ground (knocked down, dead) a sheet obeys gravity (ADR-083): "wrapped along
+        // the body" stood a sleeve's sheet up in the air with an upper arm that pointed up
+        if (lying) tA = this._layFlat(tA, S.len[s], mA);
         const tB = clamp(Math.asin(clamp(_v.x, -1, 1)), -STREAM_B, STREAM_B);
         const K = STREAM_K[s], Cd = STREAM_C[s];
         for (let n = 0; n < steps; n++) {
@@ -3506,6 +3660,32 @@ export class HeroAnimator {
       }
     }
     this.streamInit = true;
+  }
+
+  /** Lying on the ground a sheet obeys gravity: the swing nearest `a` (within ±mA) whose far end is
+   *  no higher than its root (+ 3 cm) and not under the grass; failing both, the one nearest to
+   *  that. The segment's frame before its own turn is _q0, its root _so (world). */
+  _layFlat(a, L, mA) {
+    const yy = _cq.set(0, 1, 0).applyQuaternion(_q0).y, zy = _cq.set(0, 0, 1).applyQuaternion(_q0).y;
+    const top = _so.y + 0.03;
+    const off = (x) => {
+      const t = _so.y - L * (Math.cos(x) * yy + Math.sin(x) * zy);
+      return Math.max(t - top, 0.02 - t, 0);
+    };
+    if (off(a) === 0) return a;
+    let best = a, bd = Infinity, least = a, le = Infinity;
+    for (let i = 0; i <= 32; i++) {
+      const x = -mA + (2 * mA * i) / 32, e = off(x);
+      if (e === 0 && Math.abs(x - a) < bd) {
+        bd = Math.abs(x - a);
+        best = x;
+      }
+      if (e < le) {
+        le = e;
+        least = x;
+      }
+    }
+    return bd < Infinity ? best : least;
   }
 
   /** The collision spheres along the blade and both arms (COL_*), world space, this frame's pose. */

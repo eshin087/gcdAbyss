@@ -125,6 +125,11 @@ hazard the ground heats up from its spawn     its edge shows, the heat flares, a
   parryable, blockable, attack, attacker, plunge, steel, last })` returns a `RESULT` (`hit` / `blocked` / `clashed` /
   `parried` / `dodged` / `perfectDodge` / `ignored`). `plunge: false` keeps a perfect dodge of that
   hit from becoming the plunge (fire hazards).
+- How the hero takes a hit he does not answer (ADR-083): a **flinch** (0.4 s) gives the way the
+  blow drives him (back, forward over a blow from behind, to the side); a **knockdown** (1.3 s, the
+  last 0.5 s invulnerable) falls away from the blow, onto his back from the front or a side and
+  onto his front from behind, his facing easing square to it as he falls; killed while down he
+  dies where he lies, otherwise he drops to a knee on his sword and falls forward.
 - On `parried` the attacker calls its own parry reaction: a deflect for a string's non-final hit
   (posture + a knock-back; `dragon:parried {hit, last}`, `combat:deflectChain {count}`), a recoil
   (posture + the punish window) for its last hit or a single melee attack.
@@ -569,7 +574,7 @@ across red). Target: 1.5–2.5 min for a player who knows him. No human has play
 ## The Starless Lord (2026-11-13, ADR-068 – ADR-070; `?level=starless`)
 Varr Nihil, a dark lord who fell out of the night sky and took the Obsidian Throne: a full harness
 of black plate, a deep hood over a faceplate with one slit of red light, a cape to his ankles, blades
-of red light, and the Void in his free hand (his look and motion: ADR-083, ADR-084). The owner's
+of red light, and the Void in his free hand (his look and motion: ADR-084, ADR-085). The owner's
 brief: very fast, acrobatic and fluid, strings of six with variations, jump and flip attacks, spells
 between the cuts, four blade forms. He runs on the duelist engine (the Ash Disciple's: the guard, the
 deflect chain, the blade lock, the mikiri, the full deflect, the Ghostep behind him, pressure and
@@ -661,7 +666,7 @@ Shen Hui's; `a | b` = one of the two is drawn as the move starts; weights are pe
 | The Starless Sky (4) | above | 0–16 · 14 |
 | Riposte (each form its own) | 2–3 hits, only from his guard or after he wins a blade lock | - |
 
-**How a string moves** (ADR-084): its cuts alternate the foot that drives them, so he walks through
+**How a string moves** (ADR-085): its cuts alternate the foot that drives them, so he walks through
 it; a spin is a hop that carries the whole body round; the somersault, the cartwheel and the backflip
 leave the floor (he cannot be hit by the hero's blade less for it: his hurt spheres go with him); a
 main string ends with its form's flourish as he recovers (the blade rolled round the wrist, both
@@ -676,10 +681,10 @@ form, faster form by form), TIMING (53 move × form runs: every contact within 2
 press), SPELLS (every answer in the table above, and the glide), BOUNDS (never off the floor; 32
 blows reach a cornered hero in 45 s), FLOW (the door, the throne intro, a death and the reset), WIN.
 **Difficulty (measured, seed 4242, god-mode fencing bots; 2026-11-14, with the moves above, the
-hero's faster chain of ADR-075 and the guard of ADR-080):** a bot that answers every tell wins in
-91 s with 68 parries (forms at 0 / 18 / 41 / 66 s); answering 85 % it takes 19 hits for 315 damage in
-101 s (the hero has 160 HP and five flasks of 70: he would live); answering 70 % it takes 37 hits for
-658 damage in 120 s (he would not). At his first release (31 moves, the hero's old swings): 75 s, 18
+hero's faster chain of ADR-075, the guard of ADR-080 and the hit reactions of ADR-083):** a bot that
+answers every tell wins in 93 s with 67 parries (forms at 0 / 18 / 41 / 66 s); answering 85 % it takes
+19 hits for 315 damage in 101 s (the hero has 160 HP and five flasks of 70: he would live); answering
+70 % it takes 36 hits for 692 damage in 112 s (he would not). At his first release (31 moves, the hero's old swings): 75 s, 18
 hits / 325, 44 hits / 740.
 Shen Hui's 85 % bot takes 7 – 8 hits. Target: 3 – 5 min for a player who knows him. No human has
 played him yet, and the bots never use the blade lock or the mikiri and stand inside his reach the

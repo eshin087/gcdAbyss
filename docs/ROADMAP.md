@@ -150,7 +150,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
-## M1.27 — The Starless Lord: black plate, motion, three more spells (2026-11-14, `enemies/starless-lord-armour`, ADR-083, ADR-084)
+## M1.28 — The Starless Lord: black plate, motion, three more spells (2026-11-14, `enemies/starless-lord-armour`, ADR-084, ADR-085)
 - [x] A harness of his own (hood and faceplate, cuirass, yoke and pauldrons, plate limbs, war-skirt, cape), drawn at 1.32
 - [x] Three heads rendered for the owner's pick (sallet, crown, hood): the owner picked the hood
 - [x] New guards, the glide, strings that walk, hop spins, a cartwheel and a backflip, flourishes
@@ -165,6 +165,16 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Watch the glide, the cartwheel and the flourishes in motion at 60 fps (reviewed as strips)
   - [ ] His hurt spheres against his drawn size (32 % larger than they are)
   - [ ] Sounds of his own (still none): the blade's hum, thunder, the grip, the star
+## M1.27 — Hit reactions and the death fall, audited (2026-11-14, `player/natural-reactions`, ADR-083)
+- [x] A knee / elbow floor in the solver (the death's collapse sank both knees 15 cm)
+- [x] The knockdown falls away from the blow: onto his front from behind, his facing eased (it spun him 180° in a frame)
+- [x] Killed while knocked down he dies where he lies (`deadDown`; he stood up to die again)
+- [x] The flinch follows the blow; reactions from mid-swing fade in, an interrupted whirl finishes its turn
+- [x] The fall and the corpse: knees buckle, a knee up, a knee out; the cloth lies flat on a lying body
+- [ ] Follow-ups:
+  - [ ] The owner's look at the preview
+  - [ ] Not audited: the plunge's poses
+
 ## M1.26 — Steel on steel: blades that meet, a guard you can read, cancels (2026-11-14, `combat/epic-clash`, ADR-079 – ADR-082)
 - [x] The clash: one effect of lines on the crossing of the blades; sparks fly through the freeze; a camera punch (ADR-079)
 - [x] A parried blow is held where it met the guard and rebounds; the hero's deflect goes to its side and height (ADR-079)
@@ -189,7 +199,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Anatomy: joint limits in the solver (elbows, knees, the sword wrist, hands outside the chest); the charge held out from the body (ADR-078)
 - [ ] Follow-ups:
   - [ ] The owner's look at the preview: the pace (a number from the Lab's slider if it is still off)
-  - [ ] Anatomy not yet covered: the off hand's wrist in two-handed cuts, the free arm's elbow behind the back in two backhands' recoveries, hit reactions and the death fall
+  - [ ] Anatomy not yet covered: the off hand's wrist in two-handed cuts, the free arm's elbow behind the back in two backhands' recoveries (hit reactions and the death fall: M1.27)
   - [ ] Ideas not built (the owner's pick): an afterimage on the sprint slash and the cleave's dash; a strafing guard-up stance while locked on; a second finisher (a spinning smash); a flick of the blade as a chain ends
   - [ ] The roll out of a swing and the guard's raise move the point 0.4–0.8 m in a frame (left: both must be instant)
 
@@ -216,9 +226,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] A human playtest: is form 4's 0.36 s rhythm readable, is the blink fair, is he too long?
 - [ ] Follow-ups:
   - [ ] Look at every move frame by frame up close (the somersault, the off-hand cuts, the staff)
-  - [x] His look as options for the owner (M1.27: three heads on one harness; the owner picked the hood)
+  - [x] His look as options for the owner (M1.28: three heads on one harness; the owner picked the hood)
   - [ ] Sounds of his own: a blade hum and swing, thunder for the lightning, the ignition
-  - [ ] The Void grip (lifted and held: mash to break free), designed and left out (M1.27 ships the
+  - [ ] The Void grip (lifted and held: mash to break free), designed and left out (M1.28 ships the
         Crushing Dark instead: a pin, no new hero state)
   - [ ] The hall on a phone: frame cost of the inlay batch and six brazier lights
   - [ ] A reward for beating him (ADR-059), once the technique system lands

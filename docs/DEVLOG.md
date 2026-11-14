@@ -5,15 +5,15 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
-## 2026-11-14 — Session 28: the Starless Lord in black plate; how he moves; three more spells
+## 2026-11-14 — Session 29: the Starless Lord in black plate; how he moves; three more spells
 
 **Owner:** "improve the new bosses animation, movesets, spell effects, force effects, character detail
 and motion. make him look like a darth vader look alike". Branch `enemies/starless-lord-armour` from
 `main` (PR #24 merged the day before; rebased over PR #23 and PR #25, the hero's new swings and his
-faster chain, then main's clash rework, PR #26, merged in).
+faster chain, then main's clash rework, PR #26, and its hit reactions, PR #28, merged in).
 
 **Done:**
-- **His look** (ADR-083): a harness of his own in gear.js (a hood over a faceplate, cuirass and
+- **His look** (ADR-084): a harness of his own in gear.js (a hood over a faceplate, cuirass and
   gorget, plate yoke and pauldrons, plate arms and thighs, hip plates over a war-skirt, a cape to the
   ankles), drawn at 1.32. Three heads rendered in game as one sheet for the owner (A sallet, B crown,
   C hood); built with A. An original design in that archetype: a film character's own look was not
@@ -24,7 +24,7 @@ faster chain, then main's clash rework, PR #26, merged in).
   It is now given as a front and a back edge per ring: a round crown, the brow hanging forward over
   the faceplate and closing just above it, a rim in the cloth's ember red round the opening, the
   drape pooled on the yoke. The collar is removed.
-- **How he moves** (ADR-084): four new guards (the blade hung at his side, twin blades as wings, the
+- **How he moves** (ADR-085): four new guards (the blade hung at his side, twin blades as wings, the
   staff level across him, the cross-hilt upright before his face); he glides instead of running; cuts
   alternate feet; spins hop and carry the feet round; a cartwheel cut and a backflip; a flourish per
   form; the cape lifts through a cast.
@@ -49,8 +49,8 @@ the backflip, the pinwheel, the gale, the grip, the Rift, the Dark Star, lightni
 glide, the intro from the door, him seated, Shen Hui kneeling; 88 s of the AI across the four forms
 against an idle hero: no console errors, 1879 particles at most. After the pick: the hood from six
 sides close up (ASCII and solid), a turnaround, him seated, the backflip and the grip with it on.
-Bots (seed 4242, on main's faster chain and guard): every tell answered 91 s; 85 % 19 hits / 315
-damage; 70 % 37 hits / 658.
+Bots (seed 4242, on main's faster chain, guard and hit reactions): every tell answered 93 s; 85 %
+19 hits / 315 damage; 70 % 36 hits / 692.
 
 **Fitted to the clash rework (PR #26, merged into main while this was open):** the code merged
 without a conflict. His new effects that are re-drawn every frame (the aura's wheel, the pull's
@@ -73,6 +73,33 @@ than his hurt spheres.
 **Next:** a first human fight; then tuning.
 
 ---
+## 2026-11-14 — Session 28: hit reactions and the death fall, audited
+
+**Owner** (after Session 26's anatomy round, asked whether to audit these too): "Yes, audit them".
+Branch `player/natural-reactions`, from `main` after PR #25 and PR #26 (ADR-083).
+- A scratch audit: the flinch, the block, the parry, the guard break, the knockdown and the death,
+  each entered from 20–30 states, measuring joints, body parts under the ground, the blade in the
+  body, and the fastest frames in the WORLD (measured in his own frame, a 180° snap of his facing
+  is invisible).
+- Found and fixed: killed while lying he stood up to die again (now the `deadDown` clip); the
+  death's collapse sank the knees 15 cm (a knee / elbow floor in the solver); a knockdown from
+  behind spun him round in one frame (now he falls onto his front, his facing eased); every flinch
+  went backwards (it follows the blow); struck mid-swing the blade jumped up to 1.8 m in a frame
+  (longer fades, the whirl's turn carried on); he fell and lay like a board (knees buckle, a knee
+  up, arms flung); a cloth sheet stood 0.45 m up off the corpse (elbows laid flat; cloth obeys
+  gravity while he lies).
+- In range and left alone: the guard break, the block and the parry; every joint angle.
+- Process: the two commits were first made on `player/faster-flow`, which had been MERGED and
+  deleted an hour before (PR #25): the push re-created the branch and `gh pr edit` rewrote the
+  merged PR's title. Both undone; the work was moved here. Check `gh pr view` before pushing to a
+  branch a PR was opened from.
+- The Browser pane lost WebGL on `localhost` and `127.0.0.1` ("Web page caused context loss and
+  was blocked"); the same server under another host name (`film.localhost:5191`) rendered again.
+- Verified: `npm test` ALL PASSED (995 checks, DUEL and LORD too), build ok; the reactions filmed from the side and at the game camera.
+- Not covered: the plunge's poses. Nobody has played it; nothing ran on a phone.
+
+**Next:** the owner's look at the preview.
+
 ## 2026-11-14 — Session 27: steel on steel (the clash, his guard, cancels, the blade lock)
 
 **Owner:** "improve the combat mechanics of enemy guarding, being able to animation cancel from a

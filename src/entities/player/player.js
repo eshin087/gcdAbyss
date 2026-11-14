@@ -33,6 +33,7 @@ export const TUNE = {
   staggerDur: 0.4,
   knockdownDur: 1.3,
   getUpIframes: 0.5, // last part of the knockdown
+  knockdownTurn: 11, // rad/s: he turns square to the blow as he falls
   minStaggerDamage: 5, // no-knockback hits below this only flash
   chipGuard: 0.6, // s: after a no-knockback hit, further ones (breath ticks every 0.15 s) don't re-stagger
   defaultPush: 0.35, // m of slide on a stagger without knockback
@@ -215,6 +216,12 @@ export class Player {
     this._cp = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
     this.tradeT = -Infinity; // when the last trade clash was (DEFENSE.trade.rearm)
     this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
+    // hit reactions (anim.js; ADR-083)
+    this.hitPush = { x: 0, z: -1 }; // the way the last blow drove him, in his own axes (z − = back, x + = his left)
+    this.kdProne = false; // the knockdown fell him on his FRONT (the blow came from behind)
+    this.kdYaw = 0; // the facing the knockdown turns him to as he falls (square to the blow)
+    this.downFrom = 0; // s into the knockdown at which he was killed (the death on the ground)
+    this.deadDown = false; // he died where he lay
     this.bladeLock = null; // { att, meter, push, decay, dur } while blades are locked (startBladeLock)
 
     // Lab hooks (ARCHITECTURE.md: debug = { god, infiniteFlasks, attackSpeed, heal(), teleport(x, z) })
@@ -398,21 +405,49 @@ export class Player {
     g.shake?.(guarded ? 0.06 : clamp(0.3 + dmg * 0.008, 0.3, 0.6));
     if (!guarded) this._hitstop(big ? TUNE.hurtStopBig : TUNE.hurtStop, 0.02);
 
+    // struck in the middle of a move (a swing, the charge, a roll) the reaction fades in over a
+    // little longer: the pose it leaves is far from the flinch, and 3 frames threw the blade over a
+    // metre in one of them
+    const hot = this._midMove();
     if (knockdown) {
       if (this.state !== 'knockdown') {
         this._interrupt();
-        if (hasSrc) this.yaw = Math.atan2(-nx, -nz); // face the attacker, fall away from it
+        this._fallFrom(nx, nz, hasSrc);
         this._setKb(nx, nz, Math.max(kb, 1.2));
-        this._enter('knockdown', 'knockdown', 0.06);
+        this._enter('knockdown', 'knockdown', hot ? 0.1 : 0.06);
       }
     } else if (kb > 0 || (dmg >= TUNE.minStaggerDamage && !guarded)) {
       if (this.state !== 'knockdown' && this.state !== 'guardBreak') {
         this._interrupt();
+        // the way the blow drives him, in his own axes: the flinch gives that way
+        const cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+        this.hitPush.x = nx * cy - nz * sy;
+        this.hitPush.z = nx * sy + nz * cy;
         this._setKb(nx, nz, Math.max(kb, TUNE.defaultPush));
-        this._enter('stagger', 'stagger', 0.05);
+        this._enter('stagger', 'stagger', hot ? 0.1 : 0.05);
       }
     }
     return RESULT.HIT;
+  }
+
+  /** In the middle of a move whose pose is far from a reaction's (not standing or running). */
+  _midMove() {
+    const s = this.state;
+    return s !== 'idle' && s !== 'run' && s !== 'sprint' && s !== 'stagger';
+  }
+
+  /** A knockdown falls AWAY from the blow: on his back when it came from the front or a side, on
+   *  his front when it came from behind (ADR-083: he used to turn round to face it in one frame,
+   *  whatever side it came from). The facing eases square to the blow as he falls (_tickKnockdown). */
+  _fallFrom(nx, nz, hasSrc) {
+    if (!hasSrc) {
+      this.kdProne = false;
+      this.kdYaw = this.yaw;
+      return;
+    }
+    const toAtk = Math.atan2(-nx, -nz);
+    this.kdProne = Math.cos(wrapAngle(toAtk - this.yaw)) < -0.25; // it came from behind him
+    this.kdYaw = this.kdProne ? wrapAngle(toAtk + Math.PI) : toAtk;
   }
 
   /** Chest point, world space. Unleaned (where the body really is) unless `visual` (FX anchors). */
@@ -480,6 +515,9 @@ export class Player {
     this.groundVel.x = this.groundVel.z = 0;
     this.atk = null;
     this.bladeLock = null;
+    this.kdProne = false;
+    this.deadDown = false;
+    this.downFrom = 0;
     this.rollBack = false;
     this.healApplied = false;
     this.buf.action = null;
@@ -877,11 +915,15 @@ export class Player {
         break;
       case 'guardBreak':
         this.want.x = this.want.z = 0;
-        if (this.stateT >= TUNE.guardBreakDur) this._enter('knockdown', 'knockdown', 0.1);
+        if (this.stateT >= TUNE.guardBreakDur) {
+          this.kdProne = false; // the guard was broken from the front: onto his back
+          this.kdYaw = this.yaw;
+          this._enter('knockdown', 'knockdown', 0.1);
+        }
         break;
       case 'knockdown':
         this.want.x = this.want.z = 0;
-        this._tickKnockdown();
+        this._tickKnockdown(dt);
         break;
       case 'dead':
         this.want.x = this.want.z = 0;
@@ -1318,7 +1360,7 @@ export class Player {
       return;
     }
     if (hasSrc) this.yaw = Math.atan2(-nx, -nz);
-    this._enter('guardBreak', 'guardBreak', 0.04);
+    this._enter('guardBreak', 'guardBreak', 0.07);
     this.anim.kickCoat(0.8);
   }
 
@@ -2270,17 +2312,21 @@ export class Player {
   }
 
   // --- down / dead -------------------------------------------------------
-  _tickKnockdown() {
+  _tickKnockdown(dt) {
     const t = this.stateT, p = this.position;
+    // he turns square to the blow as he falls (at most a quarter turn, over ~0.15 s)
+    if (t < 0.3 && dt > 0) this.yaw = turnToward(this.yaw, this.kdYaw, TUNE.knockdownTurn * dt);
     if (t >= 0.3 && this._once(1)) {
-      // the body lands ~half a meter behind the feet
-      this.fx.dust(p.x - Math.sin(this.yaw) * 0.6, p.z - Math.cos(this.yaw) * 0.6, 12, 1.2);
+      // the body lands ~half a meter behind the feet (on his front: ahead of them)
+      const s = this.kdProne ? 0.6 : -0.6;
+      this.fx.dust(p.x + Math.sin(this.yaw) * s, p.z + Math.cos(this.yaw) * s, 12, 1.2);
       this.game.shake?.(0.15);
     }
     if (t >= TUNE.knockdownDur) this._toLoco(0.12);
   }
 
   _tickDead() {
+    if (this.deadDown) return; // he died where he lay: no knee to drop, no body to land
     const t = this.stateT, p = this.position;
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
     if (t >= 0.5 && this._once(1)) this.fx.dust(p.x, p.z, 5, 0.6);
@@ -2303,7 +2349,11 @@ export class Player {
     this.slowmoPending = 0;
     this.blockStunT = 0;
     this._setLock(false);
-    this._enter('dead', 'dead', 0.1);
+    // killed on the ground (falling or lying in the knockdown): he dies where he lies
+    const down = this.state === 'knockdown' && this.stateT < TUNE.knockdownDur - TUNE.getUpIframes + 0.1;
+    this.deadDown = down;
+    this.downFrom = down ? this.stateT : 0;
+    this._enter('dead', down ? 'deadDown' : 'dead', down ? 0.22 : this._midMove() ? 0.14 : 0.1);
     this.want.x = this.want.z = 0;
     if (!this.diedEmitted) {
       this.diedEmitted = true;
