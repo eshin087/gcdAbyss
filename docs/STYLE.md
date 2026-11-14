@@ -381,3 +381,18 @@ all glyph particles in the dragon's `add` / `alpha` pools.
   the fire burst and flung rocks show.
 - **Claw wakes** (`clawTrail`): a burning streak behind the toes on every active frame of a claw or
   overhead; **slam burst** (`slamBurst`): fire and dust thrown up where an overhead lands.
+
+### The Obsidian Throne Hall and the blades of red light (2026-11-13, ADR-069, ADR-070)
+- **The hall** is the first set with a made floor: great square obsidian tiles (carved glyphs, the
+  calm paving look, sparser and dimmer than the courtyard's) whose seams draw a faint grid. Its light
+  is its own (`sky`: a dim cold moon, a red-tinted ambient and fog) plus six braziers burning crimson
+  (glyph flames, pooled lights). What glows without burning is **inlay**: the floor seal's rings,
+  spokes and runes, the lines down the centre runner, a slit down each pillar and the three windows
+  behind the throne are single glyphs laid along their lines (a dash turned to the line's on-screen
+  angle) in one additive batch that never moves. Keep inlay dim (ink 0.8 – 1.7 in the red channel): it
+  is the largest lit shape on screen and must sit under the fight; the seal flares only on an ignition.
+- **A blade of light** is three things: a thin mesh in the hero-art pass (red fill, red-white ink
+  lines), a row of additive strokes re-drawn along it every frame (red, with a hotter core stroke on
+  every second one), and one red point light that follows it and lights the floor round him. The
+  sweep trail is the duelist's, in red. Void lightning is the only other colour he owns: violet-white
+  jagged strokes with a light of the same hue, so a bolt never reads as a blade.

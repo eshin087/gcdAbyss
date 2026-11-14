@@ -150,6 +150,22 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.23 — The Starless Lord: a third level (2026-11-13, `level/starless-lord`, ADR-068 – ADR-070)
+- [x] Three arenas prototyped and rendered for the owner's pick; the Obsidian Throne Hall built
+- [x] A shared duelist engine (`enemies/duelist/`); the Ash Disciple moved onto it, tests unchanged
+- [x] The Starless Lord: four blade forms, four bars and deathblows, 31 moves, the Void spells, the
+      throne intro; HUD pips, DEATHBLOW, a fourth phase in flow / feed / audio / Lab
+- [x] `tests/integration/lord.mjs` (level, data, timing, forms, spells, bounds, flow, win)
+- [ ] Owner review of the PR preview (`?level=starless`, and on the phone); merge
+- [ ] A human playtest: is form 4's 0.36 s rhythm readable, is the blink fair, is he too long?
+- [ ] Follow-ups:
+  - [ ] Look at every move frame by frame up close (the somersault, the off-hand cuts, the staff)
+  - [ ] His look as options for the owner (hood or helm, cape, the blades' colour and width)
+  - [ ] Sounds of his own: a blade hum and swing, thunder for the lightning, the ignition
+  - [ ] The Void grip (lifted and held: mash to break free), designed and left out
+  - [ ] The hall on a phone: frame cost of the inlay batch and six brazier lights
+  - [ ] A reward for beating him (ADR-059), once the technique system lands
+
 ## M1.22 — Controller support and remappable controls (2026-11-13, `input/gamepad`, ADR-066, ADR-067)
 - [x] Gamepad as a third input source (`core/input.js`), the pad layer (`ui/gamepad.js`): souls-like
       layout, right-stick aim + auto-aim, title / pause menus, pad hints and PlayStation labels, rumble

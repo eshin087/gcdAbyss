@@ -148,7 +148,18 @@ export class CombatFeed {
     on('dragon:takeoff', () => log(duel() ? `${this._name()} leaps!` : `${this._name()} takes to the sky!`, 'combat', 'takeoff', 4));
     on('dragon:stagger', () => log(`${this._name()} staggers!`, 'warn', 'stagger', 1));
     on('dragon:postureBreak', () => log(`${this._name()}'s posture breaks! Critical hits land now.`, 'warn', 'postureBreak', 2));
-    on('dragon:phase2', () => log(duel() ? `${this._name()}'s blade kindles!` : "The Cinder Wyrm's fury ignites!", 'warn'));
+    // a boss with several bars (dragon.lives): each new form logs the level's own line for it
+    const formLine = (n) => {
+      const t = this.game.dragon?.lives ? this.game.level?.text?.[`phase${n}`] : null;
+      return typeof t === 'string' && t ? `${t.charAt(0)}${t.slice(1).toLowerCase()}.` : null;
+    };
+    on('dragon:phase2', () => log(formLine(2) ?? (duel() ? `${this._name()}'s blade kindles!` : "The Cinder Wyrm's fury ignites!"), 'warn'));
+    for (const n of [3, 4]) {
+      on(`dragon:phase${n}`, () => {
+        const line = formLine(n);
+        if (line) log(line, 'warn');
+      });
+    }
     on('dragon:death', () => log(`${this._name()}, ${this._title()}, falls.`, 'warn'));
 
     // flow

@@ -5,6 +5,50 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-13 — Session 24: the Starless Lord, a third level
+
+**Owner:** "lets do a new level but this time its a master sith jedi with a red lightsaber and evil
+force powers ... multiple phases where he goes from 1 lightsaber, dual wield, combined long lighsaber,
+and the last phase is back to 1 lightsaber but with cross handle and a powered up aura ... very
+acrobatic, fluid, uses different force spells such as lighting, push ... combos to be like 6 in a row
+with different variations ... ask me any questions". Asked four: identity (picked: a dark lord from
+the stars), arena ("show me a preview of the stages to select from"), health (four bars, a deathblow
+each), speed (faster than Shen Hui, ramping up). Branch `level/starless-lord` from `main`.
+
+**Done:**
+- **Arena previews:** three sets built and rendered in game (throne hall, storm peak, crater); the
+  owner picked the hall. `world/throneHall.js`; sets may now bring `sky` and `ambience` (ADR-070).
+- **A shared duelist engine** (ADR-068): `enemies/duelist/` (duelist, brain, realise, poses, fx); the
+  Ash Disciple is a kit on it. His tests pass unchanged.
+- **The Starless Lord** (ADR-069; `?level=starless`): four forms with their own stances, blades,
+  movesets and pace; four bars and deathblows; the Void (lightning, push, pull, the returning blade,
+  torn stone, called lightning, red crescents, the blink); the throne intro; `lives` pips on the boss
+  bar, DEATHBLOW call-out, a fourth phase in flow / feed / audio, a Phase 4 Lab button.
+- **Tests:** `tests/integration/lord.mjs` (LEVEL, DATA, TIMING, FORMS, SPELLS, BOUNDS, FLOW, WIN), in
+  `npm test`.
+
+**Found on the way:** the hero could stand by the door outside the boss's circle bound, out of sword
+reach (the hall is a rectangle): the lord clamps to the floor's rectangle instead. A skipped intro
+left the blades dark and him on the dais. The returning blade's second pass could only cue 0.1 s
+ahead near its turning point: it now hangs 0.32 s there. The blades read gold, not red (the `flask`
+part's shared amber ink): tinted red for this level's page load.
+
+**Verification:** `npm test`, `npm run build` (see the PR). In the dev server: the three arena sheets;
+the lord's look; film strips of each form's guard and strings, the somersault, lightning, the thrown
+blade, torn stone, the storm, the intro from the door; 40 s of the AI against an idle hero, no
+console errors. Bots (seed 4242): every tell answered 75 s; 85 % 18 hits / 325 damage; 70 % 44 hits.
+
+**Not checked / open:** no human has fought him; not tried on a phone (frame rate in the hall, the
+0.26 s cue on touch). Poses were reviewed as strips at the game camera, not frame by frame up close:
+the somersault, the off-hand blade's cuts and the staff's spins want a closer look. His look was not
+put to the owner as options (it reuses the Wanderer's pieces under a new helm). No sounds of his own.
+The grip was left out. The hero gets no reward yet (ADR-059; PR #18 is still open).
+
+**Next:** the owner's look at the PR preview (`?level=starless`, `?lab` for the Phase buttons), on the
+phone too; then tuning from a human fight.
+
+---
+
 ## 2026-11-13 — Session 23: remappable controls (keyboard, mouse and pad)
 
 **Owner:** "are we able to remap buttons as well?" → "do both pad and keyboard mapping". Same branch /

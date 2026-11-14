@@ -1363,8 +1363,9 @@ quality is still the default. Pointer Events with multi-touch (each control capt
 pointer); long-press menus, iOS gesture zoom and page panning are blocked while active (the Lab
 panel and the pause panel still scroll). Tuning: `CONFIG.touch`, sizes / look in `ui/touchStyle.js`.
 
-## Levels and the boss slot (2026-11-12, ADR-058, ADR-060)
-`src/levels/index.js`: `LEVELS` (Cinderwood `cinderwood`, Ashfall `ash`), `DEFAULT_LEVEL`,
+## Levels and the boss slot (2026-11-12, ADR-058, ADR-060; the Starless level: ADR-068 – ADR-070)
+`src/levels/index.js`: `LEVELS` (Cinderwood `cinderwood`, Ashfall `ash`, the Obsidian Throne
+`starless`), `DEFAULT_LEVEL`,
 `getLevel(id)` (id or alias, case-insensitive), `levelFromSearch(search)` (`?level=`; unknown → the
 default), `applyLevel(level)` (merges `level.world` into `CONFIG.world`: main.js calls it once,
 before building any module), `levelUrl(id, href)`. One level per page load; switching reloads.
@@ -1373,8 +1374,16 @@ A level: `{ id, aliases, name, sub, world, buildSet(U, colliders), createBoss(ga
   stoneMaterial, slabMaterial`) plus, optionally, `ash: true` (atmosphere: falling ash flakes and a
   few embers instead of fireflies, mist and leaves) and `grass: { density(x, z) → 0..1 factor,
   height (×), ash 0..1 }` (world.js thins / shortens / greys the meadow; grass.js `uAsh`).
-- `text`: `arrive[]`, `stir`, `phase2`, `phase3` (null: no banner), `victory`, `fallen`, `restReset`,
-  `again`, `rise` (GameFlow `_text(key)`; Cinderwood's lines when the game has no level).
+  A set may also bring its own night and weather (ADR-070; the throne hall does):
+  - `sky: { moonColor, moonDir, ambient, fogColor, fogNear, fogFar }` (all optional): world.js writes
+    it into the shared uniforms once, right after the set is built.
+  - `ambience: { setup(game), update(dt, game), ... }`: atmosphere.js calls `setup` once (lights,
+    its own particle batch: `game.pipeline.registerParticles`) and `update` every frame INSTEAD of
+    the fireflies / mist / leaves / ash (the bonfire's flames stay). The throne hall's also has
+    `flare(k)`: its floor seal brightens and settles (the boss calls it; optional for callers).
+- `text`: `arrive[]`, `stir`, `phase2`, `phase3`, `phase4` (null / absent: no banner), `victory`,
+  `fallen`, `restReset`, `again`, `rise` (GameFlow `_text(key)`; Cinderwood's lines when the game has
+  no level).
 - **The boss slot.** `game.dragon` (=== `game.boss`) is the level's boss. Every consumer (player,
   HUD, flow, camera, audio, name tags, minimap, touch aim, Lab) reads the Dragon contract's surface
   below and listens for the `dragon:*` events, so a boss offers: `name` (the HUD splits it at the
@@ -1384,10 +1393,41 @@ A level: `{ id, aliases, name, sub, world, buildSet(U, colliders), createBoss(ga
   `onParried(info)`, `reset()`, `update(dt)`, `debug` (the Lab's generic shape). A plunge target adds
   `plungePoint` / `onPlunge` (the wyrm); a **duelist** (`kind: 'duelist'`) instead offers
   `onExecute({ damage })` and `execRange` (the execution thrust, Player below) and gets no creature
-  voice (audio.js gates roars, pain and recoil yelps on `kind`).
+  voice (audio.js gates roars, pain and recoil yelps on `kind`). A boss with **several health bars**
+  offers `lives: { total, left }` (the Starless Lord's blade forms): `hp` / `maxHp` are then the
+  CURRENT bar, the HUD draws one pip per bar, and the execution's call-out reads DEATHBLOW.
+
+### Duelists — `src/entities/enemies/duelist/` (ADR-068)
+The engine every human boss runs on (the Ash Disciple, the Starless Lord); a boss is a KIT of data and
+a subclass with a few hooks.
+- `duelist.js` `class Duelist(game, kit)`: the boss slot's surface, the guard, posture, the break and
+  the execution, the deflect chain, the blade lock, the mikiri, the full deflect, hit stun, `hitPlayer`.
+  `kit = { id, TUNING, MOVES, MOVE_NAMES, CLIP, realise, transitions {phase: move}, counterMove(phase),
+  maxPhase, loadout, poses, blade {guard, tip}, REACT, OPEN }`. Subclass hooks: `_tint(M)`, `_setup()`
+  (extra meshes, before batching), `_makeFx()`, `_makeBrain()`, `_bladeMaterials(dt, M)`, `_onHpZero()`
+  (default: he dies), `brainFrame(dt)`, `afterPose(dt, act)`, `onImpact(beat, sense, act)`,
+  `onRelease(beat, sense, act)`, `onCast(beat, sense, act)`, `beatMotion(beat, u, sense, dt)`,
+  `onTransitionEnd(act)`, `clampTarget(point)`. `d.T` = `kit.TUNING`.
+- `brain.js` `class DuelBrain(d)`: the mind and timeline (modes sleep, intro, foot, act, react, broken,
+  dying), all data from `d.kit`. Phases are generic: when a gate is hit it starts
+  `kit.transitions[phase]` and emits `dragon:phase<n>`; `forcePhase(n)` for the Lab. Beats: a zone hit
+  (`sector` / `line` / `ring`; `hitPlayer` gets `beat`), a `release` or a `cast` (the actor's, at the
+  impact; a string never stops for want of reach on one). `def.manual` / `def.counter` / a weight of
+  0 keep a move out of the AI's pick; `def.gapCloser` is favoured against a hero who drinks.
+- `realise.js`: `makeRealise({ TUNING, MOVES, compileClip })` → `realise(name, phase, rnd)`; `perPhase`.
+  Beat extras: `{ pick: [beat, ...] }` (one alternative drawn as the move starts), `fixed: true` (its
+  windup is not scaled by the phase). `TUNING.flashLead` may be per phase.
+- `poses.js`: `createDuelPoses(GUARD, opt)` → `{ duelStance, duelLoco, compileClip, evalClip, duelClip,
+  POSES }` round one guard stance (a compiled clip remembers its set: `clip.kit`). Besides the Ash
+  Disciple's channels: `lsw` ([az, el] of an off-hand blade, left on the animator as `A.off` for the
+  actor to pose a second blade) and `larm` / `lext` / `llead` (the left hand driven by it).
+- `fx.js` `class DuelFx(d)` (also exported as `DiscipleFx`): tells, clashes, sparks, the sweep trail
+  (`sweep(.., ember)`: false steel, true ember, or a colour key such as 'red'), the Ash Crescent's
+  projectiles (each may carry its own `speed`, `radius`, `half`, `life`, `style`), `update(dt, d)`.
 
 ### Ash Disciple — `src/entities/enemies/ashDisciple/disciple.js` exports `class AshDisciple`
-The boss slot's surface above (no plunge), plus:
+A `Duelist` with `ASH_KIT` (moves.js, tuning.js, gear.js, poses.js): his colours, the kindled blade
+of phase 2 and the Ash Crescent are his own. The boss slot's surface above (no plunge), plus:
 ```
 kind = 'duelist';  name = 'SHEN HUI, THE ASH DISCIPLE';  execRange = 3.2;  ghostepBehind = 1.5
 mode: 'sleep'|'intro'|'foot'|'act'|'react'|'broken'|'dying'|'dead'   // brain.js (state follows it)
@@ -1424,7 +1464,9 @@ circle round the shoulder at the blade's azimuth, as the hero's swings do, and t
 with it; a cut is authored as the blade's path (moves.js `slashKeys`). Moves are data (moves.js
 `MOVES`; `realise(name, phase, rnd)` → beats with absolute times, each beat's `close` budget, and the
 compiled clip); reactions are `CLIP` (clash, flinch, backstep, sidestep, stagger, recoil, reeling,
-trampled, lock, broken, executed, death, meditate, intro). Beat flags: `lock` (a perfect parry crosses
+trampled, lock, broken, executed, death, meditate, intro). (The engine files named here, brain.js
+and the clip / pose code, now live in `enemies/duelist/`, above; his poses.js holds only his guard.)
+Beat flags: `lock` (a perfect parry crosses
 the blades), `mikiri` (a perilous red thrust: its hitPlayer passes `mikiri: true`, its flash
 `perilous: true`), `close` (m he may step in through the windup; default TUNING.close). Hits are zones
 tested from his position and facing through each beat's active frames (`sector`, `line`, `ring`), one
@@ -1436,6 +1478,38 @@ breather, ground-covering moves × `TUNING.punish.weight`). Numbers: tuning.js.
 **HeroAnimator** (anim.js): `new HeroAnimator(rig, player, poses = null)` — `poses` merges extra clips
 over the hero's table for that instance (a key it shares replaces the hero's clip for that instance
 only). Exported for other pose tables: `P, v3, to3, dirLerp, kf, guard, loco, turnTwist`.
+
+### Starless Lord — `src/entities/enemies/starlessLord/lord.js` exports `class StarlessLord` (ADR-069)
+A `Duelist` with `LORD_KIT`; COMBAT.md → "The Starless Lord" has the fight. The boss slot's surface, plus:
+```
+kind = 'duelist';  name = 'VARR NIHIL, THE STARLESS LORD';  phase 1..4 = his blade FORM
+lives: { total: 4, left }      // the forms still to beat (this one included); hp / maxHp = this form's bar
+lit: 0..1                      // how far the blades are lit (they extend from the hilt)
+blades: { A, B, hiltB, Q, off, L }   // main blade, the staff's second blade + joined hilt, the cross-hilt's
+                               // side blades, the off-hand saber's joint and its blade (gear.js names them)
+_onHpZero()                    // an empty bar BREAKS him (no death): on one knee for posture.breakTime
+onExecute({ damage })          // the DEATHBLOW: the form ends ('dragon:plunged {execution, deathblow, form}');
+                               // forms 1-3: react 'executed', then kit.transitions[form + 1] (enterPhase: a
+                               // full bar, the new stance and blades; nothing lands on him until the
+                               // ignition's ring goes out); form 4: he dies
+endBreak()                     // a break nobody answered: posture.spared of the bar back, half the meter
+addPosture(n)                  // × lerp(posture.gainByHp) by the bar's missing fraction (hard to move on a
+                               // full bar); regen × posture.regenByHp
+moveBy / clampTarget           // he keeps to the hall's floor: the rectangle TUNING.hall, not a circle
+debug.phase4(), debug.setForm(n), debug.form
+```
+Four stances (poses.js `GUARDS`, one pose set each; the animator's pilot carries `form`); reaction clips
+are compiled per form (`CLIPS_BY_FORM`, the brain's `C`). Moves (moves.js): `weight` is per FORM
+`[1, 2, 3, 4]`; his own beat fields: `bolt` (Void lightning: a long line zone from the casting hand; a
+perfect parry returns it: `dragon:returned`, damage + posture to him), `pull` (the hit's `from` is put
+on the hero's far side: he is dragged in), `blink: { behind }` (he reappears behind the hero as the
+windup starts), `left` (the off-hand blade cuts), `release: { style: 'push' | 'crescent' }`, `cast:
+{ kind: 'glaive' | 'debris' | 'storm' }`. fx.js `LordFx extends DuelFx`: the blades' glow and red
+light, lightning, the push's wall, thrown things (`throwShot`: the blade that returns, torn stone;
+each cues itself flashLead before it reaches the hero, or fizzles), called lightning (`callStrike`: a
+red ground ring, then the bolt), the aura, the blink, the ignition. The intro: seated at
+`CONFIG.world.dragonSleep` with the root raised to the seat (`TUNING.intro`), he rises, the blade
+ignites and he leaps to the seal; a skipped intro puts him where the leap lands.
 
 ## Event catalogue (exact names — producers → consumers)
 Player → hud/audio/fx/flow:
@@ -1477,7 +1551,7 @@ Dragon (any attacker; the BOSS SLOT: the wyrm or the level's boss, e.g. the Ash 
   lands on the head: kind 0 ember / 1 wisp, damage dealt, x/y/z the head; audio plays its hit, the HUD its number,
   flow counts it in the run stats like a sword hit),
   `dragon:posture {posture, max}`, `dragon:postureBreak`, `dragon:stagger` (ordinary stagger only), `dragon:phase2`,
-  `dragon:phase3`, `dragon:phase {n}` (with each of the two above, on the transition roar), `dragon:plunged {execution}`
+  `dragon:phase3`, `dragon:phase4` (a duelist's later phases: the Starless Lord's blade forms), `dragon:phase {n}` (the wyrm: with phase 2 and 3, on the transition roar), `dragon:plunged {execution}`
   (contract 2: every plunge that lands, even during a transition or the killing one),
   `dragon:death`, `dragon:dead`,
   `dragon:guard {heavy}` (a duelist's guard turned the hero's strike: no damage, guard posture; the Ash Disciple;

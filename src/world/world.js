@@ -15,6 +15,22 @@ import { Atmosphere } from './atmosphere.js';
 //   world.debug.setVisible(bool)            Lab only: hide / restore the environment (see below)
 export const PUSHER_SLOTS = MAX_PUSH;
 
+/** A set's own night (`sky: { moonColor, moonDir, ambient, fogColor, fogNear, fogFar }`, all optional):
+ *  written into the shared uniforms once, before anything reads them. */
+function applySky(U, sky) {
+  if (!sky || !U) return;
+  const rgb = (u, c) => {
+    if (u?.value?.setRGB && Array.isArray(c) && c.length === 3 && c.every(Number.isFinite)) u.value.setRGB(c[0], c[1], c[2]);
+  };
+  rgb(U.uMoonColor, sky.moonColor);
+  rgb(U.uAmbient, sky.ambient);
+  rgb(U.uFogColor, sky.fogColor);
+  if (Number.isFinite(sky.fogNear) && U.uFogNear) U.uFogNear.value = sky.fogNear;
+  if (Number.isFinite(sky.fogFar) && U.uFogFar) U.uFogFar.value = sky.fogFar;
+  const d = sky.moonDir;
+  if (Array.isArray(d) && d.length === 3 && d.every(Number.isFinite) && U.uMoonDir?.value?.set) U.uMoonDir.value.set(d[0], d[1], d[2]).normalize();
+}
+
 export class World {
   constructor(game) {
     this.game = game;
@@ -27,6 +43,7 @@ export class World {
     const buildSet = typeof game.level?.buildSet === 'function' ? game.level.buildSet : createForest;
     this.forest = buildSet(U, this.colliders);
     game.scene.add(this.forest.group);
+    applySky(U, this.forest.sky);
     this.scorch = new Scorch(U, game);
     const extent = 150;
     const meadow = meadowDensity(this.colliders, this.forest.treeSpots, this.forest.bare, extent, this.forest.slabs);
@@ -65,11 +82,13 @@ export class World {
     if (!on && this._hidden === null) {
       this._hidden = parts.map((o) => [o, o.visible]);
       for (const o of parts) o.visible = false;
+      this.forest?.ambience?.setVisible?.(false); // (a set's own glyph batch, e.g. the throne hall's inlay)
       this.game.fx?.alpha?.clear?.();
       this.game.fx?.add?.clear?.();
     } else if (on && this._hidden !== null) {
       for (const [o, v] of this._hidden) o.visible = v;
       this._hidden = null;
+      this.forest?.ambience?.setVisible?.(true);
     }
     return this._hidden === null;
   }

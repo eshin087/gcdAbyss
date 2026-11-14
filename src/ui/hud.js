@@ -146,6 +146,15 @@ export class Hud {
     this.bossEl = el('div', 'ab-boss', null, this.root);
     const head = el('div', 'ab-boss-head', null, this.bossEl);
     this.bossName = el('span', 'ab-boss-name', '', head);
+    // a boss with several bars (dragon.lives = { total, left }: the Starless Lord's blade forms): one
+    // pip per bar, the spent ones hollow
+    this.lifeEls = [];
+    this._lives = -1;
+    const lives = this.game?.dragon?.lives;
+    if (lives && lives.total > 1) {
+      const row = el('span', 'ab-boss-lives', null, head);
+      for (let i = 0; i < lives.total; i++) this.lifeEls.push(el('i', 'life', null, row));
+    }
     this.bossDmg = el('span', 'ab-boss-dmg', '', head);
     this.bossBar = new DelayedBar(this.bossEl, 'boss', { hold: 0.6, drain: 1.8, rise: 2.2 });
     // the phase gates (dragon.phaseAt, e.g. 66 % / 33 %): thin ticks where the next phase starts
@@ -347,6 +356,15 @@ export class Hud {
       }
       this.bossHpLast = hp;
       this.bossBar.set(hp / max);
+      if (this.lifeEls.length) {
+        const left = num(d.lives?.left, this.lifeEls.length);
+        if (left !== this._lives) {
+          // a bar refilled for the next form is a new bar, not healing: no slow rise
+          if (this._lives >= 0 && left < this._lives) this.bossBar.snap(hp / max);
+          this._lives = left;
+          this.lifeEls.forEach((e, i) => e.classList.toggle('gone', i >= left));
+        }
+      }
       // posture is polled too (authoritative); 'dragon:posture' only makes rises instant
       const pmax = num(d.maxPosture, 0);
       if (pmax > 0 && Number.isFinite(d.posture)) this.postBar.set(d.posture / pmax);

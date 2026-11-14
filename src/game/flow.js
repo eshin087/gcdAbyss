@@ -22,7 +22,7 @@ const NON_DISMISS = new Set(['Escape', 'Backquote', 'ContextMenu', 'CapsLock', '
 const NON_DISMISS_ACTIONS = ['help', 'mute', 'pause'];
 const MOUSE_CODES = ['Mouse0', 'Mouse1', 'Mouse2'];
 const NON_DISMISS_RE = /^(F\d+|Alt|Control|Meta|OS)/;
-const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:phase3', 'dragon:death', 'dragon:dead', 'player:died'];
+const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:phase3', 'dragon:phase4', 'dragon:death', 'dragon:dead', 'player:died'];
 const DEBUG_STATES = new Set(['explore', 'boss', 'dead', 'victory']);
 const DRAGON_DOWN = new Set(['dying', 'dead']);
 // the level's lines (levels/index.js `text`); Cinderwood's when the game has no level (tests, old boots)
@@ -376,9 +376,11 @@ export class GameFlow {
           break;
         case 'dragon:phase2':
         case 'dragon:phase3':
+        case 'dragon:phase4':
           if (st === 'boss' || st === 'bossIntro') {
             this.phase2 = true;
-            const text = name === 'dragon:phase3' ? this._text('phase3') : this._text('phase2');
+            // the level's line for that phase (text.phase2 / phase3 / phase4; none: no banner)
+            const text = this._text(name.slice('dragon:'.length));
             if (text) g.hud?.banner?.(text, 'phase');
             g.audio?.setMusic?.('boss2');
           }

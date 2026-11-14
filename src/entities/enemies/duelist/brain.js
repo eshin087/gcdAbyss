@@ -1,19 +1,23 @@
 import { clamp, wrapAngle, smoothstep, turnToward } from '../../../core/math.js';
 import { TELL, RESULT } from '../../../combat/rules.js';
-import { MOVES, MOVE_NAMES, CLIP, realise } from './moves.js';
-import { TUNING, perPhase } from './tuning.js';
+import { perPhase } from './realise.js';
 
-// The Ash Disciple's mind and timeline (docs/specs/ash-disciple.md §3). Modes (d.mode):
+// A duelist's mind and timeline: the Ash Disciple's (docs/specs/ash-disciple.md §3), shared by every
+// human boss built on duelist.js. Everything it knows about one boss comes from the actor's kit
+// (d.kit: { TUNING, MOVES, MOVE_NAMES, CLIP, realise, transitions }); what only one boss does is a
+// hook on the actor (d.brainFrame, d.afterPose, d.onRelease, d.onCast, d.beatMotion,
+// d.onTransitionEnd). Modes (d.mode):
 //   sleep    kneeling in meditation (state 'sleeping'); flow calls startIntro, or a strike wakes him
 //   intro    rises, flicks the jian, salutes; then 'dragon:introDone' (state 'waking')
 //   foot     footwork between moves: circling / closing / backing off, guard up after a raise delay
-//   act      a move (moves.js realise): per beat the tell at its windup start, the glint flashLead
+//   act      a move (realise.js): per beat the tell at its windup start, the glint flashLead
 //            before its impact, root motion (travel / dash / leap), the zone tested through the
-//            active frames (one hit per beat), Ash Crescents released at the impact
+//            active frames (one hit per beat); a `release` / `cast` beat hands its impact to the actor
 //   react    a reaction clip: clash, flinch, backstep, sidestep, stagger, recoil, executed
 //   broken   posture broken: on one knee for breakTime (state 'staggered')
 //   dying    the death clip, then the ash; finishDeath() → 'dead'
-// The phase-2 transition is the move 'kindle', started as soon as he is free once the gate is hit.
+// A phase's transition is the move kit.transitions[phase] (the disciple's 'kindle'), started as soon
+// as he is free once that phase's gate is hit.
 
 const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
 const ease = (u) => u * u * (3 - 2 * u);
@@ -38,10 +42,9 @@ function track(keys, u) {
   return keys[keys.length - 1][1];
 }
 
-const REACT = {
+const REACT_BASE = {
   clash: { travel: -0.15 },
   flinch: { travel: -0.12 },
-  backstep: { travel: -TUNING.move.backstep.dist },
   sidestep: { side: 1.8 },
   stagger: { travel: -0.7 },
   recoil: { travel: -0.55 },
@@ -56,6 +59,16 @@ const OPEN = new Set(['stagger', 'recoil', 'executed', 'reeling', 'trampled']);
 export class DuelBrain {
   constructor(d) {
     this.d = d;
+    const K = d.kit;
+    this.K = K;
+    this.T = K.TUNING;
+    this.M = K.MOVES;
+    this.names = K.MOVE_NAMES;
+    this.C = K.CLIP;
+    /** reaction clips' root motion (kit.REACT adds / overrides) */
+    this.R = { ...REACT_BASE, backstep: { travel: -this.T.move.backstep.dist }, ...(K.REACT ?? {}) };
+    /** reactions that leave him open */
+    this.open = new Set([...OPEN, ...(K.OPEN ?? [])]);
     this.aiEnabled = true;
     this._ld = { dx: 0, dz: 0, dist: 0, ang: 0 };
     this.reset();
@@ -78,7 +91,7 @@ export class DuelBrain {
     this.act = null;
     this.react = null;
     this.modeT = 0;
-    this.clip = CLIP.meditate;
+    this.clip = this.C.meditate;
     this.clipT = 0;
     this.leap = null;
     this.zone = null;
@@ -99,7 +112,7 @@ export class DuelBrain {
     if (d.mode === 'act') {
       const a = this.act;
       const b = a?.beats.find((x) => a.t < x.end + 1e-6);
-      return !!b && a.t < b.impact && uAt(b, a.t) < TUNING.guard.windupOpen && !a.def.transition;
+      return !!b && a.t < b.impact && uAt(b, a.t) < this.T.guard.windupOpen && !a.def.transition;
     }
     return d.mode === 'react' && (this.react?.kind === 'clash' || this.react?.kind === 'backstep');
   }
@@ -165,28 +178,14 @@ export class DuelBrain {
       default:
         break;
     }
-    // the kindled blade grows in through phase 2's transition
-    if (d.phase >= 2) d.kindle = Math.min(1, d.kindle + dt * 1.5);
+    d.brainFrame?.(dt);
   }
 
-  /** After the pose (the blade's points are fresh): swing trails and the kindled blade's embers. */
+  /** After the pose (the blade's points are fresh): the actor's swing trails and body FX. */
   afterPose(dt) {
-    const d = this.d, a = this.act;
+    const d = this.d;
     if (d.mode === 'dead') return;
-    const t1 = d._tip;
-    // the blade's sweep from the snap out of the cock through the follow-through
-    if (a && d._tipOk) {
-      for (const b of a.beats) {
-        if (b.feint || a.t < b.impact - 0.32 * b.W - 0.02 || a.t > b.end + 0.6 * b.A + 0.05) continue;
-        d.fx.sweep(d._hiltPrev, d._tipPrev, d._hilt, d._tip, d.phase >= 2);
-        break;
-      }
-    }
-    if (d.kindle > 0.05 && d.mode !== 'dying') d.fx.emberBlade(d._hilt.x, d._hilt.y, d._hilt.z, t1.x, t1.y, t1.z, dt, d.kindle);
-    if (d.mode === 'broken') {
-      const h = d._hs[0];
-      d.fx.stunStars(h);
-    }
+    d.afterPose?.(dt, this.act);
   }
 
   _sleep(dt) {
@@ -211,7 +210,7 @@ export class DuelBrain {
     d.mode = 'intro';
     d.state = 'waking';
     this.modeT = 0;
-    this._play(CLIP.intro, 0.05);
+    this._play(this.C.intro, 0.05);
     d.emit('dragon:wake');
     d.fx.dust(d.position.x, d.position.z, 0.8);
   }
@@ -241,8 +240,8 @@ export class DuelBrain {
     this.leap = null;
     d.position.y = 0;
     this.modeT = 0;
-    this.raiseT = TUNING.guard.raiseDelay;
-    const G = perPhase(TUNING.idleGap, d.phase);
+    this.raiseT = this.T.guard.raiseDelay;
+    const G = perPhase(this.T.idleGap, d.phase);
     this.gapT = gap ?? G[0] + (G[1] - G[0]) * Math.random();
     this.clip = null;
     this.clipT = 0;
@@ -257,7 +256,7 @@ export class DuelBrain {
   startAct(name, phase = this.d.phase) {
     const d = this.d;
     if (d.mode === 'dying' || d.mode === 'dead' || d.mode === 'broken') return false;
-    const A = realise(name, phase, Math.random);
+    const A = this.K.realise(name, phase, Math.random);
     if (!A) return false;
     A.t = 0;
     A.chain = 0;
@@ -276,8 +275,9 @@ export class DuelBrain {
     this.last[1] = this.last[0];
     this.last[0] = name;
     if (def.transition) {
-      d.enterPhase(2);
-      d.emit('dragon:phase2');
+      const n = def.phase ?? 2;
+      d.enterPhase(n);
+      d.emit(`dragon:phase${n}`);
       d.emit('dragon:roar', { strength: 0.6 });
     } else d.emit('dragon:windup', { name });
     return true;
@@ -287,16 +287,16 @@ export class DuelBrain {
   startReact(kind) {
     const d = this.d;
     if (d.mode === 'dying' || d.mode === 'dead' || d.mode === 'sleep') return false;
-    const clip = CLIP[kind];
+    const clip = this.C[kind];
     if (!clip) return false;
     if (d.mode === 'act' && this.act?.def?.transition && kind !== 'executed') return false; // the kindling holds
     this.act = null;
     this.leap = null;
     d.position.y = 0;
     d.mode = 'react';
-    d.state = OPEN.has(kind) ? 'staggered' : 'combat';
+    d.state = this.open.has(kind) ? 'staggered' : 'combat';
     d.warn = 0;
-    const R = REACT[kind] ?? {};
+    const R = this.R[kind] ?? {};
     this.react = { kind, clip, t: 0, travel: R.travel ?? 0, side: R.side ? R.side * (Math.random() < 0.5 ? -1 : 1) : 0, moved: 0 };
     this.modeT = 0;
     this._play(clip, kind === 'clash' || kind === 'flinch' ? 0.05 : 0.08);
@@ -306,7 +306,7 @@ export class DuelBrain {
   /** The blade lock (a perfect parry of a `lock` blow): blades crossed until the hero's push is
    *  decided (player.startBladeLock → disciple.onLockEnd). False if the hero can't lock. */
   startLock() {
-    const d = this.d, p = d.game.player, L = TUNING.lock;
+    const d = this.d, p = d.game.player, L = this.T.lock;
     if (typeof p?.startBladeLock !== 'function') return false;
     if (!this.startReact('lock')) return false;
     const ok = p.startBladeLock(d, { start: L.start, push: L.push, decay: perPhase(L.decay, d.phase), dur: L.dur, hold: L.hold });
@@ -331,7 +331,7 @@ export class DuelBrain {
     d.state = 'staggered';
     this.modeT = 0;
     this.counter.pending = false;
-    this._play(CLIP.broken, 0.1);
+    this._play(this.C.broken, 0.1);
   }
 
   startDeath() {
@@ -343,51 +343,55 @@ export class DuelBrain {
     d.mode = 'dying';
     d.state = 'dying';
     this.modeT = 0;
-    this._play(CLIP.death, 0.12);
+    this._play(this.C.death, 0.12);
   }
 
-  /** Lab: the kindling now (HP down to the gate if it is above). */
-  forcePhase2() {
-    const d = this.d;
-    if (d.phase >= 2 || d.mode === 'dying' || d.mode === 'dead') return false;
+  /** Lab: the next phase's transition now (HP down to the gate if it is above). `n` must be the
+   *  phase after the current one. */
+  forcePhase(n = this.d.phase + 1) {
+    const d = this.d, mv = this.K.transitions?.[n];
+    if (!mv || n !== d.phase + 1 || d.mode === 'dying' || d.mode === 'dead') return false;
     if (d.mode === 'sleep' || d.mode === 'intro') this._toCombat();
     d.hp = Math.min(d.hp, d.nextPhaseHp);
     this.pendingPhase = 0;
-    return this.startAct('kindle', 1);
+    return this.startAct(mv, d.phase);
+  }
+  forcePhase2() {
+    return this.forcePhase(2);
   }
 
   /** Lab: force a move now (wakes him into the duel first). False while he can't. */
   trigger(name) {
     const d = this.d;
-    if (!MOVES[name]) return false;
+    if (!this.M[name]) return false;
     if (d.mode === 'dying' || d.mode === 'dead' || d.mode === 'broken') return false;
     if (d.mode === 'sleep' || d.mode === 'intro') this._toCombat();
-    if (MOVES[name].transition) return this.forcePhase2();
-    if (MOVES[name].phase > d.phase) return false;
+    if (this.M[name].transition) return this.forcePhase(this.M[name].phase ?? 2);
+    if (this.M[name].phase > d.phase) return false;
     return this.startAct(name);
   }
 
   // ---------------------------------------------------------------- footwork
   _foot(dt) {
     const d = this.d, s = this._sense();
-    const M = TUNING.move;
+    const M = this.T.move;
     if (!s) {
       d.groundVelSet(0, 0);
       return;
     }
     d.yaw = turnToward(d.yaw, s.ang, perPhase(M.turn, d.phase) * dt);
-    if (this.pendingPhase && d.phase < 2) {
+    if (this.pendingPhase > d.phase) {
+      const mv = this.K.transitions?.[this.pendingPhase];
       this.pendingPhase = 0;
-      this.startAct('kindle', 1);
-      return;
-    }
+      if (mv && this.startAct(mv, d.phase)) return;
+    } else this.pendingPhase = 0;
     if (!this.aiEnabled) {
       d.groundVelSet(0, 0);
       return;
     }
     if (this.counter.pending) {
       this.counter.pending = false;
-      this.startAct('riposte');
+      this.startAct(this.K.counterMove?.(d.phase) ?? 'riposte');
       return;
     }
     // a charged thrust levelled at him: sometimes he steps out of its line
@@ -456,9 +460,9 @@ export class DuelBrain {
     const d = this.d;
     let total = 0;
     const pool = [];
-    for (const name of MOVE_NAMES) {
-      const def = MOVES[name];
-      if (def.counter || def.transition || def.phase > d.phase) continue;
+    for (const name of this.names) {
+      const def = this.M[name];
+      if (def.counter || def.transition || def.phase > d.phase || def.manual) continue;
       if ((this.cooldowns[name] ?? 0) > 0) continue;
       const [lo, hi] = def.band;
       if (dist < lo || dist > hi) continue;
@@ -466,7 +470,7 @@ export class DuelBrain {
       if (!(w > 0)) continue;
       if (this.last[0] === name) w *= 0.3;
       else if (this.last[1] === name) w *= 0.65;
-      if (punish && def.beats.some((b) => b.dash?.max >= 3 || b.leap || b.release)) w *= TUNING.punish.weight;
+      if (punish && (def.gapCloser || def.beats.some((b) => b.dash?.max >= 3 || b.leap || b.release))) w *= this.T.punish.weight;
       pool.push([name, w]);
       total += w;
     }
@@ -503,7 +507,7 @@ export class DuelBrain {
         d.emit('combat:tell', { source: 'dragon', attack: a.name, tell: b.def.tell, impactIn: Math.max(0.05, b.impact - t), x: p.x, z: p.z });
         if (b.def.tell === TELL.RED) d.warn = Math.max(d.warn, 0.1);
       }
-      if (!b.flashed && t >= b.flash && !b.def.release) {
+      if (!b.flashed && t >= b.flash && !b.def.release && !b.def.cast?.selfCue) {
         b.flashed = true;
         const p = d.tellPoint(b.def.part, d._v2);
         // perilous: a thrust a mikiri answers (its own read: the deep low coil, the held beat)
@@ -536,9 +540,19 @@ export class DuelBrain {
     // the hits: the zone through the active frames, one result per beat
     for (const b of a.beats) {
       if (b.feint || b.done || t < b.impact) continue;
+      if (!b.struck) {
+        b.struck = true; // the impact's first frame: the actor's own FX (a bolt, a shock ring)
+        d.onImpact?.(b, s, a);
+      }
       if (b.def.release) {
         b.done = true;
-        this._release(b, s);
+        d.onRelease?.(b, s, a);
+        continue;
+      }
+      if (b.def.cast) {
+        b.done = true;
+        d.onCast?.(b, s, a);
+        if (this.act !== a) return;
         continue;
       }
       if (t > b.end + dt * 0.5) {
@@ -549,7 +563,7 @@ export class DuelBrain {
       if (s && this._inZone(b.def.zone, s)) {
         const r = d.hitPlayer({
           damage: b.def.damage, knockback: b.def.knockback, knockdown: !!b.def.knockdown, kind: 'slash', tell: b.def.tell, attack: a.name,
-          from: { x: d.position.x, z: d.position.z }, mikiri: !!b.def.mikiri,
+          from: { x: d.position.x, z: d.position.z }, mikiri: !!b.def.mikiri, beat: b,
         });
         if (r !== RESULT.IGNORED) {
           b.done = true;
@@ -561,9 +575,9 @@ export class DuelBrain {
       }
     }
     if (this.act === a && t >= a.end) {
-      if (a.def.transition) d.kindle = Math.max(d.kindle, 0.3);
+      if (a.def.transition) d.onTransitionEnd?.(a);
       // PBZ pace: he often flows straight into another move (TUNING.chain), no footwork between
-      if (!a.def.transition && !a.def.counter && this.aiEnabled && !this.pendingPhase && s && Math.random() < perPhase(TUNING.chain, d.phase)) {
+      if (!a.def.transition && !a.def.counter && this.aiEnabled && !this.pendingPhase && s && Math.random() < perPhase(this.T.chain, d.phase)) {
         const next = this._choose(s.dist);
         if (next && next !== a.name && this.startAct(next)) return;
       }
@@ -577,7 +591,7 @@ export class DuelBrain {
     const trackUntil = D.track ?? 0.75;
     const left = Math.max(b.impact - t, dt);
     const L = s ? this._lead(s, left) : null;
-    if (L && u < trackUntil && !this.leap) d.yaw = turnToward(d.yaw, L.ang, perPhase(TUNING.move.trackTurn, d.phase) * dt);
+    if (L && u < trackUntil && !this.leap) d.yaw = turnToward(d.yaw, L.ang, perPhase(this.T.move.trackTurn, d.phase) * dt);
     const fx = Math.sin(d.yaw), fz = Math.cos(d.yaw);
     const x0 = d.position.x, z0 = d.position.z;
     // close-in: through the windup he steps in toward the hero (at most b.close m), arriving at the
@@ -586,7 +600,7 @@ export class DuelBrain {
       const gap = L.dist - this._ideal(D.zone);
       const budget = b.close - (b.closed ?? 0);
       if (gap > 0.02 && budget > 0) {
-        const step = Math.min(Math.min(gap / left, TUNING.close.speed) * dt, budget, gap);
+        const step = Math.min(Math.min(gap / left, this.T.close.speed) * dt, budget, gap);
         b.closed = (b.closed ?? 0) + step;
         d.moveBy((L.dx / (L.dist || 1)) * step, (L.dz / (L.dist || 1)) * step);
       }
@@ -610,6 +624,7 @@ export class DuelBrain {
     }
     if (D.leap) this._leap(b, u, s);
     else if (D.lift) d.position.y = Math.max(0, track(D.lift, u));
+    d.beatMotion?.(b, u, s, dt);
     d.groundVelSet((d.position.x - x0) / Math.max(dt, 1e-4), (d.position.z - z0) / Math.max(dt, 1e-4));
   }
 
@@ -622,6 +637,7 @@ export class DuelBrain {
 
   /** The furthest the hero can be at beat b's windup start and still be hit (zone + step-in + dash). */
   _reach(b) {
+    if (b.def.release || b.def.cast) return Infinity; // a thrown thing reaches him wherever he is
     const z = b.def.zone, pr = this.d.game.player?.radius ?? 0.45;
     return (z?.r ?? 2) + pr + (b.close ?? 0) + (b.def.dash?.max ?? 0);
   }
@@ -646,6 +662,7 @@ export class DuelBrain {
       }
       J.target.x = tx;
       J.target.z = tz;
+      d.clampTarget?.(J.target); // (a boss whose floor is not a circle)
     }
     const k = clamp((u - L.from) / Math.max(1e-4, 1 - L.from), 0, 1);
     const e = ease(k);
@@ -661,18 +678,6 @@ export class DuelBrain {
       d.emit('dragon:land', { x: d.position.x, z: d.position.z });
       d.fx.dust(d.position.x, d.position.z, 1.6);
       d.game.world?.gust?.(d.position.x, d.position.z, 1.2, 5);
-    }
-  }
-
-  /** Ash Crescent: sword qi along the ground toward the hero (P2: a fan). */
-  _release(b, s) {
-    const d = this.d, R = b.def.release;
-    const n = perPhase(R.count, d.phase);
-    const base = s ? s.ang : d.yaw;
-    for (let i = 0; i < n; i++) {
-      const a = base + (i - (n - 1) / 2) * R.spread;
-      const sx = d.position.x + Math.sin(a) * 1.0, sz = d.position.z + Math.cos(a) * 1.0;
-      d.fx.throwCrescent(sx, sz, Math.sin(a), Math.cos(a), { tell: b.def.tell, damage: b.def.damage, knockback: b.def.knockback, attack: this.act?.name ?? 'ashCrescent' });
     }
   }
 
@@ -716,7 +721,7 @@ export class DuelBrain {
     d.groundVelSet((d.position.x - x0) / Math.max(dt, 1e-4), (d.position.z - z0) / Math.max(dt, 1e-4));
     if (R.kind === 'lock') {
       // held until the hero's push is decided (onLockEnd); a lock the hero never resolves times out
-      if (R.t > TUNING.lock.dur + 1.5) this._toFoot(0.2);
+      if (R.t > this.T.lock.dur + 1.5) this._toFoot(0.2);
       return;
     }
     if (R.t >= R.clip.dur) {
@@ -728,7 +733,7 @@ export class DuelBrain {
 
   /** A strike his guard turned: counter likelier with each one in a row. */
   onGuarded() {
-    const d = this.d, C = this.counter, G = TUNING.guard;
+    const d = this.d, C = this.counter, G = this.T.guard;
     if (d.mode === 'act') return; // turned aside in his windup: his own strike goes on
     if (d.time - C.t > G.countWindow) C.n = 0;
     C.t = d.time;
@@ -743,7 +748,7 @@ export class DuelBrain {
 
   /** A strike landed on him outside his guard: in footwork he flinches, and breaks off after a few. */
   onStruck(heavy) {
-    const d = this.d, S = this.struck, F = TUNING.flinch;
+    const d = this.d, S = this.struck, F = this.T.flinch;
     // caught in his recovery: knocked out of it (a heavy blow staggers him)
     const a = this.act;
     if (d.mode === 'act' && a && !a.def.transition && a.t >= a.recoveryStart) {
@@ -765,7 +770,7 @@ export class DuelBrain {
   _broken() {
     const d = this.d;
     d.groundVelSet(0, 0);
-    if (this.modeT >= TUNING.posture.breakTime) {
+    if (this.modeT >= this.T.posture.breakTime) {
       d.endBreak();
       this._toFoot(0.4);
     }

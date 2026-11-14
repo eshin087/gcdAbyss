@@ -1,6 +1,7 @@
 import { TELL } from '../../../combat/rules.js';
 import { compileClip, GUARD } from './poses.js';
-import { TUNING, perPhase } from './tuning.js';
+import { TUNING } from './tuning.js';
+import { makeRealise } from '../duelist/realise.js';
 
 // The Ash Disciple's moves and reaction clips, as data (docs/specs/ash-disciple.md §3; COMBAT.md →
 // "The Ash Disciple"). Nothing mirrors the hero's moveset.
@@ -498,47 +499,11 @@ for (const [k, c] of Object.entries(CLIP)) c.name = k;
 
 // ---------------------------------------------------------------- realising a move
 /**
- * A move as it will play this time: phase scaling, rolled chances, the bait holds, absolute times
- * per beat ({ start, impact, end, flash, tellAt }) and the compiled clip. `rnd` = a 0..1 source (the
- * game's Math.random, so the seeded sims replay).
+ * A move as it will play this time (duelist/realise.js): phase scaling, rolled chances, the bait
+ * holds, absolute times per beat ({ start, impact, end, flash, tellAt }) and the compiled clip. `rnd`
+ * = a 0..1 source (the game's Math.random, so the seeded sims replay).
  */
-export function realise(name, phase = 1, rnd = Math.random) {
-  const def = MOVES[name];
-  if (!def) return null;
-  const ws = perPhase(TUNING.windupScale, phase), rs = perPhase(TUNING.recoveryScale, phase);
-  const beats = [];
-  const keys = [];
-  let t = 0;
-  def.beats.forEach((b, i) => {
-    if (b.chance !== undefined && b.chance < 1 && !(rnd() < b.chance)) return;
-    const W = b.windup * ws;
-    const H = Array.isArray(b.hold) ? b.hold[0] + (b.hold[1] - b.hold[0]) * rnd() : 0;
-    const A = b.active;
-    const cock = b.cock ?? 0.8;
-    const start = t, impact = t + W + H, end = impact + A;
-    const at = (u) => (u <= 1 ? (u <= cock ? start + u * W : start + cock * W + H + (u - cock) * W) : impact + (u - 1) * A);
-    for (const [u, pose] of b.keys ?? []) keys.push({ t: at(u), ...pose });
-    const C = TUNING.close;
-    const close = b.close ?? (b.dash || b.leap || b.release || !b.zone ? 0 : beats.length === 0 ? C.first : C.next);
-    beats.push({
-      def: b, index: i, hit: beats.length, start, impact, end, W, H, A, at, close,
-      tellAt: start, flash: impact - TUNING.flashLead, feint: !!b.feint,
-      announced: false, flashed: false, done: false, landed: false,
-    });
-    t = end;
-  });
-  // the realised hits (not feints) get their hit index; `last` = the move's last real hit
-  let n = 0;
-  for (const b of beats) if (!b.feint) b.hit = n++;
-  const hits = n;
-  for (const b of beats) b.last = !b.feint && b.hit === hits - 1;
-  const recovery = def.recovery * rs;
-  const end = t + recovery;
-  for (const [r, pose] of def.recoveryKeys ?? []) keys.push({ t: t + r * recovery, ...pose });
-  const clip = compileClip(keys, end);
-  clip.name = name;
-  return { name, def, beats, hits, recoveryStart: t, end, clip, phase };
-}
+export const realise = makeRealise({ TUNING, MOVES, compileClip: (keys, dur) => compileClip(keys, dur) });
 
 /** The guard pose (for tools). */
 export { GUARD };

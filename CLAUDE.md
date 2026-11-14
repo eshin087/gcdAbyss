@@ -2,9 +2,10 @@
 
 ABYSS is a long-term browser game: a **wuxia skill boss rush** in the vein of Phantom Blade Zero,
 with some exploring and RPG elements and fixed rewards (techniques, weapons, abilities; ADR-059),
-rendered in an ASCII look inspired by @Ansenjeo's ASCII MMORPG. Today: two levels, each its own page
-load (`?level=`): Cinderwood Hollow (the Cinder Wyrm) and the Ashfall Courtyard (the Ash Disciple,
-a human duelist). Read this file first, every session.
+rendered in an ASCII look inspired by @Ansenjeo's ASCII MMORPG. Today: three levels, each its own
+page load (`?level=`): Cinderwood Hollow (the Cinder Wyrm), the Ashfall Courtyard (the Ash Disciple,
+a human duelist) and the Obsidian Throne (the Starless Lord, a four-form duelist with Void spells).
+Read this file first, every session.
 
 - Repo: https://github.com/eshin087/gcdAbyss · Live: https://gcdabyss.vercel.app (auto-deploys `main`)
 - Stack: Three.js 0.180 (WebGL2), plain ES modules, no framework, esbuild only for the release bundle.
@@ -23,11 +24,12 @@ a human duelist). Read this file first, every session.
 ```bash
 npm run dev      # http://localhost:5173 (zero-dependency static server, no build step)
 npm test         # headless integration sims (real game modules, mocked DOM/WebGL) + glyph check
+                 # (one suite: node tests/integration/lord.mjs . <scenario>, also integ.mjs / duel.mjs)
 npm run build    # single-file dist/index.html (what Vercel serves)
 npm run hero-parts  # regenerate src/entities/player/heroParts.js (needs Blender 4.2+; ADR-037)
 ```
-Levels: `?level=ash` loads the Ashfall Courtyard (default: Cinderwood); the title screen and the Lab
-pick one too. In the dev server: append `?lab` to the URL (or press **F1**) for the **Lab** — trigger any boss
+Levels: `?level=ash` loads the Ashfall Courtyard, `?level=starless` the Obsidian Throne (default:
+Cinderwood); the title screen and the Lab pick one too. In the dev server: append `?lab` to the URL (or press **F1**) for the **Lab** — trigger any boss
 ability / phase / transition, god mode, time scale, hitbox overlay. Console: `__game` (everything),
 `__tick(dt, frames)` (step the sim even when the tab is hidden), `__inspect(x, y, w, h)` (magnify).
 In Claude Code the preview config is `.claude/launch.json` (`abyss-dev`).
@@ -74,7 +76,8 @@ src/core       config, input, camera rig, math, rng, events
 src/render     glyph atlases, shared shader lib, materials, particles, lights, frame pipeline
 src/world      ground, grass, forest/stones/bones/bonfire, scorch map, atmosphere, colliders
 src/combat     shared combat rules: hit resolution, guard/parry/dodge, attack tells
-src/entities   player/ (gear/ = equipment slot items)  dragon/  enemies/ashDisciple/  (future: npcs/)
+src/entities   player/ (gear/ = equipment slot items)  dragon/  enemies/duelist/ (the engine human
+               bosses share)  enemies/ashDisciple/  enemies/starlessLord/  (future: npcs/)
 src/levels     level registry (?level=): the set, the boss, the flow's lines per level
 src/ui         HUD, menus           src/game   flow (title, boss intro, death, victory)
 src/audio      procedural WebAudio  src/dev    Lab / debug tools

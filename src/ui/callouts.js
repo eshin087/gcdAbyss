@@ -19,6 +19,8 @@ const KINDS = {
   // a deflect chain: the parry call-out of that blow turns into "DEFLECT ×N" (styled as deflect)
   chain: { text: 'DEFLECT', life: 1.15, rise: 34, pop: 1.5, cls: 'deflect' },
   exec: { text: 'EXECUTION', life: 1.4, rise: 30, pop: 1.6, cls: 'deflect' },
+  // the execution of a boss with several bars (dragon.lives: the Starless Lord): it ends a form
+  deathblow: { text: 'DEATHBLOW', life: 1.5, rise: 30, pop: 1.7, cls: 'deflect', streak: true },
   ret: { text: 'RETURN', life: 1.0, rise: 34, pop: 1.5, cls: 'return' },
   // a duelist's guard turned the hero's strike (dragon:guard; the Ash Disciple)
   guard: { text: 'GUARDED', life: 0.7, rise: 16, pop: 1.15 },
@@ -86,7 +88,7 @@ export class Callouts {
     this.critMult = 0;
     game.events?.on?.('combat:deflectChain', (d) => this.chain(d?.count));
     game.events?.on?.('player:plungeHit', (d) => {
-      if (d?.execution) this.call('exec');
+      if (d?.execution) this.call(game.dragon?.lives ? 'deathblow' : 'exec');
     });
     game.events?.on?.('dragon:guard', () => this.call('guard'));
     game.events?.on?.('player:lock', (d) => {
