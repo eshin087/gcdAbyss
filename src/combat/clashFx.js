@@ -30,6 +30,8 @@ export const CLASH = Object.freeze({
   blue: { core: [2.4, 3.0, 3.8], streak: [1.5, 2.2, 3.2], end: [0.2, 0.5, 1.4], ember: [1.6, 2.3, 3.4], emberEnd: [0.15, 0.35, 1.0], edge: [1.7, 2.1, 2.6], ring: [1.3, 1.6, 2.0], light: [0.55, 0.8, 1.3] },
   // a perfect parry: gold
   perfect: { core: [3.8, 3.0, 1.4], streak: [3.2, 2.3, 0.8], end: [1.3, 0.45, 0.06], ember: [3.4, 2.3, 0.7], emberEnd: [0.7, 0.18, 0.02], edge: [2.6, 2.2, 1.2], ring: [2.2, 1.6, 0.5], light: [1.3, 0.95, 0.4] },
+  // the trade clash (two cuts meet): white-hot, the biggest of them
+  trade: { core: [3.0, 2.9, 2.7], streak: [2.3, 2.2, 1.95], end: [0.8, 0.5, 0.28], ember: [2.9, 2.4, 1.5], emberEnd: [0.5, 0.22, 0.06], edge: [2.3, 2.3, 2.2], ring: [2.1, 2.0, 1.8], light: [1.2, 1.1, 0.9] },
   // his guard turns the hero's strike: dull steel, few and short (a block, not an opening)
   guard: { core: [2.0, 2.1, 2.4], streak: [1.3, 1.4, 1.7], end: [0.25, 0.28, 0.4], ember: [1.1, 1.15, 1.4], emberEnd: [0.15, 0.16, 0.22], edge: [1.4, 1.5, 1.8], ring: [0.9, 0.95, 1.15], light: [0.75, 0.85, 1.1] },
   // he DEFLECTS the hero's strike (the blade is thrown back, his counter comes): hot orange-red
@@ -82,7 +84,8 @@ export function clashBurst(game, x, y, z, o = {}) {
     // two thirds ride the turned blade's way (a fan ~±50°), the rest fly all round
     const a = aimed && i % 3 ? base + R(-0.9, 0.9) * R(0.3, 1) : R(0, Math.PI * 2);
     const sp = R(6, 15) * (0.75 + 0.25 * k) * (aimed && i % 3 ? 1.15 : 0.8);
-    const d = dir(a), o0 = R(0.1, 0.34); // (born off the centre: stacked on it they add up to a blot)
+    // (born off the centre, further for a big burst: stacked on it they add up to a blot)
+    const d = dir(a), o0 = R(0.1, 0.34 + 0.4 * Math.max(0, k - 1));
     add.spawn({
       x: x + d[0] * o0, y: y + d[1] * o0, z: z + d[2] * o0, vx: d[0] * sp, vy: d[1] * sp, vz: d[2] * sp,
       life: R(0.1, 0.24), size: R(0.15, 0.24), sizeEnd: 0.03, glyph: '|', rot: a - Math.PI / 2, stretch: R(1.4, 3.2),
@@ -126,7 +129,7 @@ export function clashBurst(game, x, y, z, o = {}) {
   if (o.ring) clashRing(game, x, y, z, C.ring, 0.34, 1.25 * (0.85 + 0.15 * k), 0.16, 16);
   if (o.ring > 1) clashRing(game, x, y, z, C.streak, 0.26, 1.9, 0.26, 20);
   if (o.light !== false) {
-    game.lights?.add?.({ x, y: Math.max(1, y), z, color: C.light, intensity: 1.7 + 0.7 * k, radius: 4.5 + k, life: 0.14, fade: 0.12 });
+    game.lights?.add?.({ x, y: Math.max(1, y), z, color: C.light, intensity: 1.7 + 0.5 * Math.min(k, 1.2), radius: 4.5 + k, life: 0.14, fade: 0.12 });
   }
 }
 

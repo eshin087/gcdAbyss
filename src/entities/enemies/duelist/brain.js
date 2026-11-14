@@ -245,6 +245,15 @@ export class DuelBrain {
     this.d.anim.play('duel', blend, true);
   }
 
+  /** Jump the move's timeline forward to move time `t` (a trade clash spends the beat that was
+   *  about to land: duelist._tradeNow). The tells due in the gap fire on the next frame as usual. */
+  skipTo(t) {
+    const a = this.act;
+    if (!a || !(t > a.t)) return;
+    this.clipT += t - a.t;
+    a.t = t;
+  }
+
   /** The hero is parrying this blow (duelist.parryContact): the pose shown is held `off` s back on
    *  the strike, where the blade meets his guard; `rebound`: the blow is only deflected (the move
    *  goes on), so the blade is thrown back off the guard before the clip takes over again. */

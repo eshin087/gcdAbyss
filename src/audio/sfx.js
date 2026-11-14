@@ -605,6 +605,24 @@ export const SFX = {
     },
   },
 
+  /**
+   * combat:clash — two cuts meet: two struck steels a fourth apart ringing against each other, a hard
+   * crack, a deep hit under them. Louder and longer than a parry: nobody won, both blades sing.
+   */
+  trade: {
+    prio: 7, rev: 0.45, gap: 0.1,
+    play(v, t, o) {
+      const k = o.heavy ? 1.25 : 1;
+      for (const f0 of [660 * rnd(0.98, 1.02), 880 * rnd(0.98, 1.02)]) {
+        for (const [r, a, d] of [[1, 0.17, 0.9], [1.007, 0.09, 1.0], [2.32, 0.12, 0.6], [3.7, 0.08, 0.42], [5.1, 0.05, 0.3]]) ping(v, t, 'sine', f0 * r, a * k, d, 0.001);
+      }
+      burst(v, t, 'white', 'bandpass', 3800, 1.4, 0.6 * k, 0.05, 0.0005);
+      burst(v, t, 'white', 'highpass', 7500, 0.7, 0.25 * k, 0.09, 0.0005);
+      burst(v, t, 'pink', 'lowpass', 1200, 0.8, 0.45 * k, 0.14);
+      thump(v, t, 115, 40, 0.14, 0.9 * k, 0.34);
+    },
+  },
+
   /** player:guardBreak — crunch: saturated fracture + crackle, a bent falling clank, heavy thump. */
   guardBreak: {
     prio: 6, rev: 0.3, gap: 0.3,

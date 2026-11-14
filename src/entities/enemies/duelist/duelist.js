@@ -3,7 +3,7 @@ import { CONFIG } from '../../../core/config.js';
 import { clamp, wrapAngle } from '../../../core/math.js';
 import { markCaster } from '../../../render/pipeline.js';
 import { batchRigid } from '../../../render/rigidBatch.js';
-import { TELL, RESULT, POSTURE, tellDefaults } from '../../../combat/rules.js';
+import { TELL, RESULT, POSTURE, DEFENSE, tellDefaults } from '../../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, LEAN, HERO_SCALE } from '../../player/model.js';
 import { HeroAnimator } from '../../player/anim.js';
 import { perPhase } from './realise.js';
@@ -43,6 +43,8 @@ const TARGETABLE = new Set(['waking', 'combat', 'staggered', 'airborne']);
 // shown `thrust` s back and set `aside` m off the hero.
 const CONTACT = { max: 0.06, steps: 8, clear: 0.34, thrust: 0.022, aside: 0.4 };
 const CONTACT_D = new Float32Array(CONTACT.steps + 1);
+// the trade clash on his side (a kit's TUNING.trade overrides): guard posture × `posture`, he gives `push` m
+const TRADE = { posture: 1.5, push: 0.5 };
 const fin = (v, d = 0) => (Number.isFinite(v) ? v : d);
 /** A move's first real hit's tell (a `pick` beat: its first alternative). */
 const firstTell = (def) => def.beats.map((b) => (Array.isArray(b.pick) ? b.pick[0] : b)).find((b) => !b.feint)?.tell ?? TELL.NORMAL;
@@ -232,6 +234,8 @@ export class Duelist {
         return 0;
       }
     }
+    // the trade clash: the hero's cut connects in the last moment before his own blow would land
+    if (o.swing && !o.exact && !this.broken && this._tradeNow()) return 0;
     const P = this.T.parts;
     const part = P[o.part] !== undefined ? o.part : 'body';
     const broken = this.broken;
@@ -342,6 +346,68 @@ export class Duelist {
     if (last) this.brain.startReact('recoil');
   }
 
+  /**
+   * The hero's cut connects (takeHit) while his own blow is on its way: a blade's beat (not red, not
+   * a feint, a cast or a thrown thing) at most DEFENSE.trade.window s from its impact, the hero in
+   * his front. The two cuts meet: the beat is spent (it never lands), his timeline skips to its
+   * impact, the hero draws the clash (player.onTrade) and he answers as to any trade (onClashed).
+   * True if it was a trade.
+   */
+  _tradeNow() {
+    const br = this.brain, a = br.act, p = this.game.player;
+    if (this.mode !== 'act' || !a || a.def.transition || typeof p?.onTrade !== 'function' || !p.canTrade?.() || !this._fromFront()) return false;
+    const b = a.beats.find((x) => !x.done && !x.feint && a.t < x.impact);
+    if (!b || !b.def.zone || b.def.release || b.def.cast || b.def.tell === TELL.RED) return false;
+    if (b.impact - a.t > DEFENSE.trade.window) return false;
+    br.skipTo(b.impact);
+    b.done = true;
+    b.traded = true;
+    a.striking = b;
+    let r = null;
+    try {
+      r = p.onTrade(this, { tell: b.def.tell, attack: a.name, last: !!b.last });
+    } catch (err) {
+      console.error('[duelist] player.onTrade failed', err);
+    }
+    if (!r) return false;
+    this.onClashed({ tell: b.def.tell, beat: b, heavy: r.heavy, crush: r.crush });
+    return true;
+  }
+
+  /**
+   * A trade clash (the hero's cut met his blow; hitPlayer on RESULT.CLASHED, or _tradeNow). Guard
+   * posture × TUNING.trade.posture, he is jarred and gives ground. A string goes on (the blade
+   * rebounds, as from a deflect); its last blow, or a single strike, ends in the short 'clash'
+   * reaction: no punish window (only a parry earns that). A cleave that crushes (`crush`) beats his
+   * blow aside and staggers him.
+   */
+  onClashed(info = {}) {
+    if (this.mode === 'dying' || this.mode === 'dead') return;
+    if (this.time - this._lastParry < 0.1) return;
+    this._lastParry = this.time;
+    const p = this.game.player, a = this.brain.act, b = info.beat ?? a?.striking ?? null;
+    const heavy = info.heavy ?? !!p?.atk?.def?.heavy;
+    const crush = info.crush ?? (heavy && fin(p?.atk?.poise) >= this.T.guard.crushPoise);
+    const TR = this.T.trade ?? TRADE;
+    this.flash = Math.max(this.flash, 0.5);
+    this.jolt = Math.max(this.jolt, heavy ? 0.9 : 0.7);
+    this.addPosture((heavy ? this.T.posture.guard.heavy : this.T.posture.guard.light) * TR.posture);
+    if (this.mode !== 'act' || !a) return; // (the trade broke his posture, or the move is gone)
+    if (crush) {
+      this.emit('dragon:stagger');
+      this.brain.startReact('stagger');
+      return;
+    }
+    const pp = p?.position;
+    if (pp) {
+      const dx = this.position.x - pp.x, dz = this.position.z - pp.z, l = Math.hypot(dx, dz) || 1;
+      if (b && !b.last && a.hits > 1) this.moveBy((dx / l) * TR.push * 0.6, (dz / l) * TR.push * 0.6);
+    }
+    if (!b || b.last || a.hits <= 1) {
+      if (this.brain.startReact('clash') && this.brain.react) this.brain.react.travel = -TR.push;
+    }
+  }
+
   /** The blade lock is decided (player.js _endLock). Won by the hero: he reels, a cinematic moment;
    *  lost: he shoves the hero back and comes straight in with the Riposte. */
   onLockEnd(won) {
@@ -386,8 +452,10 @@ export class Duelist {
    * posed there (brain.setBack: the freeze-frame holds it; a blow that is only deflected then
    * rebounds off the guard) and returns the blade: { ax … bz: hilt → tip, vx vy vz: the way the tip
    * was travelling } in drawn space. `chest`: the hero's chest (drawn). null without a blade.
+   * `blade` ({ a, b }: the hero's own blade, in a trade clash): the pose is the clear one in which
+   * the two blades are nearest.
    */
-  parryContact(chest, last = true) {
+  parryContact(chest, last = true, blade = null) {
     if (!this._tipOk || !chest) return null;
     const B = this._blade, h = this._hilt, t = this._tip;
     // the way the tip is going (this frame's travel, before any stepping back)
@@ -408,6 +476,19 @@ export class Duelist {
       }
       let k = kmin;
       while (k < N && ds[k] < CONTACT.clear) k++;
+      if (blade && ds[k] >= CONTACT.clear) {
+        // a trade clash: the hero's own blade is in the air. Of the clear poses before the crossing,
+        // the one in which the two blades are nearest
+        let best = Infinity;
+        for (let j = k; j <= N; j++) {
+          this._poseAt(t1 - (j / N) * CONTACT.max);
+          const g = closestOnSegments(h, t, blade.a, blade.b, C[2], C[3]);
+          if (g < best - 0.01) {
+            best = g;
+            k = j;
+          }
+        }
+      }
       let off = (k / N) * CONTACT.max;
       if (ds[k] < CONTACT.clear) {
         // a thrust down his centre line: the guard sets it aside. He is turned so its line passes
@@ -715,6 +796,7 @@ export class Duelist {
       console.error('[disciple] player.takeHit failed', err);
       return RESULT.IGNORED;
     }
+    if (r === RESULT.CLASHED) this.onClashed({ tell, beat: o.beat ?? null });
     if (r === RESULT.PARRIED) {
       if (o.crescent || o.projectile) {
         // a thrown thing (sword qi, a bolt, a hurled stone): the parry spends it and nicks his posture

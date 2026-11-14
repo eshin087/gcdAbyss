@@ -705,6 +705,11 @@ export class AudioEngine {
     on('dragon:attack', (d) => {
       if (beast() && !RX_OWN_SOUND.test(String(d.name || ''))) this.play('dragonSwipe', this._atDragon());
     });
+    // two cuts meet (the trade clash)
+    on('combat:clash', (d) => {
+      this.charge?.stop(0.05);
+      this.play('trade', { heavy: !!d?.heavy });
+    });
     // his guard: a dry clack when he holds the strike, a harsh falling clang when he beats it away
     on('dragon:guard', (d) => this.play(d?.deflect ? 'deflected' : 'guard', { heavy: !!d?.heavy }));
     on('dragon:step', (d) => this.play('dragonStep', d));

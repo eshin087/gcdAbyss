@@ -94,6 +94,12 @@ export const TUNE = {
   bounceDur: 0.42,
   bounceAttack: 0.28,
   bouncePush: 0.9, // m
+  // the trade clash (DEFENSE.trade: his blow meets the hero's own cut): both blades thrown back, the
+  // hero `tradePush` m (the same bounce: the next blow of a string cannot be traded too, it must be
+  // guarded or dodged); a freeze of tradeStop s (a heavy cut: × 1.2), a camera punch
+  tradePush: 0.55,
+  tradeStop: 0.12,
+  tradePunch: 3.2,
   // the blade lock (startBladeLock): the two close to `lockDist` m, blades crossed between them
   // (the hero's grip follows the crossing, `lockFit` of the gap a frame); the pair slides `lockSlide`
   // m toward whoever is losing over the meter's whole range
@@ -207,6 +213,7 @@ export class Player {
     // (high < 0), the grip moved (nx, ny, nz, body axes, model metres) until the two blades touch
     this.deflect = { n: 0, t: -Infinity, side: 1, perfect: false, high: 0, nx: 0, ny: 0, nz: 0, gap0: 0, gap: 0 };
     this._cp = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    this.tradeT = -Infinity; // when the last trade clash was (DEFENSE.trade.rearm)
     this.guardHold = 0; // 0..1: the guard lingers between parries (anim.js)
     this.bladeLock = null; // { att, meter, push, decay, dur } while blades are locked (startBladeLock)
 
@@ -355,6 +362,11 @@ export class Player {
       this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN, !!hit.light, perfect, hit);
       return RESULT.PARRIED;
     }
+    // (d2) the trade clash: a blade's blow that arrives in the hero's own cut meets it
+    if (hit.steel && parryable && attacker && this._cutting() && this._inArc(DEFENSE.parryArc, hasFrom, fx, fz, hasAtk ? ap : null)) {
+      this._trade(attacker, { tell, attack, last: hit.last !== false });
+      return RESULT.CLASHED;
+    }
     // (e) block / (f) guard break
     if (this.blocking && this._inArc(DEFENSE.blockArc, hasFrom, fx, fz, hasAtk ? ap : null)) {
       if (blockable) {
@@ -495,6 +507,7 @@ export class Player {
     this.ghostFx = 0;
     this.pl.att = null;
     this.pl.phase = PL.VANISH;
+    this.tradeT = -Infinity;
     this.deflect.n = 0;
     this.deflect.t = -Infinity;
     this.deflect.perfect = false;
@@ -1001,68 +1014,9 @@ export class Player {
     this.blockStunT = 0;
     // light: a deflected bullet (hit.light). The same clash, without the weight of a claw behind it
     this._setKb(nx, nz, TUNE.deflectPush * (tell === TELL.BLUE ? 1.6 : 1) * (light ? 0.25 : 1));
-    // the blow's steel (a duelist's blade, held where it met the guard: attacker.parryContact):
-    // which side of the hero it is on, how high
-    const C = this._cp, cv = this._v;
-    this.getChestPos(cv, true);
-    const att = hit?.attacker;
-    let B = null;
-    if (!light && hit?.steel && typeof att?.parryContact === 'function') {
-      try {
-        B = att.parryContact(cv, hit.last !== false);
-      } catch (err) {
-        console.error('[player] attacker.parryContact failed', err);
-      }
-    }
-    if (B) {
-      // the point of his blade nearest the hero's chest (from mid-blade to the tip)
-      C[0].set(B.ax + (B.bx - B.ax) * 0.4, B.ay + (B.by - B.ay) * 0.4, B.az + (B.bz - B.az) * 0.4);
-      C[1].set(B.bx, B.by, B.bz);
-      closestOnSegments(C[0], C[1], cv, cv, C[2], C[3]);
-      // (+x of the body is his left: left = (cos yaw, −sin yaw))
-      const lat = (C[2].x - cv.x) * Math.cos(this.yaw) - (C[2].z - cv.z) * Math.sin(this.yaw);
-      if (Math.abs(lat) > 0.06) D.side = lat < 0 ? 1 : -1;
-      // above the chest: the overhead ward (high 0..1); below it: the hanging parry (high −1..0)
-      const dy = C[2].y - cv.y;
-      D.high = dy >= 0 ? smoothstep(0.12, 0.42, dy) : -smoothstep(0.12, 0.42, -dy);
-    }
-    this.object3d.rotation.y = this.yaw;
-    this._enter('parry', 'parry', 0); // no cross-fade: the contact pose IS this frame (it is frozen)
-    this._poseNow();
-    // the clash: on the crossing of the two blades; without his blade, in front of the guard toward
-    // the blow, on the side the blade snapped to
-    let e1 = null, e2 = null, spray = null, met = false;
-    if (B && this.sweep.valid) {
-      const sw = this.sweep;
-      let gap = closestOnSegments(sw.a, sw.b, C[0], C[1], C[2], C[3]);
-      D.gap0 = gap;
-      if (gap > 0.04) {
-        // move the grip by the gap (body axes: x his left, z ahead; model metres) and pose again
-        const S = this.drawScale || 1, c = Math.cos(this.yaw), sn = Math.sin(this.yaw);
-        const gx = C[3].x - C[2].x, gy = C[3].y - C[2].y, gz = C[3].z - C[2].z;
-        D.nx = clamp((gx * c - gz * sn) / S, -0.34, 0.34);
-        D.ny = clamp(gy / S, -0.34, 0.34);
-        D.nz = clamp((gx * sn + gz * c) / S, -0.3, 0.34);
-        this._poseNow();
-        gap = closestOnSegments(sw.a, sw.b, C[0], C[1], C[2], C[3]);
-      }
-      D.gap = gap; // (gap0 → gap: how far apart the blades were before / after the nudge, m)
-      // (still apart: his blade is out of the arm's reach; the sparks sit on the hero's steel)
-      const w = gap < 0.5 ? 0.5 : 0;
-      cv.set(C[2].x + (C[3].x - C[2].x) * w, C[2].y + (C[3].y - C[2].y) * w, C[2].z + (C[3].z - C[2].z) * w);
-      e1 = C[0].set(sw.b.x - sw.a.x, sw.b.y - sw.a.y, sw.b.z - sw.a.z);
-      e2 = C[1].set(B.bx - B.ax, B.by - B.ay, B.bz - B.az);
-      // the turned blade's way: where its point was going, thrown back off the guard and up
-      if (Number.isFinite(B.vx + B.vy + B.vz) && B.vx * B.vx + B.vy * B.vy + B.vz * B.vz > 1e-6) {
-        const vl = Math.hypot(B.vx, B.vy, B.vz);
-        spray = C[2].set(B.vx / vl + nx * 0.6, B.vy / vl + 0.25, B.vz / vl + nz * 0.6);
-      }
-      met = true;
-    } else {
-      cv.x += -nx * 0.42 + nz * D.side * 0.12;
-      cv.z += -nz * 0.42 - nx * D.side * 0.12;
-      if (!Number.isFinite(cv.x + cv.y + cv.z)) this._bladePoint(0.62, cv);
-    }
+    // the blow's steel is met (a duelist's blade: _meetBlade); else the clash sits in front of the guard
+    const M = this._meetBlade(!light && hit?.steel ? hit.attacker : null, hit?.last !== false, nx, nz);
+    const cv = this._v, e1 = M.e1, e2 = M.e2, spray = M.spray, met = M.met;
     const last = hit?.last !== false; // (a string's non-final blow says `last: false`)
     const big = tell === TELL.BLUE;
     const ret = light && !!perfect; // a bullet sent back (bullets.js reads deflect.perfect)
@@ -1087,6 +1041,80 @@ export class Player {
     this._emit('player:parry', { tell, attack, chain: D.n, light, perfect: !!perfect, last });
   }
 
+  /**
+   * Lay the hero's blade on the blow's (a parry, a trade clash). `att`: an attacker that can say
+   * where its blade met the guard (parryContact; null: none: the wyrm's claws, a bullet). The deflect
+   * pose is taken on the blade's side (deflect.side), raised for a blow from above or hung for a low
+   * cut (deflect.high), posed at once with no cross-fade (state 'parry': the freeze holds this
+   * frame), and the grip nudged (deflect.nx / ny / nz) until the two blades touch. Leaves the clash's
+   * point in this._v and returns { met, e1, e2 (the two blades' directions), spray (the turned
+   * blade's way) }. (nx, nz) = from the blow toward the hero.
+   */
+  _meetBlade(att, last, nx, nz) {
+    const D = this.deflect, M = this._met ?? (this._met = { met: false, e1: null, e2: null, spray: null });
+    M.met = false;
+    M.e1 = M.e2 = M.spray = null;
+    const C = this._cp, cv = this._v;
+    this.getChestPos(cv, true);
+    let B = null;
+    if (typeof att?.parryContact === 'function') {
+      try {
+        B = att.parryContact(cv, last);
+      } catch (err) {
+        console.error('[player] attacker.parryContact failed', err);
+      }
+    }
+    if (B) {
+      // the point of his blade nearest the hero's chest (from mid-blade to the tip)
+      C[0].set(B.ax + (B.bx - B.ax) * 0.4, B.ay + (B.by - B.ay) * 0.4, B.az + (B.bz - B.az) * 0.4);
+      C[1].set(B.bx, B.by, B.bz);
+      closestOnSegments(C[0], C[1], cv, cv, C[2], C[3]);
+      // (+x of the body is his left: left = (cos yaw, −sin yaw))
+      const lat = (C[2].x - cv.x) * Math.cos(this.yaw) - (C[2].z - cv.z) * Math.sin(this.yaw);
+      if (Math.abs(lat) > 0.06) D.side = lat < 0 ? 1 : -1;
+      // above the chest: the overhead ward (high 0..1); below it: the hanging parry (high −1..0)
+      const dy = C[2].y - cv.y;
+      D.high = dy >= 0 ? smoothstep(0.12, 0.42, dy) : -smoothstep(0.12, 0.42, -dy);
+    }
+    this.object3d.rotation.y = this.yaw;
+    this._enter('parry', 'parry', 0); // no cross-fade: the contact pose IS this frame (it is frozen)
+    this._poseNow();
+    // the clash: on the crossing of the two blades; without his blade, in front of the guard toward
+    // the blow, on the side the blade snapped to
+    if (B && this.sweep.valid) {
+      const sw = this.sweep;
+      let gap = closestOnSegments(sw.a, sw.b, C[0], C[1], C[2], C[3]);
+      D.gap0 = gap;
+      if (gap > 0.04) {
+        // move the grip by the gap (body axes: x his left, z ahead; model metres) and pose again
+        const S = this.drawScale || 1, c = Math.cos(this.yaw), sn = Math.sin(this.yaw);
+        const gx = C[3].x - C[2].x, gy = C[3].y - C[2].y, gz = C[3].z - C[2].z;
+        D.nx = clamp((gx * c - gz * sn) / S, -0.34, 0.34);
+        D.ny = clamp(gy / S, -0.34, 0.34);
+        D.nz = clamp((gx * sn + gz * c) / S, -0.3, 0.34);
+        this._poseNow();
+        gap = closestOnSegments(sw.a, sw.b, C[0], C[1], C[2], C[3]);
+      }
+      D.gap = gap; // (gap0 → gap: how far apart the blades were before / after the nudge, m)
+      // (still apart: his blade is out of the arm's reach; the sparks sit on the hero's steel)
+      const w = gap < 0.5 ? 0.5 : 0;
+      cv.set(C[2].x + (C[3].x - C[2].x) * w, C[2].y + (C[3].y - C[2].y) * w, C[2].z + (C[3].z - C[2].z) * w);
+      M.e1 = C[0].set(sw.b.x - sw.a.x, sw.b.y - sw.a.y, sw.b.z - sw.a.z);
+      M.e2 = C[1].set(B.bx - B.ax, B.by - B.ay, B.bz - B.az);
+      // the turned blade's way: where its point was going, thrown back off the guard and up
+      if (Number.isFinite(B.vx + B.vy + B.vz) && B.vx * B.vx + B.vy * B.vy + B.vz * B.vz > 1e-6) {
+        const vl = Math.hypot(B.vx, B.vy, B.vz);
+        M.spray = C[2].set(B.vx / vl + nx * 0.6, B.vy / vl + 0.25, B.vz / vl + nz * 0.6);
+      }
+      M.met = true;
+    } else {
+      cv.x += -nx * 0.42 + nz * D.side * 0.12;
+      cv.z += -nz * 0.42 - nx * D.side * 0.12;
+      if (!Number.isFinite(cv.x + cv.y + cv.z)) this._bladePoint(0.62, cv);
+    }
+    return M;
+  }
+
   /** Pose the body NOW (outside the frame's own animator step): an impact's contact pose must be on
    *  screen in the frame the freeze holds, and the blade's points read from it. */
   _poseNow() {
@@ -1107,7 +1135,14 @@ export class Player {
     const a = this.atk;
     if (a) a.guarded = true;
     if (!o.deflect || this.state === 'plunge' || this.state === 'lock' || a?.exec) return;
-    const ap = o.attacker?.position, p = this.position;
+    this._bounce(o.attacker, TUNE.bouncePush);
+    this._emit('player:bounced', { heavy: !!o.heavy });
+  }
+
+  /** The blade is thrown back and he gives `push` m, away from `att`: the bounce (state 'bounce': a
+   *  guard or a dodge cancels it at once, an attack after TUNE.bounceAttack). */
+  _bounce(att, push) {
+    const ap = att?.position, p = this.position;
     let nx = -Math.sin(this.yaw), nz = -Math.cos(this.yaw);
     if (ap && Number.isFinite(ap.x + ap.z)) {
       const dx = p.x - ap.x, dz = p.z - ap.z, l = Math.hypot(dx, dz);
@@ -1122,10 +1157,99 @@ export class Player {
     this.releaseK = 0;
     this.lmb.held = false;
     if (this.buf.action === 'light') this.buf.action = null;
-    this._setKb(nx, nz, TUNE.bouncePush);
+    this._setKb(nx, nz, push);
     this._enter('bounce', 'bounce', 0.04);
     this.anim.kickCoat(0.5, this.anim.noise);
-    this._emit('player:bounced', { heavy: !!o.heavy });
+  }
+
+  /** Is the hero's own cut in the air right now (DEFENSE.trade: its active frames, a few
+   *  hundredths either side) and not yet landed? A blade's blow that arrives now meets it. */
+  _cutting() {
+    const a = this.atk;
+    if (!this.canTrade() || a.pending) return false;
+    if (a.hit && !a.guarded) return false; // it already bit: a plain trade of blows, as before
+    const T = DEFENSE.trade, W = a.def.windup;
+    return a.t >= W - T.early && a.t <= W + a.def.active + T.late;
+  }
+
+  /** Could a swing of the hero's meet a blow right now? He is swinging (not the execution), and the
+   *  last trade clash is DEFENSE.trade.rearm s behind him. */
+  canTrade() {
+    const a = this.atk;
+    if (!this.alive || !a || a.exec || !a.def || (this.state !== 'attack' && this.state !== 'heavy')) return false;
+    return this.time - this.tradeT >= DEFENSE.trade.rearm;
+  }
+
+  /**
+   * The trade clash (DEFENSE.trade): the hero's cut and a duelist's blow at the same moment. Neither
+   * lands. The attacker is held where his blade met the hero (attacker.parryContact), the hero's cut
+   * is stopped on it (_meetBlade: the contact pose of a parry), the clash is drawn on that crossing
+   * (white-hot, two rings), the frame freezes, and the hero's blade is thrown back (the bounce). A
+   * full cleave (`crush`: its posture reaches the attacker's TUNING.guard.crushPoise) is not thrown
+   * back: it beats his blow aside and carries on.
+   * Called from takeHit (his blow arrives in the hero's cut) and by the attacker (onTrade: the hero's
+   * cut connects just before his blow would land). Emits 'combat:clash'. Returns { heavy, crush }.
+   */
+  _trade(att, o = {}) {
+    const g = this.game, a = this.atk, sw = this.sweep, D = this.deflect;
+    const heavy = !!a?.def?.heavy;
+    const crush = heavy && fin(a?.poise) >= fin(att?.T?.guard?.crushPoise, Infinity);
+    if (a) a.traded = true;
+    this.tradeT = this.time;
+    const C = this._cp, cv = this._v, p = this.position, ap = att?.position;
+    let nx = -Math.sin(this.yaw), nz = -Math.cos(this.yaw);
+    if (ap && Number.isFinite(ap.x + ap.z)) {
+      const dx = p.x - ap.x, dz = p.z - ap.z, l = Math.hypot(dx, dz);
+      if (l > 1e-3) {
+        nx = dx / l;
+        nz = dz / l;
+      }
+    }
+    let e1 = null, e2 = null;
+    if (crush) {
+      // the cleave keeps its line: his blade is held where it is nearest the hero's
+      this.getChestPos(cv, true);
+      let B = null;
+      if (typeof att?.parryContact === 'function') {
+        try {
+          B = att.parryContact(cv, o.last !== false, sw.valid ? sw : null);
+        } catch (err) {
+          console.error('[player] attacker.parryContact failed', err);
+        }
+      }
+      if (B && sw.valid) {
+        C[0].set(B.ax, B.ay, B.az);
+        C[1].set(B.bx, B.by, B.bz);
+        D.gap = closestOnSegments(sw.a, sw.b, C[0], C[1], C[2], C[3]);
+        cv.set((C[2].x + C[3].x) / 2, (C[2].y + C[3].y) / 2, (C[2].z + C[3].z) / 2);
+        e1 = C[0].set(sw.b.x - sw.a.x, sw.b.y - sw.a.y, sw.b.z - sw.a.z);
+        e2 = C[1].set(B.bx - B.ax, B.by - B.ay, B.bz - B.az);
+      } else if (sw.valid) sw.point(0.7, cv);
+    } else {
+      // the cut is stopped ON his blade: the deflect's contact pose (as in a parry), which the
+      // bounce then throws back. (His blade is low and the hero's cut high as often as not: left
+      // in their swing poses the two were 0.7 m apart in the frozen frame.)
+      this.yaw = Math.atan2(-nx, -nz);
+      D.side = 1;
+      D.high = D.nx = D.ny = D.nz = 0;
+      const M = this._meetBlade(att, o.last !== false, nx, nz);
+      e1 = M.e1;
+      e2 = M.e2;
+    }
+    clashBurst(g, cv.x, Math.max(0.75, cv.y), cv.z, { pal: CLASH.trade, power: heavy ? 1.6 : 1.35, e1, e2, ring: 2 });
+    this._hitstop(TUNE.tradeStop * (heavy ? 1.2 : 1), 0.02);
+    g.shake?.(heavy ? 0.5 : 0.4);
+    g.punch?.(TUNE.tradePunch);
+    this._emit('combat:clash', { heavy, crush, x: cv.x, y: cv.y, z: cv.z });
+    if (!crush) this._bounce(att, TUNE.tradePush);
+    return { heavy, crush };
+  }
+
+  /** The attacker's side of a trade it resolved itself (the hero's cut connected just before its
+   *  blow would have landed): the same clash. Returns { heavy, crush } or null (no cut in the air). */
+  onTrade(att, o = {}) {
+    if (!this.canTrade()) return null;
+    return this._trade(att, o);
   }
 
   _tickBounce() {
@@ -2486,12 +2610,13 @@ export class Player {
     const point = { x: h.x, y: h.y, z: h.z };
     let dealt = damage;
     try {
-      const r = dr.takeHit({ damage, part, point, dir, poise: a.poise, heavy, crit });
+      const r = dr.takeHit({ damage, part, point, dir, poise: a.poise, heavy, crit, swing: true });
       if (Number.isFinite(r)) dealt = r;
     } catch (err) {
       console.error('[player] dragon.takeHit failed', err);
     }
-    const guarded = !!a.guarded && dealt === 0; // (this.atk may be gone: a deflect bounced him)
+    // (this.atk may be gone: a deflect or a trade clash bounced him)
+    const guarded = (!!a.guarded || !!a.traded) && dealt === 0;
     this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit, kind: d.kind, guarded });
     // turned by a guard: the guard draws the clash and sets its own freeze; no cut, no sparks of his
     if (guarded) return;

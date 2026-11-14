@@ -156,6 +156,8 @@ export class GameFlow {
       // exchange turns, a heavy blow or a perfect parry: brighter); a deflected bullet: none
       if (!d?.light) this.grade.flashPulse(d?.perfect ? 0.55 : d?.tell === 'blue' ? 0.3 : d?.last === false ? 0.12 : 0.22);
     });
+    // two cuts meet (the trade clash): a bright flicker
+    ev?.on('combat:clash', () => this.grade.flashPulse(0.26));
     // a duelist beats the hero's strike away (his counter is coming): the frame flickers too
     ev?.on('dragon:guard', (d) => {
       if (d?.deflect) this.grade.flashPulse(0.25);

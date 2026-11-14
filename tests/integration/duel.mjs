@@ -3,7 +3,7 @@
 // Events) wired like src/main.js for `?level=ash`; the world is a light mock on the real Colliders
 // with the courtyard's ring of pillars. A bot drives the input.
 // usage: node duel.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI)
-//   scenario: levels | data | timing | guard | clash | deflect | ghostep | execute | phase | flow | win | all
+//   scenario: levels | data | timing | guard | clash | trade | deflect | ghostep | execute | phase | flow | win | all
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ui, AUDIO, resetWindow } from './shim.mjs';
@@ -606,6 +606,131 @@ async function scenarioClash() {
   return G;
 }
 
+// ================================================================== scenario: trade
+// (2026-11-14, ADR-082) The trade clash: the hero's cut and his blow at the same moment. Neither lands.
+async function scenarioTrade() {
+  out('\n== scenario TRADE (two cuts at the same moment meet: neither lands) ==');
+  const G = build();
+  duel(G, { dist: 2.0 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  run(G, 0.4);
+  const blow = (o = {}) => p.takeHit({ damage: 20, knockback: 1, tell: TELL.NORMAL, steel: true, last: true, attacker: d, from: { x: d.position.x, z: d.position.z }, attack: 'test', ...o });
+  /** Start a light and run to move time `at` of it (s). */
+  const cutTo = (at) => {
+    settle(G);
+    home(G);
+    place(G, 6); // (out of his reach: the cut is in the air, it meets nothing of its own)
+    run(G, 0.3);
+    input.click(0);
+    run(G, 0.6, null, () => p.state === 'attack' && p.atk && !p.atk.pending && p.atk.t >= at);
+    return p.atk;
+  };
+  // (1) the rule, on the hero: a blade's blow that arrives in his cut meets it
+  let a = cutTo(0.15);
+  let seen = [];
+  G.watch = (n, e) => { if (n === 'combat:clash') seen.push(e); };
+  const hp0 = p.hp;
+  let r = blow();
+  assert(a && r === RESULT.CLASHED && p.hp === hp0 && p.state === 'bounce' && seen.length === 1, `a blow in the hero's cut (${a?.t.toFixed(2)} s into a ${a?.def.windup} + ${a?.def.active} s swing): ${r}, no damage, his blade thrown back (${p.state}), combat:clash`);
+  assert(game.hitstopTimer >= 0.1, `the frame freezes on it (${game.hitstopTimer.toFixed(3)} s)`);
+  // in the windup, in the recovery, from a red blow, from behind: no trade
+  a = cutTo(0.03);
+  r = blow();
+  assert(r === RESULT.HIT, `a blow in his windup (${a?.t.toFixed(2)} s) just lands (${r})`);
+  a = cutTo(0.3);
+  r = blow();
+  assert(r === RESULT.HIT, `... and in his recovery (${a?.t.toFixed(2)} s: ${r})`);
+  a = cutTo(0.15);
+  r = blow({ tell: TELL.RED });
+  assert(r === RESULT.HIT, `a red blow is not met (${r})`);
+  a = cutTo(0.15);
+  r = blow({ steel: false });
+  assert(r === RESULT.HIT, `nor a blow that is not a blade's (${r})`);
+  a = cutTo(0.15);
+  r = blow({ from: { x: p.position.x - Math.sin(p.yaw) * 2, z: p.position.z - Math.cos(p.yaw) * 2 }, attacker: { position: { x: p.position.x - Math.sin(p.yaw) * 2, z: p.position.z - Math.cos(p.yaw) * 2 } } });
+  assert(r === RESULT.HIT, `nor one from behind him (${r})`);
+  G.watch = null;
+  p.debug.heal();
+  // (2) in the duel: a cut timed into the first blow of a string
+  const tradeInto = (mv, lead, after = null) => {
+    settle(G, 8);
+    home(G);
+    place(G, 2.0);
+    run(G, 0.3);
+    p.debug.heal();
+    const ev = [];
+    G.watch = (n, e) => { if (n === 'combat:clash') ev.push('clash'); if (n === 'player:hurt') ev.push('hurt'); if (n === 'dragon:hurt') ev.push('cut'); if (n === 'player:parry') ev.push('parry'); };
+    d.brain.trigger(mv);
+    let clicked = false;
+    run(G, 4, () => {
+      game.mouseGround.set(d.position.x, 0, d.position.z);
+      const A = d.brain.act, b = A?.beats.find((x) => !x.feint);
+      if (!clicked && b && b.impact - A.t <= lead) { clicked = true; input.click(0); }
+      after?.(ev);
+    }, () => d.mode !== 'act' || ev.includes('clash'));
+    return ev;
+  };
+  const post0 = d.posture, hpH = p.hp, hpD = d.hp;
+  let ev = tradeInto('swallow', 0.19);
+  const striking = d.brain.act?.name;
+  assert(ev.includes('clash') && !ev.includes('hurt') && !ev.includes('cut') && p.hp === hpH && d.hp === hpD, `a cut timed into the first blow of Swallow Flicks: the blades clash, neither is hurt (${ev.join(', ')})`);
+  assert(Math.abs(d.posture - post0 - TUNING.posture.guard.light * TUNING.trade.posture) < 0.5, `it wears his posture by ${TUNING.posture.guard.light * TUNING.trade.posture} (${post0.toFixed(0)} → ${d.posture.toFixed(0)})`);
+  assert(d.mode === 'act' && striking === 'swallow' && p.state === 'bounce', `the string goes on and the hero's blade is thrown back (${d.mode} ${striking}; hero ${p.state})`);
+  // mashing attack does not trade the next blow: the bounce holds the blade
+  const h0 = G.hits.length;
+  G.watch = null;
+  run(G, 1.2, () => { game.mouseGround.set(d.position.x, 0, d.position.z); if (((game.realTime * 60) | 0) % 6 === 0) input.click(0); }, () => G.hits.length > h0);
+  assert(G.hits.length > h0 && G.hits[h0].r === RESULT.HIT, `mashing attack does not trade the blow that follows: it lands (${G.hits[h0]?.r})`);
+  // ... a guard press out of the bounce does answer it
+  ev = tradeInto('swallow', 0.19);
+  const h1 = G.hits.length;
+  let pressed = false;
+  G.watch = (n) => { if (n === 'combat:flash' && !pressed) pressed = 'due'; };
+  let due = -1;
+  run(G, 1.2, () => {
+    game.mouseGround.set(d.position.x, 0, d.position.z);
+    if (pressed === 'due') { pressed = true; due = game.time + TUNING.flashLead - 0.12; }
+    if (due > 0 && game.time >= due) { due = -1; input.up(2); input.click(2); }
+  }, () => G.hits.length > h1);
+  G.watch = null;
+  assert(ev.includes('clash') && G.hits.length > h1 && G.hits[h1].r === RESULT.PARRIED, `a guard press out of the bounce parries the blow that follows (${G.hits[h1]?.r})`);
+  // (3) a single strike traded ends in the short 'clash' reaction: no punish window
+  ev = tradeInto('plumThrust', 0.19);
+  assert(ev.includes('clash') && d.mode === 'react' && d.brain.react?.kind === 'clash' && d.state === 'combat', `a single strike traded: he is thrown back into his guard, not opened (${d.brain.react?.kind}, state ${d.state})`);
+  // (4) a cut that lands well before his blow is a plain trade of blows, as before
+  ev = tradeInto('fallingAsh', 0.42);
+  run(G, 1.5, () => game.mouseGround.set(d.position.x, 0, d.position.z), () => d.mode !== 'act');
+  assert(!ev.includes('clash') && ev.includes('cut'), `a cut that lands 0.2 s before his blow is not a clash: it bites (${ev.join(', ')})`);
+  G.watch = null;
+  // (5) a full cleave is not thrown back: it beats his blow aside
+  settle(G, 8);
+  home(G);
+  place(G, 6);
+  run(G, 0.3);
+  p.debug.heal();
+  input.press(0);
+  run(G, 1.4);
+  input.up(0);
+  run(G, 0.6, null, () => p.state === 'heavy' && p.atk && p.atk.t >= p.atk.def.windup + 0.02);
+  const inDash = p.state === 'heavy' && p.atk.poise >= TUNING.guard.crushPoise;
+  let crushEv = null;
+  G.watch = (n, e) => { if (n === 'combat:clash') crushEv = e; };
+  r = blow();
+  G.watch = null;
+  assert(inDash && r === RESULT.CLASHED && crushEv?.crush === true && p.state === 'heavy', `a full cleave (posture ${p.atk?.poise ?? '?'}) beats his blow aside and carries on (${r}, crush ${crushEv?.crush}, hero ${p.state})`);
+  settle(G, 8);
+  home(G);
+  place(G, 2.2);
+  run(G, 0.3);
+  d.brain.trigger('fallingAsh');
+  run(G, 0.3);
+  d.onClashed({ tell: TELL.BLUE, heavy: true, crush: true });
+  assert(d.brain.react?.kind === 'stagger', `... and staggers him (${d.brain.react?.kind})`);
+  settle(G, 8);
+  return G;
+}
+
 // ================================================================== scenario: deflect
 async function scenarioDeflect() {
   out('\n== scenario DEFLECT (a string parried hit by hit, the last recoils him) ==');
@@ -1175,7 +1300,7 @@ async function scenarioProbe() {
   return G;
 }
 
-const SCENARIOS = { probe: scenarioProbe, moments: scenarioMoments, pressure: scenarioPressure, impact: scenarioImpact, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, clash: scenarioClash, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
+const SCENARIOS = { probe: scenarioProbe, moments: scenarioMoments, pressure: scenarioPressure, impact: scenarioImpact, levels: scenarioLevels, data: scenarioData, timing: scenarioTiming, guard: scenarioGuard, clash: scenarioClash, trade: scenarioTrade, deflect: scenarioDeflect, ghostep: scenarioGhostep, execute: scenarioExecute, phase: scenarioPhase, flow: scenarioFlow, win: scenarioWin };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());

@@ -131,6 +131,7 @@ export class CombatFeed {
     on('player:guardBreak', () => log('Your guard is broken!', 'warn', 'guardBreak', 1));
     // a duelist beat the hero's strike away (his counter is coming)
     on('player:bounced', () => log('Your strike is deflected!', 'warn', 'bounced', 1.5));
+    on('combat:clash', () => log('Blades clash!', 'combat', 'clash', 1));
     on('player:heal', (d) => {
       const amt = Math.round(num(d.amount));
       const left = Math.max(0, Math.round(num(d.flasks, num(game.player?.flasks))));

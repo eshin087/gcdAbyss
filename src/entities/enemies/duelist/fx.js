@@ -135,7 +135,7 @@ export class DuelFx {
       const long = i < 2;
       this._spawn(add, {
         x, y, z, life: long ? 0.24 : 0.18, size: (long ? 0.46 : 0.3) * k, sizeEnd: 0, glyph: GLINT_RAY, rot: SPARKLE_ROT[i], stretch: long ? 3.4 : 1.8,
-        color: [c[0] * 0.95 * k, c[1] * 0.95 * k, c[2] * 0.95 * k], colorEnd: [c[0] * 0.6, c[1] * 0.6, c[2] * 0.6], alpha: 1, alphaEnd: 0.2,
+        color: [c[0] * 0.62 * k, c[1] * 0.62 * k, c[2] * 0.62 * k], colorEnd: [c[0] * 0.4, c[1] * 0.4, c[2] * 0.4], alpha: 1, alphaEnd: 0.2,
       });
     }
     const U = this.game.U, Rg = U?.uCamRight?.value, Up = U?.uCamUp?.value;
@@ -144,9 +144,11 @@ export class DuelFx {
     for (let i = 0; i < n; i++) {
       const a = a0 + (i / n) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a), sp = this.rand(5, 7.5) * k;
       this._spawn(add, {
-        x, y, z, vx: (rx * ca + ux * sa) * sp, vy: (ry * ca + uy * sa) * sp, vz: (rz * ca + uz * sa) * sp,
+        // (born a hand off the centre: eight strokes stacked on the core were a white disc)
+        x: x + (rx * ca + ux * sa) * 0.16, y: y + (ry * ca + uy * sa) * 0.16, z: z + (rz * ca + uz * sa) * 0.16,
+        vx: (rx * ca + ux * sa) * sp, vy: (ry * ca + uy * sa) * sp, vz: (rz * ca + uz * sa) * sp,
         life: this.rand(0.16, 0.24), size: 0.24 * k, sizeEnd: 0.05, glyph: GLINT_RAY, rot: a - Math.PI / 2, stretch: 0.9,
-        color: [c[0] * k, c[1] * k, c[2] * k], colorEnd: [c[0] * 0.25, c[1] * 0.25, c[2] * 0.25], alpha: 1, alphaEnd: 0, drag: 7,
+        color: [c[0] * 0.7 * k, c[1] * 0.7 * k, c[2] * 0.7 * k], colorEnd: [c[0] * 0.25, c[1] * 0.25, c[2] * 0.25], alpha: 1, alphaEnd: 0, drag: 7,
       });
     }
     this._light({ x, y: Math.max(0.9, y), z, color: lightColor(c), intensity: 1.5 * k, radius: 3.2 * k, life: 0.2, fade: 0.18 });

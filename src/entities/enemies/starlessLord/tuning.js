@@ -61,6 +61,7 @@ export const TUNING = {
     evade: 0.5,
     wardLinger: 0.6,
   },
+  trade: { posture: 1.5, push: 0.5 }, // the trade clash (as the Ash Disciple's)
   // duel framing (main.js): the camera eases in within his reach (as the Ash Disciple's)
   camera: { within: 6.5, fade: 4, zoom: -6 },
   flinch: { breakOff: 2, window: 1.6, hitStun: 0.22 },

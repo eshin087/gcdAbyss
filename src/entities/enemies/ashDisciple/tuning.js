@@ -48,6 +48,9 @@ export const TUNING = {
     evade: 0.45, // the chance (once per 3 s) he steps out of a heavy blow levelled at him
     wardLinger: 0.6, // s the guard stays raised after a strike was met
   },
+  // the trade clash (the hero's cut meets his blow, DEFENSE.trade): guard posture × `posture`
+  // (light 12, heavy 30), he gives `push` m
+  trade: { posture: 1.5, push: 0.5 },
   // duel framing (main.js): within `within` m of him the camera eases `zoom` m closer (gone `fade` m
   // further out), so the blades read; the hits punch it in from there
   camera: { within: 6.5, fade: 4, zoom: -6 },
