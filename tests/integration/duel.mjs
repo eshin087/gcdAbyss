@@ -416,7 +416,9 @@ async function scenarioGuard() {
   d.yaw = Math.atan2(-(p.position.x - d.position.x), -(p.position.z - d.position.z)); // facing away
   const hp1 = d.hp;
   input.click(0);
-  run(G, 0.6);
+  // (his back stays turned through the swing: in footwork he faces the hero again within ~0.2 s, and
+  // a light now lands 0.25-0.34 s after the click. The rule under test is the guard's, not his turn)
+  run(G, 0.6, () => { d.yaw = Math.atan2(-(p.position.x - d.position.x), -(p.position.z - d.position.z)); });
   assert(d.hp < hp1, `a swing at his back lands (hp ${hp1} → ${d.hp})`);
   // counters: guarded strikes in a row raise the chance to 100 % by the 4th
   settle(G);
@@ -515,7 +517,8 @@ async function scenarioGhostep() {
   const back0 = -((p.position.x - d.position.x) * Math.sin(d.yaw) + (p.position.z - d.position.z) * Math.cos(d.yaw));
   const trace = [];
   input.click(0);
-  run(G, 0.5, () => trace.push(`${p.state}${p.atk?.hit ? '!' : ''}`));
+  // (the Ghostep's slow motion is still running: 0.9 s of real time is ~0.35 s of the swing's own)
+  run(G, 0.9, () => trace.push(`${p.state}${p.atk?.hit ? '!' : ''}`));
   if (process.env.ABYSS_TRACE) out('     trace', back0.toFixed(2), d.mode, d.brain.act?.name ?? '-', trace.filter((s, i, a) => s !== a[i - 1]).join(' '));
   assert(d.hp < hp0, `a cut at his back after the Ghostep lands (hp ${hp0} → ${d.hp}; ${back0.toFixed(2)} m behind him, ${d.mode})`);
   return G;

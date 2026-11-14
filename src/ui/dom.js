@@ -168,7 +168,7 @@ export function controlsGrid(parent, dev = 'kb') {
 // The touch-controls reference (pause menu on touch devices; src/ui/touch.js).
 export const TOUCH_CONTROLS = [
   ['STICK', 'move · push to the rim: sprint'],
-  ['ATTACK', 'tap: combo · hold: charged thrust'],
+  ['ATTACK', 'tap: combo · hold: charged cleave'],
   ['BLOCK', 'hold: block · tap: parry'],
   ['DODGE', 'roll · perfect dodge = Ghostep'],
   ['FLASK', 'drink flask'],

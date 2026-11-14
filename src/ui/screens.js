@@ -36,7 +36,7 @@ const TITLE_KB_ONLY = ['[@mute] mute', '[F1] lab'];
 // the same list for the touch controls (src/ui/touch.js); shown instead on touch devices
 const TITLE_TOUCH = [
   '[STICK] move · rim: sprint',
-  '[ATTACK] tap: combo · hold: thrust',
+  '[ATTACK] tap: combo · hold: cleave',
   '[BLOCK] hold · tap: parry',
   '[DODGE] roll',
   '[FLASK] heal',

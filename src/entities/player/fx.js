@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { DIM } from './model.js';
 
-// Glyph-particle effects owned by the Wanderer: cyan slash arcs (light sweeps, the slam), the
-// thrust's long streak, the slam's crystal-shard burst, the violet gem's glow + glints, impact
+// Glyph-particle effects owned by the Wanderer: cyan slash arcs (the light swings, the slam, the
+// cleave and its impact), the thrust's long streak, the slam's crystal-shard burst, the violet gem's glow + glints, impact
 // sparks, dust, heal glow, burn flames, hurt spray, and the defence set — parry burst, block
 // sparks, guard-break shards, Ghostep afterimage + streak, charge gather / ready glint, crit-window
 // motes. Every glyph used here is in the world atlas.
@@ -152,12 +152,14 @@ export class PlayerFx {
    * (so a sweep reads as one continuous crescent), and a halftone tail of '+' then '·' snapped to a
    * regular 0.12 m lattice behind it, fading over ~0.3 s. Fills the gap between last frame's blade
    * (pa→pb) and this one's (a→b). kind: 'light' | 'slam' (bigger, denser, longer-lived) |
+   * 'cleave' (the slam's, hanging about twice as long: the charged cut's crescent stays in the air) |
    * 'thrust' (the streak is drawn by thrustStreak; only a thin edge trail here).
    */
   trail(pa, pb, a, b, kind = 'light', crit = false) {
     const fx = this.add;
     if (!fx) return;
-    const heavy = kind === 'slam';
+    const cleave = kind === 'cleave';
+    const heavy = kind === 'slam' || cleave;
     const thrust = kind === 'thrust';
     const along = heavy ? TRAIL_ALONG_HEAVY : thrust ? TRAIL_NONE : TRAIL_ALONG;
     const col = crit ? COL.crit : heavy ? COL.trailHeavy : COL.trail;
@@ -188,7 +190,7 @@ export class PlayerFx {
         fx.spawn({
           x, y, z,
           vx: R(-0.1, 0.1), vy: R(0, 0.15), vz: R(-0.1, 0.1),
-          life: (outer ? R(0.1, 0.14) : R(0.12, 0.2)) * (heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
+          life: (outer ? R(0.1, 0.14) : R(0.12, 0.2)) * (cleave ? 2.2 : heavy ? 1.35 : 1), size, sizeEnd: size * 0.4,
           glyph: outer ? 'A8' : moving ? ')|' : '-~', rot: moving ? alongRot(dx, dy, dz) : R(-0.4, 0.4),
           stretch: moving && !outer ? Math.min(3, (step / size) * 1.1) : 0,
           color: outer && !crit ? COL.trailCore : col, colorEnd: COL.trailEnd,
@@ -207,13 +209,13 @@ export class PlayerFx {
       const L = LATTICE;
       fx.spawn({
         x: Math.round(x / L) * L, y: Math.round(y / L) * L, z: Math.round(z / L) * L,
-        life: R(0.25, 0.35) * (heavy ? 1.2 : 1), size: f > 0.8 ? 0.12 : 0.1, sizeEnd: 0.05,
+        life: R(0.25, 0.35) * (cleave ? 1.8 : heavy ? 1.2 : 1), size: f > 0.8 ? 0.12 : 0.1, sizeEnd: 0.05,
         glyph: f > 0.8 ? '+' : '·', color: col, colorEnd: COL.trailEnd, alpha: 0.85, alphaEnd: 0,
       });
     }
   }
 
-  /** The charged thrust's long cyan beam along the point's path (from → to, world): a thin
+  /** A thrust's (the execution's, the plunge's) long cyan beam along the point's path (from → to, world): a thin
    *  white-cyan core of '-' / '=' laid along the line with a '·' halo, lingering as one line behind
    *  the lunge; k = charge 0..1. */
   thrustStreak(from, to, k = 0, crit = false) {
@@ -364,6 +366,28 @@ export class PlayerFx {
       glyph: '*', color: crit ? COL.ghostCore : COL.flash, colorEnd: c0, alpha: 1, alphaEnd: 0, rot: R(0, 3),
     });
     this._light({ x, y, z, color: crit ? [0.6, 0.8, 1.2] : [1, 0.8, 0.5], intensity: heavy || crit ? 3.5 : 2.4, radius: heavy ? 6 : 4.5, life: 0.16, fade: 0.14 });
+  }
+
+  /**
+   * The charged cleave bites: a ring bursting out of the contact in the camera's plane, a fan of long
+   * cyan-white streaks thrown on along the cut's way (dx, dz), and a cold flash of light; k = charge.
+   */
+  cleaveImpact(x, y, z, dx, dz, k = 0, crit = false) {
+    const fx = this.add;
+    if (!fx || !Number.isFinite(x + y + z)) return;
+    this.shockwave(x, y, z, k > 0.5);
+    const c0 = crit ? COL.crit : COL.trailCore, c1 = crit ? COL.critEnd : COL.trailEnd;
+    const base = Math.atan2(dz, dx), n = 10 + Math.round(8 * k);
+    for (let i = 0; i < n; i++) {
+      const a = base + R(-1.1, 1.1), sp = R(7, 14) * (1 + 0.3 * k);
+      const vx = Math.cos(a) * sp, vz = Math.sin(a) * sp, vy = R(-1, 5);
+      fx.spawn({
+        x, y, z, vx, vy, vz,
+        life: R(0.16, 0.3), size: R(0.2, 0.3), sizeEnd: 0.05, glyph: '-=', rot: alongRot(vx, vy, vz) + Math.PI / 2, stretch: 2.2,
+        color: c0, colorEnd: c1, alpha: 1, alphaEnd: 0, drag: 3.5,
+      });
+    }
+    this._light({ x, y, z, color: crit ? [0.6, 0.8, 1.3] : [0.55, 0.85, 1.25], intensity: 4 + 2 * k, radius: 7, life: 0.2, fade: 0.18 });
   }
 
   /** Charged heavy's release: a short ground gust ring of dust and glints around the feet. */

@@ -6,7 +6,7 @@ import { batchRigid } from '../../render/rigidBatch.js';
 import { TELL, RESULT, DEFENSE, tellDefaults, facingDelta } from '../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, LEAN, PLAYER_SCALE, BLADE_BASE } from './model.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
-import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CHARGE, REACH, thrustStats, bandHit, SwordSweep } from './combat.js';
+import { LIGHT, SPRINT_ATK, ROLL_ATK, THRUST, CLEAVE, CHARGE, REACH, chargeStats, bandHit, SwordSweep } from './combat.js';
 import { PlayerFx } from './fx.js';
 
 // The Wanderer. Owns input → state machine → movement/collision → animation → sword hits → FX.
@@ -1339,7 +1339,7 @@ export class Player {
     if (!dp) return false;
     const dist = Math.hypot(dp.x - p.x, dp.z - p.z);
     if (!(dist <= fin(d.execRange, 3.2))) return false;
-    this._releaseThrust(CHARGE.full);
+    this._startHeavy(THRUST, chargeStats(CHARGE.full, THRUST));
     this.yaw = Math.atan2(dp.x - p.x, dp.z - p.z);
     this.object3d.rotation.y = this.yaw;
     this.atk.exec = d;
@@ -1735,7 +1735,7 @@ export class Player {
   /** A swing really starts (a held light only once it is released): announce it, glint the gem. */
   _swingStarted(def, charge) {
     this._emit('player:attack', { kind: def.kind, combo: def.combo, charge });
-    if (def.kind !== 'light') this.anim.kickCoat(def.kind === 'thrust' ? 0.5 + 0.5 * charge : 0.45);
+    if (def.kind !== 'light') this.anim.kickCoat(def.dash ? 0.5 + 0.5 * charge : 0.45);
     this.rig.gem.getWorldPosition(this._gem);
     const gv = this.gemVel;
     this.fx.gemGlint(this._gem.x, this._gem.y, this._gem.z, def.kind === 'light' ? 0.6 : 1, gv.x, gv.z, gv.y);
@@ -1744,7 +1744,7 @@ export class Player {
   _startCharge() {
     this.atk = null;
     if (this.buf.action === 'light') this.buf.action = null;
-    this.chargeK = thrustStats(this.lmb.t).k;
+    this.chargeK = chargeStats(this.lmb.t).k;
     this.chargeFull = false;
     this._enter('charge', 'charge', 0.16);
     this._emit('player:charge', { t: Math.max(0.25, CHARGE.full - this.lmb.t) });
@@ -1757,7 +1757,7 @@ export class Player {
       this._toLoco(0.14); // pause / cutscene mid-charge: drop it rather than fire it
       return;
     }
-    const st = thrustStats(L.t);
+    const st = chargeStats(L.t);
     this.chargeK = st.k;
     if (st.k >= 1 && !this.chargeFull) {
       this.chargeFull = true;
@@ -1765,7 +1765,7 @@ export class Player {
       this.fx.chargeReady(this._v.x, this._v.y, this._v.z, this.position.x, this.position.z);
     }
     if (!L.held) {
-      this._releaseThrust(L.t);
+      this._releaseCharge(L.t);
       return;
     }
     if (this.buf.action === 'roll') {
@@ -1781,18 +1781,22 @@ export class Player {
     this.yaw = dampAngle(this.yaw, this._aimYaw(moveYaw), TUNE.turnRate, dt);
   }
 
-  /** Release the charge: a lunging thrust whose travel, damage and posture grow with the charge. */
-  _releaseThrust(holdT) {
-    const st = thrustStats(holdT);
+  /** Release the charge: the dashing cleave, whose travel, damage and posture grow with the charge. */
+  _releaseCharge(holdT) {
+    this._startHeavy(CLEAVE, chargeStats(holdT, CLEAVE));
+  }
+
+  /** Start a dashing heavy (`def.dash`: the cleave, the execution's thrust) with `st` = chargeStats. */
+  _startHeavy(def, st) {
     this.atk = {
-      def: THRUST, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, pending: false,
+      def, t: 0, hit: false, prevT: 0, gust: false, impact: false, flared: false, pending: false,
       lunge: 0, travel: st.travel, damage: st.damage, poise: st.poise, charge: st.k,
     };
     this.releaseK = st.k;
     this.chargeK = 0;
     this.yaw = this._aimYaw(this.yaw);
-    this._enter('heavy', 'attack', THRUST.windup * 0.9, true);
-    this._swingStarted(THRUST, st.k);
+    this._enter('heavy', 'attack', def.windup * 0.9, true);
+    this._swingStarted(def, st.k);
   }
 
   /**
@@ -1843,10 +1847,10 @@ export class Player {
     a.t = a.pending ? Math.min(W, a.t + dt) : a.t + dt; // a held light waits at the coil
     const t = a.t;
     if (t < W && !d.keepYaw) this.yaw = turnToward(this.yaw, this._aimYaw(this.yaw), TUNE.windupSteer * dt);
-    // lunge forward through the strike (stretched by the step-in assist); the thrust's root travel
-    // is front-loaded through its active frames
+    // lunge forward through the strike (stretched by the step-in assist); a dashing heavy's root
+    // travel (the cleave, the execution's thrust) is front-loaded through its active frames
     let lv = 0;
-    if (d.kind === 'thrust') {
+    if (d.dash) {
       if (t >= W && t <= W + A) lv = (a.travel / A) * (1.5 - (t - W) / A);
     } else if (a.travel > 0) {
       // a travelling light (the sprint slash): the run's momentum carries on through the windup and
@@ -1866,7 +1870,8 @@ export class Player {
     if (t >= W + A) {
       const r = (t - W - A) / R;
       const b = this.buf.action;
-      if (b === 'light') {
+      // (the next hit waits for the cut to carry through: `chain` of the recovery, combat.js)
+      if (b === 'light' && r >= fin(d.chain, 0)) {
         this.buf.action = null;
         if (this._tryExecution()) return;
         const next = d.kind === 'light' ? LIGHT[d.combo % LIGHT.length] : LIGHT[0];
@@ -2156,7 +2161,24 @@ export class Player {
           this.anim.kickCoat(0.32, this.anim.noise);
         }
       }
-      if (d.kind === 'thrust') {
+      if (d.kind === 'cleave') {
+        if (!a.gust && t >= W) {
+          a.gust = true; // the burst forward throws a gust through the grass and a ring of dust
+          const p = this.position;
+          this.game.world?.gust?.(p.x + Math.sin(this.yaw) * 1.5, p.z + Math.cos(this.yaw) * 1.5, 0.4 + 0.6 * a.charge, 4 + 2 * a.charge);
+          this.fx.release(p.x, p.z, a.charge);
+        }
+        // the cut ends low before him: the blade's wind tears a second gust and dust out of the grass
+        if (!a.impact && t >= end - 0.02) {
+          a.impact = true;
+          sw.point(1, this._tip);
+          if (Number.isFinite(this._tip.x + this._tip.z)) {
+            this.game.world?.gust?.(this._tip.x, this._tip.z, 0.8 + 0.4 * a.charge, 4 + a.charge);
+            this.fx.dust(this._tip.x, this._tip.z, 8 + Math.round(6 * a.charge), 1 + 0.5 * a.charge);
+          }
+          this.anim.kickCoat(0.5 + 0.3 * a.charge, this.anim.noise);
+        }
+      } else if (d.kind === 'thrust') {
         if (!a.gust && t >= W) {
           a.gust = true; // the lunge throws a gust through the grass and a ring of dust
           const p = this.position;
@@ -2246,9 +2268,10 @@ export class Player {
       console.error('[player] dragon.takeHit failed', err);
     }
     this._emit('player:hitDragon', { damage: dealt, part, point, heavy, crit, kind: d.kind });
-    this._hitstop(d.hitstop * (crit ? 1.4 : 1));
+    this._hitstop(d.hitstop * (crit ? 1.4 : 1) * (d.kind === 'cleave' ? 1 + 0.3 * a.charge : 1));
     this.game.shake?.(d.shake * (crit ? 1.3 : 1));
     this.fx.sparks(h.x, h.y, h.z, dir.x, dir.z, heavy, crit);
+    if (d.kind === 'cleave') this.fx.cleaveImpact(h.x, h.y, h.z, dir.x, dir.z, a.charge, crit);
   }
 
   // ------------------------------------------------------------------ fx / visuals
@@ -2388,7 +2411,7 @@ export class Player {
         ink = d.heavy ? 2.2 : 1.6;
         glow = d.heavy ? 1.5 : 1.25;
       }
-      if (d.kind === 'thrust') {
+      if (d.dash) {
         const fade = 1 - smoothstep(d.windup + d.active, d.windup + d.active + 0.3, t);
         ink = Math.max(ink, (1.2 + 1.4 * this.releaseK) * fade);
         glow = Math.max(glow, (1.0 + 0.6 * this.releaseK) * fade);

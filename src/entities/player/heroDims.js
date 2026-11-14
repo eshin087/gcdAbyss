@@ -36,11 +36,13 @@ export const DIM = {
   // the steel length the animator poses with (anim.js keeps this point off the grass and out of the
   // legs; the integration test checks it). A little past the drawn point, so the drawn steel never
   // touches the ground
-  steelTip: 1.17,
-  // the DRAWN point: a 1.25 m sword from the pommel tip (−0.19) to here (owner: "a little shorter",
-  // the 1.64 m blade was "way too long" and ran through the coat skirt). Visual only: the hit segment
-  // below is unchanged, the swing crescent (fx.js) covers the reach past the steel
-  drawnTip: 1.06,
+  steelTip: 1.04,
+  // the DRAWN point: a 1.12 m sword from the pommel tip (−0.19) to here. (Session 25, owner: "make
+  // the sword a little bit shorter as the longness doesnt seem right": it was 1.25 m, drawnTip 1.06,
+  // swung one-handed; before that 1.64 m, "way too long", it ran through the coat skirt.) Visual
+  // only: the hit segment below is unchanged, the swing crescent (fx.js) covers the reach past the
+  // steel. The blade is sculpted to this length (`npm run hero-parts` after changing it)
+  drawnTip: 0.93,
   bladeBase: 0.16, // hit segment along +Z (hilt side) …
   bladeTip: 1.5, // … to here (+ REACH.tipExt 0.4): gameplay reach, independent of the drawn steel
 };

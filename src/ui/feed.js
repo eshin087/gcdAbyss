@@ -190,7 +190,7 @@ export class CombatFeed {
     const dmg = Math.round(num(h.damage));
     if (dmg <= 0) return null;
     const part = h.part ? ` (${h.part})` : '';
-    const what = h.kind === 'slam' ? 'Slam' : h.kind === 'thrust' ? 'Thrust' : h.heavy ? 'Heavy hit' : 'Hit';
+    const what = h.kind === 'slam' ? 'Slam' : h.kind === 'cleave' ? 'Cleave' : h.kind === 'thrust' ? 'Thrust' : h.heavy ? 'Heavy hit' : 'Hit';
     return `${h.crit ? `Critical ${what === 'Hit' ? 'hit' : what.toLowerCase()}` : what} for ${dmg}${part}`;
   }
 
