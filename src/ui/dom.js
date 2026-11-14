@@ -25,7 +25,7 @@ export function fmtClock(seconds) {
 }
 
 /** Fill `target` with text where "[E]" style tokens become keycaps. */
-export function fillKeyText(target, text) {
+export function fillKeyText(target, text, pad = false) {
   target.textContent = '';
   const str = String(text ?? '');
   const re = /\[([^\]]+)\]/g;
@@ -33,7 +33,8 @@ export function fillKeyText(target, text) {
   let m;
   while ((m = re.exec(str))) {
     if (m.index > last) target.appendChild(document.createTextNode(str.slice(last, m.index)));
-    el('span', 'ab-key', m[1], target);
+    const k = el('span', 'ab-key', m[1], target);
+    if (pad) k.dataset.pad = m[1]; // a gamepad button token: relabelled per layout (ui/gamepad.js)
     last = re.lastIndex;
   }
   if (last < str.length) target.appendChild(document.createTextNode(str.slice(last)));
@@ -102,6 +103,36 @@ export function controlsGrid(parent) {
     for (const part of k.split(' / ')) {
       if (kc.childNodes.length) kc.appendChild(document.createTextNode(' '));
       el('span', 'ab-key', part, kc);
+    }
+    el('span', 'a', a, grid);
+  }
+  return grid;
+}
+
+// The gamepad reference (src/ui/gamepad.js; shown while a pad is the device in use). Xbox tokens;
+// the chips carry data-pad and are relabelled for a PlayStation pad (PAD_LABELS).
+export const PAD_CONTROLS = [
+  ['LS', 'move'],
+  ['RS', 'aim (let go: auto-aim at the boss)'],
+  ['RB / RT', 'attack · hold to charge heavy'],
+  ['LB / LT', 'hold block · tap to parry'],
+  ['A', 'dodge · perfect dodge = Ghostep'],
+  ['B / L3', 'sprint (hold B · click L3)'],
+  ['X', 'drink flask'],
+  ['R3', 'lock-on'],
+  ['Y', 'rest at bonfire · fight again'],
+  ['MENU', 'pause'],
+  ['VIEW', 'help'],
+  ['D-PAD', 'zoom'],
+];
+
+export function padGrid(parent) {
+  const grid = el('div', 'ab-ctrls', null, parent);
+  for (const [k, a] of PAD_CONTROLS) {
+    const kc = el('span', 'k', null, grid);
+    for (const part of k.split(' / ')) {
+      if (kc.childNodes.length) kc.appendChild(document.createTextNode(' '));
+      el('span', 'ab-key', part, kc).dataset.pad = part;
     }
     el('span', 'a', a, grid);
   }

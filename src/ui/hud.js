@@ -46,6 +46,8 @@ export class Hud {
     this.help = new HelpPanel(this.root);
     const hint = el('div', 'ab-hint ab-play kb-only', null, this.root);
     fillKeyText(hint, '[H] help  [Esc] pause');
+    fillKeyText(el('div', 'ab-hint ab-play pad-only', null, this.root), '[VIEW] help  [MENU] pause', true);
+    this._padPrompt = false; // the prompt is drawn with the gamepad's interact button
     // the stage picker: game.levels / game.pickLevel (main.js; levels/index.js)
     const stage = Array.isArray(game.levels) ? { levels: game.levels, current: game.level?.id, pick: (id) => game.pickLevel?.(id) } : null;
     this.titleUi = new TitleScreen(this.root, (game.state || 'title') === 'title', stage);
@@ -221,10 +223,20 @@ export class Hud {
 
   prompt(text) {
     const t = text ? String(text) : null;
-    if (t === this._prompt) return;
+    const pad = !!this.game.gamepad?.active;
+    if (t === this._prompt && pad === this._padPrompt) return;
     this._prompt = t;
-    if (t) fillKeyText(this.promptEl, t);
+    this._padPrompt = pad;
+    // with a gamepad in use the prompt's key ("[E] Rest") reads as the interact button (Y / △)
+    if (t) fillKeyText(this.promptEl, pad ? t.replace(/\[[A-Za-z]\]/g, `[${this.game.gamepad.label('Y')}]`) : t);
     this.promptEl.classList.toggle('on', !!t);
+  }
+
+  /** Redraw the prompt (the device in use or the pad's layout changed). */
+  refreshPrompt() {
+    const t = this._prompt;
+    this._prompt = undefined;
+    this.prompt(t);
   }
 
   showTitle() {

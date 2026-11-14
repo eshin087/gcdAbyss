@@ -4,7 +4,7 @@
 // the real Colliders. A bot drives the input: it moves, attacks, blocks, parries and dodges.
 // usage: node integ.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI, ABYSS_TRACE=1 logs combat events)
 //   scenario: gate | hero | batch | breath | parry | block | reach | red | plunge | deflect | lab | strings | plungeReact |
-//             timing | fire | herolook | win | die | touch | all (default all)
+//             timing | fire | herolook | win | die | touch | pad | all (default all)
 //   (timing: ABYSS_TM=name,name... probes only those attacks; ABYSS_TMV=1 prints its per-placement map)
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -31,6 +31,7 @@ const { TUNING, SCALE } = await imp('src/entities/dragon/tuning.js');
 const SIZE = SCALE / 1.25;
 const { Hud } = await imp('src/ui/hud.js');
 const { TouchControls } = await imp('src/ui/touch.js');
+const { GamepadControls } = await imp('src/ui/gamepad.js');
 const { Input } = await imp('src/core/input.js');
 const { AudioEngine } = await imp('src/audio/audio.js');
 const { GameFlow } = await imp('src/game/flow.js');
@@ -202,12 +203,13 @@ function build(opts = {}) {
     G.defend?.onEvent(n, d);
     emit(n, d);
   };
-  // construction order = main.js: world, audio, player, dragon, hud, touch, flow, lab
+  // construction order = main.js: world, audio, player, dragon, hud, gamepad, touch, flow, lab
   game.world = world;
   game.audio = new AudioEngine(game);
   game.player = new Player(game);
   game.dragon = new Dragon(game);
   game.hud = new Hud(game);
+  game.gamepad = new GamepadControls(game); // inert without navigator.getGamepads (the pad scenario fakes one)
   game.touch = new TouchControls(game); // inert until a touch (no coarse pointer headless)
   game.flow = new GameFlow(game);
   game.lab = new Lab(game);
@@ -264,6 +266,7 @@ function build(opts = {}) {
     game.dt = dt;
     game.realDt = realDt;
     if (AUDIO.ctx) AUDIO.ctx.currentTime += realDt;
+    safe('gamepad', () => game.gamepad.update(realDt));
     safe('touch', () => game.touch.update(realDt));
     safe('lab', () => game.lab.update(realDt));
     safe('flow', () => game.flow.update(dt, realDt));
@@ -3047,6 +3050,185 @@ async function scenarioTouch() {
   return G;
 }
 
+// ================================================================== scenario: gamepad
+// The REAL core/input.js fed by the gamepad layer (src/ui/gamepad.js) from a fake "standard" pad
+// behind navigator.getGamepads(): activation by use (and back to keyboard), the title's any button,
+// a held button never leaking across a mode change, analog move + L3 sprint, attack tap / charge
+// hold, trigger hysteresis, dodge, flask, lock, the prompt on Y, right-stick aim and auto-aim,
+// pause-menu focus, rumble, a PlayStation layout, NaN axes, and a disconnect mid-fight pausing.
+async function scenarioPad() {
+  out('\n== scenario PAD (fake standard gamepad → real Input: menus, move, attack, guard, aim, rumble) ==');
+  const nav = globalThis.navigator;
+  let pads = [];
+  Object.defineProperty(nav, 'getGamepads', { value: () => pads, configurable: true, writable: true });
+  const mkPad = (id) => ({
+    id, mapping: 'standard', connected: true, axes: [0, 0, 0, 0],
+    buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })),
+    vibrationActuator: { effects: [], playEffect(type, o) { this.effects.push({ type, ...o }); return Promise.resolve('complete'); } },
+  });
+  const G = build({ realInput: true });
+  const { game, counts } = G;
+  const input = game.input, gp = game.gamepad, p = game.player, d = game.dragon;
+  const c = (n) => counts[n] || 0;
+  const frames = (s) => { for (let i = 0, n = Math.max(1, Math.round(s / DT)); i < n; i++) G.tick(DT); };
+  const html = () => document.documentElement.classList;
+  const pad = mkPad('Xbox Wireless Controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)');
+  const btn = (i, on = true, v = on ? 1 : 0) => { pad.buttons[i].pressed = on && v > 0.5; pad.buttons[i].value = v; };
+  const tap = (i, hold = 0.05, after = 0.1) => { btn(i); frames(hold); btn(i, false); frames(after); };
+  const B = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, START: 9, L3: 10, R3: 11, UP: 12, DOWN: 13 };
+
+  assert(gp && gp.active === false && !html().contains('abyss-pad'), 'no pad: inert, no pad class');
+  frames(0.8);
+  pads = [null, pad];
+  frames(0.2);
+  assert(gp.connected && !gp.active && game.state === 'title', 'a pad connected but untouched: not the device in use yet');
+  // the title: A starts, the pad becomes the device in use; the A held into play never rolls
+  const roll0 = c('player:roll');
+  btn(B.A);
+  frames(0.5);
+  assert(gp.active && html().contains('abyss-pad') && cls('ab-root')?.classList.contains('ab-pad'), 'first press → pad active (html.abyss-pad, HUD .ab-pad)');
+  assert(game.state === 'explore', `title: A → explore (got ${game.state})`);
+  assert(c('player:roll') === roll0 && !input.down('Space'), 'the A that closed the title, still held, does not roll');
+  btn(B.A, false);
+  frames(0.1);
+  // the prompt reads "[Y] Rest" and Y rests at the bonfire (the prompt's KeyE)
+  assert(game.flow.debug.toState('explore') === true, 'toState(explore)');
+  frames(0.3);
+  assert(/\[E\]/.test(game.hud.promptText ?? '') && game.hud.promptEl.textContent.startsWith('Y'), `prompt drawn with Y ("${game.hud.promptEl.textContent}")`);
+  const rest0 = c('bonfire:rest');
+  tap(B.Y, 0.05, 0.3);
+  assert(c('bonfire:rest') === rest0 + 1, 'Y at the bonfire → rest (KeyE)');
+  frames(1.5);
+  // analog move: stick up = north (−Z); half deflection runs slower than full
+  const z0 = p.position.z;
+  pad.axes[1] = -0.55;
+  frames(0.1);
+  const half = p.intent.len;
+  pad.axes[1] = -1;
+  frames(0.6);
+  assert(half > 0.3 && half < 0.8 && p.intent.len > 0.99 && p.intent.z < 0, `stick: analog (half ${half.toFixed(2)}, full ${p.intent.len.toFixed(2)})`);
+  assert(p.position.z < z0 - 1.5, `stick up → the hero runs north (${(z0 - p.position.z).toFixed(1)} m)`);
+  tap(B.L3, 0.05, 0.05);
+  assert(p.intent.sprint, 'L3 click while moving → sprint');
+  pad.axes[1] = 0;
+  frames(0.1);
+  pad.axes[1] = -1;
+  frames(0.1);
+  assert(!p.intent.sprint, 'letting the stick go ends the L3 sprint');
+  btn(B.B);
+  frames(0.1);
+  assert(p.intent.sprint, 'B held → sprint');
+  btn(B.B, false);
+  pad.axes[1] = 0;
+  frames(0.5);
+  // the fight: attack tap / charge, guard on the analog trigger, dodge, flask, lock, aim
+  fightSetup(G);
+  settle(G); place(G, 6);
+  const kinds = [];
+  G.watch = (n, e) => { if (n === 'player:attack') kinds.push(e.kind); };
+  tap(B.RB, 0.05, 0.6);
+  assert(kinds[0] === 'light', `RB tap → light attack (${kinds.join()})`);
+  settle(G); place(G, 6);
+  const ch0 = c('player:charge');
+  btn(B.RT, true, 0.8);
+  frames(1.2);
+  btn(B.RT, false);
+  frames(0.6);
+  assert(c('player:charge') === ch0 + 1 && kinds.includes('thrust'), `RT held → charge, release → thrust (${kinds.join()})`);
+  G.watch = null;
+  settle(G); place(G, 8);
+  btn(B.LT, false, 0.6);
+  frames(0.2);
+  const blocking = p.state === 'block' && input.mouseDown(2);
+  btn(B.LT, false, 0.4);
+  frames(0.1);
+  const still = input.mouseDown(2);
+  btn(B.LT, false, 0.1);
+  frames(0.1);
+  assert(blocking && still && !input.mouseDown(2), `LT: block at 0.6, held at 0.4 (hysteresis), up at 0.1 (state ${p.state})`);
+  settle(G); place(G, 8);
+  const r0 = c('player:roll');
+  tap(B.A, 0.05, 0.8);
+  assert(c('player:roll') === r0 + 1, 'A → dodge roll (Space)');
+  settle(G);
+  p.hp = 50;
+  const h0 = c('player:heal');
+  tap(B.X, 0.05, 1.0);
+  assert(c('player:heal') === h0 + 1, 'X → drink flask (KeyF)');
+  settle(G); place(G, 8);
+  tap(B.R3);
+  const locked = p.lockOn;
+  tap(B.R3);
+  assert(locked && !p.lockOn, 'R3 toggles lock-on (Tab)');
+  // aim: idle right stick → auto-aim on the boss; deflected → it steers (east)
+  settle(G); place(G, 7);
+  G.tick(DT);
+  const lp = new THREE.Vector3();
+  d.lockPoint(lp);
+  assert(gp.autoAim && Math.hypot(game.mouseGround.x - lp.x, game.mouseGround.z - lp.z) < 0.3, 'right stick idle: auto-aim on the boss');
+  pad.axes[2] = 1;
+  G.tick(DT);
+  assert(!gp.autoAim && game.mouseGround.x > p.position.x + 3 && Math.abs(game.mouseGround.z - p.position.z) < 0.5, 'right stick east → aim east');
+  pad.axes[2] = 0;
+  // rumble on the hero's hits / guards (here a block)
+  const fx0 = pad.vibrationActuator.effects.length;
+  game.events.emit('player:block', { damage: 4, tell: 'normal' });
+  const fx = pad.vibrationActuator.effects.at(-1);
+  assert(pad.vibrationActuator.effects.length === fx0 + 1 && fx.type === 'dual-rumble' && fx.duration > 0 && fx.weakMagnitude > 0, 'player:block → a dual-rumble on the pad');
+  // pause: Menu pauses (held, it does not unpause), the D-pad walks the menu, A presses, B resumes
+  frames(0.2);
+  btn(B.START);
+  frames(0.3);
+  assert(game.state === 'paused', `Menu → paused (${game.state})`);
+  btn(B.START, false);
+  frames(0.05);
+  tap(B.DOWN);
+  const qBtn = game.hud.pauseUi.btnQuality;
+  assert(qBtn.classList.contains('pad-focus') && gp.focus === 1, 'D-pad down → focus on QUALITY');
+  const q0 = game.settings.quality;
+  tap(B.A);
+  assert(game.settings.quality !== q0 && game.state === 'paused', `A on QUALITY → quality cycles (${q0} → ${game.settings.quality}), still paused`);
+  btn(B.B);
+  frames(0.3);
+  assert(game.state === 'boss' && !p.intent.sprint && !qBtn.classList.contains('pad-focus'), `B → resumed (${game.state}); the B held into play does not sprint`);
+  btn(B.B, false);
+  frames(0.1);
+  // the keyboard takes over: the pad hints go, its holds are released; the pad wins back on use
+  btn(B.LB);
+  frames(0.1);
+  fireWin('keydown', { code: 'KeyW', repeat: false });
+  frames(0.05);
+  fireWin('keyup', { code: 'KeyW' });
+  frames(0.05);
+  assert(!gp.active && !html().contains('abyss-pad') && !input.mouseDown(2), 'a key press → keyboard in use: pad hints off, the pad\'s held guard released');
+  btn(B.LB, false);
+  pad.axes[0] = 0.9;
+  frames(0.1);
+  assert(gp.active && html().contains('abyss-pad'), 'the stick → the pad is the device in use again');
+  // non-finite axes read as centred
+  pad.axes = [NaN, Infinity, -Infinity, NaN];
+  frames(0.1);
+  const m = input.moveAxis();
+  assert(m.x === 0 && m.y === 0, 'NaN / Infinity axes → centred');
+  pad.axes = [0, 0, 0, 0];
+  // a PlayStation pad: its labels (the prompt's interact button too)
+  const ps = mkPad('DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c Product: 0ce6)');
+  pads = [ps];
+  ps.buttons[B.LB].pressed = true; ps.buttons[B.LB].value = 1;
+  frames(0.05);
+  ps.buttons[B.LB].pressed = false; ps.buttons[B.LB].value = 0;
+  frames(0.05);
+  assert(gp.layout === 'ps' && gp.label('Y') === '△' && gp.label('RB') === 'R1', `DualSense → PlayStation labels (Y ${gp.label('Y')}, RB ${gp.label('RB')})`);
+  // a disconnect mid-fight pauses and hands the screen back to the keyboard hints
+  pads = [];
+  frames(0.1);
+  assert(!gp.connected && !gp.active && game.state === 'paused' && !html().contains('abyss-pad'), `pad unplugged mid-fight → paused (${game.state})`);
+  game.flow.resume();
+  frames(0.1);
+  delete nav.getGamepads;
+  return G;
+}
+
 // ================================================================== scenario: string timing / coverage
 // The verifier for the melee strings (contract 1): every hit of every string, started through the
 // AI's own start path (no Lab face-turn) from placements the AI would pick it at (its band), the hero
@@ -3585,7 +3767,7 @@ async function scenarioBatch() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, batch: scenarioBatch, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, herolook: scenarioHeroLook, herolife: scenarioHeroLife, probe: scenarioProbe };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, batch: scenarioBatch, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, pad: scenarioPad, herolook: scenarioHeroLook, herolife: scenarioHeroLife, probe: scenarioProbe };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());

@@ -1,6 +1,7 @@
 import { CONFIG } from '../core/config.js';
 import { el } from './dom.js';
 import { injectTouchStyle } from './touchStyle.js';
+import { aimWithoutCursor } from './aim.js';
 
 // Touch controls for phones / tablets (contract: docs/ARCHITECTURE.md → Touch controls).
 // A thin layer ON TOP of core/input.js: the left-thumb stick feeds input.setVirtualAxis(), the
@@ -178,28 +179,8 @@ export class TouchControls {
 
   // ---------------------------------------------------------------- aim
   _aimUpdate() {
-    const g = this.game, p = g.player, mg = g.mouseGround, pos = p?.position;
-    if (!pos || !mg) return;
-    const d = g.dragon;
-    this.autoAim = false;
-    if (p.alive !== false && typeof d?.isTargetable === 'function' && typeof d.lockPoint === 'function' && d.isTargetable()) {
-      d.lockPoint(this._v);
-      const dx = this._v.x - pos.x, dz = this._v.z - pos.z, r = CONFIG.touch.autoAimRange;
-      if (Number.isFinite(dx + dz) && dx * dx + dz * dz <= r * r) {
-        mg.set(this._v.x, 0, this._v.z);
-        this.autoAim = true;
-        return;
-      }
-    }
-    const A = this.aim;
-    if (!A.set) {
-      const y = fin(p.yaw, Math.PI);
-      A.x = Math.sin(y);
-      A.z = Math.cos(y);
-      A.set = true;
-    }
-    const D = CONFIG.touch.aimDistance;
-    mg.set(pos.x + A.x * D, 0, pos.z + A.z * D);
+    const T = CONFIG.touch;
+    this.autoAim = aimWithoutCursor(this.game, this.aim, T.autoAimRange, T.aimDistance, this._v);
   }
 
   // ---------------------------------------------------------------- layout / visibility

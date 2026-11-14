@@ -442,7 +442,8 @@ export class GameFlow {
     g.events?.emit('area', { name: area.name });
     g.audio?.setMusic?.('ambient');
     for (const line of this._text('arrive') ?? []) this._log(line, 'lore');
-    if (!g.touch?.active) this._log('H: controls  ·  Esc: pause', 'system');
+    if (g.gamepad?.active) this._log(`${g.gamepad.label('VIEW')}: controls  ·  ${g.gamepad.label('MENU')}: pause`, 'system');
+    else if (!g.touch?.active) this._log('H: controls  ·  Esc: pause', 'system');
     // ease the camera from the establishing shot back to the player
     this._ovW = 0;
     this._ovZ = 0;
@@ -679,7 +680,7 @@ export class GameFlow {
     }
     if (!this.canRetry && this.deathT >= TUNE.deathHold) {
       this.canRetry = true;
-      g.hud?.bannerHint?.(g.touch?.active ? 'tap to rise again' : 'press any key to rise again');
+      g.hud?.bannerHint?.(g.gamepad?.active ? 'press any button to rise again' : g.touch?.active ? 'tap to rise again' : 'press any key to rise again');
     }
     if (this.canRetry && !this.respawning && this._dismissPressed()) {
       g.hud?.bannerHint?.(null);

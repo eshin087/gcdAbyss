@@ -691,6 +691,12 @@ const CSS = `
 .ab-btn .v { color: var(--ab-gold); }
 .ab-sep { height: 1px; margin: 14px 0 12px; background: var(--ab-line); }
 
+/* ---------- gamepad in use (src/ui/gamepad.js adds html.abyss-pad) ---------- */
+html:not(.abyss-pad) .pad-only { display: none !important; }
+html.abyss-pad .kb-only, html.abyss-pad .tp-only { display: none !important; }
+.ab-btn.pad-focus { color: #fff; border-color: var(--ab-ember); background: rgba(255, 138, 61, 0.12); box-shadow: 0 0 0 1px rgba(255, 138, 61, 0.35); }
+.ab-stage .ab-btn.pad-focus { color: #f2e7d2; border-color: var(--ab-ember); }
+
 /* ---------- touch devices (src/ui/touch.js adds .ab-touch; desktop never gets it) ---------- */
 .ab-root:not(.ab-touch) .tp-only { display: none !important; }
 .ab-touch .kb-only { display: none !important; }

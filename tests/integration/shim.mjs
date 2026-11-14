@@ -41,6 +41,7 @@ export class El {
   getBoundingClientRect() { return { left: 0, top: 0, width: 1920, height: 1080 }; }
   closest() { return null; }
   blur() {}
+  click() { this.dispatch('click'); }
   focus() {}
   getContext() { return ctxStub; }
   find(pred) { if (pred(this)) return this; for (const c of this.children) if (c instanceof El) { const r = c.find(pred); if (r) return r; } return null; }

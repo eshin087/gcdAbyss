@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config.js';
-import { button, controlsGrid, el, fillKeyText, tellLegend, touchGrid } from './dom.js';
+import { button, controlsGrid, el, fillKeyText, padGrid, tellLegend, touchGrid } from './dom.js';
 
 // Full-screen / panel UI: title, pause menu, help panel, victory record.
 
@@ -44,6 +44,21 @@ const TITLE_TOUCH = [
   '[PINCH] zoom',
 ];
 
+// the same list for a gamepad (src/ui/gamepad.js); shown while a pad is the device in use
+const TITLE_PAD = [
+  '[LS] move',
+  '[RS] aim',
+  '[RB] attack · hold: heavy',
+  '[LB] block · tap: parry',
+  '[A] dodge',
+  '[B] sprint',
+  '[X] flask',
+  '[R3] lock-on',
+  '[Y] rest',
+  '[MENU] pause',
+  '[VIEW] help',
+];
+
 export class TitleScreen {
   /** stage (optional): { levels: [{ id, name }], current: id, pick(id) } — the stage picker (each
    *  level is its own page load: picking one reloads the game into it, levels/index.js). */
@@ -54,6 +69,7 @@ export class TitleScreen {
     this.logo = el('pre', 'ab-logo', LOGO.join('\n'), inner);
     el('div', 'ab-title-rule', '◆', inner);
     el('div', 'ab-title-sub', 'an ASCII action RPG', inner);
+    this.stageButtons = []; // the stage picker's buttons, for the gamepad's focus (ui/gamepad.js)
     if (stage?.levels?.length > 1) {
       const row = el('div', 'ab-stage', null, inner);
       for (const L of stage.levels) {
@@ -62,14 +78,18 @@ export class TitleScreen {
         });
         b.textContent = String(L.name).toUpperCase();
         b.dataset.level = L.id;
+        this.stageButtons.push(b);
       }
     }
     el('div', 'ab-press kb-only', 'PRESS ANY KEY', inner);
     el('div', 'ab-press tp-only', 'TAP TO BEGIN', inner);
+    el('div', 'ab-press pad-only', 'PRESS ANY BUTTON', inner);
     const ctrl = el('div', 'ab-title-ctrl kb-only', null, inner);
     for (const item of TITLE_KEYS) fillKeyText(el('span', 'item', null, ctrl), item);
     const tctrl = el('div', 'ab-title-ctrl tp-only', null, inner);
     for (const item of TITLE_TOUCH) fillKeyText(el('span', 'item', null, tctrl), item);
+    const pctrl = el('div', 'ab-title-ctrl pad-only', null, inner);
+    for (const item of TITLE_PAD) fillKeyText(el('span', 'item', null, pctrl), item, true);
     tellLegend(inner).classList.add('title');
     el('div', 'ab-credit', "art direction inspired by @Ansenjeo's ASCII MMORPG  ·  prototype v0.4", this.root);
 
@@ -153,9 +173,12 @@ export class PauseMenu {
       el('span', '', 'FULLSCREEN', this.btnFull);
       this.fullVal = el('span', 'v', '', this.btnFull);
     }
+    // the buttons in order, for the gamepad's menu focus (ui/gamepad.js)
+    this.buttons = [resume, this.btnQuality, this.btnMute, this.btnFull].filter(Boolean);
     el('div', 'ab-sep', null, panel);
     controlsGrid(panel).classList.add('kb-only');
     touchGrid(panel).classList.add('tp-only');
+    padGrid(panel).classList.add('pad-only');
     tellLegend(panel);
     this.on = false;
     this._q = null;
@@ -208,8 +231,10 @@ export class HelpPanel {
     this.root = el('div', 'ab-help ab-panel', null, parent);
     const head = el('div', 'ab-help-title', null, this.root);
     el('span', '', 'CONTROLS', head);
-    fillKeyText(el('span', '', null, head), '[H] close');
-    controlsGrid(this.root);
+    fillKeyText(el('span', 'kb-only', null, head), '[H] close');
+    fillKeyText(el('span', 'pad-only', null, head), '[VIEW] close', true);
+    controlsGrid(this.root).classList.add('kb-only');
+    padGrid(this.root).classList.add('pad-only');
     el('div', 'ab-help-sub', 'ATTACK TELLS', this.root);
     tellLegend(this.root);
     this.on = false;
