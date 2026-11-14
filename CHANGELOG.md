@@ -4,7 +4,16 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Fourteen pieces of work since 0.4.0:
+Fifteen pieces of work since 0.4.0:
+- **Controller support** (2026-11-13, ADR-066): play with a gamepad (Xbox, PlayStation or any
+  "standard" pad in the browser). Left stick moves (analog), right stick aims (let go and attacks
+  aim at the boss), RB / RT attack (hold to charge), LB / LT block (tap to parry), A dodges, B or
+  L3 sprints, X drinks a flask, Y rests at the bonfire / fights again, R3 locks on, Menu pauses,
+  View shows the controls, the D-pad zooms. Any button starts from the title (the D-pad picks a
+  stage); the pause menu is walked with the D-pad and A, B resumes. The on-screen hints switch to
+  pad buttons (PlayStation symbols on a PlayStation pad) while the pad is in use and back on the
+  first key or click. Rumble on hits, guards, parries and perfect dodges. Unplugging the pad
+  mid-fight pauses the game.
 - **The hero at Shen Hui's size, a trimmed cloak** (2026-11-12, ADR-064, ADR-065): the hero is drawn
   10 % smaller, so in a fight he reads about the same size as Shen Hui (he was the nearer of the two
   to the camera and looked a size bigger); his reach and hitboxes are unchanged. His cloak is the

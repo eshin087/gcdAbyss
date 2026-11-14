@@ -150,6 +150,13 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.22 — Controller support (2026-11-13, `input/gamepad`, ADR-066)
+- [x] Gamepad as a third input source (`core/input.js`), the pad layer (`ui/gamepad.js`): souls-like
+      layout, right-stick aim + auto-aim, title / pause menus, pad hints and PlayStation labels, rumble
+- [x] Headless PAD scenario (fake standard pad → real Input); checked in the dev server with a faked pad
+- [ ] The owner's check with a real controller (feel of the dead zone, the triggers, the rumble)
+- [ ] Button rebinding; sound on a pad-only session (browsers need a key / click / tap for audio)
+
 ## M1.21 — The hero at Shen Hui's size, a trimmed cloak (2026-11-12, `player/hero-size-cloak`)
 - [x] The player drawn at 90 % (three sizes previewed beside Shen Hui; the owner picked one) (ADR-064)
 - [x] The same cloak trimmed, the coat tails a little shorter (three cloaks previewed) (ADR-065)

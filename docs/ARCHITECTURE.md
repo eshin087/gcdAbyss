@@ -18,7 +18,7 @@ the plunge, three phases, fire hazards, keep-in-view camera, and now the bullet 
 
 ## Frame order (src/main.js)
 ```
-wheel zoom → mouse ray (mouseGround) → touch.update(realDt) → lab.update(realDt)
+wheel zoom → mouse ray (mouseGround) → gamepad.update(realDt) → touch.update(realDt) → lab.update(realDt)
 → flow.update(dt, realDt) → player.update(dt) → dragon.update(dt)
 → lab.postUpdate() → camera (rig) → view override → shared uniforms → world.update(dt)
 → lights.update → fx.update → hud.update(realDt) → audio.update(realDt) → render
@@ -34,7 +34,7 @@ updating underneath; `null` snaps back to the game camera. A missing, non-finite
 override is skipped for that frame (never throws, never feeds NaN).
 `dt = realDt × game.timeScale × game.debugTimeScale × hit-stop`. `realDt` is unscaled. Input edges
 (`pressed`) are valid for exactly one frame. Construction order: world, audio, player, dragon, hud,
-touch, flow, lab — constructors must not dereference modules built later.
+gamepad, touch, flow, lab — constructors must not dereference modules built later.
 **`render`** = `pipeline.updateShadowCamera(focus)` then `pipeline.render()` (`render/pipeline.js`):
 ```
 scene.updateMatrixWorld()            once for both scene passes (scene.matrixWorldAutoUpdate is off while they draw)
@@ -58,10 +58,11 @@ hazards and the bullet field (`dragon.hazards.update`, `dragon.bullets.update`, 
 | `THREE`, `CONFIG` | three.js namespace, `core/config.js` |
 | `renderer, scene, fxScene, camera, pipeline, U` | rendering. `U` = shared uniforms (`render/shaderLib.js`), including `U.uBoneTex` (the rigid batches' bone matrices, see Rigid batching below). `pipeline.setShadowSize(texels)` resizes the moon shadow map (`pipeline.shadowSize`; main.js `applyQuality` passes the preset's `shadow`) |
 | `events` | pub/sub: `on(name, fn)` → unsubscribe fn, `emit(name, data)` |
-| `input` | `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
-| `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame; with touch controls on, the touch aim point (see Touch controls) |
+| `input` | `down(code)`, `pressed(code)`, `released(code)`, `mouseDown(b)`, `mousePressed(b)`, `mouseReleased(b)`, `moveAxis()` → `{x, y}` (y = up/north; keys give a unit vector, a deflected virtual stick wins with its analog length ≤ 1), `anyPressed`, `wheel`. Codes are `KeyboardEvent.code`. **Virtual sources** (touch): `setVirtual(code, down)` (code = a `KeyboardEvent.code` or `'Mouse0'`/`'Mouse1'`/`'Mouse2'`; same one-frame `pressed` / `released` edges as the real device, only on a change), `setVirtualAxis(x, y)`, `releaseVirtual()` (everything up, stick centred). Virtual holds are tracked apart from the real keys / buttons. **Gamepad source** (ADR-066): `setPad(code, down)`, `setPadAxis(x, y)`, `releasePad()` — the same semantics with their own holds (a release on one source never drops a hold on another); a deflected pad stick wins over the touch stick and the keys in `moveAxis()`. `pulse(code)`: a one-frame `pressed` edge with no hold. `kbmT`: `performance.now()` of the last real keyboard / mouse event (a mousemove only with movement). Mouse events within 1 s of a touch pointer event (browser compatibility mousedown / mouseup / mousemove) are ignored. |
+| `mouseGround` | `Vector3` — mouse ray ∩ ground plane, updated each frame; with a gamepad in use or touch controls on, their aim point (see Gamepad controls, Touch controls; shared helper `ui/aim.js` `aimWithoutCursor`) |
 | `cameraRig` | `addTrauma(0..1)`, `extraZoom`, `focus`, `zoom(steps)` (2.5 m per step, clamped to the profile), `targetDistance`; distance profile `setMobile(bool)` / `mobile`, `defaultDistance`, `minDistance`, `maxDistance`, `maxExtraZoom` (desktop: `CONFIG.camera.distance/min/max`, unlimited extra zoom; phone: `mobileDistance` 20 / `mobileMinDistance` 14 / `mobileMaxDistance` 34, extra zoom (lock-on, boss framing, title / intro shots) capped at `mobileMaxExtraZoom` 3 m). `setMobile` resets the zoom to the profile default. `cine = { zoom, x, z, w }`: flow.cinematic's pull-in (zoom m added to the distance, negative = closer; the follow focus leans toward (x, z) by w; all 0 when no moment runs). **Keep-in-view** (`FIT` in `core/cameraRig.js`): `keep(x, y, z, r = 1, must = false)` asks for a world sphere to stay on screen this frame (≤ 16 per frame; non-finite input is ignored). After the usual follow / distance damping the rig projects the subjects with the real camera and eases a ground-plane pan (`fitX` / `fitZ`, ≤ 30 m) and extra distance (`fitZoom`: ≤ 6 m to fit every subject, ≤ 12 m for `must` ones; phone 1.5 / 3 m) until they sit inside the NDC box (\|x\| 0.9, top 0.86, bottom 0.78). `must` subjects (the hero) are never cropped to fit the others. Damped (5/s, 12/s while a must subject is off the box), eased back to 0 with no requests, reset by `snap()`. `focus` = the damped follow focus + the pan. |
 | `touch` | touch controls (`ui/touch.js`, below): `active`, `phone`, `portrait`, `autoAim`, `setActive(bool)`, `update(realDt)` |
+| `gamepad` | gamepad controls (`ui/gamepad.js`, below): `active`, `connected`, `layout` (`'xbox'`/`'ps'`), `autoAim`, `focus`, `label(token)`, `rumble([ms, strong, weak])`, `update(realDt)` |
 | `shake(a)` | camera trauma (0.15 light hit … 0.7 huge slam) |
 | `hitstop(sec, scale=0.04)` | brief time-scale dip measured in real seconds (also the perfect-dodge slow-mo, the plunge's included: `hitstop(0.6, 0.3)`) |
 | `debugTimeScale` | Lab multiplier on game time (1 = normal). Only the Lab writes it. |
@@ -1096,6 +1097,8 @@ showStats(rows)                      // victory / death run stats
 prompt(text|null)                    // interaction prompt, e.g. "[E] Rest at bonfire"
 promptText                           // getter: the prompt shown now (raw "[E] ..." text) or null
 promptEl                             // the prompt's element (touch controls make it a tap target)
+refreshPrompt()                      // redraw it (the gamepad: device in use or layout changed; "[E]" → "[Y]")
+pauseUi.buttons; titleUi.stageButtons  // the menu buttons in order, for the gamepad's focus
 showTitle() / hideTitle();  showPause(bool);  toggleHelp()
 ```
 **Touch layout:** the touch controls add `.ab-touch` to the HUD root (`.ab-root`). Elements with
@@ -1106,6 +1109,11 @@ hidden, the prompt becomes a tap target ("TAP › Rest at bonfire"), the pause p
 560 px of height (phones in landscape) the player frame (×0.8) and minimap (×0.6) shrink, the boss
 bar narrows to the bottom centre between the thumbs, and the title / banners / record compact.
 Desktop (no `.ab-touch`) is unchanged.
+**Gamepad layout:** while a pad is the device in use, `html.abyss-pad` (and `.ab-pad` on the HUD root)
+hides `kb-only` and `tp-only` elements and shows `pad-only` ones (title "PRESS ANY BUTTON" and pad
+list, the pause / help pad grid, the "[VIEW] help [MENU] pause" hint). Pad key chips carry
+`data-pad` (the Xbox token) and are relabelled for a PlayStation pad. `.pad-focus` marks the focused
+menu button.
 Renders no attack tells of its own: no text, icons, rings or arrows (tells are read from the
 attacker — COMBAT.md). Its only tell cue is a brief red screen-edge flash (~0.25 s, game time,
 stronger on the attacker's side) on a red `combat:flash`, dropped by a stagger / posture break /
@@ -1244,6 +1252,44 @@ are skipped); with the panel open the actor is centred in the free area to its
 right. `solo` hides the other actor only between `lab.postUpdate` and the next `lab.update` (the
 actors never see their `visible` flag change). Poses are driven as usual — `dragon.debug.trigger(name)`,
 player inputs / methods — and stepped with `__tick(dt, frames)`.
+
+### Gamepad controls — `src/ui/gamepad.js` exports `class GamepadControls`, `PAD_LABELS` (ADR-066)
+```
+constructor(game)          // inert until navigator.getGamepads() reports a pad and it is used
+active: boolean            // the pad is the device in use: its last input is newer than input.kbmT and input.lastTouch
+connected; layout ('xbox' | 'ps', from the id: Sony's vendor id 054c); autoAim; focus (menu index)
+label(token)               // 'A', 'Y', 'RB', 'MENU', 'VIEW', ... in the current layout (PAD_LABELS)
+rumble([ms, strong, weak]) // dual-rumble on the pad; nothing where vibrationActuator is missing
+update(realDt)             // main.js, after the mouse ray, before the touch layer / Lab / flow / player
+```
+Polls once a frame (the `standard` mapping preferred) and feeds `input.setPad` / `setPadAxis` with the
+real codes, so tap vs hold timings are the real device's. Play states (everything but `title` and
+`paused`):
+
+| button (standard index) | feeds | behaviour |
+|---|---|---|
+| LS (axes 0, 1) | `setPadAxis` | radial dead zone `CONFIG.gamepad.deadZone` 0.2, full run at `runAt` 0.9; stick up = north |
+| RB 5 / RT 7 | `Mouse0` | tap = light combo, hold = charge, release = thrust (triggers: on ≥ 0.5, off < 0.3) |
+| LB 4 / LT 6 | `Mouse2` | hold = block, tap = parry |
+| A 0 · B 1 · X 2 · R3 11 | `Space` · `ShiftLeft` · `KeyF` · `Tab` | dodge · hold to sprint · flask · lock-on |
+| L3 10 | `ShiftLeft` | sprint until the stick returns to centre |
+| Y 3 | `Key<letter>` of the HUD prompt's `[E]` / `[R]` token | rest / fight again (nothing without a prompt) |
+| Menu 9 · View 8 | `Escape` · `KeyH` | pause · help |
+| D-pad up 12 / down 13 | `cameraRig.zoom(∓1)` | zoom |
+
+**Aim** (`explore` / `bossIntro` / `boss`, unless the touch controls are on): the right stick past
+`aimDeadZone` 0.35 steers `game.mouseGround` `aimDistance` m ahead along it; idle, it auto-aims on the
+boss's lock point within `autoAimRange` (32 m), else ahead along the last move direction.
+**Menus:** `title` — any face / shoulder / trigger / Menu / stick-click button `input.pulse('Gamepad')`
+(dismisses "press any key"); D-pad left / right walks `titleUi.stageButtons`, A on another stage
+clicks it. `paused` — focus opens on RESUME, D-pad / LS up-down move it (repeat every `menuRepeat`
+0.22 s while held), A clicks, B or Menu = `Escape` (resume). **A button held across a menu ↔ play
+change counts only after it is let go** (the title's A never rolls, the resuming B never sprints);
+the press that makes the pad active counts. Inactive (keyboard / mouse / touch used since): every
+pad hold is released. A pad unplugged while active in a play state pauses the game.
+`gamepadconnected` / `gamepaddisconnected` log a system line. **Rumble** (`CONFIG.gamepad.rumble`)
+on `player:hurt`, `player:guardBreak`, `player:block`, `player:parry` (perfect stronger, a bullet
+lighter), `player:perfectDodge`, `player:hitDragon` (heavy only); only while active.
 
 ### Touch controls — `src/ui/touch.js` exports `class TouchControls`
 ```
