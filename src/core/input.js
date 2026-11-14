@@ -13,6 +13,12 @@
 // setPad(code, down) / setPadAxis(x, y) / releasePad(). Touch, pad and the real device each keep
 // their own holds, so letting go on one never drops a hold on another. `kbmT` stamps the last real
 // keyboard / mouse event (performance.now()): the pad layer uses it to tell which device is in use.
+//
+// Actions (core/bindings.js): the game reads act(a) / actPressed(a) / actReleased(a), true when any
+// code bound to `a` (or its virtual code '@a', pressed by touch / pad) is down / pressed / released.
+// moveAxis() reads the up / down / left / right actions. Raw codes stay readable for fixed keys.
+
+import { Bindings, installActions } from './bindings.js';
 
 const PREVENT = new Set(['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'F1']);
 const MOUSE_CODE = { Mouse0: 0, Mouse1: 1, Mouse2: 2 };
@@ -20,8 +26,9 @@ const TOUCH_MOUSE_GUARD = 1000; // ms after a touch during which mouse events ar
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 export class Input {
-  constructor(canvas) {
+  constructor(canvas, bindings = new Bindings()) {
     this.canvas = canvas;
+    installActions(this, bindings); // this.bindings, act(), actPressed(), actReleased()
     this.keys = new Set();
     this.pressedKeys = new Set();
     this.releasedKeys = new Set();
@@ -128,7 +135,7 @@ export class Input {
     return this.enabled && this.releasedButtons[b];
   }
   /**
-   * WASD / arrows as a vector in screen space: x right, y up (north). Keys give a unit vector; a
+   * The move actions (WASD / arrows by default) as a vector in screen space: x right, y up (north). Keys give a unit vector; a
    * deflected stick wins and keeps its analog length (0..1): the gamepad's, then the touch stick.
    */
   moveAxis() {
@@ -136,10 +143,10 @@ export class Input {
     if (this.enabled && (pa.x !== 0 || pa.y !== 0)) return { x: pa.x, y: pa.y };
     if (this.enabled && (v.x !== 0 || v.y !== 0)) return { x: v.x, y: v.y };
     let x = 0, y = 0;
-    if (this.down('KeyA') || this.down('ArrowLeft')) x -= 1;
-    if (this.down('KeyD') || this.down('ArrowRight')) x += 1;
-    if (this.down('KeyW') || this.down('ArrowUp')) y += 1;
-    if (this.down('KeyS') || this.down('ArrowDown')) y -= 1;
+    if (this.act('left')) x -= 1;
+    if (this.act('right')) x += 1;
+    if (this.act('up')) y += 1;
+    if (this.act('down')) y -= 1;
     const len = Math.hypot(x, y);
     return len > 0 ? { x: x / len, y: y / len } : { x: 0, y: 0 };
   }

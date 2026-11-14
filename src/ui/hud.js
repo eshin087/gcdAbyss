@@ -2,13 +2,14 @@ import { DEFENSE, POSTURE } from '../combat/rules.js';
 import { DelayedBar, PostureBar } from './bars.js';
 import { Banner } from './banner.js';
 import { Callouts } from './callouts.js';
-import { el, fillKeyText, flashClass, num, safeDt } from './dom.js';
+import { el, fillKeyText, flashClass, num, relabelChips, safeDt, setChipSource } from './dom.js';
 import { CombatFeed } from './feed.js';
 import { injectHudStyle } from './hudStyle.js';
 import { LogPanel } from './logPanel.js';
 import { Minimap } from './minimap.js';
 import { NameTags } from './nameTags.js';
 import { ScreenProjector } from './project.js';
+import { RemapPanel } from './remap.js';
 import { HelpPanel, PauseMenu, StatsPanel, TitleScreen } from './screens.js';
 import { TellEdges } from './tells.js';
 
@@ -26,6 +27,9 @@ export class Hud {
   constructor(game) {
     this.game = game;
     injectHudStyle();
+    // key chips ("[@dodge]") read the bindings and the device in use (ui/dom.js); relabel on a remap
+    setChipSource({ bindings: game.input?.bindings ?? null, padActive: () => !!game.gamepad?.active, layout: () => game.gamepad?.layout ?? 'xbox' });
+    game.input?.bindings?.onChange?.(() => relabelChips());
     const host = document.getElementById('ui') ?? document.body;
     this.root = el('div', 'ab-root', null, host);
     this.root.dataset.state = game.state || 'title';
@@ -44,14 +48,13 @@ export class Hud {
     this.bannerUi = new Banner(this.root);
     this.statsUi = new StatsPanel(this.root);
     this.help = new HelpPanel(this.root);
-    const hint = el('div', 'ab-hint ab-play kb-only', null, this.root);
-    fillKeyText(hint, '[H] help  [Esc] pause');
-    fillKeyText(el('div', 'ab-hint ab-play pad-only', null, this.root), '[VIEW] help  [MENU] pause', true);
-    this._padPrompt = false; // the prompt is drawn with the gamepad's interact button
+    const hint = el('div', 'ab-hint ab-play ab-nontouch', null, this.root);
+    fillKeyText(hint, '[@help] help  [@pause] pause');
     // the stage picker: game.levels / game.pickLevel (main.js; levels/index.js)
     const stage = Array.isArray(game.levels) ? { levels: game.levels, current: game.level?.id, pick: (id) => game.pickLevel?.(id) } : null;
     this.titleUi = new TitleScreen(this.root, (game.state || 'title') === 'title', stage);
     this.pauseUi = new PauseMenu(game, this.root);
+    this.remapUi = new RemapPanel(game, this.root);
     this.feed = new CombatFeed(game, this);
     this._ghostAt = -10;
 
@@ -126,7 +129,7 @@ export class Hud {
     this.pipsEl = el('span', 'ab-pips', null, fl);
     this.pipFull = el('span', 'full', '', this.pipsEl);
     this.pipEmpty = el('span', 'empty', '', this.pipsEl);
-    fillKeyText(el('span', '', null, fl), ' [F]');
+    fillKeyText(el('span', '', null, fl), ' [@flask]');
     this.lockEl = el('span', 'ab-lock', '◎ LOCKED ON', foot);
 
     this._hp = null;
@@ -216,27 +219,17 @@ export class Hud {
     this.bannerUi.clear(instant);
   }
 
-  /** The prompt shown now (raw text with "[E]" key tokens), or null. Touch controls make it tappable. */
+  /** The prompt shown now (raw text with "[@interact]" key tokens), or null. Touch controls make it tappable. */
   get promptText() {
     return this._prompt;
   }
 
   prompt(text) {
     const t = text ? String(text) : null;
-    const pad = !!this.game.gamepad?.active;
-    if (t === this._prompt && pad === this._padPrompt) return;
+    if (t === this._prompt) return;
     this._prompt = t;
-    this._padPrompt = pad;
-    // with a gamepad in use the prompt's key ("[E] Rest") reads as the interact button (Y / △)
-    if (t) fillKeyText(this.promptEl, pad ? t.replace(/\[[A-Za-z]\]/g, `[${this.game.gamepad.label('Y')}]`) : t);
+    if (t) fillKeyText(this.promptEl, t); // "[@interact]" shows the bound key / pad button
     this.promptEl.classList.toggle('on', !!t);
-  }
-
-  /** Redraw the prompt (the device in use or the pad's layout changed). */
-  refreshPrompt() {
-    const t = this._prompt;
-    this._prompt = undefined;
-    this.prompt(t);
   }
 
   showTitle() {
@@ -248,6 +241,7 @@ export class Hud {
   }
 
   showPause(on) {
+    if (!on) this.remapUi.close();
     this.pauseUi.show(on);
   }
 

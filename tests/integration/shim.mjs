@@ -68,10 +68,11 @@ globalThis.document = {
 if (!globalThis.performance) globalThis.performance = { now: () => Date.now() };
 /** Dispatch a window event. Returns true when a capture listener stopped it (the game never sees it). */
 export const fireWin = (n, e = {}) => {
-  let stopped = false;
-  const ev = { preventDefault() {}, stopPropagation() { stopped = true; }, ...e };
+  let stopped = false, immediate = false;
+  const ev = { preventDefault() {}, stopPropagation() { stopped = true; }, stopImmediatePropagation() { stopped = immediate = true; }, ...e };
   // capture listeners (Lab key handler) run first and may stop the event, like the browser
-  for (const f of (winListeners['capture:' + n] || []).slice()) f(ev);
+  // (stopImmediatePropagation also skips the window's later capture listeners)
+  for (const f of (winListeners['capture:' + n] || []).slice()) { f(ev); if (immediate) break; }
   if (stopped) return true;
   for (const f of (winListeners[n] || []).slice()) f(ev);
   return false;

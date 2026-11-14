@@ -98,8 +98,8 @@ export class TimingTrainer {
   trackInput() {
     const inp = this.game?.input;
     if (!inp) return;
-    const rmb = !!inp.mousePressed?.(2);
-    const space = !!inp.pressed?.('Space');
+    const rmb = !!inp.actPressed?.('block');
+    const space = !!inp.actPressed?.('dodge');
     if (!rmb && !space) return;
     const now = this.now;
     if (rmb) this.rmbAt = now;

@@ -694,8 +694,28 @@ const CSS = `
 /* ---------- gamepad in use (src/ui/gamepad.js adds html.abyss-pad) ---------- */
 html:not(.abyss-pad) .pad-only { display: none !important; }
 html.abyss-pad .kb-only, html.abyss-pad .tp-only { display: none !important; }
+.ab-touch:not(.ab-pad) .ab-nontouch { display: none !important; }
 .ab-btn.pad-focus { color: #fff; border-color: var(--ab-ember); background: rgba(255, 138, 61, 0.12); box-shadow: 0 0 0 1px rgba(255, 138, 61, 0.35); }
 .ab-stage .ab-btn.pad-focus { color: #f2e7d2; border-color: var(--ab-ember); }
+
+/* ---------- the CONTROLS (remap) panel: src/ui/remap.js ---------- */
+.ab-pause.remap .ab-pause-panel { display: none; }
+.ab-remap { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(2, 3, 6, 0.58); z-index: 10; }
+.ab-remap.on { display: flex; }
+.ab-remap-panel { width: 400px; max-height: calc(100% - 24px); overflow-y: auto; padding: 18px 22px 14px; text-align: center; pointer-events: auto; }
+.ab-remap-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+.ab-remap-tabs .ab-btn { justify-content: center; margin: 0; color: var(--ab-dim); }
+.ab-remap-tabs .ab-btn.on { color: #fff; border-color: var(--ab-ember); }
+.ab-remap-list .ab-btn { margin: 3px 0; padding: 5px 10px; font-size: 10.5px; }
+.ab-remap-list .ab-btn .n { color: var(--ab-dim); }
+.ab-remap-list .ab-btn .v { color: var(--ab-gold); letter-spacing: 0.08em; }
+.ab-remap-list .ab-btn.wait { border-color: var(--ab-ember); background: rgba(255, 138, 61, 0.1); }
+.ab-remap-list .ab-btn.wait .v { color: #fff; animation: ab-blink 1.2s ease-in-out infinite; }
+.ab-remap-hint { margin: 8px 0 4px; min-height: 14px; font-size: 10px; color: var(--ab-faint); letter-spacing: 0.06em; }
+.ab-remap-hint.warn { color: var(--ab-ember); }
+.ab-remap-foot { display: flex; gap: 8px; }
+.ab-remap-foot .ab-btn { justify-content: center; margin: 4px 0 0; }
+.ab-remap-foot .ab-btn.dim { opacity: 0.45; }
 
 /* ---------- touch devices (src/ui/touch.js adds .ab-touch; desktop never gets it) ---------- */
 .ab-root:not(.ab-touch) .tp-only { display: none !important; }

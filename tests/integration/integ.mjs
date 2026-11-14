@@ -4,7 +4,7 @@
 // the real Colliders. A bot drives the input: it moves, attacks, blocks, parries and dodges.
 // usage: node integ.mjs <repoRoot> [scenario]   (env: ABYSS_SEED=n reseeds the AI, ABYSS_TRACE=1 logs combat events)
 //   scenario: gate | hero | batch | breath | parry | block | reach | red | plunge | deflect | lab | strings | plungeReact |
-//             timing | fire | herolook | win | die | touch | pad | all (default all)
+//             timing | fire | herolook | win | die | touch | pad | remap | all (default all)
 //   (timing: ABYSS_TM=name,name... probes only those attacks; ABYSS_TMV=1 prints its per-placement map)
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -33,6 +33,7 @@ const { Hud } = await imp('src/ui/hud.js');
 const { TouchControls } = await imp('src/ui/touch.js');
 const { GamepadControls } = await imp('src/ui/gamepad.js');
 const { Input } = await imp('src/core/input.js');
+const { Bindings, installActions, ACTIONS } = await imp('src/core/bindings.js');
 const { AudioEngine } = await imp('src/audio/audio.js');
 const { GameFlow } = await imp('src/game/flow.js');
 const { Lab } = await imp('src/dev/lab.js');
@@ -141,6 +142,7 @@ function build(opts = {}) {
       this.anyPressed = false; this.wheel = 0;
     },
   };
+  installActions(input, new Bindings(null)); // act / actPressed / actReleased (core/bindings.js), default bindings
   const colliders = new Colliders();
   for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2; colliders.add(Math.cos(a) * 19.5, Math.sin(a) * 19.5, 0.9, 'stone'); }
   const pushers = new Map();
@@ -2977,13 +2979,13 @@ async function scenarioTouch() {
   const ax = input.moveAxis();
   touch('pointermove', zone, 16, 150, 230); // past the rim
   frames(0.3);
-  const sprinted = p.state === 'sprint' && input.down('ShiftLeft');
+  const sprinted = p.state === 'sprint' && input.act('sprint');
   touch('pointerup', zone, 16);
   frames(0.5);
   assert(ran && Math.abs(ax.x) < 1e-6 && ax.y > 0.99, `stick up → hero runs north (Δz ${(p.position.z - z0).toFixed(2)} m, axis ${ax.x.toFixed(2)},${ax.y.toFixed(2)})`);
   assert(sprinted, 'stick at the rim → sprint (ShiftLeft held)');
   const ax2 = input.moveAxis();
-  assert((p.state === 'idle' || p.state === 'run') && !input.down('ShiftLeft') && ax2.x === 0 && ax2.y === 0, `stick release → stops, sprint off (${p.state})`);
+  assert((p.state === 'idle' || p.state === 'run') && !input.act('sprint') && ax2.x === 0 && ax2.y === 0, `stick release → stops, sprint off (${p.state})`);
   // LOCK toggles lock-on; FLASK drinks
   const tapBtn = (b, id) => { touch('pointerdown', b, id); frames(0.05); touch('pointerup', b, id); frames(0.1); };
   settle(G); place(G, 8);
@@ -3000,7 +3002,7 @@ async function scenarioTouch() {
   // || → pause; controls hide and every virtual input is released
   touch('pointerdown', atk, 20);
   tapBtn(pause, 21);
-  assert(game.state === 'paused' && cls('tc-root').classList.contains('off') && !input.mouseDown(0), `|| → paused, controls hidden + released (${game.state})`);
+  assert(game.state === 'paused' && cls('tc-root').classList.contains('off') && !input.act('attack'), `|| → paused, controls hidden + released (${game.state})`);
   touch('pointerup', atk, 20);
   game.flow.resume();
   frames(0.2);
@@ -3017,12 +3019,12 @@ async function scenarioTouch() {
   assert(game.flow.debug.toState('explore') === true, 'toState(explore)');
   frames(0.3);
   const rest0 = c('bonfire:rest');
-  assert(/\[E\]/.test(game.hud.promptText ?? ''), `prompt up at the bonfire ("${game.hud.promptText}")`);
+  assert(/\[@interact\]/.test(game.hud.promptText ?? ''), `prompt up at the bonfire ("${game.hud.promptText}")`);
   touch('pointerdown', game.hud.promptEl, 22);
   frames(0.05);
   touch('pointerup', game.hud.promptEl, 22);
   frames(0.2);
-  assert(c('bonfire:rest') === rest0 + 1, 'prompt tap → rest at the bonfire (KeyE)');
+  assert(c('bonfire:rest') === rest0 + 1, 'prompt tap → rest at the bonfire (@interact)');
   // auto-aim off (dragon asleep): aim follows the stick
   touch('pointerdown', zone, 23, 150, 300);
   touch('pointermove', zone, 23, 190, 300); // right = east
@@ -3088,16 +3090,16 @@ async function scenarioPad() {
   frames(0.5);
   assert(gp.active && html().contains('abyss-pad') && cls('ab-root')?.classList.contains('ab-pad'), 'first press → pad active (html.abyss-pad, HUD .ab-pad)');
   assert(game.state === 'explore', `title: A → explore (got ${game.state})`);
-  assert(c('player:roll') === roll0 && !input.down('Space'), 'the A that closed the title, still held, does not roll');
+  assert(c('player:roll') === roll0 && !input.act('dodge'), 'the A that closed the title, still held, does not roll');
   btn(B.A, false);
   frames(0.1);
   // the prompt reads "[Y] Rest" and Y rests at the bonfire (the prompt's KeyE)
   assert(game.flow.debug.toState('explore') === true, 'toState(explore)');
   frames(0.3);
-  assert(/\[E\]/.test(game.hud.promptText ?? '') && game.hud.promptEl.textContent.startsWith('Y'), `prompt drawn with Y ("${game.hud.promptEl.textContent}")`);
+  assert(/\[@interact\]/.test(game.hud.promptText ?? '') && game.hud.promptEl.textContent.startsWith('Y'), `prompt drawn with Y ("${game.hud.promptEl.textContent}")`);
   const rest0 = c('bonfire:rest');
   tap(B.Y, 0.05, 0.3);
-  assert(c('bonfire:rest') === rest0 + 1, 'Y at the bonfire → rest (KeyE)');
+  assert(c('bonfire:rest') === rest0 + 1, 'Y at the bonfire → rest (@interact)');
   frames(1.5);
   // analog move: stick up = north (−Z); half deflection runs slower than full
   const z0 = p.position.z;
@@ -3139,13 +3141,13 @@ async function scenarioPad() {
   settle(G); place(G, 8);
   btn(B.LT, false, 0.6);
   frames(0.2);
-  const blocking = p.state === 'block' && input.mouseDown(2);
+  const blocking = p.state === 'block' && input.act('block');
   btn(B.LT, false, 0.4);
   frames(0.1);
-  const still = input.mouseDown(2);
+  const still = input.act('block');
   btn(B.LT, false, 0.1);
   frames(0.1);
-  assert(blocking && still && !input.mouseDown(2), `LT: block at 0.6, held at 0.4 (hysteresis), up at 0.1 (state ${p.state})`);
+  assert(blocking && still && !input.act('block'), `LT: block at 0.6, held at 0.4 (hysteresis), up at 0.1 (state ${p.state})`);
   settle(G); place(G, 8);
   const r0 = c('player:roll');
   tap(B.A, 0.05, 0.8);
@@ -3200,7 +3202,7 @@ async function scenarioPad() {
   frames(0.05);
   fireWin('keyup', { code: 'KeyW' });
   frames(0.05);
-  assert(!gp.active && !html().contains('abyss-pad') && !input.mouseDown(2), 'a key press → keyboard in use: pad hints off, the pad\'s held guard released');
+  assert(!gp.active && !html().contains('abyss-pad') && !input.act('block'), 'a key press → keyboard in use: pad hints off, the pad\'s held guard released');
   btn(B.LB, false);
   pad.axes[0] = 0.9;
   frames(0.1);
@@ -3218,13 +3220,146 @@ async function scenarioPad() {
   frames(0.05);
   ps.buttons[B.LB].pressed = false; ps.buttons[B.LB].value = 0;
   frames(0.05);
-  assert(gp.layout === 'ps' && gp.label('Y') === '△' && gp.label('RB') === 'R1', `DualSense → PlayStation labels (Y ${gp.label('Y')}, RB ${gp.label('RB')})`);
+  const hintKeys = cls('ab-hint')?.findAll((e) => e.classList?.contains('ab-key')).map((e) => e.textContent).join(' ');
+  assert(gp.layout === 'ps' && input.bindings.padText('interact', gp.layout) === '△' && input.bindings.padText('attack', gp.layout) === 'R1' && hintKeys === 'SHARE OPTIONS',
+    `DualSense → PlayStation labels (interact ${input.bindings.padText('interact', gp.layout)}, the corner hint: ${hintKeys})`);
   // a disconnect mid-fight pauses and hands the screen back to the keyboard hints
   pads = [];
   frames(0.1);
   assert(!gp.connected && !gp.active && game.state === 'paused' && !html().contains('abyss-pad'), `pad unplugged mid-fight → paused (${game.state})`);
   game.flow.resume();
   frames(0.1);
+  delete nav.getGamepads;
+  return G;
+}
+
+// ================================================================== scenario: remap
+// core/bindings.js rules (swap on a clash, reserved keys, fixed pause, persistence and repair) and
+// the pause menu's CONTROLS panel (ui/remap.js) driven like a player would: keyboard, mouse and pad
+// picks, the game obeying the new keys, the key chips following every change.
+async function scenarioRemap() {
+  out('\n== scenario REMAP (bindings: swap, reserved, saved; the CONTROLS panel by key, mouse and pad) ==');
+  // ---- the rules, on their own
+  const mem = new Map();
+  const storage = { getItem: (k) => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)) };
+  const b = new Bindings(storage);
+  assert(b.isDefault() && b.codes('dodge').join() === 'Space' && b.buttons('attack').join() === '5,7', 'defaults: Space dodges, RB / RT attack');
+  assert(b.bindKey('dodge', 'KeyQ') && b.codes('dodge').join() === 'KeyQ' && !ACTIONS.some((a) => b.codes(a.id).includes('Space')), 'bind Q to dodge: Space is free');
+  assert(b.bindKey('dodge', 'KeyF') && b.codes('dodge').join() === 'KeyF' && b.codes('flask').join() === 'KeyQ', 'F (the flask key) to dodge → a swap: the flask gets Q');
+  assert(b.bindKey('up', 'ArrowDown') && b.codes('up').join() === 'ArrowDown' && b.codes('down').join() === 'KeyS', 'a taken alternate (↓) moves without a swap when its action keeps a key');
+  assert(!b.bindKey('dodge', 'Escape') && !b.bindKey('dodge', 'F1') && !b.bindKey('pause', 'KeyP') && !b.bindPad('dodge', 9) && !b.bindKey('zoomIn', 'KeyZ'), 'refused: Esc, F1, the fixed pause, the pad\'s Menu, a pad-only action on the keyboard');
+  assert(b.bindPad('attack', 0) && b.buttons('attack').join() === '0' && b.buttons('dodge').join() === '5,7', 'pad: A to attack → dodge takes RB / RT');
+  assert(b.moveText() === '↓ASD', `the move chip follows (${b.moveText()})`);
+  const b2 = new Bindings(storage);
+  assert(b2.codes('dodge').join() === 'KeyF' && b2.codes('flask').join() === 'KeyQ' && b2.buttons('attack').join() === '0', 'saved: a new Bindings on the same storage loads them');
+  b2.reset(true, 'pad');
+  assert(b2.buttons('attack').join() === '5,7' && b2.codes('dodge').join() === 'KeyF', 'reset the pad tab only: the keyboard keeps its remap');
+  mem.set('abyss.bindings.v1', '{ not json');
+  assert(new Bindings(storage).isDefault(), 'corrupt storage → defaults');
+  mem.set('abyss.bindings.v1', JSON.stringify({ kb: { dodge: ['KeyF'], flask: ['KeyF'], attack: ['Escape', 7] }, pad: { attack: [5, 99, 9] } }));
+  const b3 = new Bindings(storage);
+  assert(b3.isDefault('kb') && b3.buttons('attack').join() === '5' && b3.buttons('block').join() === '4,6',
+    `stored clash that would leave the flask unbound → keyboard defaults; pad junk (99, Menu) dropped (attack ${b3.buttons('attack')})`);
+
+  // ---- the panel, in the game
+  const nav = globalThis.navigator;
+  let pads = [];
+  Object.defineProperty(nav, 'getGamepads', { value: () => pads, configurable: true, writable: true });
+  const G = build({ realInput: true });
+  const { game, counts } = G;
+  const input = game.input, B = input.bindings, p = game.player, R = game.hud.remapUi, P = game.hud.pauseUi;
+  const c = (n) => counts[n] || 0;
+  const frames = (s) => { for (let i = 0, n = Math.max(1, Math.round(s / DT)); i < n; i++) G.tick(DT); };
+  const key = (code) => { const eaten = fireWin('keydown', { code, repeat: false }); frames(0.05); fireWin('keyup', { code }); frames(0.05); return eaten; };
+  const row = (id) => R.rows.find((r) => r.id === id);
+  const chip = (act, dev) => ui.find((e) => e.dataset?.act === act && (dev ? e.dataset.dev === dev : !e.dataset.dev) && e.isConnected);
+  frames(0.8);
+  key('Space'); // leave the title
+  assert(game.flow.debug.toState('explore') === true, 'toState(explore)');
+  frames(0.3);
+  key('Escape');
+  assert(game.state === 'paused' && P.buttons.includes(P.btnControls), `Esc → paused; the menu has CONTROLS (${game.state})`);
+  P.btnControls.click();
+  assert(R.on && R.tab === 'kb' && P.root.classList.contains('remap') && R.rows.some((r) => r.id === 'dodge') && !R.rows.some((r) => r.id === 'pause' || r.id === 'zoomIn'),
+    'CONTROLS opens on the keyboard tab: rows for the remappable actions (not pause, not pad-only zoom)');
+  // keyboard: pick DODGE, press Q; the game never sees the Q
+  row('dodge').btn.click();
+  assert(R.waiting === 'dodge' && /press/.test(row('dodge').v.textContent), 'DODGE picked: "press a key or click…"');
+  const eaten = fireWin('keydown', { code: 'KeyQ', repeat: false });
+  assert(eaten && !input.pressed('KeyQ') && B.codes('dodge').join() === 'KeyQ' && row('dodge').v.textContent === 'Q' && !R.waiting, 'Q → dodge; the panel swallowed the key');
+  input.endFrame();
+  fireWin('keyup', { code: 'KeyQ' });
+  assert(chip('dodge', 'kb')?.textContent === 'Q', `the controls grid relabelled (${chip('dodge', 'kb')?.textContent})`);
+  // mouse: pick LOCK-ON, click the middle button
+  row('lockOn').btn.click();
+  fireWin('mousedown', { button: 1, target: G.canvas });
+  assert(B.codes('lockOn').join() === 'Mouse1' && row('lockOn').v.textContent === 'MMB', 'a middle click → lock-on on MMB');
+  // reserved: F1 is refused, the pick ends, the flask keeps F
+  row('flask').btn.click();
+  fireWin('keydown', { code: 'F1', repeat: false });
+  assert(B.codes('flask').join() === 'KeyF' && R.hint.classList.contains('warn') && !R.waiting, `F1 refused ("${R.hint.textContent}")`);
+  // Esc cancels a pick, then closes the panel (the game stays paused)
+  row('flask').btn.click();
+  fireWin('keydown', { code: 'Escape', repeat: false });
+  assert(!R.waiting && R.on && B.codes('flask').join() === 'KeyF', 'Esc cancels a pick');
+  fireWin('keydown', { code: 'Escape', repeat: false });
+  frames(0.05);
+  assert(!R.on && game.state === 'paused' && !P.root.classList.contains('remap'), `Esc again closes CONTROLS, still paused (${game.state})`);
+  game.flow.resume();
+  frames(0.3);
+  // the game obeys: Q rolls, Space does nothing; the prompt's chip follows a remap of interact
+  const r0 = c('player:roll');
+  key('Space');
+  frames(0.6);
+  const r1 = c('player:roll');
+  key('KeyQ');
+  frames(0.8);
+  assert(r1 === r0 && c('player:roll') === r0 + 1, `Space no longer rolls, Q does (${r0} → ${r1} → ${c('player:roll')})`);
+  assert(game.flow.debug.toState('explore') === true, 'toState(explore) at the bonfire');
+  frames(0.3);
+  assert(game.hud.promptEl.textContent.startsWith('E'), `prompt "${game.hud.promptEl.textContent}"`);
+  B.bindKey('interact', 'KeyG');
+  assert(game.hud.promptEl.textContent.startsWith('G'), `interact → G: the prompt relabels ("${game.hud.promptEl.textContent}")`);
+  const rest0 = c('bonfire:rest');
+  key('KeyE');
+  frames(0.2);
+  const restE = c('bonfire:rest');
+  key('KeyG');
+  frames(0.3);
+  assert(restE === rest0 && c('bonfire:rest') === rest0 + 1, 'E no longer rests, G does');
+
+  // ---- the pad: Menu → CONTROLS (D-pad) → the controller tab → DODGE → press X
+  const pad = { id: 'Xbox Wireless Controller (STANDARD GAMEPAD)', mapping: 'standard', connected: true, axes: [0, 0, 0, 0], buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })) };
+  const btn = (i, on = true) => { pad.buttons[i].pressed = on; pad.buttons[i].value = on ? 1 : 0; };
+  const tap = (i) => { btn(i); frames(0.05); btn(i, false); frames(0.08); };
+  pads = [pad];
+  frames(0.1);
+  tap(9);
+  assert(game.state === 'paused' && game.gamepad.active, `Menu → paused (${game.state})`);
+  for (let i = 0; i < P.buttons.indexOf(P.btnControls); i++) tap(13);
+  assert(P.btnControls.classList.contains('pad-focus'), 'D-pad down to CONTROLS');
+  tap(0);
+  assert(R.on && R.tab === 'pad' && !R.rows.some((r) => r.id === 'up') && R.rows.some((r) => r.id === 'zoomIn'), 'A → CONTROLS opens on the controller tab (no move keys; zoom is there)');
+  const di = R.navButtons.indexOf(row('dodge').btn);
+  for (let i = 0; i < di; i++) tap(13);
+  assert(row('dodge').btn.classList.contains('pad-focus'), `D-pad to DODGE (row ${di})`);
+  tap(0);
+  assert(R.waiting === 'dodge', 'A picks DODGE: waiting for a button');
+  tap(2);
+  assert(B.buttons('dodge').join() === '2' && B.buttons('flask').join() === '0' && row('dodge').v.textContent === 'X' && !R.waiting, `X → dodge, the flask takes A (swap) (${row('flask').v.textContent})`);
+  tap(1);
+  assert(!R.on && game.state === 'paused', `B closes CONTROLS only (${game.state})`);
+  tap(1);
+  assert(game.state === 'explore', `B again resumes (${game.state})`);
+  frames(0.3);
+  p.hp = 50;
+  const h0 = c('player:heal'), r2 = c('player:roll');
+  tap(2);
+  frames(0.8);
+  tap(0);
+  frames(1.0);
+  assert(c('player:roll') === r2 + 1 && c('player:heal') === h0 + 1, 'in play: X rolls, A drinks');
+  B.reset(false);
   delete nav.getGamepads;
   return G;
 }
@@ -3767,7 +3902,7 @@ async function scenarioBatch() {
   return G;
 }
 
-const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, batch: scenarioBatch, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, pad: scenarioPad, herolook: scenarioHeroLook, herolife: scenarioHeroLife, probe: scenarioProbe };
+const SCENARIOS = { gate: scenarioGate, hero: scenarioHero, batch: scenarioBatch, breath: scenarioBreath, parry: scenarioParry, block: scenarioBlock, reach: scenarioReach, red: scenarioRed, plunge: scenarioPlunge, deflect: scenarioDeflect, lab: scenarioLab, bullets: scenarioBullets, strings: scenarioStrings, plungeReact: scenarioPlungeReact, timing: scenarioTiming, fire: scenarioFire, win: scenarioWin, die: scenarioDie, touch: scenarioTouch, pad: scenarioPad, remap: scenarioRemap, herolook: scenarioHeroLook, herolife: scenarioHeroLife, probe: scenarioProbe };
 const runs = [];
 const OPT_IN = new Set(['probe']); // run only when named
 for (const [name, fn] of Object.entries(SCENARIOS)) if (SCEN === name || (SCEN === 'all' && !OPT_IN.has(name))) runs.push(await fn());

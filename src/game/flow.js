@@ -17,7 +17,10 @@ const PLAY = new Set(['explore', 'bossIntro', 'boss']);
 const FIGHTING = new Set(['combat', 'staggered', 'airborne']);
 // settings keys don't skip screens; nor do modifiers / function keys (Alt-Tab, F11 fullscreen, F12 devtools)
 // (Backquote opens the Lab)
-const NON_DISMISS = new Set(['KeyM', 'KeyH', 'Escape', 'Backquote', 'ContextMenu', 'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen']);
+const NON_DISMISS = new Set(['Escape', 'Backquote', 'ContextMenu', 'CapsLock', 'NumLock', 'ScrollLock', 'PrintScreen']);
+// ... nor do the keys / buttons bound to these actions (core/bindings.js; help and mute are remappable)
+const NON_DISMISS_ACTIONS = ['help', 'mute', 'pause'];
+const MOUSE_CODES = ['Mouse0', 'Mouse1', 'Mouse2'];
 const NON_DISMISS_RE = /^(F\d+|Alt|Control|Meta|OS)/;
 const QUEUED = ['dragon:introDone', 'dragon:phase2', 'dragon:phase3', 'dragon:death', 'dragon:dead', 'player:died'];
 const DEBUG_STATES = new Set(['explore', 'boss', 'dead', 'victory']);
@@ -297,7 +300,7 @@ export class GameFlow {
     if (this.autoPause) {
       this.autoPause = false;
       if (PLAY.has(g.state)) this.pause(true);
-    } else if (inp?.pressed('Escape')) {
+    } else if (this._act('pause')) {
       this.togglePause();
     }
 
@@ -350,9 +353,14 @@ export class GameFlow {
     const inp = g.input;
     if (!inp) return;
     if (inp.pressed('F2')) this.cycleQuality();
-    if (inp.pressed('KeyM')) this.toggleMute();
+    if (this._act('mute')) this.toggleMute();
     if (inp.pressed('F3') && g.settings) g.settings.showFps = !g.settings.showFps;
-    if (inp.pressed('KeyH')) g.hud?.toggleHelp?.();
+    if (this._act('help')) g.hud?.toggleHelp?.();
+  }
+
+  /** The action was pressed this frame (core/bindings.js; false without an action-aware input). */
+  _act(name) {
+    return !!this.game.input?.actPressed?.(name);
   }
 
   _drainQueue() {
@@ -442,8 +450,10 @@ export class GameFlow {
     g.events?.emit('area', { name: area.name });
     g.audio?.setMusic?.('ambient');
     for (const line of this._text('arrive') ?? []) this._log(line, 'lore');
-    if (g.gamepad?.active) this._log(`${g.gamepad.label('VIEW')}: controls  ·  ${g.gamepad.label('MENU')}: pause`, 'system');
-    else if (!g.touch?.active) this._log('H: controls  ·  Esc: pause', 'system');
+    if (!g.touch?.active || g.gamepad?.active) {
+      const k = (a) => g.gamepad?.actionText?.(a) ?? g.input?.bindings?.keyText?.(a) ?? a;
+      this._log(`${k('help')}: controls  ·  ${k('pause')}: pause`, 'system');
+    }
     // ease the camera from the establishing shot back to the player
     this._ovW = 0;
     this._ovZ = 0;
@@ -469,8 +479,8 @@ export class GameFlow {
 
     const bf = g.world?.bonfire;
     const near = !!bf && Math.hypot(pos.x - bf.x, pos.z - bf.z) < TUNE.restRadius;
-    g.hud?.prompt?.(near ? '[E] Rest at bonfire' : null);
-    if (near && this.restCooldown <= 0 && g.input?.pressed('KeyE')) this._rest();
+    g.hud?.prompt?.(near ? '[@interact] Rest at bonfire' : null);
+    if (near && this.restCooldown <= 0 && this._act('interact')) this._rest();
 
     if (d) {
       const ds = d.state;
@@ -714,9 +724,9 @@ export class GameFlow {
     if (!this.statsShown && this.victoryT >= TUNE.statsDelay) {
       this.statsShown = true;
       g.hud?.showStats?.(this.stats.rows());
-      g.hud?.prompt?.('[R] Fight again');
+      g.hud?.prompt?.('[@interact] Fight again');
     }
-    if (this.victoryT > 1 && !this.respawning && g.input?.pressed('KeyR')) this._beginRespawn(true);
+    if (this.victoryT > 1 && !this.respawning && this._act('interact')) this._beginRespawn(true);
   }
 
   // ------------------------------------------------------------------ respawn / restart
@@ -1037,10 +1047,12 @@ export class GameFlow {
   _dismissPressed() {
     const inp = this.game.input;
     if (!inp) return false;
-    if (inp.mousePressed?.(0) || inp.mousePressed?.(1) || inp.mousePressed?.(2)) return true;
+    const B = inp.bindings;
+    const skip = (code) => NON_DISMISS_ACTIONS.some((a) => code === `@${a}` || !!B?.codes?.(a)?.includes(code));
+    for (let b = 0; b < 3; b++) if (inp.mousePressed?.(b) && !skip(MOUSE_CODES[b])) return true;
     const keys = inp.pressedKeys;
     if (keys && typeof keys[Symbol.iterator] === 'function') {
-      for (const k of keys) if (!NON_DISMISS.has(k) && !NON_DISMISS_RE.test(k)) return true;
+      for (const k of keys) if (!NON_DISMISS.has(k) && !NON_DISMISS_RE.test(k) && !skip(k)) return true;
       return false;
     }
     return !!inp.anyPressed;

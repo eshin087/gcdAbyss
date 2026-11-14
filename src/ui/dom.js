@@ -24,8 +24,61 @@ export function fmtClock(seconds) {
   return `${m < 10 ? '0' : ''}${m}:${s % 60 < 10 ? '0' : ''}${s % 60}`;
 }
 
-/** Fill `target` with text where "[E]" style tokens become keycaps. */
-export function fillKeyText(target, text, pad = false) {
+// ---------------------------------------------------------------- key chips
+// "[...]" tokens become keycaps. "[@action]" is an ACTION chip (core/bindings.js): it shows the key
+// bound to that action, or the pad button while a gamepad is the device in use, and every action chip
+// is relabelled when a binding, the device or the pad layout changes (relabelChips). Pseudo actions:
+// @move (WASD / LS), @aim (Mouse / RS), @zoom (Wheel / the D-pad zoom buttons).
+// dev: null = follow the device in use; 'kb' | 'pad' = always that device (the control grids).
+let chipSource = null; // { bindings, padActive(), layout() } — set by the HUD
+const chips = new Set();
+
+export function setChipSource(src) {
+  chipSource = src ?? null;
+  relabelChips();
+}
+
+/** The text an action chip shows now. all = every bound key ("Tab / MMB"), else the first. */
+export function chipText(act, dev = null, all = false) {
+  const S = chipSource, B = S?.bindings;
+  const pad = (dev ?? (S?.padActive?.() ? 'pad' : 'kb')) === 'pad';
+  const layout = S?.layout?.() ?? 'xbox';
+  if (act === 'move') return pad ? 'LS' : (B?.moveText?.() ?? 'WASD');
+  if (act === 'aim') return pad ? 'RS' : 'Mouse';
+  if (act === 'zoom') return pad && B ? `${B.padText('zoomIn', layout)} ${B.padText('zoomOut', layout)}` : 'Wheel';
+  if (!B) return act;
+  if (pad) {
+    const t = B.padText(act, layout, all);
+    if (t !== '—' || dev === 'pad') return t;
+  }
+  return B.keyText(act, all);
+}
+
+/** Redraw every action chip on screen (bindings / device / layout changed). */
+export function relabelChips() {
+  for (const c of chips) {
+    if (c.isConnected === false) {
+      chips.delete(c);
+      continue;
+    }
+    c.textContent = chipText(c.dataset.act, c.dataset.dev || null, c.dataset.all === '1');
+  }
+}
+
+/** An action chip ("[@dodge]") in `parent`. */
+export function actionChip(parent, act, dev = null, all = false) {
+  const k = el('span', 'ab-key', null, parent);
+  k.dataset.act = act;
+  if (dev) k.dataset.dev = dev;
+  if (all) k.dataset.all = '1';
+  k.textContent = chipText(act, dev, all);
+  if (chips.size > 400) for (const c of chips) if (c.isConnected === false) chips.delete(c);
+  chips.add(k);
+  return k;
+}
+
+/** Fill `target` with text where "[E]" style tokens become keycaps ("[@action]": action chips). */
+export function fillKeyText(target, text, dev = null) {
   target.textContent = '';
   const str = String(text ?? '');
   const re = /\[([^\]]+)\]/g;
@@ -33,8 +86,8 @@ export function fillKeyText(target, text, pad = false) {
   let m;
   while ((m = re.exec(str))) {
     if (m.index > last) target.appendChild(document.createTextNode(str.slice(last, m.index)));
-    const k = el('span', 'ab-key', m[1], target);
-    if (pad) k.dataset.pad = m[1]; // a gamepad button token: relabelled per layout (ui/gamepad.js)
+    if (m[1][0] === '@') actionChip(target, m[1].slice(1), dev);
+    else el('span', 'ab-key', m[1], target);
     last = re.lastIndex;
   }
   if (last < str.length) target.appendChild(document.createTextNode(str.slice(last)));
@@ -76,64 +129,37 @@ export function button(parent, className, onClick) {
   return b;
 }
 
-// Shared controls reference (title, pause menu, help panel).
+// Shared controls reference (title, pause menu, help panel): one row per action ('@id': its bound
+// keys, relabelled on a remap) or a fixed key; `only` = shown in that device's grid alone.
 export const CONTROLS = [
-  ['WASD', 'move'],
-  ['Mouse', 'aim'],
-  ['LMB', 'attack · hold to charge heavy'],
-  ['RMB', 'hold block · tap to parry'],
-  ['Space', 'dodge · perfect dodge = Ghostep'],
-  ['Shift', 'sprint'],
-  ['F', 'drink flask'],
-  ['Tab / MMB', 'lock-on'],
-  ['E', 'rest at bonfire'],
-  ['Esc', 'pause'],
-  ['H', 'help'],
-  ['M', 'mute'],
-  ['F1', 'lab (debug)'],
-  ['F2', 'quality'],
-  ['F3', 'fps'],
-  ['Wheel', 'zoom'],
+  ['@move', 'move'],
+  ['@aim', 'aim', 'kb'],
+  ['@aim', 'aim (let go: auto-aim at the boss)', 'pad'],
+  ['@attack', 'attack · hold to charge heavy'],
+  ['@block', 'hold block · tap to parry'],
+  ['@dodge', 'dodge · perfect dodge = Ghostep'],
+  ['@sprint', 'sprint (a stick click: until you let go)', 'pad'],
+  ['@sprint', 'sprint', 'kb'],
+  ['@flask', 'drink flask'],
+  ['@lockOn', 'lock-on'],
+  ['@interact', 'rest at bonfire · fight again'],
+  ['@pause', 'pause'],
+  ['@help', 'help'],
+  ['@mute', 'mute', 'kb'],
+  ['F1', 'lab (debug)', 'kb'],
+  ['F2', 'quality', 'kb'],
+  ['F3', 'fps', 'kb'],
+  ['@zoom', 'zoom'],
 ];
 
-export function controlsGrid(parent) {
+/** The controls grid for one device ('kb' | 'pad'): keys follow the bindings. */
+export function controlsGrid(parent, dev = 'kb') {
   const grid = el('div', 'ab-ctrls', null, parent);
-  for (const [k, a] of CONTROLS) {
+  for (const [k, a, only] of CONTROLS) {
+    if (only && only !== dev) continue;
     const kc = el('span', 'k', null, grid);
-    for (const part of k.split(' / ')) {
-      if (kc.childNodes.length) kc.appendChild(document.createTextNode(' '));
-      el('span', 'ab-key', part, kc);
-    }
-    el('span', 'a', a, grid);
-  }
-  return grid;
-}
-
-// The gamepad reference (src/ui/gamepad.js; shown while a pad is the device in use). Xbox tokens;
-// the chips carry data-pad and are relabelled for a PlayStation pad (PAD_LABELS).
-export const PAD_CONTROLS = [
-  ['LS', 'move'],
-  ['RS', 'aim (let go: auto-aim at the boss)'],
-  ['RB / RT', 'attack · hold to charge heavy'],
-  ['LB / LT', 'hold block · tap to parry'],
-  ['A', 'dodge · perfect dodge = Ghostep'],
-  ['B / L3', 'sprint (hold B · click L3)'],
-  ['X', 'drink flask'],
-  ['R3', 'lock-on'],
-  ['Y', 'rest at bonfire · fight again'],
-  ['MENU', 'pause'],
-  ['VIEW', 'help'],
-  ['D-PAD', 'zoom'],
-];
-
-export function padGrid(parent) {
-  const grid = el('div', 'ab-ctrls', null, parent);
-  for (const [k, a] of PAD_CONTROLS) {
-    const kc = el('span', 'k', null, grid);
-    for (const part of k.split(' / ')) {
-      if (kc.childNodes.length) kc.appendChild(document.createTextNode(' '));
-      el('span', 'ab-key', part, kc).dataset.pad = part;
-    }
+    if (k[0] === '@') actionChip(kc, k.slice(1), dev, true);
+    else el('span', 'ab-key', k, kc);
     el('span', 'a', a, grid);
   }
   return grid;

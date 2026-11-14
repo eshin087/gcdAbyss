@@ -1,37 +1,37 @@
+import { ACTIONS, STICK_CLICKS } from '../core/bindings.js';
 import { CONFIG } from '../core/config.js';
 import { aimWithoutCursor } from './aim.js';
+import { relabelChips } from './dom.js';
 
-// Gamepad controls (contract: docs/ARCHITECTURE.md → Gamepad controls; ADR-066).
+// Gamepad controls (contract: docs/ARCHITECTURE.md → Gamepad controls; ADR-066, ADR-067).
 // A thin layer ON TOP of core/input.js, like the touch controls: it polls navigator.getGamepads()
-// once a frame and feeds input.setPad(code, down) / setPadAxis(x, y) with the real key / mouse
-// codes, so the player and flow keep reading the same game.input API and every edge (tap / hold /
-// release: the parry tap, the charge hold) is the real device's. Layout = the Gamepad API
-// "standard" mapping (Xbox names; PlayStation in brackets):
-//   LS move (analog)   RS aim (idle: auto-aim at the boss)   RB / RT [R1 / R2] attack → Mouse0
-//   LB / LT [L1 / L2] block, tap parry → Mouse2   A [✕] dodge → Space   B [○] hold sprint → Shift
-//   L3 sprint until the stick is let go   X [□] flask → KeyF   Y [△] the HUD prompt's key (rest /
-//   fight again)   R3 lock-on → Tab   D-pad up / down zoom   Menu [Options] pause → Escape
-//   View [Share] help → KeyH
+// once a frame and, for every action bound to a pad button (core/bindings.js; remappable in the
+// pause menu's CONTROLS panel), holds that action's virtual code '@<action>' with input.setPad
+// while one of its buttons is down, so the player and flow read the same actions and every edge
+// (the parry tap, the charge hold) is the real device's. The left stick moves (setPadAxis), the
+// right stick aims; neither is remappable. Default layout (Gamepad API "standard" mapping, Xbox
+// names; PlayStation in brackets):
+//   RB / RT [R1 / R2] attack   LB / LT [L1 / L2] block, tap parry   A [✕] dodge   B [○] hold sprint
+//   L3 sprint until the stick is let go (any stick click bound to sprint latches)   X [□] flask
+//   Y [△] rest / fight again   R3 lock-on   View [Share] help   D-pad up / down zoom
+//   Menu [Options] pause (fixed, never remappable)
 // Menus: on the title any button starts (D-pad left / right + A picks a stage); in the pause menu
-// the D-pad / stick moves a focus over its buttons, A presses one, B or Menu resumes.
+// the D-pad / stick moves a focus over its buttons, A presses one, B or Menu resumes; in the CONTROLS
+// panel LB / RB switch tabs, A picks a row and the next button press is its new binding.
 // Active = the pad is the device in use (its last input is newer than the last keyboard / mouse /
-// touch event): `html.abyss-pad` swaps the on-screen key hints to pad buttons. A button held across
-// a mode change (menu ↔ play) counts only once it is let go, so the A that closes the title never
-// rolls, the Menu that resumes never pauses again. Rumble on hits / parries where supported.
+// touch event): `html.abyss-pad` swaps the on-screen hints to pad buttons. A button held across a
+// screen change (menu ↔ play, the CONTROLS panel) counts only once it is let go, so the A that
+// closes the title never rolls, the Menu that resumes never pauses again. Rumble where supported.
 
-const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
+const BTN = { A: 0, B: 1, LB: 4, RB: 5, LT: 6, RT: 7, START: 9, L3: 10, R3: 11, UP: 12, DOWN: 13, LEFT: 14, RIGHT: 15 };
 const N_BTN = 16;
 const TRIGGERS = new Set([BTN.LT, BTN.RT]);
 const MENU = new Set(['title', 'paused']); // no gameplay codes: the pad drives the screen instead
 const AIM = new Set(['explore', 'bossIntro', 'boss']);
-// face / shoulder / start: the buttons that dismiss "press any key" on the title
-const ANY = [BTN.A, BTN.B, BTN.X, BTN.Y, BTN.LB, BTN.RB, BTN.LT, BTN.RT, BTN.START, BTN.L3, BTN.R3];
-
-// on-screen labels by layout ([data-pad] key chips are relabelled when a PlayStation pad shows up)
-export const PAD_LABELS = {
-  xbox: { A: 'A', B: 'B', X: 'X', Y: 'Y', LB: 'LB', RB: 'RB', LT: 'LT', RT: 'RT', LS: 'LS', RS: 'RS', L3: 'L3', R3: 'R3', 'D-PAD': 'D-PAD', MENU: 'MENU', VIEW: 'VIEW' },
-  ps: { A: '✕', B: '○', X: '□', Y: '△', LB: 'L1', RB: 'R1', LT: 'L2', RT: 'R2', LS: 'L', RS: 'R', L3: 'L3', R3: 'R3', 'D-PAD': 'D-PAD', MENU: 'OPTIONS', VIEW: 'SHARE' },
-};
+// every button but the D-pad and View dismisses "press any key" on the title
+const ANY = [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11];
+// the actions the pad holds as '@<action>' codes (zoom is the camera's, handled here)
+const HELD = ACTIONS.filter((a) => a.pad && a.id !== 'zoomIn' && a.id !== 'zoomOut').map((a) => a.id);
 // Sony's USB vendor id 054c is in Chrome's and Firefox's id strings (an Xbox pad is a "Wireless Controller" too)
 const PS_ID = /playstation|dualsense|dualshock|054c/i;
 
@@ -51,13 +51,13 @@ export class GamepadControls {
     this.raw = new Array(N_BTN).fill(false); // physical state this frame (triggers with hysteresis)
     this.eff = new Array(N_BTN).fill(false); // effective (held and not blocked) this frame
     this.prev = new Array(N_BTN).fill(false); // effective last frame
-    this.blocked = new Set(); // held across a mode change: ignored until let go
+    this.blocked = new Set(); // held across a screen change: ignored until let go
     this.mode = null; // 'menu' | 'play'
     this.lastPadT = -Infinity; // performance.now() of the last pad activity
-    this.sprintLatch = false; // L3 clicked: sprint until the stick is let go
-    this.yCode = null; // the prompt key Y is holding down
+    this.sprintLatch = false; // a stick click bound to sprint: sprint until the stick is let go
     this.focus = -1; // menu focus (index into the current screen's buttons)
     this._focusEl = null;
+    this._menuKey = null; // which list the focus indexes ('pause', 'remap:kb', ...)
     this.nav = { dir: 0, t: 0 };
     this._v = game.THREE ? new game.THREE.Vector3() : { x: 0, y: 0, z: 0, set() { return this; } };
 
@@ -68,9 +68,11 @@ export class GamepadControls {
     this._subscribe(game.events);
   }
 
-  /** On-screen label for a pad button token ('A', 'Y', 'RB', 'MENU', ...) in the current layout. */
-  label(token) {
-    return PAD_LABELS[this.layout]?.[token] ?? token;
+  /** The pad button(s) bound to an action, as shown on screen ('A', '△', 'RB'), or null. */
+  actionText(action) {
+    if (!this.active) return null;
+    const t = this.game.input?.bindings?.padText?.(action, this.layout);
+    return t && t !== '—' ? t : null;
   }
 
   /** Per frame (main.js, right after the mouse ray and before the touch layer / Lab / flow / player). */
@@ -116,7 +118,7 @@ export class GamepadControls {
       const was = this.mode;
       this._releaseAll();
       this.mode = mode;
-      if (was) for (let i = 0; i < N_BTN; i++) if (this.raw[i]) this.blocked.add(i);
+      if (was) this._blockHeld();
     }
     for (const i of this.blocked) if (!this.raw[i]) this.blocked.delete(i);
     for (let i = 0; i < N_BTN; i++) {
@@ -130,7 +132,7 @@ export class GamepadControls {
 
   // ---------------------------------------------------------------- play
   _play(lx, ly, lm, rx, ry, rm) {
-    const g = this.game, inp = g.input, C = CONFIG.gamepad, B = BTN;
+    const g = this.game, inp = g.input, C = CONFIG.gamepad, B = inp.bindings;
     const down = (i) => this.eff[i];
     const pressed = (i) => this.eff[i] && !this.prev[i];
     this._clearFocus();
@@ -140,32 +142,19 @@ export class GamepadControls {
     const mx = k > 0 ? (lx / lm) * k : 0, my = k > 0 ? (-ly / lm) * k : 0;
     inp.setPadAxis(mx, my);
     if (k === 0) this.sprintLatch = false;
-    else if (pressed(B.L3)) this.sprintLatch = true;
 
-    inp.setPad('ShiftLeft', down(B.B) || this.sprintLatch);
-    inp.setPad('Space', down(B.A));
-    inp.setPad('KeyF', down(B.X));
-    inp.setPad('Mouse2', down(B.LB) || down(B.LT));
-    inp.setPad('Mouse0', down(B.RB) || down(B.RT));
-    inp.setPad('Tab', down(B.R3));
-    inp.setPad('Escape', down(B.START));
-    inp.setPad('KeyH', down(B.BACK));
-
-    // Y = the key the HUD prompt asks for ("[E] Rest", "[R] Fight again"), held while Y is
-    if (pressed(B.Y) && !this.yCode) {
-      const m = /\[([A-Za-z])\]/.exec(g.hud?.promptText ?? '');
-      if (m) {
-        this.yCode = `Key${m[1].toUpperCase()}`;
-        inp.setPad(this.yCode, true);
+    // every pad-bound action: '@<action>' held while one of its buttons is
+    for (const a of HELD) {
+      let on = false;
+      for (const i of B?.buttons(a) ?? []) {
+        if (a === 'sprint' && STICK_CLICKS.has(i)) {
+          if (pressed(i) && k > 0) this.sprintLatch = true; // a stick click latches the sprint
+        } else if (down(i)) on = true;
       }
+      inp.setPad(`@${a}`, on || (a === 'sprint' && this.sprintLatch));
     }
-    if (this.yCode && !down(B.Y)) {
-      inp.setPad(this.yCode, false);
-      this.yCode = null;
-    }
-
-    if (pressed(B.UP)) g.cameraRig?.zoom?.(-1);
-    if (pressed(B.DOWN)) g.cameraRig?.zoom?.(1);
+    for (const i of B?.buttons('zoomIn') ?? []) if (pressed(i)) g.cameraRig?.zoom?.(-1);
+    for (const i of B?.buttons('zoomOut') ?? []) if (pressed(i)) g.cameraRig?.zoom?.(1);
 
     // aim (the touch layer owns it while it is on): the right stick steers; idle → auto-aim at the
     // boss in range, else ahead along the last move direction (screen right = +X, screen down = +Z)
@@ -196,9 +185,16 @@ export class GamepadControls {
     const pressed = (i) => this.eff[i] && !this.prev[i];
     this.autoAim = false;
     if (g.state === 'paused') {
+      const R = g.hud?.remapUi;
+      if (R?.on) {
+        inp.setPad('@pause', false);
+        this._remap(R, realDt, ly, pressed);
+        return;
+      }
       const list = this._pauseButtons();
-      // B (back) or Menu resumes: the flow toggles the pause on Escape
-      inp.setPad('Escape', this.eff[B.START] || this.eff[B.B]);
+      this._useList('pause');
+      // B (back) or Menu resumes: the flow toggles the pause on the pause action
+      inp.setPad('@pause', this.eff[B.START] || this.eff[B.B]);
       if (this.focus < 0 || this.focus >= list.length) this.focus = 0; // opens on RESUME
       const step = this._navStep(realDt, this.eff[B.UP] || ly < -0.5, this.eff[B.DOWN] || ly > 0.5);
       if (step && list.length) this.focus = (this.focus + step + list.length) % list.length;
@@ -207,6 +203,7 @@ export class GamepadControls {
       return;
     }
     // title: D-pad left / right walks the stage picker, A on another stage picks it; anything else starts
+    this._useList('title');
     const list = this._stageButtons();
     const step = this._navStep(realDt, this.eff[B.LEFT], this.eff[B.RIGHT]);
     if (step && list.length) {
@@ -225,6 +222,47 @@ export class GamepadControls {
         break;
       }
     }
+  }
+
+  /** The CONTROLS panel (ui/remap.js): a waiting pad row takes the next press; else walk / pick / back. */
+  _remap(R, realDt, ly, pressed) {
+    const B = BTN;
+    if (R.waiting) {
+      this._showFocus(R.navButtons, -1);
+      if (R.tab === 'pad') {
+        for (let i = 0; i < N_BTN; i++) {
+          if (!pressed(i)) continue;
+          R.capturePad(i);
+          this._blockHeld(); // the button just bound must not also act in the panel
+          break;
+        }
+      } else if (pressed(B.B) || pressed(B.START)) R.cancel(); // a keyboard pick: B / Menu cancel it
+      return;
+    }
+    if (pressed(B.B) || pressed(B.START)) {
+      R.close();
+      this._blockHeld(); // B closes the panel only, not the pause menu under it
+      return;
+    }
+    if (pressed(B.LB)) R.setTab('kb');
+    if (pressed(B.RB)) R.setTab('pad');
+    const list = R.navButtons;
+    this._useList(`remap:${R.tab}`);
+    if (this.focus < 0 || this.focus >= list.length) this.focus = 0;
+    const step = this._navStep(realDt, this.eff[B.UP] || ly < -0.5, this.eff[B.DOWN] || ly > 0.5);
+    if (step && list.length) this.focus = (this.focus + step + list.length) % list.length;
+    this._showFocus(list);
+    if (pressed(B.A) && list.length) {
+      this._press(list[this.focus]);
+      this._blockHeld();
+    }
+  }
+
+  /** The focus indexes a new list: start over at its top. */
+  _useList(key) {
+    if (key === this._menuKey) return;
+    this._menuKey = key;
+    this.focus = -1;
   }
 
   /** -1 / +1 on a fresh press and then every CONFIG.gamepad.menuRepeat s while held; 0 otherwise. */
@@ -256,8 +294,8 @@ export class GamepadControls {
     if (typeof b?.click === 'function') b.click();
   }
 
-  _showFocus(list) {
-    const el = this.focus >= 0 ? list[this.focus] ?? null : null;
+  _showFocus(list, index = this.focus) {
+    const el = index >= 0 ? list[index] ?? null : null;
     if (el === this._focusEl) return;
     this._focusEl?.classList?.remove('pad-focus');
     el?.classList?.add('pad-focus');
@@ -265,9 +303,19 @@ export class GamepadControls {
   }
 
   _clearFocus() {
+    this._menuKey = null;
     if (this.focus < 0 && !this._focusEl) return;
     this.focus = -1;
     this._showFocus([]);
+  }
+
+  /** Everything held now counts only after it is let go. */
+  _blockHeld() {
+    for (let i = 0; i < N_BTN; i++) {
+      if (!this.raw[i]) continue;
+      this.blocked.add(i);
+      this.eff[i] = false;
+    }
   }
 
   // ---------------------------------------------------------------- devices
@@ -292,21 +340,18 @@ export class GamepadControls {
     this.active = on;
     globalThis.document?.documentElement?.classList?.toggle('abyss-pad', on);
     this.game.hud?.root?.classList?.toggle('ab-pad', on);
-    this.game.hud?.refreshPrompt?.();
+    relabelChips(); // every "[@action]" chip now shows the pad button (or the key again)
     if (!on) this._clearFocus();
   }
 
   _setLayout(layout) {
     this.layout = layout;
-    const chips = globalThis.document?.querySelectorAll?.('[data-pad]');
-    if (chips) for (const c of chips) c.textContent = this.label(c.dataset.pad);
-    this.game.hud?.refreshPrompt?.();
+    relabelChips();
   }
 
   /** Release every pad hold (with `released` edges) and forget the frame state. */
   _releaseAll() {
     this.game.input?.releasePad?.();
-    this.yCode = null;
     this.sprintLatch = false;
     this.mode = null;
     this.nav.dir = 0;
