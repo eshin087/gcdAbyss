@@ -1748,3 +1748,43 @@ cleave, three chains, a roll and the guard, elbows ≥ 38°, knees ≥ 30°, the
 on the forearm; the held charge's wrist, elbows and off hand in range. Not covered: the off hand's
 wrist (it runs 4–40° off the steel in two-handed cuts), the free arm's elbow drawn behind the back
 in two backhands' recoveries, hit reactions and the death fall (not driven by the audit).
+## ADR-079 — The Starless Lord's harness: an armoured dark lord of his own design (2026-11-14)
+- **Context:** the owner asked to improve the boss's "character detail" and to make him look like a
+  famous film villain in black armour, a helmet and a cape. He had been built from the Wanderer's
+  coat, pauldron, boots and half-cape under a horned helm, at the Ash Disciple's size.
+- **Decision:** the archetype, not the character. He gets a harness of his own (gear.js): a closed
+  helm with a prow faceplate, one slit of red light and a ribbed breather; a cuirass with a gorget, a
+  standing collar and a ring of red light on the breastbone; a plate yoke on the chest joint with a
+  lamed pauldron on each arm; plate arms and thighs; hip plates over a war-skirt; and a cape of five
+  sheets to the ankles on the streamer springs. Nothing is copied from another work's design: the
+  helm is a crested sallet with a lamed tail, there is no chest panel, and the names stay his own.
+  Three helms were rendered for the owner (sallet, crown, hood: `LORD_LOOKS`); `?lordLook=` picks one
+  on a preview build until the pick is made. He is drawn at 1.32 (`kit.scale`; the hero is 1.08, Shen
+  Hui 1.2): a head taller, visual only.
+- **Consequences:** the game is public, so a look-alike of a film character was not built; the owner
+  was told so with the sheet. The yoke is rigid on the chest, so a raised arm passes under it (as the
+  hero's mantle). His drawn body is 32 % larger than his hurt spheres (was 20 %). The unpicked helms
+  and the URL switch are to be removed once the owner has chosen.
+
+## ADR-080 — How the Starless Lord moves: the glide, strings that walk, three more spells (2026-11-14)
+- **Context:** the owner asked for better animation, movesets, spell and force effects and motion. On
+  film a man in full plate sprinting at 9 m/s on the hero's run cycle looked wrong; every cut of a
+  string re-planted the same foot; a spinning cut turned the hips a full turn over planted feet; and
+  his spells were few strokes each.
+- **Decision:** (1) **He does not run.** Past 3.4 m/s in footwork the animator takes his own `glide`
+  clip (not a walking clip: no foot planning), lord.js lifts the root 0.22 m and a wake streams off
+  under him; his backstep and sidestep are carried the same way. Inside striking range he walks.
+  (2) **Strings walk and turn:** cuts alternate the driving foot, a spin's feet go round with the
+  body on a hop, two new aerials (a cartwheel cut, a backflip that throws crescents), a flourish per
+  form in the recovery of its main strings, a slower and deeper breath in the guard. (3) **Four new
+  moves and three new spells** that need no new hero state: the Crushing Dark (a red line; the catch
+  is a knockdown under a closing seal), the Rift (fissures along the floor: crescents with their own
+  look), the Dark Star (a marked ring that follows the hero until its cue). (4) Every spell's
+  effect was redrawn (fx.js); a pilot may raise the cloth's updraft, so his cape lifts through a cast.
+  (5) Found on the way: a waiting duelist stood in his guard (the animator's reset came after the
+  brain's and went back to the walking clip): both bosses now wait in their clip (he sits, Shen Hui
+  kneels).
+- **Consequences:** the grip is the pin, not the "lifted and held, mash to break free" grab the
+  roadmap sketched: that needs a hero state of its own. 37 moves (was 31); with the hero's new
+  swings (ADR-071) the 85 % bot takes 340 damage (was 325 at his release) and the 70 % bot 846 (was
+  740): about as hard, not re-tuned against a human. No sounds of their own for any of it yet.

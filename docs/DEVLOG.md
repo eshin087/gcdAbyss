@@ -5,6 +5,54 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-14 — Session 27: the Starless Lord in black plate; how he moves; three more spells
+
+**Owner:** "improve the new bosses animation, movesets, spell effects, force effects, character detail
+and motion. make him look like a darth vader look alike". Branch `enemies/starless-lord-armour` from
+`main` (PR #24 merged the day before; rebased over PR #23, the hero's new swings).
+
+**Done:**
+- **His look** (ADR-079): a harness of his own in gear.js (helm, cuirass and gorget, plate yoke and
+  pauldrons, plate arms and thighs, hip plates over a war-skirt, a cape to the ankles), drawn at 1.32.
+  Three helms rendered in game as one sheet for the owner (A sallet, B crown, C hood); built with A.
+  An original design in that archetype: a film character's own look was not copied, and the owner
+  was told so.
+- **How he moves** (ADR-080): four new guards (the blade hung at his side, twin blades as wings, the
+  staff level across him, the cross-hilt upright before his face); he glides instead of running; cuts
+  alternate feet; spins hop and carry the feet round; a cartwheel cut and a backflip; a flourish per
+  form; the cape lifts through a cast.
+- **Moves:** 37 (was 31): Starless Dirge, Crushing Dark, Pinwheel, The Rift, Parting Light, Dark Star;
+  more alternatives in Crimson Litany, Bladed Gale and Judgment.
+- **Effects** (fx.js): lightning (core, sheath, strands, forks, a burst and arcs along the floor), the
+  push's burst, the pull's vortex, the grip's talons and crush, the Rift, the Dark Star, called
+  lightning's wheel in the sky, stones that turn round him, the glide's wake, form 4's wheel of marks,
+  the blink's afterimage, the ignition's pillar.
+- **Tests:** lord.mjs LEVEL (the harness, every helm builds, seated) and SPELLS (the grip, the Rift,
+  the Dark Star, Parting Light, the glide); duel.mjs (Shen Hui waits in his meditation clip).
+
+**Found on the way:** both duelists stood in their guard while they waited (on the throne's seat, in
+the courtyard): the animator's reset ran after the brain's and went back to the walking clip. Fixed
+in duelist.js: he sits, Shen Hui kneels. Parting Light's crescents fizzled from close in (thrown too
+near to cue): they fly from 4 m off at 12 m/s. The Dark Star's red ring was lost on the hall's red
+inlay: it draws its reach in violet too.
+
+**Verification:** `npm test`, `npm run build` (see the PR). In the dev server: the look sheet (three
+helms, four angles and a close-up each), the four guards from two sides, film strips of the dirge,
+the backflip, the pinwheel, the gale, the grip, the Rift, the Dark Star, lightning, the push, the
+glide, the intro from the door, him seated, Shen Hui kneeling; 88 s of the AI across the four forms
+against an idle hero: no console errors, 1879 particles at most. Bots (seed 4242, on main's new
+swings): every tell answered 93 s; 85 % 22 hits / 340 damage; 70 % 47 hits / 846.
+
+**Not checked / open:** no human has fought him; not tried on a phone. The helm is my pick (A): the
+owner has the sheet and `?lordLook=crown|hood` on the PR preview; the two not picked and the switch
+then come out. The glide, the cartwheel and the flourishes were reviewed as strips, not in motion at
+60 fps. The hop spin's legs are hidden by the war-skirt and the cape: not checked bare. The numbers
+were not re-tuned for the six new moves. No sounds of their own. His drawn body is now 32 % larger
+than his hurt spheres.
+
+**Next:** the owner's pick of the helm and a first human fight; then tuning.
+
+---
 ## 2026-11-14 — Session 26: a faster chain, the finisher as a clip, a recovery that flows
 
 **Owner (on the merged build of Session 25):** "speed up the attack speed on the character. its too

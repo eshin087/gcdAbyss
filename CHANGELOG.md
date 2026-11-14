@@ -4,7 +4,20 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-Eighteen pieces of work since 0.4.0:
+Nineteen pieces of work since 0.4.0:
+- **The Starless Lord in black plate, and how he moves** (2026-11-14, ADR-079, ADR-080): he wears a
+  harness of his own now: a closed helm with a slit of red light, a cuirass with a ring of red light
+  on the breastbone, a plate yoke and pauldrons, plate arms and legs, hip plates over a war-skirt and
+  a cape to his ankles, and he stands a head taller. Each form has a new guard. He no longer runs: out
+  of reach he glides over the floor with his cape streaming. His strings walk forward on alternating
+  feet, his spins leave the floor, he cartwheels over your guard and backflips away throwing red
+  crescents, and each form ends its strings with a flourish (your opening). Six new moves, among them
+  three spells: the **Crushing Dark** (red: talons of the Void close on you; caught, you are thrown
+  down and crushed), **The Rift** (fissures of red light race along the floor: parry yours or step
+  between them) and the **Dark Star** (it follows you over a violet ring, then bursts). Lightning, the
+  push, the pull, the thrown stones, the storm, the blink and the ignitions are redrawn.
+  *Fixed:* he sat on the throne only in name (he stood on its seat in his guard until woken), and
+  Shen Hui stood where he should kneel: both wait in their own pose now.
 - **A faster chain, a new finisher, swings that flow home** (2026-11-14, ADR-075, ADR-076): the
   attack chain is quicker: a hit every ~0.32 s when you mash (it was 0.42 s), each cut over in 0.12
   s. The light hits deal 30 / 32 / 36 / 30 again (the ×1.4 that paid for the slow chain is gone),

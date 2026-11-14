@@ -150,6 +150,19 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [ ] Arm and leg armour, belts and buckles as sculpted parts
   - [ ] The reference's density of small bright detail
 
+## M1.26 — The Starless Lord: black plate, motion, three more spells (2026-11-14, `enemies/starless-lord-armour`, ADR-079, ADR-080)
+- [x] A harness of his own (helm, cuirass, yoke and pauldrons, plate limbs, war-skirt, cape), drawn at 1.32
+- [x] Three helms rendered for the owner's pick (sallet, crown, hood); `?lordLook=` on the preview
+- [x] New guards, the glide, strings that walk, hop spins, a cartwheel and a backflip, flourishes
+- [x] Six new moves (37): Starless Dirge, Crushing Dark, Pinwheel, The Rift, Parting Light, Dark Star
+- [x] Every Void effect redrawn; the glide's wake, the blink's afterimage
+- [x] Fixed: a waiting duelist stood in his guard (he sits; Shen Hui kneels)
+- [ ] Owner: pick the helm; then remove the other two and the URL switch
+- [ ] A human fight, and on the phone; re-tune for the new moves
+- [ ] Follow-ups:
+  - [ ] Watch the glide, the cartwheel and the flourishes in motion at 60 fps (reviewed as strips)
+  - [ ] His hurt spheres against his drawn size (32 % larger than they are)
+  - [ ] Sounds of his own (still none): the blade's hum, thunder, the grip, the star
 ## M1.25 — A faster chain, the finisher as a clip, a recovery that flows (2026-11-14, `player/faster-flow`, ADR-075, ADR-076)
 - [x] The pace: a light every ~0.32 s (was 0.42), a 0.12 s cut; the lights' damage back to 30 / 32 / 36 / 30 (ADR-075)
 - [x] The Lab's attack-speed slider (`player.debug.attackSpeed`) for trying other paces on the preview (ADR-075)
@@ -187,9 +200,10 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [ ] A human playtest: is form 4's 0.36 s rhythm readable, is the blink fair, is he too long?
 - [ ] Follow-ups:
   - [ ] Look at every move frame by frame up close (the somersault, the off-hand cuts, the staff)
-  - [ ] His look as options for the owner (hood or helm, cape, the blades' colour and width)
+  - [x] His look as options for the owner (M1.26: three helms on one harness)
   - [ ] Sounds of his own: a blade hum and swing, thunder for the lightning, the ignition
-  - [ ] The Void grip (lifted and held: mash to break free), designed and left out
+  - [ ] The Void grip (lifted and held: mash to break free), designed and left out (M1.26 ships the
+        Crushing Dark instead: a pin, no new hero state)
   - [ ] The hall on a phone: frame cost of the inlay batch and six brazier lights
   - [ ] A reward for beating him (ADR-059), once the technique system lands
 

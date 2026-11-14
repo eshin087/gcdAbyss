@@ -1449,7 +1449,11 @@ a subclass with a few hooks.
 - `duelist.js` `class Duelist(game, kit)`: the boss slot's surface, the guard, posture, the break and
   the execution, the deflect chain, the blade lock, the mikiri, the full deflect, hit stun, `hitPlayer`.
   `kit = { id, TUNING, MOVES, MOVE_NAMES, CLIP, realise, transitions {phase: move}, counterMove(phase),
-  maxPhase, loadout, poses, blade {guard, tip}, REACT, OPEN }`. Subclass hooks: `_tint(M)`, `_setup()`
+  maxPhase, loadout, poses, blade {guard, tip}, scale, REACT, OPEN }` (`scale`: his drawn size, model
+  metres → world, default `HERO_SCALE`; visual only, as the hero's: it is `d.drawScale` and the
+  pilot's `drawScale`, so the animator's gait matches it). `reset()` resets the animator before the
+  brain, then poses one short step: he waits in his waiting clip (kneeling, enthroned), not in the
+  walking clip's guard. Subclass hooks: `_tint(M)`, `_setup()`
   (extra meshes, before batching), `_makeFx()`, `_makeBrain()`, `_bladeMaterials(dt, M)`, `_onHpZero()`
   (default: he dies), `brainFrame(dt)`, `afterPose(dt, act)`, `onImpact(beat, sense, act)`,
   `onRelease(beat, sense, act)`, `onCast(beat, sense, act)`, `beatMotion(beat, u, sense, dt)`,
@@ -1464,7 +1468,9 @@ a subclass with a few hooks.
   Beat extras: `{ pick: [beat, ...] }` (one alternative drawn as the move starts), `fixed: true` (its
   windup is not scaled by the phase). `TUNING.flashLead` may be per phase.
 - `poses.js`: `createDuelPoses(GUARD, opt)` → `{ duelStance, duelLoco, compileClip, evalClip, duelClip,
-  POSES }` round one guard stance (a compiled clip remembers its set: `clip.kit`). Besides the Ash
+  POSES }` round one guard stance (a compiled clip remembers its set: `clip.kit`); `opt.run` (how the
+  blade is carried at a run), `opt.breath { k, period }` (the idle breath's size and pace); `setSw(p,
+  az, el)` is exported for a boss's own pose functions. Besides the Ash
   Disciple's channels: `lsw` ([az, el] of an off-hand blade, left on the animator as `A.off` for the
   actor to pose a second blade) and `larm` / `lext` / `llead` (the left hand driven by it).
 - `fx.js` `class DuelFx(d)` (also exported as `DiscipleFx`): tells, clashes, sparks, the sweep trail
@@ -1523,7 +1529,9 @@ string whose next hit can't reach (`_reach`) ends there. Footwork circles only i
 breather, ground-covering moves × `TUNING.punish.weight`). Numbers: tuning.js.
 **HeroAnimator** (anim.js): `new HeroAnimator(rig, player, poses = null)` — `poses` merges extra clips
 over the hero's table for that instance (a key it shares replaces the hero's clip for that instance
-only). Exported for other pose tables: `P, v3, to3, dirLerp, kf, guard, loco, turnTwist`.
+only; a key of its own that is not a walking clip gets no foot planning: the Starless Lord's
+`glide`). Exported for other pose tables: `P, v3, to3, dirLerp, kf, guard, loco, turnTwist`. A pilot
+may set `updraft` (0..1): a wind under its cloth outside the hero's charge (a duelist's casts).
 
 ### Starless Lord — `src/entities/enemies/starlessLord/lord.js` exports `class StarlessLord` (ADR-069)
 A `Duelist` with `LORD_KIT`; COMBAT.md → "The Starless Lord" has the fight. The boss slot's surface, plus:
@@ -1542,18 +1550,35 @@ endBreak()                     // a break nobody answered: posture.spared of the
 addPosture(n)                  // × lerp(posture.gainByHp) by the bar's missing fraction (hard to move on a
                                // full bar); regen × posture.regenByHp
 moveBy / clampTarget           // he keeps to the hall's floor: the rectangle TUNING.hall, not a circle
+_glide(dt)                     // in footwork past TUNING.glide.on m/s: the animator's 'glide' clip, the root
+                               // lifted TUNING.glide.hover m, a wake under him; a backstep / sidestep likewise
 debug.phase4(), debug.setForm(n), debug.form
 ```
-Four stances (poses.js `GUARDS`, one pose set each; the animator's pilot carries `form`); reaction clips
-are compiled per form (`CLIPS_BY_FORM`, the brain's `C`). Moves (moves.js): `weight` is per FORM
-`[1, 2, 3, 4]`; his own beat fields: `bolt` (Void lightning: a long line zone from the casting hand; a
-perfect parry returns it: `dragon:returned`, damage + posture to him), `pull` (the hit's `from` is put
-on the hero's far side: he is dragged in), `blink: { behind }` (he reappears behind the hero as the
-windup starts), `left` (the off-hand blade cuts), `release: { style: 'push' | 'crescent' }`, `cast:
-{ kind: 'glaive' | 'debris' | 'storm' }`. fx.js `LordFx extends DuelFx`: the blades' glow and red
-light, lightning, the push's wall, thrown things (`throwShot`: the blade that returns, torn stone;
-each cues itself flashLead before it reaches the hero, or fizzles), called lightning (`callStrike`: a
-red ground ring, then the bolt), the aura, the blink, the ignition. The intro: seated at
+**His gear** (gear.js, ADR-079): `lord.*` items registered into the hero's gear registry: a helm
+(`lord.helm.sallet` | `.crown` | `.hood`: `LORD_LOOKS`; `?lordLook=` in the page's URL picks one, the
+first by default), `lord.plate` (cuirass, gorget, the sigil), `lord.yoke` (a plate yoke on the chest
+joint, a pauldron on each upper arm), `lord.arms`, `lord.legs` (the Wanderer's boots under cuisses),
+`lord.skirt` (hip plates; `LORD_PANELS` on the coat springs), `lord.cape` (`LORD_CAPE`: five sheets
+on the streamer springs), `lord.saber`. `lordLoadout(look)` → the loadout; `TUNING.scale` 1.32.
+Four stances (poses.js `GUARDS`, one pose set each; the animator's pilot carries `form`) and
+`glidePose` (the animator key `glide`); reaction clips are compiled per form (`CLIPS_BY_FORM`, the
+brain's `C`). Moves (moves.js): `weight` is per FORM `[1, 2, 3, 4]`; a string's cuts alternate the
+driving foot (`cut(.., { step: 'L' })`), a spin carries the feet round with the body (`spinFeet`),
+`cut('aerial')` is a cartwheel, `parting()` a backflip, and a main string ends in its form's
+`FLOURISH` (`recoveryKeys`). His own beat fields: `bolt` (Void lightning: a long line zone from the
+casting hand; a perfect parry returns it: `dragon:returned`, damage + posture to him), `pull` (the
+hit's `from` is put on the hero's far side: he is dragged in), `grip` (the Crushing Dark: a red line
+from his hand; a hit is `kind: 'grip'`, a knockdown, and `fx.gripCrush` where the hero lies), `blink:
+{ behind }` (he reappears behind the hero as the windup starts), `left` (the off-hand blade cuts),
+`release: { style: 'push' | 'crescent' | 'rift', count, spread, speed, from }`, `cast: { kind:
+'glaive' | 'debris' | 'storm' | 'star' }`. fx.js `LordFx extends DuelFx`: the blades' glow and red
+light, lightning (`lightning`, `arc`, `crackle`), the push's wall and burst, the pull's vortex, the
+grip (`gripClaw`, `gripSnap`, `gripCrush`), thrown things (`throwShot`: the blade that returns, torn
+stone that turns round him until thrown; each cues itself flashLead before it reaches the hero, or
+fizzles; the Rift's fissures are crescents with `style: 'rift'`), marked ground (`callStrike(x, z,
+r, warn, { style: 'bolt' | 'star', drift })`: a red ground ring, then called lightning or the Dark
+Star's burst; a star follows the hero until its cue), `glideWake`, the aura, `afterimage` and the
+blink, the ignition. The intro: seated at
 `CONFIG.world.dragonSleep` with the root raised to the seat (`TUNING.intro`), he rises, the blade
 ignites and he leaps to the seal; a skipped intro puts him where the leap lands.
 
