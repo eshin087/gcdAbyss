@@ -38,25 +38,18 @@ const COL = {
   gemGlow: [0.6, 0.15, 1.4], // the gem's always-on glow point
 };
 
-// The sword arc's looks (ADR-077). The arc is drawn off the STEEL: `at` is where its edge line runs
-// along the hit segment (0 = the hilt … 1 = the end of the gameplay reach, 1.9 m out; the drawn
-// steel's point is at ARC_STEEL). It ran at 1: a crescent twice the sword's length, whose end dipped
-// under the grass on a low cut and whose glint flashed on the ground a metre past the point.
+// The sword arc's look (ADR-077): a thin crescent, pointed at both ends. The arc is drawn off the
+// STEEL: `at` is where its edge line runs along the hit segment (0 = the hilt … 1 = the end of the
+// gameplay reach, 1.9 m out; the drawn steel's point is at 0.44). It ran at 1: a crescent twice the
+// sword's length, whose end dipped under the grass on a low cut and whose glint flashed on the
+// ground a metre past the point.
 //   edge   the edge line's stroke size (m; the stroke is a sliver of it wide)
 //   life   s the edge hangs in the air
-//   veil   rows inside the edge: [fraction of `at`, opacity]
-//   ghost  opacity of the blade's afterimages (0 = none): faint copies of the steel left behind it
+//   veil   rows close inside the edge: [fraction of `at`, opacity]
 //   motes  specks of light shed off the point per frame (at most)
-export const ARC_STYLES = {
-  // one fine line of light off the point, and nothing else
-  line: { at: 0.6, edge: 0.11, life: [0.22, 0.3], veil: [], ghost: 0, motes: 1 },
-  // the line with a short faint veil inside it: a thin crescent, pointed at both ends
-  crescent: { at: 0.64, edge: 0.11, life: [0.2, 0.27], veil: [[0.94, 0.3], [0.88, 0.2], [0.82, 0.12], [0.76, 0.06]], ghost: 0, motes: 1 },
-  // afterimages of the blade itself fanned out behind it, under a faint line
-  ghost: { at: 0.5, edge: 0.08, life: [0.14, 0.2], veil: [], ghost: 0.34, motes: 0 },
-};
-export const ARC_DEFAULT = 'crescent';
-const ARC_STEEL = 0.44; // the drawn steel's point along the hit segment (heroDims: drawnTip / bladeTip + REACH.tipExt)
+// (Session 26: three looks were built behind a Lab button for the owner to choose from, a bare line,
+// this crescent and afterimages of the blade; the owner picked the crescent and the others went.)
+export const ARC_LOOK = { at: 0.64, edge: 0.11, life: [0.2, 0.27], veil: [[0.94, 0.3], [0.88, 0.2], [0.82, 0.12], [0.76, 0.06]], motes: 1 };
 const ARC_HEAVY = 1.22; // the slam's and the cleave's arc reaches this much further out
 const ARC_TURN = [0.03, 0.2]; // rad the blade turns in a frame: below, no arc; above, the full one
 const TRAIL_SUB_LEN = 0.11; // m of the edge's travel per trail sub-step (short: the line bends smoothly) …
@@ -121,7 +114,6 @@ const RING = { white: [1.5, 1.55, 1.75], warm: [1.6, 1.3, 0.8], gold: [2.0, 1.45
 
 export class PlayerFx {
   constructor(game, rig) {
-    this.arcStyle = ARC_DEFAULT; // the sword arc's look (ARC_STYLES); player.js sets it from debug.arcStyle
     this.game = game;
     this.rig = rig;
     this._v = new THREE.Vector3();
@@ -169,18 +161,16 @@ export class PlayerFx {
 
   /** Where the arc's edge runs along the hit segment for a swing of `kind` (0 hilt … 1 reach end). */
   arcAt(kind = 'light') {
-    const S = ARC_STYLES[this.arcStyle] ?? ARC_STYLES[ARC_DEFAULT];
-    return Math.min(1, S.at * (kind === 'slam' || kind === 'cleave' ? ARC_HEAVY : 1));
+    return Math.min(1, ARC_LOOK.at * (kind === 'slam' || kind === 'cleave' ? ARC_HEAVY : 1));
   }
 
   /**
-   * The sword arc (ADR-077; its look: ARC_STYLES[this.arcStyle]). Fills the gap between last
+   * The sword arc (ADR-077; its numbers: ARC_LOOK). Fills the gap between last
    * frame's blade (pa→pb) and this one's (a→b) with:
    *  - the EDGE: one fine line of light just past the steel's point, laid along its path in strokes
    *    that overlap, white-hot as it is drawn and cooling to indigo as it thins away: the cut hangs
    *    in the air for a moment as a drawn line, its tail tapering to nothing;
-   *  - the VEIL (crescent): two or three faint rows inside the line, close to it;
-   *  - GHOSTS (ghost): faint copies of the steel itself where it was a moment ago;
+   *  - the VEIL: four faint rows inside the line, close to it, the faintest at 6 %;
    *  - MOTES: a speck of light shed off the point now and then.
    * The arc is the blade TURNING: its strength follows how far the blade turned this frame (`gate`),
    * so it swells and tapers with the cut and a blade merely carried along (a dash, a lunge) leaves
@@ -194,7 +184,7 @@ export class PlayerFx {
   trail(pa, pb, a, b, kind = 'light', crit = false, gate = true) {
     const fx = this.add;
     if (!fx) return;
-    const S = ARC_STYLES[this.arcStyle] ?? ARC_STYLES[ARC_DEFAULT];
+    const S = ARC_LOOK;
     const cleave = kind === 'cleave';
     const heavy = kind === 'slam' || cleave;
     const thrust = kind === 'thrust';
@@ -243,24 +233,6 @@ export class PlayerFx {
           glyph: '|', rot: alongRot(dx, dy, dz), stretch: Math.min(24, (step / size) * 1.5),
           color: veil, colorEnd: end, alpha: rows[k][1] * turn, alphaEnd: 0, drag: 2.5,
         });
-      }
-      // the blade's afterimages: the steel where it was, from the guard to the point
-      if (S.ghost > 0 && !thrust && (s & 1) === (nSub & 1)) {
-        arcPoint(t, 0.04, ARC_Q);
-        arcPoint(t, ARC_STEEL * (heavy ? 1.1 : 1), ARC_P);
-        dx = ARC_P[0] - ARC_Q[0];
-        dy = ARC_P[1] - ARC_Q[1];
-        dz = ARC_P[2] - ARC_Q[2];
-        step = Math.hypot(dx, dy, dz);
-        if (step > 0.05) {
-          const size = 0.1;
-          fx.spawn({
-            x: (ARC_P[0] + ARC_Q[0]) / 2, y: (ARC_P[1] + ARC_Q[1]) / 2, z: (ARC_P[2] + ARC_Q[2]) / 2,
-            life: R(0.1, 0.15) * linger, size, sizeEnd: size * 0.6,
-            glyph: '|', rot: alongRot(dx, dy, dz), stretch: Math.min(30, (step / size) * 1.5),
-            color: veil, colorEnd: end, alpha: S.ghost * turn, alphaEnd: 0, drag: 3,
-          });
-        }
       }
     }
     // motes off the point, carried on along the cut
