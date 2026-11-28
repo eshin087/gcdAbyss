@@ -1091,7 +1091,8 @@ export class Rig {
       // neck's end (a broken neck); and the snout stays above the ground (a dive's look at its mark
       // tipped it 0.45 m under)
       const minY = clamp((SNOUT_FLOOR - hc.p[n].y) / (SNOUT_LEN * S), -1, 1);
-      if (dir.y < minY) {
+      // (in the air only: on the ground its jaws reach down to what it bites, the hurl's tree at its base)
+      if (dir.y < minY && (s.airborne > 0.3 || s.alt > 0.5)) {
         const h = Math.hypot(dir.x, dir.z);
         if (h > 1e-5) {
           const k = Math.sqrt(Math.max(0, 1 - minY * minY)) / h;
@@ -1258,7 +1259,7 @@ export class Rig {
     if (snap) tail.snap();
     else {
       this._stiff = damp(this._stiff ?? 1, stiff, 6, dt);
-      tail.relax = !legacy && fixOn() ? 4 : 0; // (the motion audit: kinks where it meets the ground smoothed out)
+      tail.relax = !legacy && fixOn() && s.airborne < 0.5 ? 4 : 0; // (the motion audit: kinks where it meets the ground smoothed out; not in flight)
       tail.spring(Math.min(dt, 1 / 30), 70 * this._stiff, 10 * this._stiff * this._stiff, 0.5);
     }
     tail.apply(qTailBase, this._q[2]);

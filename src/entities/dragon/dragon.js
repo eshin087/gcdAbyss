@@ -620,10 +620,20 @@ export class Dragon {
       // (the motion audit) a turn speeds up over a few frames instead of jumping to full speed in one (0 to
       // 3.2 rad/s at a string's change of side jerked the whole body, its 20 m wings most): the yaw rate
       // gains at most TURN_ACC rad/s a second, and never overshoots its target
-      const fresh = this._turnAt !== undefined && this.time - this._turnAt < 2.5 * dt;
-      const v0 = fresh ? this._turnV : 0;
+      // (every call of a frame starts from the last frame's rate: a move may turn the body twice a frame)
+      if (this._turnAt !== this.time) {
+        const fresh = this._turnAt !== undefined && this.time - this._turnAt < 2.5 * dt;
+        this._turnV0 = fresh ? this._turnV : 0;
+      }
+      const v0 = this._turnV0;
       const diff = angleDiff(this.yaw, target), step = rate * dt;
-      let v = clamp(clamp(diff, -step, step) / dt, v0 - TURN_ACC * dt, v0 + TURN_ACC * dt);
+      // (a move that asks for a fast turn, the hurl's whip toward its tree, gets up to it as fast: ~1/8 s)
+      // (braking a turn, or reversing it, goes 3x as fast: a move whose turn began against the last one's
+      // momentum, the hurl's lunge, never came round in its 0.3 s)
+      const acc = Math.max(TURN_ACC, rate * 8), want = clamp(diff, -step, step) / dt;
+      const brake = want * v0 < 0 || Math.abs(want) < Math.abs(v0);
+      const a = brake ? 3 * acc : acc;
+      let v = clamp(want, v0 - a * dt, v0 + a * dt);
       if (Math.abs(v * dt) > Math.abs(diff)) v = diff / dt;
       this.yaw += v * dt;
       this._turnV = v;
