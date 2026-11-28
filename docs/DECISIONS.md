@@ -8435,3 +8435,29 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
 - **Consequences:** `integ wyrmfix` holds the death's and the wake's slide ≤ 0.15 m. The audit names the skating foot
   and when (`slideFoot`).
 
+## ADR-294 — One blue rule: every blue blow of a body takes the deathblow; no deflect on the hero's side; the deathblow's weight (2026-11-28)
+- **Context:** the owner, in the Halcyon fight: blue blows gave "DEFLECT" and no deathblow, "there should only be guard
+  parry for defensive options", and the deathblow's "random instant slash effects on the screen" should give way to a
+  blow that is "weighty, impactful and going through the player realistically". The causes: the HUD printed DEFLECT for
+  every blue parry (`hud.js`); Halcyon's flying blue blows (`halCrash`) crashed him into cover and the deathblow stood
+  aside for the crash; a blue ring parried past 6 m was out of the combo's reach.
+- **Decision** (the owner's answers, asked first): (1) every parried BLUE blow of a body or a blade, from every boss but
+  the wyrm (it has no ground combo), arms the deathblow wherever it comes in a string; a blow that reaches from afar
+  (a projectile, a crescent, a cast, a released blast, a beam's head, a held stream: the hit's new `ranged`) never does,
+  it flies back as before. (2) A blue ring parried up to `deathblow.close.reach` (10 m) still takes it: the first blow
+  runs in on the ground at `close.speed` (14 m/s), planted (no blink, no leap). (3) Halcyon: a blue `halCrash` blow the
+  combo answers stops his pass and recoils him (an open reaction: airFall drops him); the crash stays for a perfect
+  dodge of a red flying blow and when the riposte is not the deathblow. (4) A white blow mid-string still only
+  "deflects" in the code (posture, the string goes on: the owner kept it), but the hero's words are PARRY, PARRY ×N
+  and PERFECT PARRY ×N; internal names (`combat:deflectChain`, `dragon:deflected`, `player.deflect`) stay to spare the
+  contract. The boss's own DEFLECTED (he beats the hero's strike away) is his guard, not a parry: kept.
+  (5) The deathblow's look `?dbfx=e`, WEIGHT, is the default: `DEFENSE.deathblow.weight` (a hit-pause growing 0.10 →
+  0.24 s, the finisher's 0.55 s, its wind-up 0.34 s, a slow follow-through, shoves 0.28 → 0.55 m, camera kick x 0.85
+  → 1.4); the contact draws only deathblowFx's own: a short bite of steel letters where the blade crosses him, a small
+  heat flash, the tip out of his back and his blood thrown out of it to land as pools. The hero's ordinary contact
+  burst, edge flash and cleave ring are skipped for its blows, and the screen takes no cold cast.
+- **Consequences:** `?dbfx=b` (Shatter Web, the timing before) and `?parryRiposte=old` keep the old answers. Tests:
+  `duel deathblow` (w) holds the weight's numbers and the missing cast, (a)-(h) run on `b`; `city pass` holds the blue
+  pass's deathblow (him on the floor at the first blow) and the crash with `old`; `dbfx` knows look e. Not done: the
+  internal renames, a test of a parried blue projectile per boss.
+

@@ -518,16 +518,26 @@ Against a duelist (`?parryRiposte=deathblow`, the default; `planted` / `old` the
 - Parries fill his **posture** (26, 48 for a blue blow, a perfect parry x1.5) and bank perfect parries in
   `player.parryRun` (spent by a combo; back to 0 when he is hurt or the posture has drained), **not** the dodge streak.
 - A string's **last blow** parried: he recoils and the counter-cut window opens (0.9 s). Nothing is automatic.
-- A parry that **breaks** his posture, or **any parry of a blue blow**: the **DEATHBLOW**, N = parryRun (1..7) blows
-  where the hero stands (0.6 m at most): his own cuts, a new order each time, the finisher a big one. Every contact
-  holds for a beat (0.16 - 0.2 s, the finisher 0.38 s; ~3 s for seven) under the cold cast; 22 + 2N a blow, 40 + 15N
+- A parry that **breaks** his posture, or **any parry of a blue blow** of his body or blade, wherever in a string it
+  comes, from every boss but the wyrm (ADR-294: ONE blue rule; a blue thing thrown or fired, a beam or a cast, flies
+  back instead; Halcyon's blue flying blows drop him out of the air instead of the crash; a blue ring parried up to
+  10 m away: the first blow runs in): the **DEATHBLOW**, N = parryRun (1..7) blows
+  where the hero stands (0.6 m at most): his own cuts, a new order each time, the finisher a big one. THE WEIGHT
+  (`?dbfx=e`, the default, ADR-294): every contact holds longer than the last (0.10 → 0.24 s, the finisher wound up
+  0.34 s and held 0.55 s, then a slow follow-through), every blow drives him back further (0.28 → 0.55 m), no cast
+  on the screen (`?dbfx=b`: 0.16 - 0.2 s, the finisher 0.38 s, under the cold cast); 22 + 2N a blow, 40 + 15N
   the finisher, final; he cannot be hurt; after a break he stays broken. A guard press does not end it (it waits,
   and the guard comes up in the finisher's tail); attack, heavy and dodge presses are dropped (ADR-280).
 - A **perfect** parry of a blue blow marked `lock` would also cross the blades: the deathblow takes it (he recoils,
   the combo follows; `?dbLock=lock` gives the blade lock back, ADR-280). Without the deathblow (`old` / `planted`) the
   lock is as before; Tian Lei's beam and lantern locks are their own and unchanged.
-- Each blow: a straight cut on his body that crosses the last and shatters on the finisher (`?dbfx=b`), blood (a
-  spray, a wound, pools on the floor), the Flesh sound (`?dbsfx=a`).
+- Each blow (`?dbfx=e`): a short bite of letters only where the blade crosses him, a small flash, the blade's tip out
+  of his back and his blood thrown out of it to land as pools; nothing else at the contact (no white burst, edge
+  flash or ring); the Flesh sound (`?dbsfx=a`). (`?dbfx=b`, before: a straight cut that crosses the last and
+  shatters on the finisher.)
+- **No deflect on the hero's side** (ADR-294): every parry reads PARRY; parries in a row inside one string PARRY ×N;
+  every blow of a long string parried (the full deflect's reward) PERFECT PARRY ×N. A white blow parried mid-string
+  still lets the string go on; only its last blow recoils him.
 - A chain of perfect parries grows (`?parryGrow=a`): more sparks a tier, embers, a short heat flash.
 
 ## The streak and the flurry (2026-11-14, ADR-091)

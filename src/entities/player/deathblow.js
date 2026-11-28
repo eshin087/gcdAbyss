@@ -24,7 +24,7 @@ import { clamp, lerp } from '../../core/math.js';
 import { mulberry32 } from '../../core/rng.js';
 import { DEFENSE } from '../../combat/rules.js';
 import { streakTier } from '../../combat/streak.js';
-import { deathblowHit } from '../../combat/deathblowFx.js';
+import { deathblowHit, getDbFx } from '../../combat/deathblowFx.js';
 import { deathblowMatrixStart, deathblowMatrixHit, deathblowMatrixEnd } from '../../combat/deathblowMatrix.js';
 import { LIGHT, HEAVY, THRUST, ROLL_ATK, CHARGE, HIT_FEEL, chargeStats } from './combat.js';
 import * as THREE from 'three';
@@ -76,7 +76,7 @@ export function newDeathblowState() {
     ox: 0, oz: 0, dx: 0, dz: 1, side: 1, rip: null, point: { x: 0, y: 0, z: 0 },
     last: '', lastFin: '', moveOf: null, clips: [], seq: [], rng: mulberry32(0x0db10c5), // (the stream: advances over every combo of the run)
     tip: new Float32Array(SAMPLES * 3), tipN: 0, tipI: 0, // the blade tip's NDC x, y and the time, a ring
-    path: new Float32Array(PATH_MAX * 3), pathN: 0, holdT: 0, easeT: 0, hitLog: [], // this swing's blade tip in the world (pooled), the ease after the pause
+    path: new Float32Array(PATH_MAX * 3), pathN: 0, holdT: 0, easeT: 0, easeLast: false, hitLog: [], // this swing's blade tip in the world (pooled), the ease after the pause
   };
 }
 
@@ -128,10 +128,16 @@ export const deathblowMoves = () => {
 };
 
 /** The attack definition of blow `i` (0-based) of `n` (its own clip and contact look, the combo's weights). */
+/** THE WEIGHT (`?dbfx=e`, the default; ADR-294; DEFENSE.deathblow.weight): its numbers replace the combo's own. */
+export const dbWeight = () => getDbFx() === 'e';
 const blowStop = (i, n) => {
-  const D = DEFENSE.deathblow;
-  return i >= n - 1 ? D.finHold : lerp(D.hold[0], D.hold[1], n > 2 ? clamp(i / (n - 2), 0, 1) : 1);
+  const D = DEFENSE.deathblow, W = dbWeight() ? D.weight : null;
+  if (i >= n - 1) return W ? W.finHold : D.finHold;
+  const H = W ? W.hold : D.hold;
+  return lerp(H[0], H[1], n > 2 ? clamp(i / (n - 2), 0, 1) : 1);
 };
+/** The weight's 0..1 of blow `i` of `n` (the finisher 1). */
+const weightK = (i, n) => (n > 1 ? clamp(i / (n - 1), 0, 1) : 1);
 function blowDef(e, wind, last, i, n) {
   const D = DEFENSE.deathblow, b = e.base, stop = blowStop(i, n);
   return Object.freeze({
@@ -144,14 +150,14 @@ function blowDef(e, wind, last, i, n) {
 /** The tempo: blow `i` (0-based) of `n`: its wind-up (s). */
 export const deathblowWind = (i, n, beat = false) => {
   const D = DEFENSE.deathblow;
-  const w = i === n - 1 ? D.finWind : Math.max(D.windMin, D.wind0 * Math.pow(D.windK, i));
+  const w = i === n - 1 ? (dbWeight() ? D.weight.finWind : D.finWind) : Math.max(D.windMin, D.wind0 * Math.pow(D.windK, i));
   return beat && i === 0 ? Math.max(w, D.read.entryWind) : w; // (the read's break: the first blow's step in is seen)
 };
 /** About how long a combo of `n` blows runs (s): the cast's hold. */
 export const deathblowDuration = (n, beat = false) => {
   const D = DEFENSE.deathblow;
   let t = 0;
-  for (let i = 0; i < n; i++) t += deathblowWind(i, n, beat) + D.ease.dur * 0.6 + (i === n - 1 ? D.finActive + D.finHold : D.active + blowStop(i, n) + D.gap);
+  for (let i = 0; i < n; i++) t += deathblowWind(i, n, beat) + D.ease.dur * 0.6 + (i === n - 1 ? D.finActive + blowStop(i, n) + (dbWeight() ? D.weight.finEase.dur * 0.5 : 0) : D.active + blowStop(i, n) + D.gap);
   return t;
 };
 
@@ -304,7 +310,8 @@ function holdEase(S, g) {
   }
   S.easeT = Math.max(0, S.easeT - rd);
   if (S.easeT > 0) {
-    g.hitstopScale = lerp(E.ease.scale, 1, 1 - S.easeT / E.ease.dur);
+    const EZ = S.easeLast ? E.weight.finEase : E.ease;
+    g.hitstopScale = lerp(EZ.scale, 1, 1 - S.easeT / EZ.dur);
     g.hitstopTimer = Math.max(fin(g.hitstopTimer), 0.03);
   }
   return true;
@@ -396,7 +403,9 @@ function aim(P, att, S) {
 /** The combo can start on `att` from here (a ground foe in the riposte's reach). */
 function canCombo(P, att) {
   const p = P.position, tp = att?.position;
-  return P.flurry.reach(att, true) === 'ground' && !!tp && Math.hypot(tp.x - p.x, tp.z - p.z) <= DEFENSE.flurry.riposteRange.ground;
+  // (a blue blow's combo reaches as far as the blow could: a ring of force parried at its edge; the first blow runs in)
+  const r = P.db?.blue ? Math.max(DEFENSE.flurry.riposteRange.ground, DEFENSE.deathblow.close.reach) : DEFENSE.flurry.riposteRange.ground;
+  return P.flurry.reach(att, true) === 'ground' && !!tp && Math.hypot(tp.x - p.x, tp.z - p.z) <= r;
 }
 
 function startCombo(P, att) {
@@ -449,7 +458,11 @@ function startBlow(P, att, i) {
   const S = P.db, D = DEFENSE.deathblow, p = P.position, e = S.seq[i], last = i === S.n - 1;
   const dist = aim(P, att, S);
   if (dist < 0) return finish(P);
-  const def = blowDef(e, deathblowWind(i, S.n, S.rb), last, i, S.n);
+  // the run in (a blue blow parried from afar, DEFENSE.deathblow.close): the first blow covers the distance on the
+  // ground at `speed` m/s, its wind-up as long as the run takes (planted: no blink, no leap)
+  const far = i === 0 ? Math.max(0, dist - (S.rs ? D.read.gap : D.minGap) - D.read.entry) : 0;
+  const wind = far > 0 ? Math.max(deathblowWind(i, S.n, S.rb), (far + D.read.entry) / D.close.speed) : deathblowWind(i, S.n, S.rb);
+  const def = blowDef(e, wind, last, i, S.n);
   // the turn: the foe's bearing, a little to this blow's side (alternating); the finisher faces him square
   S.side = -S.side;
   const off = last ? 0 : S.side * e.yaw * (0.8 + 0.4 * S.rng());
@@ -472,6 +485,7 @@ function startBlow(P, att, i) {
   // (nearer than the gap, a non-final blow gives itself room: a short step back in its wind-up; a broken foe on his knee is never shoved)
   if (S.rs) step = clamp(dist - gap, last ? 0 : -RD.back, RD.follow);
   if (S.rb && i === 0) step = clamp(dist - gap, 0, RD.entry);
+  if (far > 0) step = Math.max(step, dist - gap); // (the run in)
   if (def.dash) a.travel = step;
   else a.lunge = step;
   S.step = step; // (tests, the films)
@@ -516,6 +530,8 @@ export function deathblowTakeHit(P, point, out) {
   // the read: he stays thrown open while the break's reel runs (keepOpen); every blow drives him back (shove)
   out.keepOpen = S.rb;
   out.shove = S.rs && !last ? DEFENSE.deathblow.read.shove : 0;
+  // the weight: every blow drives him back further than the one before (the finisher's stagger is its reel 2)
+  if (dbWeight() && !last) out.shove = lerp(DEFENSE.deathblow.weight.shove[0], DEFENSE.deathblow.weight.shove[1], weightK(S.i, S.n));
   if (last) out.away = { x: p.x, z: p.z };
   S.point.x = point.x;
   S.point.y = point.y;
@@ -527,7 +543,9 @@ const ANG = [NaN, NaN];
 /** A blow's contact weight and its events (after `_applyHit` dealt `dealt`), and the hit effect. */
 export function deathblowLanded(P, dealt) {
   const S = P.db, D = DEFENSE.deathblow, R = DEFENSE.riposteCut, g = P.game, G = DEFENSE.flurry.ground, PL = DEFENSE.plunge;
-  const n = S.n, i = S.i, last = i >= n - 1, k = last ? D.wLast : D.wMid * (0.7 + 0.6 * (i / Math.max(1, n - 1))); // (each blow heavier than the last)
+  const n = S.n, i = S.i, last = i >= n - 1;
+  let k = last ? D.wLast : D.wMid * (0.7 + 0.6 * (i / Math.max(1, n - 1))); // (each blow heavier than the last)
+  if (dbWeight()) k *= lerp(D.weight.kick[0], D.weight.kick[1], weightK(i, n));
   dealt = fin(dealt);
   S.dealt += dealt;
   g.shake?.(Math.min(1, (PL.impactShake + R.shakePerN * n) * k) * G.shake);
@@ -539,7 +557,8 @@ export function deathblowLanded(P, dealt) {
   g.hitstopTimer = hold;
   g.hitstopScale = D.holdScale;
   S.holdT = hold;
-  S.easeT = D.ease.dur;
+  S.easeLast = last && dbWeight(); // (the weight: the finisher follows through slowly)
+  S.easeT = S.easeLast ? D.weight.finEase.dur : D.ease.dur;
   // his body jolts with every blow (the finisher's stagger is takeHit's reel 2)
   const att = S.att;
   if (att && Number.isFinite(att.jolt)) att.jolt = Math.max(att.jolt, last ? 1.2 : D.jolt);

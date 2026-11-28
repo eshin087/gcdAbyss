@@ -19,6 +19,16 @@ export const RELEASES = [
     entries: [
       {
         date: '2026-11-28',
+        title: 'Every blue blow ends in a deathblow, with weight',
+        notes: [
+          'Parry any blue blow of a boss (every boss but the Cinder Wyrm) and your hero answers with a deathblow, wherever the blow came in his combo. Blue things that are thrown or fired at you still fly back instead.',
+          "Halcyon's blue flying blows count too: a parry knocks him out of the air in front of you and the deathblow follows, instead of crashing him into cover.",
+          'No more DEFLECT: every parry reads PARRY, and parries in a row count up as PARRY ×N. Parrying every blow of a long combo shows PERFECT PARRY ×N.',
+          'The deathblow lands harder: each blow freezes a little longer than the last and drives him back further, the last one is wound up and held, and his blood is thrown out of his back. The bright streaks across the screen are gone, and the screen no longer changes colour during it.',
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: "The Cinder Wyrm's feet stay planted as it dies and as it wakes",
         notes: [
           'When the Cinder Wyrm falls dead or gets up from its sleep, its feet stay where they stand instead of sliding over the ground.',

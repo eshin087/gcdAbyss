@@ -410,6 +410,17 @@ export const DEFENSE = Object.freeze({
     // finisher's stagger as before); c) a clean contact: his hurt
     // flash `hurtFlash` (deathblowFx.js has the effect's own numbers, DBFX_TUNE.clean)
     read: Object.freeze({ beat: 0.35, entryWind: 0.2, entry: 1.0, gap: 1.3, follow: 0.55, back: 0.3, shove: 0.3, hurtFlash: 0.3 }),
+    // the run in (ADR-294): a BLUE blow of a body parried up to `reach` m from him (a ring of force at its edge) still
+    // takes the combo; the first blow runs in on the ground at `speed` m/s (its wind-up as long as the run)
+    close: Object.freeze({ reach: 10, speed: 14 }),
+    // THE WEIGHT (`?dbfx=e`, the default; ADR-294; deathblow.js reads it): a hit-pause that grows blow by blow
+    // (`hold` first .. last non-final, `finHold` the finisher's), every blow drives him back `shove[0]` .. `shove[1]` m,
+    // the finisher wound up `finWind` s and followed through slowly (`finEase`: the time at `scale`, back to 1 over
+    // `dur` real s), each blow a little heavier on the camera (`kick` x the shake and punch, first .. finisher)
+    weight: Object.freeze({
+      hold: Object.freeze([0.1, 0.24]), finHold: 0.55, shove: Object.freeze([0.28, 0.55]), finWind: 0.34,
+      finEase: Object.freeze({ scale: 0.22, dur: 0.38 }), kick: Object.freeze([0.85, 1.4]),
+    }),
   }),
   // --- the clash dance (`?clash=dance`, combat/clashDance.js; ADR-247): parries in a row inside one of a
   // duelist's moves pay more posture each: the run's n-th parry x mult[n - 1] (the last is the cap); the

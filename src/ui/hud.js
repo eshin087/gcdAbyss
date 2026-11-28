@@ -138,7 +138,7 @@ export class Hud {
     });
 
     // call-outs + damage numbers
-    on('player:parry', (d) => this.calls.call(d.light && d.perfect ? 'ret' : d.tell === 'blue' ? 'deflect' : 'parry'));
+    on('player:parry', (d) => this.calls.call(d.light && d.perfect ? 'ret' : 'parry')); // (one word for every parry, a blue one too: ADR-294)
     // a returned bullet landing on the wyrm: its damage at the head, like a heavy hit's number
     on('dragon:returned', (d) => this.calls.number(d.damage, d, { heavy: true }));
     // (Bai Wuji: a cut stopped on his barrier that still chipped him, where the blade stopped)

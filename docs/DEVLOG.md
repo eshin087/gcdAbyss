@@ -5,6 +5,28 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — One blue rule, no deflect, the deathblow's weight (ADR-294; branch `combat/one-parry-deathblow`)
+
+**Owner:** in the Halcyon fight blue blows read DEFLECT and gave no deathblow; "every blue attack except the dragon
+to do a deathblow", "get rid of the deflect status symbol or rule. its just parry"; the deathblow should stop "adding
+the random instant slash effects" and be "weighty impactful and going through". Asked first: a white mid-string
+parry keeps the string going; blue projectiles excluded; a blue flying blow drops Halcyon (no crash); the full
+deflect kept, renamed.
+
+**What:** a blue parry of a body / blade blow arms the deathblow (`hit.ranged` excludes projectiles, casts, beams);
+the combo reaches a blue ring parried up to 10 m (the first blow runs in); Halcyon's blue `halCrash` blows recoil him
+out of the air when the combo answers; DEFLECT → PARRY / PARRY ×N / PERFECT PARRY ×N on the hero's side; the
+deathblow's default look `?dbfx=e` WEIGHT (`DEFENSE.deathblow.weight`; deathblowFx look e; the hero's own contact
+burst, edge flash and cleave ring skipped for its blows; no cold cast).
+
+**Verified:** city pass, duel deathblow (+ the new part w), dbfx, integ's call-outs; two films (headless Edge, the
+real game camera cropped 2x, and a close side camera) of a parried blue Fly-By into a 7-blow deathblow, sent to the
+owner. The full suite: CI.
+
+**Open / next:** the owner's verdict on the weight (numbers in `DEFENSE.deathblow.weight`, `DBFX_TUNE.weight`); the
+blood spray reaches 3 - 5 m at the game camera (may want less); internal deflect names kept; no per-boss test of a
+parried blue projectile.
+
 ## 2026-11-28 — The wyrm's feet planted in the death and the wake (ADR-293; branch `dragon/planted-death-wake`)
 
 **Owner:** "fix the death and wake foot sliding next" (left by ADR-281).

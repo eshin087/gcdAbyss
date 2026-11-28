@@ -33,7 +33,7 @@ const LOGGED = {
   'player:ghostep': 'P ghostep',
   'player:died': 'P died',
   'dragon:parried': 'D parried',
-  'combat:deflectChain': 'D deflect chain',
+  'combat:deflectChain': 'P parries in a row',
   'dragon:postureBreak': 'D postureBreak',
   'dragon:stagger': 'D stagger',
   'dragon:phase2': 'D phase2',

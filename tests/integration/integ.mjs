@@ -2136,7 +2136,7 @@ async function scenarioStreakHud() {
     C.ghostep(4);
     C.riposte(5);
     C.chain(3);
-    assert(callText('ghostep') === 'GHOSTEP ×4' && callText('riposte') === 'RIPOSTE ×5' && callText('chain') === 'DEFLECT ×3', `counter off: the call-outs keep their counts (${callText('ghostep')} / ${callText('riposte')} / ${callText('chain')})`);
+    assert(callText('ghostep') === 'GHOSTEP ×4' && callText('riposte') === 'RIPOSTE ×5' && callText('chain') === 'PARRY ×3', `counter off: the call-outs keep their counts (${callText('ghostep')} / ${callText('riposte')} / ${callText('chain')})`);
     C.count(1, pt);
     frames(DT);
     const it0 = C.nums.find((c) => c.active && c.kind === 'count');
@@ -2201,7 +2201,7 @@ async function scenarioStreakHud() {
     C.ghostep(4);
     C.riposte(5);
     C.chain(3);
-    assert(callText('ghostep') === 'GHOSTEP' && callText('riposte') === 'RIPOSTE' && callText('chain') === 'DEFLECT ×3', `counter on: GHOSTEP / RIPOSTE keep their word, the streak's number is the counter's; DEFLECT keeps its string's count (${callText('ghostep')} / ${callText('riposte')} / ${callText('chain')})`);
+    assert(callText('ghostep') === 'GHOSTEP' && callText('riposte') === 'RIPOSTE' && callText('chain') === 'PARRY ×3', `counter on: GHOSTEP / RIPOSTE keep their word, the streak's number is the counter's; DEFLECT keeps its string's count (${callText('ghostep')} / ${callText('riposte')} / ${callText('chain')})`);
     // a flurry: the counter lets go of the hero and fades; its cut count ticks without a new pop
     p.debug.streak(4);
     frames(DT * 2);
@@ -3714,10 +3714,10 @@ async function scenarioDeflect() {
     assert(s.res.length === 5 && s.res.every((x) => x === RESULT.PARRIED) && s.hurt === 0, `every blow of the string deflected (taps of ${hold} s)`);
     assert(s.chains.join(',') === '1,2,3,4,5', `player:parry counts the chain up (${s.chains.join(',')})`);
   }
-  // the HUD turns the parry call-out into "DEFLECT ×N"
+  // the HUD turns the parry call-out into "PARRY ×N"
   const calls = ui.findAll((e) => e.classList?.contains('ab-call') && e.classList?.contains('on')).map((e) => e.textContent);
   out('   call-outs:', JSON.stringify(calls));
-  assert(calls.some((t) => /DEFLECT ×5/.test(t)), 'combat:deflectChain → a "DEFLECT ×N" call-out');
+  assert(calls.some((t) => /PARRY ×5/.test(t)), 'combat:deflectChain → a "PARRY ×N" call-out');
   // a successful deflect re-arms at once (player.rmb.chain): two blows only 0.3 s apart, each tapped in
   // time with the guard held 0.2 s, both deflect. Mashing (whiffed presses) still needs the full
   // re-arm: scenario PARRY's mashed RMB.

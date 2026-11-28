@@ -19,7 +19,7 @@ import { HitReact } from '../enemies/duelist/react.js';
 import { impactK } from '../../combat/impact.js';
 import { Flurry } from './flurry.js';
 import { riposteMode, startRiposteCut, riposteTakeHit, riposteCutLanded, riposteContact } from './riposteCut.js';
-import { newDeathblowState, armDeathblow, tickDeathblow, deathblowTakeHit, deathblowLanded, deathblowClaims } from './deathblow.js';
+import { newDeathblowState, armDeathblow, tickDeathblow, deathblowTakeHit, deathblowLanded, deathblowClaims, dbWeight } from './deathblow.js';
 import { deathblowFxUpdate, deathblowFxClear } from '../../combat/deathblowFx.js';
 import { deathblowMatrixUpdate, deathblowMatrixClear } from '../../combat/deathblowMatrix.js';
 import { SwordMystic } from './swordMystic.js';
@@ -1413,7 +1413,10 @@ export class Player {
       const att = hit?.attacker ?? null, R = this.riposte;
       // (the deathblow: a flare moment is a blue parry, and the combo answers it: no counter cut of its own)
       R.att = !db && (last || moment) && att && hit?.melee === true && !this.debug.noRiposte ? att : null;
-      if (db && !this.debug.noRiposte) armDeathblow(this, att, attack, tell, tell === TELL.BLUE);
+      // (ONE PARRY, ADR-294: every parried BLUE blow of a body or a blade answers with the combo, wherever in a
+      // string it came; a thrown or fired thing (a projectile, a beam, a cast: `ranged`) never does)
+      const blueBody = tell === TELL.BLUE && hit?.melee === true && !hit?.ranged;
+      if (db && !this.debug.noRiposte) armDeathblow(this, att, attack, tell, blueBody);
       R.counter = moment;
       R.t = 0;
       R.attack = attack;
@@ -3909,9 +3912,12 @@ export class Player {
     if (pm > 0) this.game.punch?.(pm);
     const km = feel(d.kick, k) * (crit ? HF.kick : 1);
     if (km > 0 && C) this.game.kick?.(C.cx, C.cy, C.cz, km);
-    if (!viaShards) this.fx.contact(point, d.contact ?? 'light', C, crit || dr.broken === true, k, !!(a.rip?.db && this.db.rc)); // (the deathblow's clean contact: the light burst)
-    if (C) this._edgeFlash(C, heavy, crit, d.glint === 'ridge');
-    if (d.kind === 'cleave') this.fx.cleaveImpact(point.x, point.y, point.z, C ? C.gx : dir.x, C ? C.gz : dir.z, k, crit, true);    if (a.rip) (a.rip.db ? deathblowLanded : riposteCutLanded)(this, dealt);
+    // (the deathblow's weight, ADR-294: its blows draw only their own hit, combat/deathblowFx.js: no burst of white
+    // strokes, no edge flash, no cleave ring at the contact)
+    const quiet = !!a.rip?.db && dbWeight();
+    if (!viaShards && !quiet) this.fx.contact(point, d.contact ?? 'light', C, crit || dr.broken === true, k, !!(a.rip?.db && this.db.rc)); // (the deathblow's clean contact: the light burst)
+    if (C && !quiet) this._edgeFlash(C, heavy, crit, d.glint === 'ridge');
+    if (d.kind === 'cleave' && !quiet) this.fx.cleaveImpact(point.x, point.y, point.z, C ? C.gx : dir.x, C ? C.gz : dir.z, k, crit, true);    if (a.rip) (a.rip.db ? deathblowLanded : riposteCutLanded)(this, dealt);
   }
 
   /**

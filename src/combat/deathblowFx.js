@@ -16,6 +16,11 @@ import { FIRE_KIND } from '../render/firePalettes.js';
 //                    the floor, then crackles out.
 //   d  GOLD CRESCENT each blow leaves a crescent of gold letters ALONG THE SWORD'S OWN PATH (two rows, three
 //                    on the finisher) that sweeps on a little and crumbles into falling gold embers.
+//   e  WEIGHT        (the default, ADR-294) nothing hangs on the screen: a short bite of dark steel letters only
+//                    where the blade crosses his body, gone in ~0.1 s, a small heat flash at the contact, and the
+//                    blade going THROUGH him: its tip out of his far side and his blood thrown out of his back
+//                    along the blow, falling to the floor as pools. The weight itself is the combo's timing
+//                    (deathblow.js dbWeight: a hit-pause that grows, each blow driving him back, a slow finisher).
 // THE SLASH IS ON THE SWORD: every look draws its cut along `o.path` (the blade tip's real positions from
 // the start of the swing to its contact, ending past the contact), not at a guessed angle; without a path
 // it falls back to a straight sweep through the contact along the blow's bearing.
@@ -46,7 +51,7 @@ export const DEATHBLOW_FX_GLYPHS = ['-', '/', '\\', '|', "'", '.', ',', ':'];
 const CHARS = DEATHBLOW_FX_GLYPHS.join('');
 const G_DASH = 0, G_SLASH = 1, G_BACK = 2, G_BAR = 3, G_TICK = 4, G_DOT = 5, G_COMMA = 6, G_COLON = 7;
 
-const OPTS = ['a', 'b', 'c', 'd'];
+const OPTS = ['a', 'b', 'c', 'd', 'e'];
 const q = (name) => {
   try {
     return typeof location !== 'undefined' ? new URLSearchParams(location.search).get(name) : null;
@@ -54,7 +59,7 @@ const q = (name) => {
     return null;
   }
 };
-export const DBFX_DEFAULT = 'b'; // Shatter Web: the owner's pick (2026-11-26)
+export const DBFX_DEFAULT = 'e'; // Weight (ADR-294, the owner asked for it 2026-11-28); b: Shatter Web, the pick before
 /** The switch (`?dbfx=`): read at the moment of each blow (the Lab cycles it). */
 export const DB_FX = { opts: OPTS, mode: OPTS.includes(q('dbfx')) ? q('dbfx') : DBFX_DEFAULT };
 export const getDbFx = () => DB_FX.mode;
@@ -85,6 +90,9 @@ export const DBFX_TUNE = Object.freeze({
   // first frames, not held through it); the exit burst's spray `burst` x as many, its tip streak `tip` x as long and held
   // `tipHold` x as long
   clean: Object.freeze({ flash: 0.45, offset: 0.7, burst: 0.4, tip: 0.6, tipHold: 0.5 }),
+  // e WEIGHT: the bite's half length along the cut (m; the finisher's), its life (s), the flash's size (frame px at
+  // a 5 px cell; the finisher's), how many blood droplets the exit throws (x the exit's spray) and how fast
+  weight: Object.freeze({ bite: 0.32, biteLast: 0.5, life: 0.11, lifeLast: 0.16, flash: 1.6, flashLast: 2.8, exit: 1.4, exitSpeed: 0.8 }),
   blood: Object.freeze({ spray: 14, sprayMax: 24, sprayLast: 40, slow: 0.15, streak: 0.6, streakLast: 0.8, pools: 480, poolSoft: 0.08, poolLift: 0.08 }),
   ramps: Object.freeze([
     Object.freeze([[0, 0.55, 0.27, 0.06], [0.3, 0.52, 0.17, 0.025], [0.65, 0.32, 0.07, 0.012], [1, 0.13, 0.02, 0.005]].map(Object.freeze)),
@@ -554,6 +562,19 @@ function lookB(game, x, y, z, i, last, floor) {
   }
 }
 
+/** e: WEIGHT. A short bite where the blade crosses him (nothing past his body), a small flash; the exit does the rest. */
+function lookE(game, x, y, z, i, last, floor) {
+  const W = DBFX_TUNE.weight;
+  startFlash(game, x, y, z, 1, last ? W.flashLast : W.flash, 0.5, 0.35, STEEL, last);
+  const half = last ? W.biteLast : W.bite, life = last ? W.lifeLast : W.life;
+  for (let s = 0; s < SN; s++) {
+    const d = Math.hypot(SX[s], SY[s]);
+    if (d > half) continue;
+    const al = clamp(1 - d / half, 0.35, 1);
+    add(wx(x, SX[s], SY[s]), wy(y, SX[s], SY[s]), wz(z, SX[s], SY[s]), 0, 0, 0, life, 0, 0, strokeOf(SA[s]), 2, al, 5, SU[s] * 0.012, -1e9, 0.5);
+  }
+}
+
 /** The finisher's snap: every hanging line breaks into shards that fly outward and fall. */
 function snap(floor) {
   for (let i = 0; i < count; i++) {
@@ -669,7 +690,8 @@ function lookD(game, x, y, z, i, last, floor) {
  * with the blow's number; the finisher's is the largest.
  */
 function exitBurst(game, o, mode, ang, i, last, floor) {
-  const ramp = mode === 'b' ? 2 : mode === 'c' ? 3 : mode === 'd' ? 1 : 0;
+  const ramp = mode === 'b' || mode === 'e' ? 2 : mode === 'c' ? 3 : mode === 'd' ? 1 : 0;
+  const W = mode === 'e' ? DBFX_TUNE.weight : null; // (the weight: what flies out of his back is his blood, and it lands)
   let dx = fin(o.dx) ? o.dx : 0, dz = fin(o.dz) ? o.dz : 1;
   const bs = o.base;
   if (bs && fin(bs.x + bs.z)) {
@@ -694,10 +716,15 @@ function exitBurst(game, o, mode, ang, i, last, floor) {
     add(x + dx * t, y + R(-0.03, 0.03), z + dz * t, 0, 0, 0, hold * (1 - 0.4 * u), 0, 0, g, ramp, 0.9 - 0.4 * u, 5, u * 0.02, -1e9, 0.35);
   }
   // the spray: letters thrown out of his back (the far side), fanned across the blow's direction
-  const ns = Math.round((last ? 46 : Math.min(26, 9 + 3 * i)) * (C ? C.burst : 1));
+  const ns = Math.round((last ? 46 : Math.min(26, 9 + 3 * i)) * (C ? C.burst : 1) * (W && DB_BLOOD.on ? W.exit : 1));
   for (let k = 0; k < ns; k++) {
-    const sp = R(3.5, 8) * (last ? 1.25 : 1), fan = R(-0.5, 0.5), c = Math.cos(fan), sn = Math.sin(fan);
+    const sp = R(3.5, 8) * (last ? 1.25 : 1) * (W ? W.exitSpeed : 1), fan = R(-0.5, 0.5), c = Math.cos(fan), sn = Math.sin(fan);
     const vx = (dx * c - dz * sn) * sp, vz = (dx * sn + dz * c) * sp, vy = R(-0.4, 2.4);
+    if (W && DB_BLOOD.on) {
+      // (a droplet: it hangs through the hit-pause, flies, arcs and lands as a pool)
+      if (add(x + R(-0.12, 0.12), y + R(-0.3, 0.3), z + R(-0.12, 0.12), vx, vy + R(0.4, 1.6), vz, R(0.9, 1.3), R(0.3, 0.9), -9.8, -1, 4, 1, 6, 0, floor, 0.15) >= 0) DBFX_LAST.blood++;
+      continue;
+    }
     add(x + R(-0.12, 0.12), y + R(-0.3, 0.3), z + R(-0.12, 0.12), vx, vy, vz, R(0.16, 0.42), sp / R(0.15, 0.5), -9, -1, ramp, 1, 0, 0, floor, 0.3);
   }
   return { dx, dz };
@@ -749,6 +776,7 @@ export function deathblowHit(game, o) {
       lookB(game, x, y, z, i, last, floor);
     } else if (mode === 'c') lookC(game, x, y, z, i, last, floor, cellM, rowM);
     else if (mode === 'd') lookD(game, x, y, z, i, last, floor);
+    else if (mode === 'e') lookE(game, x, y, z, i, last, floor);
     else lookA(game, x, y, z, i, last, floor);
     exitBurst(game, o, mode, ang, i, last, floor);
     P.looksSpawned = P.spawned - s0;

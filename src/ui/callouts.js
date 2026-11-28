@@ -1,8 +1,8 @@
 import { el, num } from './dom.js';
 import { streakK } from '../combat/streak.js';
 
-// Short combat call-outs: world-anchored pop-ups over the player's head (PARRY / DEFLECT /
-// GHOSTEP / GUARD BROKEN / BLOCK, "DEFLECT ×N" for a deflect chain, EXECUTION, RETURN for a
+// Short combat call-outs: world-anchored pop-ups over the player's head (PARRY /
+// GHOSTEP / GUARD BROKEN / BLOCK, "PARRY ×N" for parries in a row (ADR-294: no deflect), EXECUTION, RETURN for a
 // perfectly parried bullet sent back at the wyrm), floating damage
 // numbers at the hit point (crits read "CRIT 123"), and a small mid-screen "POSTURE BROKEN"
 // banner. Pooled DOM nodes, animated from update(realDt) on real time so they stay readable during
@@ -13,13 +13,12 @@ import { streakK } from '../combat/streak.js';
 // one place over its target ("×3").
 // With the streak counter on (the streak pass's 'counter', ui/streakCounter.js) the streak's number
 // lives beside the hero, so GHOSTEP and RIPOSTE keep their word and drop their count (one streak
-// number near the hero, not two). DEFLECT ×N keeps its count: it counts the boss's string, not the streak.
+// number near the hero, not two). PARRY ×N keeps its count: it counts the boss's string, not the streak.
 // The flurry's cut counter then ticks without popping again while its cuts come faster than its pop (the accelerating storm).
 
 const HEAD_UP = 3.0; // m above the player's feet (just over the name tag)
 const KINDS = {
   parry: { text: 'PARRY', life: 0.95, rise: 30, pop: 1.35 },
-  deflect: { text: 'DEFLECT', life: 1.1, rise: 32, pop: 1.45 },
   ghostep: { text: 'GHOSTEP', life: 1.25, rise: 26, pop: 1.5, streak: true },
   // a parried last blow answered with flash cuts (player:flurry, art 'riposte')
   riposte: { text: 'RIPOSTE', life: 1.1, rise: 26, pop: 1.5, cls: 'deflect', streak: true },
@@ -27,8 +26,9 @@ const KINDS = {
   // the guard meter ran out on a blocked blow (player:guardOpen): styled as the guard break
   gopen: { text: 'GUARD DOWN', life: 1.0, rise: 20, pop: 1.25, cls: 'gbreak' },
   block: { text: 'BLOCK', life: 0.6, rise: 16, pop: 1.15 },
-  // a deflect chain: the parry call-out of that blow turns into "DEFLECT ×N" (styled as deflect)
-  chain: { text: 'DEFLECT', life: 1.15, rise: 34, pop: 1.5, cls: 'deflect' },
+  // parries in a row inside one string: the parry call-out of that blow turns into "PARRY ×N" (ADR-294: there is
+  // no deflect, every parry is a parry; the css class keeps its old name)
+  chain: { text: 'PARRY', life: 1.15, rise: 34, pop: 1.5, cls: 'deflect' },
   exec: { text: 'EXECUTION', life: 1.4, rise: 30, pop: 1.6, cls: 'deflect' },
   // the execution of a boss with several bars (dragon.lives: the Starless Lord): it ends a form
   deathblow: { text: 'DEATHBLOW', life: 1.5, rise: 30, pop: 1.7, cls: 'deflect', streak: true },
@@ -52,7 +52,7 @@ const KINDS = {
   lock: { text: 'BLADE LOCK', life: 1.1, rise: 20, pop: 1.5, cls: 'deflect' },
   lockWon: { text: 'BREAKTHROUGH', life: 1.3, rise: 30, pop: 1.6, cls: 'deflect' },
   mikiri: { text: 'MIKIRI', life: 1.3, rise: 30, pop: 1.7, cls: 'deflect', streak: true },
-  fullDeflect: { text: 'PERFECT DEFLECT', life: 1.5, rise: 32, pop: 1.7, cls: 'deflect', streak: true },
+  fullDeflect: { text: 'PERFECT PARRY', life: 1.5, rise: 32, pop: 1.7, cls: 'deflect', streak: true },
 };
 const NUM = { life: 0.95, rise: 34 };
 const COUNT = { life: 0.9, rise: 10 }; // a flurry's cut counter over its target
@@ -128,7 +128,13 @@ export class Callouts {
       else if (d?.phase === 'won') this.call('lockWon');
     });
     game.events?.on?.('player:mikiri', () => this.call('mikiri'));
-    game.events?.on?.('dragon:deflected', () => this.call('fullDeflect'));
+    // every blow of a long string parried (the full deflect's reward): "PERFECT PARRY ×N"
+    game.events?.on?.('dragon:deflected', (d) => {
+      this.call('fullDeflect');
+      const n = Math.round(num(d?.count));
+      const it = n >= 2 ? this.calls.find((c) => c.active && c.kind === 'fullDeflect' && c.age === 0) : null;
+      if (it) it.span.textContent = `${KINDS.fullDeflect.text} ×${n}`;
+    });
   }
 
   /** Pop a call-out over the player's head. kind ∈ KINDS. */
@@ -162,16 +168,16 @@ export class Callouts {
   }
 
   /**
-   * A deflect chain (combat:deflectChain): "DEFLECT ×N" over the hero's head, popping bigger as the
+   * Parries in a row (combat:deflectChain): "PARRY ×N" over the hero's head, popping bigger as the
    * chain climbs. One counter per string: the live chain call-out counts up in place, and the
-   * PARRY / DEFLECT call-out this same blow just popped folds into it, so a string parried in
+   * PARRY call-out this same blow just popped folds into it, so a string parried in
    * rhythm reads as one climbing counter, not a stack of words.
    */
   chain(count) {
     const n = Math.round(num(count));
     if (!(n >= 2)) return;
     const k = KINDS.chain;
-    const fresh = this.calls.find((c) => c.active && c.age < 0.05 && (c.kind === 'parry' || c.kind === 'deflect'));
+    const fresh = this.calls.find((c) => c.active && c.age < 0.05 && c.kind === 'parry');
     let it = this.calls.find((c) => c.active && c.kind === 'chain');
     if (it) {
       if (fresh) fresh.hide();

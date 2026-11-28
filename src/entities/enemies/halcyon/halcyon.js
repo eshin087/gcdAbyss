@@ -424,10 +424,18 @@ export class Halcyon extends Duelist {
     return r;
   }
 
-  /** A parried flying blow (Fly-By's pass, Blink of an Eye's flying cross): THE CRASH, not a recoil. */
+  /** A parried flying blow (Fly-By's pass, Blink of an Eye's flying cross): THE CRASH, not a recoil. A BLUE one the
+   *  hero's deathblow answers (ADR-294: every blue blow of a body takes the combo) is beaten out of the air instead:
+   *  his pass stops where he is and he recoils as from any parried last blow (an open reaction: he drops, airFall),
+   *  in front of the hero, and the combo follows. The crash stays for a perfect dodge of a red flying blow. */
   onParried(info = {}) {
     const a = this.brain.act, b = a?.striking ?? null;
     if (!b?.def?.halCrash || this.mode !== 'act' || info?.tell === TELL.RED) return super.onParried(info);
+    const db = this.game.player?.db;
+    if (info?.tell === TELL.BLUE && db?.phase === 'watch' && db.blue === true && db.att === this) {
+      this.flight.pass.on = false;
+      return super.onParried(info);
+    }
     if (this.time - this._lastParry < 0.1) return;
     this._lastParry = this.time;
     const tell = info?.tell === TELL.BLUE ? TELL.BLUE : TELL.NORMAL;

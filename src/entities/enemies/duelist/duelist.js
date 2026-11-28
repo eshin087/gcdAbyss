@@ -1194,6 +1194,9 @@ export class Duelist {
         // exchange goes on after it (a string's non-final hit: a short freeze)
         steel: !!o.beat && !o.crescent && !o.projectile,
         melee: !!o.beat && !o.crescent && !o.projectile, // (what the hero's riposte may answer)
+        // a blow that reaches the hero from afar (a cast, a released blast, a bolt of lightning, a beam, a stream held lit): never answered
+        // by the deathblow (ADR-294: projectiles are not part of the one blue rule)
+        ranged: !!o.projectile || !!o.crescent || o.kind === 'lightning' || o.kind === 'beam' || !!(o.beat?.def && (o.beat.def.cast || o.beat.def.release || o.beat.def.selfHit || o.beat.def.sustain || o.beat.def.bolt)),
         around: !!o.beat?.def?.flit, // a blow of his flurry: a guard meets it from any side
         // (a parry moment ends the string: the hero's parry holds it as a last blow)
         last: o.beat ? !!o.beat.last || (!!o.beat.def?.flare && tell === TELL.BLUE) : true,

@@ -4,7 +4,20 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-One hundred and fifty pieces of work since 0.4.0:
+One hundred and fifty-one pieces of work since 0.4.0:
+- **Every blue blow ends in a deathblow, with weight** (2026-11-28, ADR-294). *Changed (the owner: "every blue attack
+  except the dragon to do a deathblow", "get rid of the deflect", the deathblow "weighty, impactful and going through"):*
+  a parry of any BLUE blow of a body or a blade, from every boss but the wyrm and wherever in a string it comes, is
+  answered by the deathblow (a ring of force parried at its edge: the first blow runs in, up to 10 m); blue projectiles,
+  beams and casts are not (they fly back as before; a new hit field `ranged`). Halcyon's parried blue flying blows beat
+  him out of the air in front of the hero instead of the crash into cover (the crash stays for a perfect dodge of a red
+  one, and with `?parryRiposte=old`). The word DEFLECT is gone from the hero's side: a blue parry reads PARRY, parries in
+  a row PARRY ×N, the full deflect PERFECT PARRY ×N (the rules are unchanged: a white blow mid-string is parried and
+  the string goes on). The deathblow's new default look, `?dbfx=e` (WEIGHT): a hit-pause that grows 0.10 → 0.24 s, a
+  0.55 s hold on the finisher, wound up 0.34 s and followed through slowly; every blow drives him back further (0.28 →
+  0.55 m) and kicks the camera harder; at the contact only a short bite of letters where the blade crosses him, a small
+  flash, the tip out of his back and his blood thrown out of it to land as pools; no contact burst, edge flash or cleave
+  ring, no cold cast on the screen. `?dbfx=b` gives back Shatter Web and the timing before.
 - **The Cinder Wyrm's feet stay planted as it dies and as it wakes** (2026-11-28, ADR-293). *Fixed (the owner: "fix the death and wake foot sliding next"):* while
   the body sank to lie down in the death or rose in the wake, its hind toes slid up to 0.3 m forward and back over
   the ground (0.6 m in all in the death, 0.4 m in the wake) and a forepaw settled 0.1 m off where it stood. The
