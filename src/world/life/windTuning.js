@@ -118,6 +118,18 @@ export const WIND_TUNE = Object.freeze({
     wisps: { color: [0.46, 0.47, 0.52], rate: 0.35, gust: 2.4, alpha: 0.34 },
     loud: 3.5,
   }),
+  /** the Last Foundry: the furnace draws the night air in across the casting floor from the south (toward
+   *  -z), in long breaths, a front now and then off the broken walls; the wisps are steam and smoke,
+   *  grey with a warm cast; the fire field's smoke and flames lean hard on it */
+  foundry: level({
+    dir: -100, wander: 9, speed: 1.3,
+    breath: { floor: 0.45, periods: [13, 31] },
+    fronts: { every: [12, 20], strength: [0.75, 1.05], speed: [6.5, 8], tail: [4.5, 6.5], spread: 14 },
+    wisps: { color: [0.5, 0.46, 0.43], rate: 0.45, gust: 2.6, alpha: 0.32 },
+    grass: { lean: 0.12, wave: 0.12, front: 0.2 },
+    loud: 4,
+    fire: { smoke: 0.6, flame: 0.45 },
+  }),
 });
 
 /** a level without a block: a quiet breeze, no fronts */

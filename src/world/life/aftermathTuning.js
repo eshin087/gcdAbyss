@@ -61,6 +61,8 @@ export const AFTERMATH_TUNING = Object.freeze({
   grove: level({ dust: { ...DEFAULT.dust, color: [0.4, 0.42, 0.37] } }),
   // the Veiled Crossing: concrete dust, ash-grey; the smoke of burning wrecks a little bluer
   veil: level({ dust: { ...DEFAULT.dust, color: [0.44, 0.44, 0.46] }, smoke: { ...DEFAULT.smoke, color: [0.4, 0.41, 0.45] } }),
+  // the Last Foundry: scale and slag dust, rust-grey; the smoke of hot metal warmer and darker
+  foundry: level({ dust: { ...DEFAULT.dust, color: [0.42, 0.38, 0.34] }, smoke: { ...DEFAULT.smoke, color: [0.36, 0.33, 0.32] }, embers: { ...DEFAULT.embers, rate: 2.2, color: [0.95, 0.34, 0.06] } }),
   // (code, city: the defaults; no living-world tuning of their own yet)
 });
 

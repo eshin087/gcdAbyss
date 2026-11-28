@@ -42,6 +42,11 @@ const KINDS = ['slam', 'cut', 'thrust', 'dash', 'blast', 'beam', 'step'];
 // cosmetic noise from this module's own stream (the seeded sims replay Math.random)
 let seed = 0x7a3c19e5;
 const rnd = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
+/** Put the marks' stream back at a known point (the tests: a mark's jagged shape must not depend on how many
+ *  marks the scenarios before it made, e.g. a new level's set). */
+export function reseedMarks(s = 0x7a3c19e5) {
+  seed = s >>> 0;
+}
 const pick = (s) => s[Math.floor(rnd() * s.length)];
 /** n x k glyphs, rounded at random (k = 1: n, and no draw: a level without thinning keeps its stream) */
 const thinN = (n, k) => (k >= 1 ? n : Math.floor(n * k + rnd()));

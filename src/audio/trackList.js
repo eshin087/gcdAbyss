@@ -105,6 +105,17 @@ export const SCORE = {
         T('starless-p4'),
       ],
     },
+    // The Last Foundry borrows the Obsidian Throne's score (four phases: its last track twice) until the
+    // owner picks its own by ear (core's stand-in, wave 0)
+    foundry: {
+      explore: T('starless-explore', { xfade: 3 }),
+      phases: [
+        T('starless-p2', { xfade: 1.5 }),
+        T('starless-p3', { xfade: 0.5 }),
+        T('starless-p4'),
+        T('starless-p4'),
+      ],
+    },
   },
   victory: T('victory', { loop: false }), // Victory Fanfare Short, cynicmusic
   death: T('death', { loop: false }), // Death of a Ninja (Game Over), Joth

@@ -299,5 +299,31 @@ export const LITTER = deepFreeze({
         },
       ],
     },
+
+    // the Last Foundry: soot and fine slag sifting down from the furnace's smoke, lying in the lee of the
+    // steel; a few flakes of mill scale (rust-dark, with a little body) skittering across the plates; sparse
+    foundry: {
+      takes: ['ash'],
+      rate: 6,
+      lying: 140,
+      last: [30, 60],
+      grass: 0.9,
+      shelter: 0.4,
+      kinds: [
+        {
+          share: 0.82, glyphs: ".,'`", color: [0.34, 0.31, 0.29], color2: [0.27, 0.24, 0.22],
+          size: [0.12, 0.2], ground: { glyphs: '.,:~', size: [0.3, 0.38] }, fall: [0.5, 0.85], slip: 0.3, flutter: [1.0, 2.0], spin: 0, tau: 0.45,
+          lift: [1.9, 3.4], carry: 0.9, hop: 0.9, lie: 1.0, alpha: 0.66, from: [4, 9], flat: 0.22,
+          where: { at: 'ash', base: 0.08, pile: 2.5, reach: 1.6, gap: 0.35, lee: [[1, 0], [0, 1], [0.7, 0.7]], within: 30, maxR: 3.5, tags: ['stone'] },
+          source: 'sky',
+        },
+        {
+          share: 0.18, glyphs: 'ces', color: [0.4, 0.26, 0.17], color2: [0.3, 0.2, 0.14],
+          size: [0.24, 0.3], ground: { glyphs: 'ces', size: [0.32, 0.4] }, fall: [0.6, 0.9], slip: 0.5, flutter: [1.2, 2.0], spin: 2.4, tau: 0.5,
+          lift: [1.6, 2.8], carry: 0.9, hop: 1.2, lie: 0.8, alpha: 0.6, from: [1.5, 3.5],
+          where: { at: 'flat', r: 18, out: 0.6 }, source: 'sky',
+        },
+      ],
+    },
   },
 });

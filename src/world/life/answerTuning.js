@@ -45,6 +45,8 @@ export const ANSWER_TUNING = Object.freeze({
   // same; the hush is deeper and longer (there is no breeze to come back, only the bamboo settling)
   // the Veiled Crossing: the defaults (a blow's breath across the rubble)
   veil: level(),
+  // the Last Foundry: the furnace's draw is already moving the air; the answer runs a little harder
+  foundry: level({ roar: { ...DEFAULT.roar, front: { strength: 2.8, speed: 15, width: 11 } } }),
   grove: level({
     roar: { ...DEFAULT.roar, front: { strength: 1.4, speed: 12, width: 8 } },
     wake: { ...DEFAULT.wake, front: { strength: 0.5, speed: 7, width: 6 } },

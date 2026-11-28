@@ -307,7 +307,7 @@ export default {
 
   /** What each level takes from the atmosphere. */
   takes(T) {
-    const want = { cinderwood: 'leaves', ash: 'ash', starless: 'leaves', ring: 'leaves', fox: 'leaves', grove: 'leaves', veil: 'ash' };
+    const want = { cinderwood: 'leaves', ash: 'ash', starless: 'leaves', ring: 'leaves', fox: 'leaves', grove: 'leaves', veil: 'ash', foundry: 'ash' };
     for (const id of WITH(T)) {
       const w = T.build(id, 'litter');
       w.step(0.1);

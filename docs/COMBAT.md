@@ -3199,6 +3199,152 @@ perfect 42 - 60 s, fencing 6, roller 6, blocker dead at 78 s, pace alive. PACE (
 phase; the first Null at 73 - 89 s of the fight. DOWNTIME: the hero's knockdown 1.30 s (the engine's); the
 longest stretch out of his hands 1.43 s; standing up to the next cue, median 0.43 - 0.88 s.
 
+## The False Saint (2026-11-28, ADR-285 – ADR-288; `?level=foundry`)
+
+Anselm, the False Saint: a calm man in a charcoal jacket whose skin is a shell over a machine's frame, BARE-HANDED
+(falseSaint/; Tian Lei's strike builders; his hands open, a fist only for the booster punch). One health bar (18000),
+four phases: at 74 % THE SKIN BREAKS, at 46 % WEAPONS FREE, at 20 % TRUE FRAME. **COMBAT.md's floors** (ADR-287):
+`flashLead` 0.35, a first windup of 0.7 s or more in phase 1, hits 0.45 s apart at least (the data checks every phase,
+the first windup against 0.7 x `windupScale`); `windupScale` [1, 0.94, 0.88, 0.84], `recoveryScale` [0.8, 0.72, 0.66,
+0.6]; posture [1000, 1150, 1300, 1450]; `damageScale` 1.6, the game's hardest hitter (Bai Wuji 1.54); the pressure
+block on (the director, the fairness guard, the pursuit). He is the fastest duelist by links, short recoveries, gap
+closers and his jet step: **under COMBAT.md's floors no boss is faster.** His windups sit on the floors (the least
+phase-1 first windup 0.72 s; the least gap between two hits 0.46 s, Rosary's fixed pistons; 0.51 s in the melee
+strings); every arsenal first windup is 0.9 s or more, every terrain windup fixed at 0.7 s or more.
+
+**Cyan is only looks.** His sensors and his shell's sparks are cyan; nothing of his that signals an attack is cyan
+or blue (blue means parry): the sight lines are pale white with a red cross, the marks red, the beams white-hot, and
+his sensors never brighten with a charge (`TUNING.arsenal.beams.eyes` 0).
+
+**The shell** (ADR-286) is look only: a landed cut chips it where it lands, each phase's change bares him to its
+milestone (about 24 / 64 / 94 %), a bonfire rest makes him whole. It changes no hitbox and no damage.
+
+**Through a phase's change** (1.7 s, fixed; a push ring at its end: no damage, knockback 7, blockable, block push 4)
+nothing lands on him until the ring is out: a cut rings off him (a spark, no damage, no posture). The change into
+phase 2 shakes the floor round him (a small shock), into phase 3 tears up and throws 8 plates, into phase 4 throws 14
+and strikes every standing piece within 16 m (the core's nova); the ladles, their cranes and the gas tanks are spared.
+
+**His jet step** (Censer Step, from phase 2; `TUNING.boost.step`): a hero past 6 / 5.5 / 5 m (phases 2 / 3 / 4) is
+closed on a jet, at most every 3.0 / 2.3 / 1.7 s: 0.12 - 0.09 s of the boosters lighting, then a straight dash at 22
+/ 25 / 29 m/s that stops 2.4 m short of the hero (never through him), 10 m at most, an afterimage where he left; from
+phase 3 a zig-zag of two legs and a low hover between moves. It deals nothing. A share (0.3 / 0.45 / 0.6) of the picks
+and links made with the hero that far off wait for it.
+
+### His moves (N white, B blue, R red; `+` a flare; windups at phase 1; damage before x1.6)
+
+Later phases scale every windup not marked fixed by `windupScale`. The melee (`moves/melee.js`):
+
+| Move | From | Beats | Band (m) · cooldown |
+|---|---|---|---|
+| Benediction | 1 | N 0.72, 14 (the lead palm) · N 0.50, 14 (the advancing right palm) · B+ 0.62 after a held quarter turn (0.04 - 0.22 s), 22, the left palm on a long lunge: knockback 6.5, thrown through what stands behind | 0 – 5 · 3.5 |
+| Genuflect | 1 | N 0.72, 12 (the ankle sweep, a scuff) · B+ 0.52, 20 (the rising knee) | 0 – 4.5 · 4.5 |
+| Laying On of Hands | 1 | R 0.76, 6: the grab (a 1.9 m reach). Caught: lifted 0.62 s, thrown 4 - 10 m at the nearest standing piece within 9 m, 22, through it. Never the last HP; out of the hero's hands 1.9 s at most. Missed: he stands open the whole recovery | 0 – 3.4 · 9 |
+| The Long Walk | 1 | N 1.9, fixed: he walks up to 7.5 m at the hero; light cuts land and do not stop him, a heavy cut staggers him; then one straight, 26, knockback 5. Not parried, it goes on 9 m into the scenery | 3.4 – 9.5 · 7 |
+| Interdict | 2 | N 0.72, 14 · R 0.72, 30: the gavel, a ring of 2.4 m, a crater | 0 – 5 · 6 |
+| Cast Out | 2 | B+ 0.76, 16: the double palm, knockback 8, block push 5.2, 40 of the guard; it breaks what stands 4.2 m ahead | 0 – 5.2 · 7 |
+| Lauds | 3 | N 0.72, 14 (the low kick) · B+ 0.58, 24 (the hand-heel down on the collarbone) | 0 – 4.6 · 5.5 |
+| Rebuke | counter, P1 | a 0.6 m slip off the line, B+ 0.72, 18 (the short elbow) | |
+| Penance | counter, P2 | B+ 0.72, 20 (the hand-heel up under the chin) | |
+| Anathema | counter, P3 | N 0.72, 14 (the elbow) · B+ 0.50, 20, knockback 7 through the scenery (the double palm) | |
+| Requiem | counter, P4 | N 0.72, 14 (the elbow) · R 0.60, 28 (the gavel) | |
+| Litany | flurry, P1 | five alternating palms, N 0.72 then 0.50, 12 each, the later ones from another side of the hero | |
+
+The boosters (`moves/boost.js`):
+
+| Move | From | Beats | Band (m) · cooldown |
+|---|---|---|---|
+| Votive Fist | 2 | B+ 0.95: the elbow's jet lit from 10 % of the windup (the tell), then up to 10 m in a blink, stopping 1.3 m short; 30, knockback 6.5. A miss carries on 3.4 m (a crater, a wave 4.5 m on). Parried: +90 posture, he skids 1.5 m past the hero | 2.2 – 11 · 5.2 / 4.4 / 3.8 |
+| Rosary | flurry, P2 – P4 | 7 - 10 pistons of the plated arm: N 0.72, then 0.41 / 0.41 / 0.55 (fixed, a stutter of threes), 10 each, a blocked one 6 of the guard; the last B+ 0.56, 22, 34 of the guard. A guard held through it holds | |
+| Descent | 3 | R 1.55, fixed: up 7.5 m on the back thrusters, the mark following the hero until 0.74 of the windup, the dive knee: 34, a ring of 2.8 m, knockdown, a crater | 3 – 14 · 9 |
+| Censer Wheel | 3 | B 0.95 (the booster punch) · N 0.46, 16 (a jet-spun back elbow) · B+ 0.52, 24 (a rising jet kick) | 3 – 10 · 7 |
+| Thurible | 3 | N 0.75, 16 (the elbow) · B 0.52, 24 (the kick) · B+ 0.80 (the booster punch out of the air, 7 m) | 0 – 3.4 · 7 |
+| Vespers | 4 | four passes through the hero, each announced (he jets to its launch point, its line shows 0.32 s), B 0.62 fixed, 20; then from above R 0.66, 30, a ring of 2.4 m, knockdown. The cues 1.17 s apart | 0 – 12 · 14 |
+| Last Rite | 4, once, under 8 % | R 1.75, fixed: he stops, the core whines, a 5 m lunge to embrace. Caught: 60 (at most the hero's HP - 1). Dodged or missed: his posture breaks (the deathblow's chance) | 0 – 9 |
+
+The arsenal (`moves/arsenal.js`; a beam hits a standing hero 0.35 s after its flare, ONCE; red: a roll through it
+spends it, and a roll at the flare is a perfect dodge):
+
+| Move | From | Beats | Band (m) · cooldown |
+|---|---|---|---|
+| Vigil | 2 | R 1.3: the eye's cutting laser. A pale sight line across the hero's spot (it follows him until 0.6, then holds); the laser lights at the cue and its foot runs the line at 10 m/s, crossing his spot at the impact; 22, knockdown; a 7.2 m scar | 2.4 – 22 · 8 / 7 / 7 |
+| Absolution | 2 | R 1.5: the palm cannon. The iris charges (the light dims); lit 1.2 s, 1.3 m wide, 18 m long, swept 34° toward the hero's side while he walks sideways; 28, knockdown; a melted trench. The first cover on its line holds a few ticks (a tank about 0.7 s) | 3 – 24 · 10 / 9 / 9 |
+| Triptych | 3 | B 1.1 · B 0.5 · B 0.5: three bolts of the forearm gun, each arriving at its impact, 14 | 3 – 20 · 6.5 / 6 |
+| Choir | 3 | R 1.1, fixed: 9 (P3) / 11 (P4) missiles on red rings round the hero (none on him), then the last three on him, their marks tracking until 0.75 s before they land; 12 each. The hero's blade cuts one out of the air | 2.8 – 30 · 11 / 10 |
+| Passing Bell | 3 | R 1.35, fixed: up 3.4 m on the thrusters, the line shown (it follows the hero until 0.62); he flies it at 17 m/s with the eye laser cutting beneath him; 24, knockdown; one scar across the floor | 3 – 26 · 10 |
+| Kyrie | 4 | R 1.2, fixed: four rows of five marked shells, 0.85 s apart, each landing 1.5 s after it is marked, walking over the hero (the lanes below); 16 each; then THE GREAT SHELL on his spot (r 3, 28, knockdown) | 3 – 30 · 15 |
+| Verdict | 4 | R 1.7, fixed: a reticle follows the hero and locks at the cast; the pillar of light 0.95 s later (r 1.5, 32, knockdown); 0.55 s after it a NORMAL ring shock out to 7 m (10: a block or a parry answers it); a molten pool where it fell | 3 – 30 · 13 |
+| Revelation | 4 | R 1.6: twin palm beams lit at the cue either side of the hero's bearing, crossing on him at the impact, held 0.75 s, 20 · R 0.75: the core cannon, 3.2 m wide, lit 2 s, swept 60°, 38. The biggest scar in the game | 3 – 30 · 16 |
+
+The terrain (`moves/terrain.js`; every windup fixed; what he sends carries its own cue: the flare on the piece, the
+mark where it falls, the flash on the front; at most one terrain move in 9 s, none while a piece of his is in the air
+or held; a move whose piece is gone is refused):
+
+| Move | From | Beats | Band (m) · cooldown |
+|---|---|---|---|
+| Offertory | 2 | a fetch (0.62 s, a jet hop to a gas tank, no cue), then R 0.78: the tank kicked low at the hero; where it lands it bursts (the set's blast: 16 within 2.6 m, blockable). The red flare on the tank 0.35 s before it lands; uncued, it lands a dud | 4.5 – 26 · 14 |
+| Crucible | 3 | R 1.0: his gun on the chain of a full ladle within 6.2 m of the hero; the pools' marks fixed at 0.3 of the windup (the spill under the ladle, r 2.6; a splash where the hero stood, r 1.9); the shot, the pour | 0 – 30 · 12 |
+| Relic | 3 | a fetch, then B+ 0.76: a girder (26), an ingot stack (24) or an unfinished frame (18) thrown at where the hero will be (the flare on the piece). Parried, it breaks on the blade (22 posture to him); the hero's blade can cut it from his hands | 4 – 26 · 11 |
+| Prostration | 3 | R 0.92: the eye's laser cuts the foot of a column within 8.6 m of the hero; it falls across his place (the world's red strip, cued about 1.3 s ahead; 22 x its weight) | 0 – 30 · 16 |
+| Dies Irae | 4 | R 0.95: the press's ram shot; a shock runs out from the press at 15 m/s to 38 m and reaches the hero once: 22, unblockable (roll through the front); every piece and plate it passes is struck (the plates crack more than they break); the press gives out after about six slams | 0 – 30 · 16 |
+
+**The molten pools.** A spilled ladle (cut down by either of them, broken by any blow, or his Crucible), Verdict's
+crater and Crucible's splash lay pools (the set's `molten`). Each is cued RED where it lies 0.55 s before it burns,
+then burns every 0.5 s: the hero in it takes 9 (14.4 of his 160) and is thrown out 0.7 m past its rim (knockback 2.2 at
+least): one burn per entry, never a trap, never on a hero who is down or held, and not for 0.5 s after he is up. Red,
+unblockable, unparryable, no perfect dodge (a roll's i-frames pass through it). Measured: from a fresh pool's middle a
+roll started up to 0.45 s after its cue clears it unburnt (8 directions); a walk out takes one burn; from the rim, a step. **They burn him
+too** (`onMolten`): 60 and 35 posture a burn and a strip of his shell, a stagger at most every 2.5 s; from phase 2 he
+jets out of a pool (he walks out in phase 1). The ladles hang 13.7 - 14.1 m from the middle, so a ladle's pool reaches
+2.3 - 2.7 m into his circle (13.8 m): bring one down on him.
+
+**The gas tanks.** Five, four at the floor's corners. Broken (by anyone), a tank burns 0.9 s with a red cue and
+bursts: 16 to the hero within 2.6 m (blockable; a roll clears it), knockback 4; a tank the HERO broke costs him 90
+and 24 posture within 3.6 m (Halcyon's cars are the precedent). His shocks spare them; his barrage, his beams and
+the hero's blade burst them.
+
+**The barrage's lanes** (Kyrie). The shells are 1.25 m marks with lanes of 2.2 m of clear floor between them (1.3 m
+for the hero's middle); each row is laid so a lane's middle is within half a spacing of where the hero stands, the
+next row's lanes off the last's: a safe spot is always within 2.35 m (a roll is 4.2 m). One ledger handle a row.
+
+**The bolts' return** (Triptych). Blue: a parry or a block answers a bolt (a parry nicks his posture 18). A PERFECT
+parry sends it home: it flies back into his chest at 30 m/s, 70 damage and 110 posture (`dragon:returned`).
+
+**Last Rite.** Once a fight, in phase 4 under 8 % of his bar: 1.75 s of red windup, the core's whine, the lunge.
+Dodged or missed he stands wide open (his posture breaks: a free deathblow); caught, a heavy blast and a ring of
+4.5 m that bites the world, never the hero's last HP.
+
+**Every move wrecks the world.** Each melee blow strikes the world at the striking limb's real height (power damage /
+40 x 1.5, x1.25 red; the other families' powers are in their tuning files); a missed booster punch goes on into what stands behind the hero; a beam cuts every piece on its
+line and scars the plates; a shell craters the floor. By the end of a fight the floor is cratered and scarred, the
+ladles are down and the line is scrap.
+
+**Fairness** (ADR-287). Every projectile flies through `fx.fly` with its own ledger handle (`brain.expect`) that the
+fairness guard may move later (`brain.fairDelay`) or drop (not fired); a beam is a `selfHit` beat the brain cues,
+holds and ledgers; a thrown piece's landing is asked of the guard. Measured (`saint.mjs . arFair`, 10 seeds x 24 s of
+phases 3 and 4 with the swarm and the barrage likely): 341 missiles and shells landed against 171 guarding cues,
+none within 0.3 s of a cue that needs the other answer; `tunePace`: none in any seed or phase.
+
+### The numbers measured (`saint.mjs . tunePace` / `tuneFight`, 2026-11-28, ADR-288)
+PACE (a god-mode guarding bot roaming 2.5 / 5 / 9 m, seeds 4242, 7, 99, 60 s a phase):
+
+| Phase | cues a minute (mean; seeds) | longest gap | links / chains a minute | jet steps a minute |
+|---|---|---|---|---|
+| 1 | 47.7 (43.7 – 53.6) | 6.37 s | 4.7 / 6.7 | 0 |
+| 2 | 53.8 (50.3 – 56.7) | 4.54 s | 12.3 / 5.3 | 1.7 |
+| 3 | 53.7 (48.5 – 59.4) | 4.90 s | 10.0 / 8.0 | 3.7 |
+| 4 | 55.4 (53.0 – 58.2) | 5.87 s | 7.3 / 10.0 | 4.3 |
+
+(Bai Wuji's integration pass: 51.3 / 58.5 / 66.9.) Phase 4 read 63.4 on the build before Dies Irae's plates changed:
+the seeded fights part, so the meter (`TUNING.pressure.meter`) is loose: each phase at least [1, 1.04, 0.97, 0.98] x
+the one before in the seeds' mean, at least [40, 46, 44, 48] cues a minute per seed, no gap over [7, 5.2, 5.5, 6.5]
+s, the jet step at least 0.75 x as frequent as in the phase before.
+
+WHOLE FIGHTS (four mortal bots: 160 HP, 5 flasks, skill 0.95, a 480 s cap; seeds 4242, 7, 99): the guarding bot and
+the rolling bot are alive at the cap in all three (him in phase 3 with a quarter of his bar or so); the striking bot
+(parries, rolls, swings at him whenever he is in reach) wins 2 of 3 in 219 - 225 s; the parrying bot won 2 of 2 in
+200 - 204 s with the faster phase scales that were turned down. With those faster scales the striking bot lost all
+three (ADR-288's table).
+
 ## The duelists' pressure and the fairness guard (2026-11-16, ADR-122)
 The human bosses run one engine (`enemies/duelist/`: `brain.js`, `director.js`, `ledger.js`;
 ARCHITECTURE.md "Duelists"), so the same rules keep them attacking and keep them fair. The owner's

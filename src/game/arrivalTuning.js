@@ -51,6 +51,9 @@ export const ARRIVAL_TUNING = Object.freeze({
   // bars, then drifts back down the avenue to the man standing in the middle of it, hands in his
   // pockets; a cold breath of air down the street (east to west)
   veil: level({ look: { x: 0, z: 1 }, end: { x: 0.3, z: 7 }, zoom: 26, hold: 3.4, front: { strength: 0.6, speed: 6, width: 14, delay: 0.5, dirX: -1, dirZ: 0 } }),
+  // the Last Foundry (core's stand-in): the shot opens on the pour and the kneeling man at its edge, then
+  // drifts back down the casting floor; furnace air drawn north toward the pour
+  foundry: level({ look: { x: 0, z: -12 }, end: { x: 0.3, z: -4 }, zoom: 26, hold: 3.4, front: { strength: 0.5, speed: 5, width: 14, delay: 0.5, dirX: 0, dirZ: -1 } }),
 });
 
 export const arrivalTuning = (id) => ARRIVAL_TUNING[id] ?? ARRIVAL_TUNING.DEFAULT;

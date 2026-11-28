@@ -1989,4 +1989,459 @@ export const SFX = {
       burst(v, t, 'brown', 'bandpass', 380, 0.8, 0.3, D * 0.8, 0.003);
     },
   },
+  // The False Saint (the Last Foundry; the fx agent's recipes, ADR-285). A machine, not a sorcerer: jets
+  // that light with a hard hiss, servos, metal ringing on metal, the deep roar of the beams, the dry crack
+  // of his gun, shells that whistle down. Serious and dry (the owner's taste); every jitter from the audio
+  // stream (dsp.js rnd / spikes), never Math.random. All from `dragon:spell { name: 'fs...', x, z, dur }`
+  // the effects emit (falseSaint/fx.js _say); `o.dur`: a held sound's length (s), a burst's power, a count.
+  /** A booster lights (o.dur its strength 0..1): a hard hiss that catches, a low rumble under it. */
+  fsJetLight: {
+    prio: 4, rev: 0.12, gap: 0.08, falloff: 0.7,
+    play(v, t, o) {
+      const k = 0.6 + 0.4 * clamp(num(o.dur, 1), 0, 1);
+      const f = swish(v, t, 'white', 'bandpass', 2600, 0.9, [[0, 0], [0.015, 0.22 * k], [0.12, 0.12 * k], [0.32, 0]]);
+      glide(f.frequency, t, 3800, 1800, 0.25);
+      burst(v, t, 'brown', 'lowpass', 220, 0.8, 0.32 * k, 0.3, 0.004);
+      thump(v, t, 90, 50, 0.08, 0.22 * k, 0.12);
+    },
+  },
+  /** A jet launch kicks off the floor (o.dur ~1): a blast of exhaust, a heavy knock. */
+  fsJetBurst: {
+    prio: 5, rev: 0.2, gap: 0.08, falloff: 0.6,
+    play(v, t, o) {
+      const k = 0.7 + 0.3 * clamp(num(o.dur, 1), 0, 2);
+      burst(v, t, 'white', 'highpass', 1600, 0.7, 0.3 * k, 0.12, 0.001);
+      thump(v, t, 110, 38, 0.18, 0.7 * k, 0.3);
+      const f = swish(v, t, 'pink', 'bandpass', 900, 0.8, [[0, 0], [0.02, 0.35 * k], [0.4, 0]]);
+      glide(f.frequency, t, 1400, 500, 0.35);
+    },
+  },
+  /** The booster dash (o.dur its metres): a tearing jet past, falling in pitch. */
+  fsDash: {
+    prio: 5, rev: 0.18, gap: 0.1, falloff: 0.6,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 6) / 20, 0.18, 0.5);
+      const f = swish(v, t, 'white', 'bandpass', 2000, 1.1, [[0, 0], [0.03, 0.3], [D, 0.12], [D + 0.15, 0]]);
+      glide(f.frequency, t, 3200, 900, D + 0.1);
+      burst(v, t, 'brown', 'lowpass', 260, 0.8, 0.4, D + 0.1, 0.004);
+    },
+  },
+  /** A sensor goes out (o.dur 0..2): a small falling blip, dry. */
+  fsSensorOut: {
+    prio: 5, rev: 0.5, gap: 0.2, falloff: 0.5,
+    play(v, t, o) {
+      const f0 = 1320 - 180 * clamp(num(o.dur, 0), 0, 2);
+      const s = v.osc('sine', f0, t, t + 0.4);
+      glide(s.frequency, t, f0, f0 * 0.35, 0.35);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.005, 0.06], [0.35, 0]]);
+      s.connect(g).connect(v.out);
+      burst(v, t, 'white', 'highpass', 4200, 0.7, 0.03, 0.03, 0.0005);
+    },
+  },
+  /** A chip of his shell flies (o.dur the share it took): a brittle porcelain tick. */
+  fsFlake: {
+    prio: 3, rev: 0.15, gap: 0.05, falloff: 0.8,
+    play(v, t, o) {
+      const k = 0.6 + 2 * clamp(num(o.dur, 0.1), 0, 0.3);
+      burst(v, t, 'white', 'bandpass', rnd(3200, 4200), 3, 0.09 * k, 0.03, 0.0005);
+      ping(v, t + 0.002, 'triangle', rnd(1900, 2300), 0.025 * k, 0.06);
+    },
+  },
+  /** His shell burns off (o.dur 0..1): a crackle that thickens with it, a soft whoosh of heat. */
+  fsStrip: {
+    prio: 4, rev: 0.25, gap: 0.2, falloff: 0.7,
+    play(v, t, o) {
+      const k = clamp(num(o.dur, 0.2), 0.05, 1), D = 0.3 + 0.7 * k;
+      const c = v.noise('white', t, t + D + 0.05);
+      const bp = v.filter('bandpass', 2600, 1.1);
+      const g = v.gain(0);
+      spikes(g.gain, t, D, Math.round(10 + 30 * k), 0.12 + 0.12 * k, 0.002, 0.012, 0.6);
+      c.connect(bp).connect(g).connect(v.out);
+      swish(v, t, 'pink', 'lowpass', 700, 0.7, [[0, 0], [0.1, 0.12 * k], [D, 0]]);
+    },
+  },
+  /** The core's whine (o.dur s): a high thin tone climbing, a hum under it. */
+  fsCoreWhine: {
+    prio: 5, rev: 0.35, gap: 0.6, falloff: 0.5,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1.6), 0.4, 3);
+      const s = v.osc('sine', 700, t, t + D + 0.1);
+      glide(s.frequency, t, 700, 2600, D);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.2, 0.025], [D, 0.06], [D + 0.08, 0]]);
+      s.connect(g).connect(v.out);
+      const lp = v.filter('lowpass', 200, 0.8);
+      const h = v.gain(0);
+      env(h.gain, t, [[0, 0], [0.3, 0.1], [D, 0.14], [D + 0.1, 0]]);
+      lp.connect(h).connect(v.out);
+      v.osc('sawtooth', 55, t, t + D + 0.15, 0).connect(lp);
+    },
+  },
+  /** Phase 2's change: skin tearing off the forearm, a servo shifting under it. */
+  fsSkin: {
+    prio: 6, rev: 0.3, gap: 1, falloff: 0.5,
+    play(v, t) {
+      const c = v.noise('pink', t, t + 1.4);
+      const bp = v.filter('bandpass', 1500, 1.2);
+      const g = v.gain(0);
+      spikes(g.gain, t + 0.1, 1.2, 22, 0.16, 0.003, 0.02, 0.7);
+      c.connect(bp).connect(g).connect(v.out);
+      const s = v.osc('square', 140, t + 0.8, t + 1.4);
+      glide(s.frequency, t + 0.8, 140, 220, 0.4);
+      const lp = v.filter('lowpass', 600, 1.4);
+      const sg = v.gain(0);
+      env(sg.gain, t + 0.8, [[0, 0], [0.05, 0.05], [0.5, 0.04], [0.6, 0]]);
+      s.connect(lp).connect(sg).connect(v.out);
+    },
+  },
+  /** Phase 3's change: plates unlocking, the petals opening (a run of mechanical clicks), the jets spooling. */
+  fsArm: {
+    prio: 6, rev: 0.35, gap: 1, falloff: 0.45,
+    play(v, t) {
+      for (let i = 0; i < 6; i++) {
+        const tt = t + 0.15 + i * 0.09;
+        burst(v, tt, 'white', 'bandpass', 2400 - i * 120, 4, 0.12, 0.025, 0.0005);
+        thump(v, tt, 180, 120, 0.03, 0.12, 0.05);
+      }
+      const f = swish(v, t + 0.9, 'white', 'bandpass', 900, 1.2, [[0, 0], [0.8, 0.16], [1.1, 0]]);
+      glide(f.frequency, t + 0.9, 900, 3200, 1.0);
+    },
+  },
+  /** Phase 4's change (o.dur s): a long rising whine to the top, the room's air pulled in. */
+  fsFrame: {
+    prio: 6, rev: 0.45, gap: 1.5, falloff: 0.35,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 2), 0.8, 3.5);
+      for (const [f0, f1, a] of [[220, 1760, 0.05], [223, 1780, 0.03]]) {
+        const s = v.osc('sawtooth', f0, t, t + D + 0.1);
+        glide(s.frequency, t, f0, f1, D);
+        const lp = v.filter('lowpass', 900, 1);
+        glide(lp.frequency, t, 900, 4000, D);
+        const g = v.gain(0);
+        env(g.gain, t, [[0, 0], [0.3, a * 0.5], [D, a], [D + 0.06, 0]]);
+        s.connect(lp).connect(g).connect(v.out);
+      }
+      const n = swish(v, t, 'brown', 'lowpass', 160, 0.8, [[0, 0], [D * 0.9, 0.3], [D + 0.1, 0]]);
+      glide(n.frequency, t, 160, 700, D);
+    },
+  },
+  /** A change lands (o.dur the phase 2..4): a heavy metal boom; 4: a pressure blast with a ringing tail. */
+  fsMoment: {
+    prio: 7, rev: 0.5, gap: 0.8, falloff: 0.35,
+    play(v, t, o) {
+      const n = clamp(num(o.dur, 2), 2, 4), k = 0.7 + 0.15 * (n - 2);
+      thump(v, t, 100, 26, 0.5, 1.1 * k, 0.8);
+      burst(v, t, 'brown', 'lowpass', 300, 0.8, 0.8 * k, 0.6, 0.003);
+      burst(v, t, 'white', 'highpass', 2200, 0.7, 0.3 * k, 0.08, 0.0005);
+      if (n >= 4) {
+        bell(v, t + 0.01, 196, 0.06, 2.4);
+        const f = swish(v, t, 'white', 'bandpass', 1800, 0.7, [[0, 0], [0.03, 0.3], [0.9, 0]]);
+        glide(f.frequency, t, 3000, 400, 0.8);
+      } else bell(v, t + 0.01, 147, 0.035, 1.6);
+    },
+  },
+  /** The sight line finds its mark: a thin high tone, held a moment. */
+  fsSight: {
+    prio: 5, rev: 0.25, gap: 0.3, falloff: 0.5,
+    play(v, t) {
+      const s = v.osc('sine', 2093, t, t + 0.6);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.01, 0.04], [0.45, 0.03], [0.55, 0]]);
+      s.connect(g).connect(v.out);
+      ping(v, t, 'sine', 4186, 0.012, 0.25);
+    },
+  },
+  /** The cutting laser held (o.dur s, sent again while it holds): a searing hiss over a tight buzz. */
+  fsLaser: {
+    prio: 5, rev: 0.2, gap: 0.5, falloff: 0.5,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1), 0.3, 2);
+      swish(v, t, 'white', 'highpass', 3200, 0.8, [[0, 0], [0.03, 0.16], [D - 0.05, 0.14], [D + 0.05, 0]]);
+      const s = v.osc('sawtooth', 165, t, t + D + 0.1);
+      const bp = v.filter('bandpass', 1300, 3);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.03, 0.06], [D - 0.05, 0.05], [D + 0.05, 0]]);
+      s.connect(bp).connect(g).connect(v.out);
+      const c = v.noise('white', t, t + D);
+      const cb = v.filter('bandpass', 2400, 1.5);
+      const cg = v.gain(0);
+      spikes(cg.gain, t, D, Math.round(14 * D), 0.08, 0.002, 0.01, 0.6);
+      c.connect(cb).connect(cg).connect(v.out);
+    },
+  },
+  /** A cannon charging (o.dur s): a rising electric whine, the air thickening. */
+  fsCharge: {
+    prio: 6, rev: 0.35, gap: 0.5, falloff: 0.45,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1.2), 0.4, 3);
+      const s = v.osc('triangle', 300, t, t + D + 0.1);
+      glide(s.frequency, t, 300, 1500, D);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [D * 0.5, 0.04], [D, 0.08], [D + 0.05, 0]]);
+      s.connect(g).connect(v.out);
+      const lp = v.filter('lowpass', 150, 1);
+      glide(lp.frequency, t, 150, 900, D);
+      const h = v.gain(0);
+      env(h.gain, t, [[0, 0], [D, 0.16], [D + 0.08, 0]]);
+      lp.connect(h).connect(v.out);
+      for (const [f, det] of [[49, -8], [49, 8]]) v.osc('sawtooth', f, t, t + D + 0.12, det).connect(lp);
+    },
+  },
+  /** The palm cannon fired (o.dur s, sent again while it holds): a roaring incineration, a deep rumble. */
+  fsBeam: {
+    prio: 6, rev: 0.4, gap: 0.6, falloff: 0.4,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1.2), 0.4, 2.5);
+      thump(v, t, 80, 30, 0.4, 0.7, 0.5);
+      const f = swish(v, t, 'pink', 'bandpass', 1100, 0.6, [[0, 0], [0.04, 0.4], [D, 0.3], [D + 0.2, 0]]);
+      glide(f.frequency, t, 1600, 800, D);
+      const lp = v.filter('lowpass', 300, 0.9);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.05, 0.2], [D, 0.16], [D + 0.25, 0]]);
+      lp.connect(g).connect(v.out);
+      for (const [fr, det] of [[46, -6], [46, 6]]) v.osc('sawtooth', fr, t, t + D + 0.3, det).connect(lp);
+    },
+  },
+  /** The core beam (o.dur s): the palm's roar lower and wider, a tearing top. */
+  fsCoreBeam: {
+    prio: 7, rev: 0.5, gap: 0.6, falloff: 0.3,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1.2), 0.4, 2.5);
+      thump(v, t, 64, 20, 0.6, 1.0, 0.8);
+      const f = swish(v, t, 'pink', 'bandpass', 700, 0.5, [[0, 0], [0.05, 0.55], [D, 0.42], [D + 0.3, 0]]);
+      glide(f.frequency, t, 1100, 520, D);
+      swish(v, t, 'white', 'highpass', 2800, 0.7, [[0, 0], [0.05, 0.12], [D, 0.1], [D + 0.2, 0]]);
+      const lp = v.filter('lowpass', 240, 0.9);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.06, 0.28], [D, 0.22], [D + 0.3, 0]]);
+      lp.connect(g).connect(v.out);
+      for (const [fr, det] of [[32.7, -8], [32.7, 8], [49, 0]]) v.osc('sawtooth', fr, t, t + D + 0.35, det).connect(lp);
+    },
+  },
+  /** A beam ends: the air slams back, molten steel hisses in the trench. */
+  fsBeamEnd: {
+    prio: 5, rev: 0.4, gap: 0.3, falloff: 0.5,
+    play(v, t) {
+      thump(v, t, 75, 36, 0.25, 0.5, 0.4);
+      swish(v, t, 'white', 'highpass', 3600, 0.7, [[0, 0], [0.05, 0.12], [1.4, 0]]);
+    },
+  },
+  /** The forearm gun: a hard dry crack, a short metallic tail. */
+  fsGun: {
+    prio: 6, rev: 0.3, gap: 0.05, falloff: 0.5,
+    play(v, t) {
+      burst(v, t, 'white', 'highpass', 2200, 0.7, 0.5, 0.05, 0.0005);
+      thump(v, t, 160, 55, 0.08, 0.6, 0.18);
+      burst(v, t + 0.005, 'pink', 'bandpass', 3400, 4, 0.08, 0.12, 0.001);
+      ping(v, t + 0.004, 'triangle', rnd(2600, 2900), 0.02, 0.15);
+    },
+  },
+  /** A bolt bites (o.dur its weight): a sharp electric crack. */
+  fsBoltHit: {
+    prio: 5, rev: 0.25, gap: 0.05, falloff: 0.6,
+    play(v, t, o) {
+      const k = 0.7 + 0.3 * clamp(num(o.dur, 1), 0, 2);
+      burst(v, t, 'white', 'bandpass', 3000, 1.2, 0.3 * k, 0.06, 0.0005);
+      thump(v, t, 120, 50, 0.1, 0.4 * k, 0.16);
+    },
+  },
+  /** The petals open and the missiles leave (o.dur how many): a ripple of hard launches. */
+  fsLaunch: {
+    prio: 6, rev: 0.3, gap: 0.3, falloff: 0.45,
+    play(v, t, o) {
+      const n = clamp(Math.round(num(o.dur, 8)), 1, 14);
+      for (let i = 0; i < n; i++) {
+        const tt = t + i * 0.06 + rnd(0, 0.015);
+        const f = swish(v, tt, 'white', 'bandpass', 1800, 1.1, [[0, 0], [0.01, 0.12], [0.35, 0]]);
+        glide(f.frequency, tt, 1200, 3400, 0.3);
+        thump(v, tt, 140, 70, 0.05, 0.16, 0.08);
+      }
+    },
+  },
+  /** A missile or a blast of his (o.dur its power): a hard boom, debris. */
+  fsBlast: {
+    prio: 6, rev: 0.35, gap: 0.07, falloff: 0.45,
+    play(v, t, o) {
+      const k = 0.65 + 0.3 * clamp(num(o.dur, 1), 0, 2);
+      burst(v, t, 'white', 'highpass', 1500, 0.7, 0.35 * k, 0.06, 0.0005);
+      thump(v, t, 90, 28, 0.4, 0.95 * k, 0.55);
+      burst(v, t + 0.01, 'brown', 'lowpass', 320, 0.8, 0.7 * k, 0.45, 0.003);
+      const c = v.noise('pink', t + 0.05, t + 0.6);
+      const bp = v.filter('bandpass', 1800, 0.8);
+      const g = v.gain(0);
+      spikes(g.gain, t + 0.06, 0.5, 9, 0.16 * k, 0.002, 0.02, 0.7);
+      c.connect(bp).connect(g).connect(v.out);
+    },
+  },
+  /** A missile cut out of the air: a sharp pop, a ringing scrape. */
+  fsMissileCut: {
+    prio: 6, rev: 0.3, gap: 0.08, falloff: 0.5,
+    play(v, t) {
+      burst(v, t, 'white', 'highpass', 2600, 0.7, 0.35, 0.05, 0.0005);
+      thump(v, t, 120, 45, 0.2, 0.5, 0.3);
+      ping(v, t, 'triangle', 1750, 0.04, 0.3);
+    },
+  },
+  /** The mortar tubes fire (o.dur how many): deep hollow thumps one after another. */
+  fsMortar: {
+    prio: 6, rev: 0.4, gap: 0.2, falloff: 0.4,
+    play(v, t, o) {
+      const n = clamp(Math.round(num(o.dur, 1)), 1, 6);
+      for (let i = 0; i < n; i++) {
+        const tt = t + i * 0.08;
+        thump(v, tt, 70, 40, 0.12, 0.6, 0.35);
+        burst(v, tt, 'brown', 'bandpass', 260, 1.2, 0.35, 0.25, 0.002);
+        burst(v, tt, 'white', 'highpass', 1900, 0.7, 0.08, 0.04, 0.0005);
+      }
+    },
+  },
+  /** A shell coming down (o.dur the s it falls): a whistle falling in pitch. */
+  fsWhistle: {
+    prio: 4, rev: 0.3, gap: 0.12, falloff: 0.55,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1), 0.2, 1.6);
+      const s = v.osc('sine', 2400, t, t + D + 0.05);
+      glide(s.frequency, t, 2400, 900, D);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [D * 0.3, 0.03], [D, 0.05], [D + 0.03, 0]]);
+      s.connect(g).connect(v.out);
+      const f = swish(v, t, 'white', 'bandpass', 2200, 6, [[0, 0], [D, 0.05], [D + 0.03, 0]]);
+      glide(f.frequency, t, 2400, 900, D);
+    },
+  },
+  /** A shell bursts (o.dur its power; the great shell 2.5): a deep crump, earth falling after. */
+  fsShellBurst: {
+    prio: 6, rev: 0.4, gap: 0.08, falloff: 0.4,
+    play(v, t, o) {
+      const p = clamp(num(o.dur, 1), 0.3, 3), k = 0.6 + 0.25 * p;
+      thump(v, t, 75, 22, 0.55, 1.0 * k, 0.8);
+      burst(v, t, 'brown', 'lowpass', 280, 0.8, 0.85 * k, 0.6, 0.004);
+      burst(v, t, 'white', 'highpass', 1300, 0.7, 0.25 * k, 0.07, 0.0005);
+      const c = v.noise('pink', t + 0.1, t + 1.0);
+      const bp = v.filter('bandpass', 1100, 0.7);
+      const g = v.gain(0);
+      spikes(g.gain, t + 0.12, 0.8, 14, 0.14 * k, 0.003, 0.03, 0.7);
+      c.connect(bp).connect(g).connect(v.out);
+    },
+  },
+  /** The reticle finds the hero: two soft ticks. */
+  fsTrack: {
+    prio: 4, rev: 0.2, gap: 0.5, falloff: 0.6,
+    play(v, t) {
+      ping(v, t, 'sine', 1568, 0.03, 0.06);
+      ping(v, t + 0.12, 'sine', 1568, 0.03, 0.06);
+    },
+  },
+  /** The reticle LOCKS: a hard two-tone, unmissable. */
+  fsLock: {
+    prio: 7, rev: 0.25, gap: 0.3, falloff: 0.3,
+    play(v, t) {
+      for (const dt of [0, 0.09]) {
+        const s = v.osc('square', 1760, t + dt, t + dt + 0.07);
+        const lp = v.filter('lowpass', 3000, 1);
+        const g = v.gain(0);
+        perc(g.gain, t + dt, 0.07, 0.002, 0.06);
+        s.connect(lp).connect(g).connect(v.out);
+      }
+      ping(v, t + 0.18, 'sine', 2349, 0.06, 0.3);
+    },
+  },
+  /** The pillar of light (o.dur s): a falling roar from above, a boom as it meets the floor. */
+  fsLance: {
+    prio: 7, rev: 0.6, gap: 0.6, falloff: 0.3,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1.4), 0.5, 2.5);
+      const f = swish(v, t, 'white', 'bandpass', 2600, 0.8, [[0, 0], [0.05, 0.3], [D, 0.18], [D + 0.2, 0]]);
+      glide(f.frequency, t, 3600, 700, D);
+      thump(v, t + 0.04, 70, 22, 0.6, 1.1, 0.9);
+      burst(v, t + 0.04, 'brown', 'lowpass', 300, 0.8, 0.8, 0.7, 0.004);
+    },
+  },
+  /** A ring shock rolling out (o.dur its strength): a low crack and the air shoved outward. */
+  fsRing: {
+    prio: 6, rev: 0.4, gap: 0.2, falloff: 0.45,
+    play(v, t, o) {
+      const k = 0.7 + 0.25 * clamp(num(o.dur, 1), 0, 2);
+      thump(v, t, 85, 30, 0.35, 0.8 * k, 0.5);
+      const f = swish(v, t, 'brown', 'lowpass', 400, 0.8, [[0, 0], [0.04, 0.5 * k], [0.6, 0]]);
+      glide(f.frequency, t, 700, 200, 0.55);
+    },
+  },
+  /** Molten steel pouring (o.dur s, sent again while it pours): a heavy hiss, a sizzle where it lands. */
+  fsPour: {
+    prio: 4, rev: 0.3, gap: 0.6, falloff: 0.5,
+    play(v, t, o) {
+      const D = clamp(num(o.dur, 1.5), 0.4, 3);
+      swish(v, t, 'pink', 'bandpass', 900, 0.6, [[0, 0], [0.15, 0.18], [D, 0.16], [D + 0.2, 0]]);
+      const c = v.noise('white', t, t + D);
+      const bp = v.filter('bandpass', 3000, 1);
+      const g = v.gain(0);
+      spikes(g.gain, t, D, Math.round(16 * D), 0.06, 0.002, 0.015, 0.6);
+      c.connect(bp).connect(g).connect(v.out);
+    },
+  },
+  /** A servo step (from phase 3): a short whirr and a muffled metal set-down. */
+  fsServo: {
+    prio: 2, rev: 0.12, gap: 0.2, falloff: 0.8,
+    play(v, t) {
+      const s = v.osc('square', 260, t, t + 0.12);
+      glide(s.frequency, t, 260, 340, 0.1);
+      const lp = v.filter('lowpass', 900, 2);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.02, 0.025], [0.1, 0]]);
+      s.connect(lp).connect(g).connect(v.out);
+      thump(v, t + 0.08, 110, 70, 0.05, 0.16, 0.08);
+    },
+  },
+  /** The hero's blade on his bare frame (o.dur 1, 1.4 heavy): metal on metal, a short bright ring. */
+  fsHitMetal: {
+    prio: 6, rev: 0.25, gap: 0.04, falloff: 0.6,
+    play(v, t, o) {
+      const k = clamp(num(o.dur, 1), 0.6, 1.6);
+      burst(v, t, 'white', 'bandpass', 3600, 2.4, 0.22 * k, 0.04, 0.0005);
+      const f0 = rnd(1180, 1320);
+      for (const [r, a, d] of [[1, 0.05, 0.35], [2.76, 0.025, 0.2], [5.4, 0.012, 0.12]]) ping(v, t + 0.002, 'sine', f0 * r, a * k, d * k);
+      thump(v, t, 140, 70, 0.06, 0.25 * k, 0.1);
+    },
+  },
+  /** His death (o.dur the sensors lit): the power going down, a long falling hum. */
+  fsPowerDown: {
+    prio: 7, rev: 0.6, gap: 2, falloff: 0.3,
+    play(v, t) {
+      const s = v.osc('sawtooth', 180, t, t + 2.4);
+      glide(s.frequency, t, 180, 30, 2.2);
+      const lp = v.filter('lowpass', 1200, 1.2);
+      glide(lp.frequency, t, 1200, 150, 2.2);
+      const g = v.gain(0);
+      env(g.gain, t, [[0, 0], [0.05, 0.08], [2.3, 0]]);
+      s.connect(lp).connect(g).connect(v.out);
+      ping(v, t, 'sine', 880, 0.03, 1.2);
+    },
+  },
+  /** (v04 pack C1) A palm lands (o.dur its weight; 1.5 the shove): a flat, dense slap of a hand on cloth,
+   *  a short body thump under it. */
+  fsPalm: {
+    prio: 5, rev: 0.15, gap: 0.06, falloff: 0.7,
+    play(v, t, o) {
+      const k = clamp(num(o.dur, 1), 0.4, 2);
+      burst(v, t, 'pink', 'bandpass', 1500, 1.1, 0.35 * k, 0.05, 0.0008);
+      burst(v, t, 'white', 'highpass', 3000, 0.7, 0.08 * k, 0.025, 0.0005);
+      thump(v, t, 120, 55, 0.08, 0.45 * k, 0.16);
+    },
+  },
+  /** (v04 pack C2) A foot planted and slid (o.dur its weight): a gritty scrape over the plates, a knock. */
+  fsScuff: {
+    prio: 4, rev: 0.12, gap: 0.08, falloff: 0.75,
+    play(v, t, o) {
+      const k = clamp(num(o.dur, 1), 0.3, 2);
+      thump(v, t, 95, 50, 0.06, 0.3 * k, 0.12);
+      const c = v.noise('white', t, t + 0.3);
+      const bp = v.filter('bandpass', 2200, 1.2);
+      const g = v.gain(0);
+      spikes(g.gain, t, 0.26, 9, 0.1 * k, 0.002, 0.012, 0.6);
+      c.connect(bp).connect(g).connect(v.out);
+      swish(v, t, 'pink', 'bandpass', 900, 0.9, [[0, 0], [0.02, 0.12 * k], [0.25, 0]]);
+    },
+  },
 };

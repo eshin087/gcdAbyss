@@ -3,6 +3,7 @@ import { THRONE } from '../throneHall.js';
 import { RING } from '../skybreakRing.js';
 import { GROVE } from '../windlessGrove.js';
 import { CROSSING } from '../veiledCrossing.js';
+import { FOUNDRY } from '../lastFoundry.js';
 
 // THE STEPS' numbers (steps.js reads them): what the ground is where, and how each surface answers a
 // foot. Every per-level choice is a block under `levels`; a level without one gets `fallback`.
@@ -51,6 +52,9 @@ export const STEPS = freeze({
     // the Veiled Crossing: the asphalt, its painted bars and the corners' kerbs are slabs (stone taps);
     // where a slab is gone, and past the floor, rubble and ash (a gritty scuff)
     veil: { slab: 'stone', grass: 'ash', ground: 'ash', areas: [{ square: CROSSING.outer, surface: 'ash' }] },
+    // the Last Foundry: the casting floor's steel plates and the path's plates tap (stone's tick); where a
+    // plate is gone, and off the floor, cinder and slag (an ash puff, a print that fills in)
+    foundry: { slab: 'stone', grass: 'ash', ground: 'ash', areas: [{ square: FOUNDRY.half, surface: 'ash' }] },
   },
   fallback: { slab: 'stone', grass: 'grass', ground: 'earth' },
 

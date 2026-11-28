@@ -1185,7 +1185,8 @@ export class AudioEngine {
     });
     on('dragon:spell', (d) => {
       const n = d?.name;
-      if (typeof n !== 'string' || !n.startsWith('wj') || !SFX[n]) return;
+      // (and the False Saint's: `fs...`, falseSaint/fx.js _say; recipes in sfx.js's fs block)
+      if (typeof n !== 'string' || !(n.startsWith('wj') || n.startsWith('fs')) || !SFX[n]) return;
       this.play(n, { x: num(d.x, 0), z: num(d.z, 0), dur: num(d.dur, 0) });
     });
     // the world breaks (ADR-107): a blow on wood / stone / metal, something coming down, fire catching

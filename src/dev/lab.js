@@ -825,7 +825,7 @@ export class Lab {
    *  reload. Only in a duelist's level; collapsed by default (it is long). */
   _buildLooks(root) {
     const id = this.game.level?.id;
-    if (id !== 'ash' && id !== 'starless' && id !== 'ring' && id !== 'fox' && id !== 'grove' && id !== 'city' && id !== 'veil') return;
+    if (id !== 'ash' && id !== 'starless' && id !== 'ring' && id !== 'fox' && id !== 'grove' && id !== 'city' && id !== 'veil' && id !== 'foundry') return;
     if (this.prefs.collapsed && !('looks' in this.prefs.collapsed)) this.prefs.collapsed.looks = true;
     const { body } = this._section(root, 'looks', 'LOOKS');
     this.ui.looksSync = buildLooks(body, id, (t) => this._status(t, 'ok'));
@@ -946,6 +946,18 @@ export class Lab {
       button(grid, 'Void break', () => D().domain('break')).title = 'the void breaks: the crossing returns';
       button(grid, 'Pull', () => D().pull()).title = 'an Azure Draw knot where the hero stands (it drags him)';
       button(grid, 'Blink', () => D().blink('behind')).title = 'he is behind the hero now';
+    }
+    // the False Saint (ADR-285): his shell, a molten pool, his phases through their changes, every effect alone
+    if (typeof this.game.dragon?.debug?.fx === 'function' && Array.isArray(this.game.dragon?.debug?.fxNames)) {
+      const D = () => this.game.dragon.debug;
+      button(grid, 'Pool here', () => D().pool()).title = 'a molten pool at the hero\'s feet (cued red, then it burns)';
+      button(grid, 'Shell whole', () => D().shell(0)).title = 'no part bared (until his next cut; a phase\'s floor holds)';
+      button(grid, 'Shell half', () => D().shell(0.5)).title = 'every part at least half bared';
+      button(grid, 'Shell bare', () => D().shell(1)).title = 'the true frame everywhere';
+      for (const n of [2, 3, 4]) button(grid, `Into P${n}`, () => D().setPhase(n)).title = `the next change on the way to phase ${n} (press again after each)`;
+      button(grid, 'Tidy', () => D().tidy()).title = 'every handler stops what it holds; he stands at the middle';
+      const fxRow = el('div', 'lab-grid c4', null, body);
+      for (const n of this.game.dragon.debug.fxNames) button(fxRow, n, () => D().fx(n)).title = `fx: ${n} alone (fxDebug.js; nothing dealt, nothing broken)`;
     }
     const row = el('div', 'lab-row', null, body);
     el('span', 'lab-lbl', 'HP', row);

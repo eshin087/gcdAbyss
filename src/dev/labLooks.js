@@ -134,6 +134,11 @@ export const LOOK_SWITCHES = Object.freeze([
   // Bai Wuji: world rows
   ['wjCity', ['a', 'b', 'c'], 'a', 'a', true, ['veil'], 'the crossing: a ash moon (cold moonlit ash-grey), b last lamps (sodium amber, dead screens), c black wet (wet black asphalt, pale bars) (a reload)'],
   ['wjVoid', ['a', 'b', 'c'], 'b', 'b', true, ['veil'], 'the void: a drifts (star clumps only), b the ring (a great pale ring on the floor round the fight), c the fall (stars falling as streaks, a line of light where the floor ends) (a reload)'],
+  // --- foundry: the Last Foundry and the False Saint (ADR-286; awaiting the owner's picks: each draws its call
+  // site's default until then)
+  ['fsLook', ['a', 'b'], 'a', 'a', true, ['foundry'], 'the False Saint\'s third milestone: a both legs plated (the second sheet\'s 03), b the right leg plated, the left trouser whole until phase 4 (the first sheet\'s 03) (a reload)', 'awaiting'],
+  ['fsLetters', ['0', 'a'], 'a', 'a', false, ['foundry'], 'his letters: a they follow his size on screen as the hero\'s do, 0 the bosses\' fixed fine cell (live)', 'awaiting'],
+  ['fsMark', ['disc', 'ring'], 'disc', 'disc', false, ['foundry'], 'the marks of his missiles and shells on the floor: disc a dim red disc under the ring that fills as it comes, ring a ring of red blobs and a ring closing in (live)', 'awaiting'],
 
   ['halMotion', ['0', 'a', 'b'], '0', 'a', false, ['city'], 'Halcyon\'s motion: b (ADR-254, the default) a plus straight punches on the line to the hero, straight kicks, long trailing legs, a level fly-by at chest height; a (ADR-225) a flier\'s legs in his blows, each blow aimed down at the hero (he dips into it), his arms open at the end, the held windups, his snap blows (Flick, Tap); 0 as before (live, from his next move)'],
   ['halEyes', ['0', 'a', 'b'], '0', 'a', false, ['city'], 'Halcyon\'s eye beams (ADR-254): a heat vision (the default), twin threads meeting in one hard crimson line, a shimmer rising, a molten spot spitting sparks; b the crimson pulse, rings racing down it, a scorch ring on the beat; 0 Tian Lei\'s beam in crimson (live)'],
@@ -150,7 +155,7 @@ export const LOOK_SWITCHES = Object.freeze([
   ['sheathHero', ['0', 'a', 'b', 'c'], '0', 'c', false, ['grove'], 'Lu Wusheng in the style of the hero: a his shading, b his outline, c both (his colours and outfit kept)'],
   ['halHero', ['0', 'a', 'b', 'c'], '0', 'a', false, ['city'], 'Halcyon in the style of the hero: a his shading, b his outline, c both (his colours and outfit kept)'],
   // --- the title (ADR-196)
-  ['menu', ['0', 'a', 'b', 'c'], '0', 'c', true, ['cinderwood', 'ash', 'starless', 'ring', 'fox', 'grove', 'code', 'city', 'veil'], 'the title: c the sword\'s path (the default), a the world list, b the campfire grid, 0 the title before (a reload)'],
+  ['menu', ['0', 'a', 'b', 'c'], '0', 'c', true, ['cinderwood', 'ash', 'starless', 'ring', 'fox', 'grove', 'code', 'city', 'veil', 'foundry'], 'the title: c the sword\'s path (the default), a the world list, b the campfire grid, 0 the title before (a reload)'],
 ]);
 
 const NAMES = LOOK_SWITCHES.map((s) => s[0]);
