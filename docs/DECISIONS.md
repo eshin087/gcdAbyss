@@ -8435,3 +8435,30 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
 - **Consequences:** `integ wyrmfix` holds the death's and the wake's slide ≤ 0.15 m. The audit names the skating foot
   and when (`slideFoot`).
 
+
+## ADR-294 — The Mixamo hero trial: two Mixamo bodies drawn over his rig, behind `?hero=mixamo|mixrig` (2026-11-28)
+- **Context:** the owner: "lets try using resources from mixamo ... remaking the main character with these 3d
+  assets and animation and incorporating his look. you pick and choose the appropriate animations". Asked first,
+  they picked: they sign in to Mixamo and I choose and download; "build both" bodies and they pick; the Great Sword
+  pack (two-handed, like his fight hold); the clips follow the GAME's timing.
+- **Decision:**
+  - Two bodies, each a GLB built by `scripts/mixamo/convert.py` (Blender) into `assets/models/`: `mixamo` = Mixamo's
+    stock Ninja (lean, dark clothes; its masked head dropped) wearing a rest-pose hero's head, hair, pauldron, belts,
+    coat and cape on the matching bones; `mixrig` = his own T-pose mesh (`scripts/mixamo/export-hero-obj.mjs`) run
+    through Mixamo's auto-rigger, its materials, parts and letter layout (aGUV) matched back from the OBJ vertex by
+    vertex (max error 2e-7 m). 24 of the pack's 51 clips (`scripts/mixamo/clips.json`), root motion stripped.
+  - The body is printed in his own letter materials: the surface glyph vertex shader gained three's skinning chunks
+    (they compile to nothing without a SkinnedMesh: no existing mesh changes).
+  - DRAWING only. His rig, animator, hits, reach and timing run untouched; the rig's meshes are hidden each frame.
+    A swing's clip is stretched so its cut (the blade's fastest frame, measured in Blender, checked on contact
+    sheets: `mixClips.js` MIX_SWING) lands at windup + half the active window; loops run at his real ground speed;
+    the rest by state (`MIX_MOVES`). His sword is drawn in the Mixamo hands after the hit checks and put back before
+    the next animator step, so the sweep never sees it (the animator reads the sword's position back).
+  - Gaps in the pack, filled for now: no roll (a crouched leap), no drink (the power-up), no knockdown (the second
+    death's fall, played forward and back).
+- **Licence:** Mixamo's characters and animations are royalty-free for use in games; Adobe does not allow them to be
+  redistributed as raw assets. Only the converted, game-specific GLBs are in the repo (no FBX); `assets/models/CREDITS.md`
+  says where they come from. The owner decides before this ships to everyone.
+- **Consequences:** no `?hero=`: nothing loads, the hero is today's. Each GLB is ~2.5 MB, fetched only with the switch
+  (it ships in `dist/assets`). `tests/mixamocheck.mjs` holds the data to the files. Earlier footage-driven tries were
+  turned down (PR 147, 162, 170); this one was asked for by the owner.

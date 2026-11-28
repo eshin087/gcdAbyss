@@ -5,6 +5,14 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 One hundred and fifty pieces of work since 0.4.0:
+- **A trial hero moved by Mixamo's great sword clips** (2026-11-28, ADR-294). *Added (the owner: "lets try using
+  resources from mixamo ... remaking the main character", behind a switch until they pick):* `?hero=mixamo` draws a
+  Mixamo body (the stock Ninja) wearing his head, hair, shoulder plate, coat and cape; `?hero=mixrig` draws his own
+  mesh auto-rigged on Mixamo. Both move by 24 clips of Mixamo's Great Sword pack (idle, walk, run, back-step and
+  side-steps at his real speed, five light cuts, the whirl, the heavy slam, the lunge, the charge, the guard, the
+  parry, the hits, the dodges, the drink, the deaths), printed in his own letters, his sword in the Mixamo hands.
+  The swings keep the game's timing (each clip's cut lands on the game's contact) and the hits are today's.
+  No `?hero=`: nothing changes.
 - **The Cinder Wyrm's feet stay planted as it dies and as it wakes** (2026-11-28, ADR-293). *Fixed (the owner: "fix the death and wake foot sliding next"):* while
   the body sank to lie down in the death or rose in the wake, its hind toes slid up to 0.3 m forward and back over
   the ground (0.6 m in all in the death, 0.4 m in the wake) and a forepaw settled 0.1 m off where it stood. The

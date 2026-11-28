@@ -5,6 +5,37 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — The Mixamo hero trial, behind `?hero=mixamo|mixrig` (ADR-294; branch `player/hero-mixamo-anim`)
+
+**Owner:** "lets try using resources from mixamo ... remaking the main character with these 3d assets and animation
+and incorporating his look. you pick and choose the appropriate animations ... show me a preview for me to play".
+Their answers: they sign in, I pick and download; build both bodies, they pick; the Great Sword pack; game timing.
+
+**What changed:**
+- Mixamo (the owner's sign-in, in Chrome): the Great Sword pack (51 clips) on the stock Ninja; today's hero exported in
+  a T-pose (`scripts/mixamo/export-hero-obj.mjs`, his aGUV as texture coordinates) and auto-rigged there (markers
+  placed by hand, symmetry off: his sleeve streamers make the box lopsided), the same pack on it.
+- `scripts/mixamo/convert.py` (Blender 5.2): body + 24 clips (`clips.json`) -> `assets/models/hero-mixamo.glb` /
+  `hero-mixrig.glb` (~2.5 MB each), materials named by his material keys, UV0 = aGUV, UV1.x = aPart; prints each
+  clip's fastest-hand frame (most were the windup: the cut frames in `mixClips.js` were read off tip-speed curves
+  and contact sheets).
+- `materials.js`: the surface glyph vertex shader skins (three's chunks; no SkinnedMesh, no change).
+- `player/mixamo/mixHero.js` + `mixClips.js`; `player.js`: `mix` (restore before the animator, update after the hits),
+  `restHero()`, rebind on a gear change. `tests/mixamocheck.mjs` (in `npm test`).
+
+**Lessons:** `skeleton.pose()` wrecks a glTF skin whose root bone sits under the armature node's 0.01 scale and 90°
+turn (the hips went to 1e-6 m): keep the file's node transforms as the bind pose. The auto-rigged mesh comes back 100x
+small (Mixamo reads the OBJ's metres as cm): fit it by its box. The hero faces the mouse, so "back" and the side-steps
+are real states, not a bug. The Mixamo token in the page is not ours to read: the site's own UI only.
+
+**Verification:** both bodies in the Lab's model view and at the game camera (Cinderwood); every state picks its clip
+(idle, strafe, roll, charge, heavy, lunge, death) with no NaN bone; `node tests/mixamocheck.mjs .`; full `npm test`.
+
+**Open / next:** the owner plays both on the preview and picks (or neither). Gaps in the pack: a real roll, a drink, a
+knockdown and get-up (more Mixamo clips if they want them). The gear on the Ninja is 85 separate meshes (draw calls):
+merge per bone if it stays. His sword's hold is measured from the idle clip's two hands; one-handed moments (the
+spin's release) may need a per-clip grip. Mixamo's licence (no redistribution of raw assets) before it ships.
+
 ## 2026-11-28 — The wyrm's feet planted in the death and the wake (ADR-293; branch `dragon/planted-death-wake`)
 
 **Owner:** "fix the death and wake foot sliding next" (left by ADR-281).

@@ -782,6 +782,12 @@ object3d: THREE.Object3D;  position: THREE.Vector3 (=== object3d.position);  yaw
                                        // position.y is 0 except in the plunge, where it carries the visual
                                        // lift (x / z stay the ground point under him)
 batch                                  // his rigid batches (render/rigidBatch.js batchRigid; empty with ?nobatch)
+mix: MixHero | null                    // `?hero=mixamo|mixrig` only (player/mixamo/mixHero.js, ADR-294): a Mixamo body drawn
+                                       // over his rig. DRAWING only: the rig, the animator and every hit run as before; each
+                                       // frame `mix.restore()` (before anim.update) puts the sword back where the animator left
+                                       // it, `mix.update(dt)` (after _combat, before _updateFx) hides the rig's meshes, poses
+                                       // the body from `state` / `atk` / the animator's key and draws the sword in its hands
+restHero(): rig                        // a buildHero() of his loadout that is never drawn (the shared per-part ink put back)
 name = 'Wanderer'
 hp, maxHp, flasks, maxFlasks: number   // (v0.2: NO stamina) TUNE: 160 HP, 5 flasks of +70 HP
 guard, maxGuard: number                // the guard meter (combat/rules.js GUARD, ADR-095): a blocked blow costs guard, not HP;
