@@ -4,7 +4,18 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-One hundred and forty-six pieces of work since 0.4.0:
+One hundred and forty-seven pieces of work since 0.4.0:
+- **Costume 11 for gcd, to try** (2026-11-28, ADR-291). *Added (an option, off by default: the owner picks):* `?heroLook=ref11` (the Lab's
+  OUTFIT row, "Costume 11") dresses gcd after the owner's costume reference 11: a deep hood over a face in shadow, a
+  heavy cowl over both shoulders pinned by a square silver clasp at the left collarbone, a black wrap tunic with a
+  dark strap across the chest and a silver plate belt with a green stone, loose black sleeves into silver gauntlets
+  (both hands in silver), dark trousers into silver plated boots with a pointed plate over each shin, layered skirts
+  and a long cloak, black at the shoulders and torn into lavender rags below the knee, with a line of pale glyphs
+  down the middle of the back. The sword is unchanged. `src/entities/player/gear/ref11.js`. Departures from the sheet,
+  for the fight: the cloak ends at mid-calf (longer, its ends went under the grass in rolls) and has no sheet over
+  the flanks (the thighs and the free hand went into them); the skirts cover his sides. Its cloth goes into his body
+  on 1.0 % of the route's frames (today's cloak: 30 %), near the free hand on 1.4 % (3.7 %); 24.4k triangles and 16
+  draws (today's ~26.6k and 18).
 - **The deathblow is not cut short** (2026-11-28, ADR-280). *Fixed:* pressing guard during a deathblow ended it at
   once with nothing dealt; the press now waits and the guard comes up as the finisher ends. A perfect parry of a
   boss's blue blow that would cross the blades now gives the deathblow (he recoils, the combo follows) instead of
