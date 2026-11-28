@@ -14,6 +14,28 @@ import { lookOf } from '../duelist/lookSwitch.js';
 //                  damage or the root motion.
 
 export const refLook = () => lookOf('ashRef', '0') !== '0';
+
+/**
+ * The rebuild's three steps of one build (refGear.js; `?ashRef=a|b|c`): a after the anchor, b fuller and
+ * longer (the robe to the lower calf, wider sleeves, deeper tears), c leaner (the robe to the knee, closer
+ * sleeves, shallower tears). Lengths in metres:
+ *   len        the skirt's two segments (sash -> mid-thigh, mid-thigh -> hem)   full   panel widths x
+ *   tear       the hem's torn points' depth          over   the over-layer's tear (0: none)
+ *   blouse     the robe's fullness over the sash     loose  at the chest
+ *   sleeve     the upper sleeve's fullness at the shoulder / the elbow
+ *   swordCuff  the sword sleeve below the elbow      freeLen / freeBell  the free sleeve's length / its bell
+ *   sleeveTear the sleeves' torn edge                trouser  the trousers' fullness
+ *   wrapTop    the wraps start this far below the knee   hatFray  the brim's loose straw
+ *   locks      the locks by his face                 tail   the hair's tail (two segments)
+ *   sashTail   the sash's two tails
+ */
+export const REF_BUILD = Object.freeze({
+  a: Object.freeze({ len: [0.34, 0.32], full: 1, tear: 0.11, over: 0.06, blouse: 0.02, loose: 0.014, sleeve: [0.018, 0.036], swordCuff: 0.08, freeLen: 0.25, freeBell: 0.06, sleeveTear: 0.035, trouser: 0.026, wrapTop: 0.17, hatFray: 0.018, locks: 0.12, tail: [0.15, 0.18], sashTail: [0.26, 0.2] }),
+  b: Object.freeze({ len: [0.37, 0.43], full: 1.15, tear: 0.15, over: 0.08, blouse: 0.026, loose: 0.02, sleeve: [0.024, 0.05], swordCuff: 0.1, freeLen: 0.27, freeBell: 0.085, sleeveTear: 0.05, trouser: 0.032, wrapTop: 0.19, hatFray: 0.024, locks: 0.14, tail: [0.17, 0.22], sashTail: [0.32, 0.24] }),
+  c: Object.freeze({ len: [0.32, 0.22], full: 0.9, tear: 0.08, over: 0.045, blouse: 0.012, loose: 0.01, sleeve: [0.012, 0.024], swordCuff: 0.06, freeLen: 0.22, freeBell: 0.04, sleeveTear: 0.025, trouser: 0.02, wrapTop: 0.16, hatFray: 0.012, locks: 0.1, tail: [0.13, 0.15], sashTail: [0.22, 0.16] }),
+});
+/** The build drawn (a for any other non-'0' value). */
+export const refBuild = () => REF_BUILD[lookOf('ashRef', '0')] ?? REF_BUILD.a;
 export const refMove = () => lookOf('ashRefMove', '0') !== '0';
 
 /**

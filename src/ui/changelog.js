@@ -21,9 +21,9 @@ export const RELEASES = [
         date: '2026-11-28',
         title: 'Shen Hui after the reference pack, to try',
         notes: [
-          'A new look for Shen Hui to try before it becomes his own: a bronze bracer, a brick-red fold down his robe, and the robe layered and torn ragged at the hem.',
+          'Shen Hui redrawn from his reference art, to try before it becomes his own: a loose layered robe over a long brick-red inner robe, a thick sash of brown cord, wide torn sleeves with the sword forearm bare under a bronze bracer, crossed white leg wraps, a frayed hat and his hair in a long tail. Three builds: a, b (fuller) and c (leaner).',
           'And a new way for him to move: a lower, wider guard, blows that sink into the cut, the free hand out behind, bigger reactions. His timing and damage are exactly as before.',
-          'Add ashRef=a and ashRefMove=a to the address to try them.',
+          'Add ashRef=a (or b, c) and ashRefMove=a to the address to try them.',
         ],
       },
       {

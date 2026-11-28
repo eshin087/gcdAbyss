@@ -6123,12 +6123,12 @@ async function scenarioAshRef() {
   const offC = brain.C === C0;
   setLook('ashRefMove', null);
   assert(refC && offC && Object.keys(CLIP_REF).length === Object.keys(C0).length, `the reaction clips follow the switch (${Object.keys(CLIP_REF).length} clips, the reference's round its guard)`);
-  // the look: what the build hangs on him with the switch off and on (meshes by material, triangles)
-  const census = (on) => {
-    setLook('ashRef', on ? 'a' : '0');
+  // the look (the rebuild after the anchor, three builds): what each hangs on him, by material, and its cost
+  const census = (opt) => {
+    setLook('ashRef', opt);
     const g = build(SEED + 3);
     duel(g, { dist: 4 });
-    const dd = g.game.dragon, MM = dd.rig.materials, c = { red: 0, bronze: 0, coat: 0, tris: 0 };
+    const dd = g.game.dragon, MM = dd.rig.materials, c = { red: 0, bronze: 0, coat: 0, sash: 0, tris: 0 };
     dd.rig.root.traverse((o) => {
       if (!o.isMesh) return;
       const n = o.geometry?.index ? o.geometry.index.count / 3 : (o.geometry?.attributes?.position?.count ?? 0) / 3;
@@ -6136,13 +6136,18 @@ async function scenarioAshRef() {
       if (o.material === MM.facing) c.red += n;
       if (o.material === MM.trim) c.bronze += n;
       if (o.material === MM.coat) c.coat += n;
+      if (o.material === MM.piping) c.sash += n;
     });
+    c.coatPanels = dd.rig.coat.length;
     setLook('ashRef', null);
     return c;
   };
-  const c0 = census(false), c1 = census(true);
-  out(`     his rig: ${Math.round(c0.tris)} -> ${Math.round(c1.tris)} triangles (+${Math.round(c1.tris - c0.tris)}); red ${Math.round(c0.red)} -> ${Math.round(c1.red)}, bronze ${Math.round(c0.bronze)} -> ${Math.round(c1.bronze)}, robe ${Math.round(c0.coat)} -> ${Math.round(c1.coat)}`);
-  assert(c1.red > c0.red * 1.5 && c1.bronze > c0.bronze * 1.3 && c1.coat > c0.coat && c1.tris - c0.tris < 0.15 * c0.tris, `?ashRef=a hangs the red inner folds, the bronze bracer and the ragged robe on him, for less than 15 % more triangles than he has (+${Math.round(c1.tris - c0.tris)} on ${Math.round(c0.tris)})`);
+  const c0 = census('0');
+  for (const opt of ['a', 'b', 'c']) {
+    const c1 = census(opt);
+    out(`     ?ashRef=${opt}: his rig ${Math.round(c0.tris)} -> ${Math.round(c1.tris)} triangles (+${Math.round(((c1.tris - c0.tris) / c0.tris) * 100)} %); red ${Math.round(c0.red)} -> ${Math.round(c1.red)}, bronze ${Math.round(c0.bronze)} -> ${Math.round(c1.bronze)}, robe ${Math.round(c0.coat)} -> ${Math.round(c1.coat)}, sash ${Math.round(c1.sash)}, ${c1.coatPanels} skirt panels`);
+    assert(c1.red > c0.red * 1.5 && c1.bronze > c0.bronze * 1.3 && c1.sash > 0 && c1.coatPanels === 8 && c1.tris - c0.tris < 0.2 * c0.tris, `?ashRef=${opt} dresses him after the anchor (the red inner robe, the bronze bracer, the cord sash, eight skirt panels) for less than 20 % more triangles than he has (+${Math.round(c1.tris - c0.tris)} on ${Math.round(c0.tris)})`);
+  }
   setLook('ashRef', 'a');
   const G = build(SEED + 3);
   duel(G, { dist: 4, ai: true });
@@ -6157,6 +6162,15 @@ async function scenarioAshRef() {
   run(G, 4, () => { if (!Number.isFinite(d.position.x + d.position.z)) bad = true; });
   hatOn3 = hat.some((m) => m.visible);
   setLook('ashRef', null);
+  for (const opt of ['b', 'c']) {
+    setLook('ashRef', opt);
+    const Gx = build(SEED + 5);
+    duel(Gx, { dist: 4, ai: true });
+    const dx = Gx.game.dragon;
+    dx.debug.phase3();
+    run(Gx, 4, () => { if (!Number.isFinite(dx.position.x + dx.position.z) || !Number.isFinite(dx.rig.coat[0].segs[1].rotation.x)) bad = true; });
+    setLook('ashRef', null);
+  }
   assert(hatOn1 && !hatOn3 && !bad, `?ashRef=a: the hat on in phase 1 (${hatOn1}) and off in phase 3 (${!hatOn3}); 10 s through three phases, nothing NaN`);
   return last;
 }

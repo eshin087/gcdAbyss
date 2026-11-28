@@ -12,6 +12,7 @@ import { AshMoveFx } from './moveFx.js';
 import { AshSpecialFx } from './specialFx.js';
 import { lookOf } from '../duelist/lookSwitch.js';
 import { dressFrame } from './look.js';
+import { refLook } from './refLook.js';
 import { TELL } from '../../../combat/rules.js';
 
 // the crescents in flight at once (DuelFx pools 6; the Storm of Ash throws nine within a second and a half)
@@ -78,6 +79,9 @@ export class AshDisciple extends Duelist {
     fill(M.armor, 0.5, 0.52, 0.56); // the jian's pale steel (his gear wears no armour)
     fill(M.bevel, 0.7, 0.72, 0.76); // its ridge
     fill(M.hair, 0.05, 0.05, 0.06);
+    // (ADR-289, `?ashRef`: the rebuild's sash of brown cord (the hero's unused piping), its paler wraps)
+    fill(M.piping, 0.27, 0.18, 0.11);
+    if (refLook()) fill(M.hem, 0.66, 0.62, 0.55);
     if (M.armor?.uniforms) {
       M.armor.uniforms.uInk.value.setRGB(0.75, 0.78, 0.84);
       M.armor.uniforms.uEmissive.value.setRGB(1.6, 0.5, 0.1); // phase 2: the kindled blade (uGlow)
