@@ -265,6 +265,8 @@ export const TUNING = {
   // tolerance): a hero standing inside the snout was caught by the lunge 0.1 s after the flash said
   // it would land (cataclysm's held bite at 3 m); past this the bite misses instead (2026-11-20)
   biteLate: 0.07,
+  // ... and how early (s before its impact; the motion audit's spread snap, motionFix.js)
+  biteEarly: 0.06,
   // strings (contract 1): a follow-up hit lands at least this long after the previous one (the
   // player releases and re-presses RMB: DEFENSE.parryRearm 0.25 s); checked by the STRINGS scenario
   minHitGap: 0.45,

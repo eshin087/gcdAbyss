@@ -46,7 +46,9 @@ export function biteLead(d, a, st, dt, predict = null) {
   const B = WYRM_STRIKE.bite, left = a.dur - a.t;
   // (the spread snap starts the head `pre` s before the active, the body's lead stays `lead`)
   const spread = snapOn() && !!predict;
-  const pre = spread ? Math.max(B.lead, B.pre) : B.lead;
+  // (a bite whose impact comes later in its active starts later: the path spans ~`pre` s in all; started 0.2 s
+  // ahead, a 0.12 s bite reached a near hero up to 0.13 s before its cue promised)
+  const pre = spread ? Math.max(B.lead, B.pre - (st.impact ?? 0.06) + 0.06) : B.lead;
   if (!(left < pre)) {
     st.held = false;
     return false;

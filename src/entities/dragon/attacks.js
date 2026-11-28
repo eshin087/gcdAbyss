@@ -1627,7 +1627,9 @@ const BITE = {
   hit(d, a, h, stage) {
     // a string's bite connects up to TUNING.biteLate s after its impact, never later (a late contact
     // came after the flash had promised the blow)
-    if (stage === 'active' && a.t <= h.spec.impact + TUNING.biteLate) biteHit(d, a, h.spec);
+    // (and not sooner than TUNING.biteEarly before it, the motion audit's spread snap: its swing round the
+    // neck's base crossed a close hero's chest ~0.1 s before the cue's impact)
+    if (stage === 'active' && a.t <= h.spec.impact + TUNING.biteLate && (!fixOn() || a.t >= h.spec.impact - TUNING.biteEarly)) biteHit(d, a, h.spec);
   },
 };
 

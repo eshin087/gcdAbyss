@@ -1300,7 +1300,15 @@ export class Rig {
       l.home.y = 0;
       // (off the ground as soon as the body has left it: a leap's take-off used to drag the planted
       // hind feet up to 0.4 m a frame for a few frames until the airborne blend caught up)
+      const wasFree = l.free;
       l.free = s.airborne > 0.3 || s.alt > 0.6 * S;
+      // (the motion audit) a foot coming down from the air plants where it is drawn, not at its home: it
+      // skated ~0.4 m over the ground after every landing while its air pose faded
+      if (fixOn() && wasFree && !l.free && !snap) {
+        gait.plantAt(k, pt.legs[k].toe);
+        l.landed = true;
+      }
+      if (l.free || s.airborne < 0.01) l.landed = false;
       // dying, every foot stays where it stands: the body falls and rolls over them (they used to
       // keep stepping toward the lying homes, or be hauled out stiff through the rolling body)
       l.lock = (!!pose.hindLock || s.dead > 0.01) && !l.free;
@@ -1312,7 +1320,13 @@ export class Rig {
       home(l.home, side * (lerp(A.handHome[0], 1.35, lying) + (s.stanceF + st.frontOut) * awake) * S, (lerp(A.handHome[2], 3.15, lying) + (s.strideF + st.frontFwd) * awake + stagger) * S);
       l.home.add(lv);
       l.home.y = 0;
+      const wasFree = l.free;
       l.free = s.airborne > 0.3 || s.rear > 0.35 || s.pawW[k] > 0.35;
+      if (fixOn() && wasFree && !l.free && !snap && s.airborne > 0.05) {
+        gait.plantAt(2 + k, pt.arms[k].toe); // (a landing, as the hind feet)
+        l.landed = true;
+      }
+      if (l.free || s.airborne < 0.01) l.landed = false;
       l.lock = s.dead > 0.01 && !l.free;
     }
 
@@ -1369,7 +1383,9 @@ export class Rig {
         const hv = s.hover, rch = s.airReach;
         const bx = lerp(1.0, 1.15, hv), by = lerp(-1.6, -2.45, hv), bz = lerp(-1.9, -0.55, hv) + 0.12 * hv * Math.sin(this.time * 2.3 + side);
         const tuck = v[6].set(side * lerp(bx, 1.2, rch), lerp(by, -2.55, rch), lerp(bz, 0.1, rch)).applyMatrix4(m.hips.matrixWorld);
-        toeT.lerp(tuck, s.airborne);
+        // (planted again after a landing, only its height still eases from the air pose: the audit)
+        if (fixOn() && limb.landed) toeT.y = lerp(toeT.y, tuck.y, s.airborne);
+        else toeT.lerp(tuck, s.airborne);
       }
       const ankleT = v[7].copy(toeT);
       ankleT.x += ankleOff.z * fwdFlat.x;
@@ -1422,7 +1438,8 @@ export class Rig {
         const hv = s.hover, rch = s.airReach;
         const bx = lerp(0.9, 1.0, hv), by = lerp(-1.55, -2.1, hv), bz = lerp(0.2, 0.75, hv);
         const tuck = v[6].set(side * lerp(bx, 1.2, rch), lerp(by, -2.6, rch), lerp(bz, 1.0, rch)).applyMatrix4(m.chest.matrixWorld);
-        toeT.lerp(tuck, s.airborne);
+        if (fixOn() && gait.limbs[2 + k].landed) toeT.y = lerp(toeT.y, tuck.y, s.airborne);
+        else toeT.lerp(tuck, s.airborne);
         freeW = Math.max(freeW, s.airborne);
       }
       if (s.pawW[k] > 0.001) {
