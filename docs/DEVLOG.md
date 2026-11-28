@@ -5,6 +5,24 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — Halcyon rebuilt by code a third time, to read as the sheet (ADR-289; `halcyon-ref-look`)
+
+**Owner**, shown the second pass: "it doesn't seem like the new look has any resemblance to the reference
+art"; then "build it by code first and dont worry about face details since its ascii".
+
+- **Why the second pass missed:** the details changed (gold edges, clasps, plates) on the shared rig's stocky
+  proportions, a helmet of hair over the face, and the bosses' print (a dim shared tone, bright outlines, a dark
+  falloff), so he read as the same mannequin.
+- **Now:** the drawn meshes slimmed (arms, legs, hips, deltoids, cuffs, hands), the head drawn x0.86, the hair a
+  swept cap with the face clear, flat knees and pectorals, the plate lines pale blue (gold only where the sheet
+  has it), the cape without drawn fold lines, and `uArtOwn` (materials.js): his materials keep their own fill
+  under the bosses' print, solid navy / crimson / gold / blond (look.js `HAL_OWN`). Bones, timing and hitboxes
+  untouched (`city.mjs . halref` green; 95 meshes).
+- **Comparison (local):** `docs/art/character-packs-v04/halcyon/implementation/look-compare-v3.png` (sheet 01,
+  the second pass, now; four views).
+- **Open:** the owner's verdict; the cape is five spring sheets (their seams show as faint lines); phase 1's
+  folded arms read as hands on the hips from the front.
+
 ## 2026-11-28 — Halcyon rebuilt after the reference sheet, and his attacks (ADR-289, second pass; `halcyon-ref-look`)
 
 **Owner**, shown the first pass beside sheet 01: "rebuild him to look identical to the reference sheet and same with
@@ -14,7 +32,7 @@ his attacks".
   breasts: flattened and squared), six ab plates, smaller shoulders under pauldrons, limb plates and greaves, every
   plate edged in gold; collar, clasps, belt, cuffs, gold-capped boots; a square jaw; three rows of swept locks. The
   cape: a mantle over the shoulders and five overlapping sheets to the heels, swinging less. Its lower third printed
-  lavender: the bosses' pale hem (ADR-194); a per-material `uArtNoHem` keeps it crimson (0 for everything else).
+  lavender: the bosses' pale hem (ADR-194); a per-material `uArtNoHem` keeps it crimson (0 for everything else; renamed `uArtOwn` in the third pass).
 - **The attacks (`?halRefMove=a`):** sheet 02's legs (the right knee drawn up in the windup, bent and trailing from
   the strike, a kick's other knee tucked), the hover and the hover reactions the same; `?halMotion=b`'s straight
   arms kept. Timing identity re-checked (`halref`), the city suite green with both switches forced.

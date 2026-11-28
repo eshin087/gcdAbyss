@@ -8179,10 +8179,20 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
      with gold toe caps and heels; bare hands; a square jaw; blond hair swept straight back in three rows of locks.
      THE CAPE: a crimson mantle over both shoulders and the upper back, and five sheets from the clasps to his heels
      (about 1.3 m), wide and overlapping so they read as one cloth, a few deep folds, hanging close and swinging
-     less than the shipped cape. It is crimson to its edge: a new per-material `uArtNoHem` (materials.js; 0 for
-     every other material) keeps its fill under the bosses' pale hem line (ADR-194), and its fill sits at the boss
-     print's brightness cap. Colours: look.js outfit 'd' (navy suit and plates, the gold in the gold-ink `hair`
-     part, the blond in `hairTip`). His eyes a dim red until they kindle to the same full glow. 97 drawn meshes
+     less than the shipped cape. THIRD PASS (the owner: "it doesn't seem like the new look has any resemblance
+     to the reference art"; "build it by code first and dont worry about face details"): the rig's proportions
+     were the stocky hero's, so the drawn meshes are slimmed (arms x0.8, legs x0.84, the hips narrower, the
+     deltoids x0.85, a thin gold cuff for the gold cylinder, the hands x0.9), the head drawn x0.86 (about 8
+     heads; the skull, jaw and neck the rig drew move under a scaled joint, the beams' eye point unchanged), the
+     hair a cap over the crown and the back only with strands combed back and the face clear below the brow,
+     the knee a flat plate, the pectorals nearly flat, the torso's and thighs' plate lines in the plate's pale
+     blue (gold kept for the strap, the belt, the clasps, the cuffs, the collar, the boots' bands, toes and
+     heels), the cape without drawn fold lines (they printed as a tent of bright strokes; its folds are its
+     sheets' shape). HIS OWN PRINT: a per-material `uArtOwn` (materials.js; 0 for every other material)
+     keeps a material's own fill under the bosses' print (ADR-194: no shared tone, no pale hem, no dark
+     falloff), so he prints solid in the sheets' colours (look.js `HAL_OWN`: navy, pale-blue plates, gold,
+     crimson, blond, the skin). Colours: look.js outfit 'd' (navy suit and plates, the gold in the gold-ink `hair`
+     part, the blond in `hairTip`). His eyes a dim red until they kindle to the same full glow. 95 drawn meshes
      against 90: more objects, only under the switch, so no seeded fight shifts with it off.
   3. THE POSES, never the timing (`?halRefMove=a`): the sheets' leg language over the owner's `?halMotion=b` arms.
      (a) The hover: the right knee drawn up, the left hanging, the toes pointed (01 B7, B8), in place of `b`'s long

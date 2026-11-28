@@ -7,8 +7,8 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 One hundred and forty-seven pieces of work since 0.4.0:
 - **Halcyon after the reference pack, to try** (2026-11-28, ADR-289). *Added (options, off by default: the owner
   picks):* `?halRef=a` rebuilds Halcyon after the owner's character pack (`docs/art/character-packs-v04/halcyon`):
-  a V-tapered man in sculpted navy plates (chest, abdomen, shoulders, forearms, thighs, knees, shins) each edged in
-  gold, a gold strap across the chest, a high collar, square gold clasps, a gold belt and cuffs, bare hands, navy
+  a lean, long-legged man (about 8 heads) printed solid in his own colours, in navy plates (chest, abdomen,
+  shoulders, forearms, thighs, knees, shins) lined in pale blue, a gold strap across the chest, a high collar, square gold clasps, a gold belt and cuffs, bare hands, navy
   boots with gold toe caps and heels, a square jaw, blond hair swept back, and a crimson mantle with a cape to his
   heels, red to its edge; his eyes dim until they kindle. `?halRefMove=a` poses him after the sheets: in the hover,
   his blows and the reactions he takes in the air the right knee drawn up and the left leg hanging (no planted
