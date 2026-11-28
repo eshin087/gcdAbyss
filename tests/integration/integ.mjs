@@ -13553,6 +13553,8 @@ async function scenarioTerrain() {
     }
     G.watch = null;
     G.defend = null;
+    // (a move still between its tell and its flash when the 300 s run out was cut short by the window)
+    if (open && !open.flash) excused++;
     if (process.env.GCD_TRACE2) out('   ' + JSON.stringify(dbg) + ' ' + JSON.stringify(picks));
     const total = Object.values(picks).reduce((a, b) => a + b, 0);
     const mine = (picks.hurl || 0) + (picks.tailBat || 0) + (picks.fireBrand || 0);

@@ -8430,11 +8430,12 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   size), its growth capped at 20 rad/s²; past him the body runs on to the old curve's final facing on a damped
   spring (the next blow of a string was timed from that facing; braking short of it put the wing sweep after a
   whip 100 - 170 ms early). The blow keeps the old curve where steering missed the beat: a hero within ~10° of
-  straight behind (the old backswing is tuned for a tail lying on his bearing), more than 3.5 rad still to turn
-  when steering would begin, the tail jab and a string's tail sweep (steered, they reached a close hero up to
+  straight behind (the old backswing is tuned for a tail lying on his bearing), phase 3 (its windups x0.78 left
+  too little time: five contacts 100 - 183 ms off), more than 3.5 rad still to turn or more than 5.5 rad/s on
+  average needed when steering would begin, the tail jab and a string's tail sweep (steered, they reached a close hero up to
   0.23 s early), a string's second whip.
 - **Measured:** spin in place (the audit's placements): the tail sweep 674 → 153°/s, pivot lash 706 → 271, rear
-  guard 703 → 278, cinder rake 705 → 258, cataclysm 705 → 299; the tail lash keeps ~680 (its jab and sweep).
+  guard 703 → 286, cinder rake 705 → 319 (phases 1 - 2); the tail lash (~680) and phase 3 (the cataclysm) keep the old curve.
   `integ timing`: every contact within ±85 ms, no first hit missed.
 - **Consequences:** the tail lash's spins and the straight-behind cases are the old motion; a later pass could
   steer them with a longer windup (a timing change: the owner's call).

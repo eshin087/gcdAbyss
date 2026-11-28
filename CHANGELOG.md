@@ -9,8 +9,8 @@ One hundred and forty-nine pieces of work since 0.4.0:
   tail whips no longer spin the whole wyrm ~700°/s in place: the turn starts during the wind-up, after the
   backswing, and is steered onto the blow (the part of the tail that will touch you reaches you exactly on the
   cue, wherever you stand), then runs on and slows to a stop. The tail sweep turns at most ~150°/s, the pivot
-  lash, rear guard, cinder rake and cataclysm ~260 - 300°/s. Where steering could not keep the blow on its cue
-  (you almost straight behind it, a turn of more than half a circle still to go, the jab and the sweep of the
+  lash, rear guard and cinder rake ~280 - 320°/s. Where steering could not keep the blow on its cue
+  (you almost straight behind it, phase 3, a turn of more than half a circle still to go, the jab and the sweep of the
   tail lash, a string's second whip) the old spin stays. `?wyrmFix=0` as before.
 - **The Cinder Wyrm moves like a living animal** (2026-11-28, ADR-281). *Fixed (the owner: "fix them all", from a frame-by-frame audit of all
   59 of its moves and states, `integ wyrmmotion`):* its wings no longer go through the ground (finger tips went up

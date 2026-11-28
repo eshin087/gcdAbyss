@@ -509,14 +509,14 @@ const tailKeys = (n) => {
  * behind the body is taken up as it goes); the rate grows at most `acc` rad/s a second; past him it brakes
  * at `dec`. `st.spinW` the yaw rate, `st.spunPast` once the tail has crossed his bearing.
  */
-const SPIN = Object.freeze({ pre: 0.35, preJab: 0.12, acc: 20, dec: 26, max: 9, wrap: 0.35, follow: 7, minStart: 0.45, behind: 2.95, maxArc: 3.5 });
+const SPIN = Object.freeze({ pre: 0.35, preJab: 0.12, acc: 20, dec: 26, max: 9, wrap: 0.35, follow: 7, minStart: 0.45, behind: 2.95, maxArc: 3.5, maxRate: 5.5 });
 /** One frame of the aimed spin, `dir` +1 / -1 (the yaw's sense), `tRem` s to the impact (<= 0: past it).
  *  `endArc` (rad, read on its first frame): where the old curve ended, from the yaw it starts at. */
 function aimSpin(d, st, dir, tRem, dt, endArc = NaN) {
   if (!(dt > 0)) return false;
   if (!st.spinOn && tRem > 0.2 && spinToGo(d, dir) < SPIN.minStart) return false; // (the backswing goes on)
-  if (!st.spinOn && spinToGo(d, dir) > SPIN.maxArc) {
-    st.aimed = false; // (too far round to steer in time: this blow keeps the old curve)
+  if (!st.spinOn && (spinToGo(d, dir) > SPIN.maxArc || spinToGo(d, dir) / Math.max(dt, tRem) > SPIN.maxRate)) {
+    st.aimed = false; // (too far round, or too fast an average to reach on the ramp: this blow keeps the old curve)
     return false;
   }
   if (!st.spinOn) {
@@ -562,10 +562,11 @@ function aimSpin(d, st, dir, tRem, dt, endArc = NaN) {
   return true;
 }
 /** Whether this blow takes the aimed spin (read at its start): not for a hero (nearly) straight behind, where
- *  the old curve's backswing was tuned for the tail lying on his bearing, nor for a spin of more than `maxArc`
+ *  the old curve's backswing was tuned for the tail lying on his bearing, nor in phase 3, nor for a spin of more than `maxArc`
  *  (the old curve's whole turn: steered, it could not come round in time). Else the old curve. */
 function spinAimed(d) {
-  return fixOn() && d.sense.absAng < SPIN.behind;
+  // (phase 3's windups, x0.78, leave too little time to steer onto the beat: it keeps the old curve)
+  return fixOn() && d.sense.absAng < SPIN.behind && (d.phase ?? 1) < 3;
 }
 /** The angle the tail's middle still has to travel to the hero's bearing, in the spin's sense (rad, 0..2pi). */
 function spinToGo(d, dir) {
