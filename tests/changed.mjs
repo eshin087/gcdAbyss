@@ -24,6 +24,7 @@ export const BOSSES = [
   { enemy: 'wokenOne', level: 'scripthall', sets: ['scriptHall'], suite: 'woke' },
   { enemy: 'halcyon', level: 'halcyon', sets: ['halcyonPlaza'], suite: 'city' },
   { enemy: 'untouched', level: 'veil', sets: ['veiledCrossing'], suite: 'veil' },
+  { enemy: 'falseSaint', level: 'foundry', sets: ['lastFoundry', 'foundryProps'], suite: 'saint' },
 ];
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

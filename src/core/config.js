@@ -131,13 +131,16 @@ export const CONFIG = {
       //   guardPortrait  held upright (no room beside the stick): `lift` px above the ring
       split: {
         tiles: {
-          attack: { x: 0, y: 0, w: 92, h: 84 },
-          heavy: { x: 0, y: 84, w: 92, h: 66 },
-          dodge: { x: 92, y: 0, w: 80, h: 84 },
+          // (ADR-278, the owner: a second guard under ATTACK; the left hand's GUARD stays)
+          block: { x: 0, y: 0, w: 92, h: 56 },
+          attack: { x: 0, y: 56, w: 92, h: 84 },
+          heavy: { x: 0, y: 140, w: 92, h: 66 },
+          dodge: { x: 92, y: 56, w: 80, h: 84 },
         },
-        flask: { x: 103, y: 96, w: 58, h: 42 },
-        guard: { gap: 14, y: 0, w: 84, h: 100 },
-        guardPortrait: { lift: 14, w: 100, h: 70 },
+        flask: { x: 103, y: 152, w: 58, h: 42 },
+        // (ADR-278, the owner: closer to the stick) its left edge just over the ring's glyphs
+        guard: { gap: -6, y: 0, w: 84, h: 100 },
+        guardPortrait: { lift: 4, w: 100, h: 70 },
       },
     },
     // HOLD ATTACK (a pause-menu switch, off by default; ADR-131): a thumb resting on ATTACK keeps
@@ -148,6 +151,12 @@ export const CONFIG = {
     // the fight starts locked on (ADR-270): on touch the hero takes the lock as the boss fight
     // begins (retried for `autoLock` s while the boss is out of lock range); 0 = off
     autoLock: 4,
+    // SWIPE DODGE (a pause-menu switch, on by default, the owner's pick; ADR-278): a quick flick on the bare right half of the screen
+    // dodges the way it flicked, so the thumb never has to find the DODGE tile. It fires the moment
+    // the finger has travelled `dist` px (x the screen's fit) within `time` s of touching down, not
+    // on the lift; a slower drag, or a second finger (a pinch), is no swipe. `from`: where the right
+    // part begins, as a share of the screen's width
+    swipe: { dist: 30, time: 0.2, from: 0.5 },
   },
 
   // Gamepad (src/ui/gamepad.js; the Gamepad API "standard" layout). Stick values are 0..1 deflection.

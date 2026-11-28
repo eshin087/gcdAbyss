@@ -7894,6 +7894,44 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   the oldest title. Open: the owner's verdict on an iPhone and on the small phone (the fit's floor 0.62 may want
   to be higher for thumbs), and whether the mouse and pad want the start lock-on too.
 
+## ADR-278 — Swipe to dodge on touch (2026-11-28)
+- **Context:** the owner, on a phone: "i cant seem to be able to react fast enough for parry or dodge with the
+  mobile controls vs mouse keyboard or controller". The rules are the same on every input (a swing cancels into a
+  guard or a dodge at once, presses buffer 0.3 s); the difference is the hand: on the phone one right thumb leaves
+  ATTACK and has to find a flat tile it cannot feel. The owner picked two things to try first: the guard on the
+  left hand (PAD LAYOUT "guard on left", already built in ADR-131) and a swipe to dodge.
+- **Decision:** SWIPE DODGE, a pause-menu switch beside HOLD ATTACK (`touch.swipeDodge`, kept in `gcd.touchPad`,
+  `?swipe=1|0`). A finger on the bare right half of the screen in play that travels 30 px (x the screen's fit)
+  within 0.2 s of touching down dodges the way it went, at that moment (no wait for the lift), once per touch.
+  The direction rides with the press: `input.dodgeToward(x, y)` pulses `@dodge` and leaves `dodgeAim` for that
+  frame; the player keeps it with the buffered roll (`rollAim`) and rolls that way over the stick (so a swipe can
+  dodge sideways while the stick runs forward). A slow drag and a two-finger pinch never dodge; the DODGE tile
+  stays. Its mark is a short ASCII streak of chevrons that fades in 0.3 s.
+- **The owner's verdict (same day):** "i like the swipe dodge": ON BY DEFAULT (saved under a new key, `sw`, so
+  everyone gets it); and the left GUARD "more closer to the dpad" and "locked/unlocked": GUARD now stands against
+  the stick's ring (`split.guard.gap` 14 → -6 px, upright `lift` 14 → 4), with a padlock of its own over its
+  corner; the two padlocks are one lock, open both the pad and GUARD drag, GUARD's place is kept (`goff`).
+- **Then (same day):** "have a 2nd guard button available below the attack button as well": in the left-guard
+  layout the BLOCK tile stands under ATTACK too (both feed `@block`, the right cluster raised by its height). "The
+  left guard button looks really out of play ... the lock symbols ... more subtle ... i dont want the UI to stick
+  out": GUARD takes the tiles' corner brackets and a fainter frame at 0.4 opacity (full while held); the padlocks
+  lose their disc and frame and rest at 0.34 opacity (0.9 open). One design, no options offered: it is the same
+  look as the tiles, only quieter.
+- **And:** "allow options in settings to remove either left or right guard button and also allow the player to
+  change the button layout": PAD LAYOUT now only picks the cluster's arrangement (BLOCK BESIDE / BLOCK UNDER
+  ATTACK); LEFT GUARD and RIGHT GUARD are two switches of their own (one always stays). A pad saved with the
+  old `split` keeps its left GUARD. The pause menu grows two entries; it scrolls.
+- **Then:** "have it both named block", "the attack symbol flipped upside down", "make the guard and cursor
+  design on the left more seamless ... out of place with the random bottom bar line": the left button is BLOCK,
+  the gauge line is gone from both BLOCKs (the HUD's GD meter carries it), the dagger points down, BLOCK is
+  centred on the stick, and the left side's look is three options for the owner to pick on the phone
+  (`?leftLook=a|b|c`). The owner picked `c` (glyphs only), the default; and "swap dodge and block on the right
+  side": BLOCK beside ATTACK and DODGE under it again (the default arrangement), `?pad=split` only turns the
+  left BLOCK on, an older saved pad takes the default arrangement (`v: 2`).
+- **Consequences:** first shipped off, then on after the owner tried it on the phone. The
+  pad itself is not a swipe surface (a flick that starts on ATTACK still slides between tiles); open: a flick
+  off the pad, a touch timing allowance (the wider parry / perfect-dodge windows on touch the owner was offered).
+
 ## ADR-271 — The blackout for a black blow, red trails for a red string: options behind switches (2026-11-27)
 
 - **Context:** the owner sent a Phantom Blade Zero boss fight as the reference for combat feel and approved two of
@@ -8134,3 +8172,203 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   `pace` counts the Bend as busy time and leaves it out of his cues a minute: it is the hero's answer, not his pace.
   How the one parry LOOKS (the spark spit is small next to the boss's guard) is still
   the owner's call: options to come.
+
+## ADR-285 — The Last Foundry and the False Saint: a tenth level, a four-phase duelist, four move handlers on one routing contract (2026-11-28)
+
+- **Context:** the owner asked for a new boss, "the false saint", drawn after their concept sheet (four milestones of a
+  man whose skin is a shell over a machine): a machine infiltrator in the spirit of a film, set against an iconic
+  place of that film, "very fast, strong, able to shoot lasers, missiles, crazy artillery attacks", with a cyborg
+  disciple's booster movement, and "make sure his attacks cause destruction in the background terrain". The owner's
+  standing rule for homages: what things do and look like may wink at the source; its names, quotes, logos and
+  character names appear nowhere (game text, code, comments, tests, commits, docs). Bai Wuji (ADR-241) is the
+  newest whole boss and level: a duelist with three move handlers routed by `moves.js`. This boss has four kinds of
+  move (open hands, boosters, guns, the set) and about as many moves.
+- **Decision:**
+  1. THE LEVEL, `?level=foundry` (`levels/foundry.js` `FOUNDRY_LEVEL`; aliases `saint`, `falsesaint`, `anselm`,
+     `mill`, `machine`), the set `world/lastFoundry.js` (`createLastFoundry`, layout `FOUNDRY`, numbers
+     `FOUNDRY_TUNING`; builders `world/foundryProps.js`): a steel mill at the end of a war with the machines, at
+     night, still running. A casting floor of 400 plates (half 15 m, cell 1.5; every plate a floor piece), the pour
+     along its north edge, four ladles on jib cranes, the press, the line of unfinished frames (his brothers), the
+     blast furnace, columns under the crane runway, pipe racks, five gas tanks, ingots, girders, slag, a catwalk,
+     twelve wall sections; the wreck field past 30 m is a static mesh. Everything breaks (492 breakables) but the
+     bonfire, the furnace's body (`hp: Infinity`: it chips) and the pour's kerb. The light follows his phase (the
+     Skybreak Ring's `ambience`). No reward yet.
+  2. THE HAZARD SURFACE, `game.world.forest.foundry` (world.js keeps the set as `world.forest`; the brief said
+     `world.set`): `ladles`, `ladleNear`, `drop`, `molten.add / pools / at`, `tanks`, `boom`, `reset`. The SET draws
+     the pools and the ladles and sets the world alight round a pool; the BOSS's terrain handler deals a pool's
+     damage, to the hero and to him.
+  3. THE BOSS, `enemies/falseSaint/` (`class FalseSaint` on the duelist engine, kit id `saint`, `TUNING.name`
+     'ANSELM, THE FALSE SAINT'): one bar, four phases (`phaseAt` [1, 0.74, 0.46, 0.2]; transitions `skinBreaks`,
+     `weaponsFree`, `trueFrame`), bare-handed (his "blade" is the striking limb of the moment, Tian Lei's way). Every
+     new beat, move or tuning field starts with `fs` (`saint.mjs . data` fails otherwise). 32 moves, the grab's hidden
+     lift and the three transitions.
+  4. FOUR HANDLERS ON BAI WUJI'S ROUTING (saint.js's head is the contract): one move file each (`moves/melee.js`
+     `FsMelee`, `moves/boost.js` `FsBoost`, `moves/arsenal.js` + `arsenal.js` `FsArsenal`, `moves/terrain.js` +
+     `terrain.js` `FsTerrain`), each exporting `moves(X)`, `FIELDS`, `LINKS` and `create(d)`. A beat goes to the
+     handler whose `FIELDS` name one of its fields, a move to every handler one of its beats goes to; `moves.js` is the
+     router and holds only the three transitions. Three hooks beyond Bai Wuji's: `footwork(dt, s) → true` (it moved
+     him this frame; asked before the engine's footwork: the jet step, the walk home after a fetch), `takeHit(o) → o |
+     false | undefined` (asked first in `FalseSaint.takeHit`: the Long Walk's armour), and the terrain handler's
+     `onMoment(n)` (a phase change's world blow, in place of core's one push ring). His flurry and his counter per
+     phase are move data (`fsFlurry`, `fsCounter`: the later file's claim wins), so no agent edits the router for them.
+  5. HOW IT WAS MADE: the lead (Fable) wrote a brief and a core (the level on a stand-in set, the boss folder, the
+     handler stubs, `saint.mjs`), then Opus agents built it, each in its own worktree: world, body, effects, melee
+     and boosters; arsenal and terrain; the owner's v04 pack; the tuning pass. The lead merged and reviewed.
+- **Consequences:** a new move goes in its family's file and needs no edit anywhere else; `links.js` links every
+  move by id, and a missing target is passed over. His shared touches: `audio.js` plays the `dragon:spell` names that
+  start with `fs` (35 recipes in `sfx.js`), two fire palettes (`saint`, `foundry`), `SCAR.thin.foundry`, a block in
+  every living-world tuning file, the air, the world's sounds and the arrival, the Lab's LOOKS and FIGHT rows, the
+  Training's roles (`saint` among the boss kinds), a cost row, the music borrowed from the Obsidian Throne. No new
+  event (`dragon:dash`, `dragon:takeoff`, `dragon:land`, `dragon:returned`, `world:blast` and the cues exist). His rig
+  is heavy: 252 meshes, 43.6k triangles (Bai Wuji's 63 / 19.6k); `cost.mjs` counts the set only.
+- **Alternatives turned down:** one big moves file (Bai Wuji's three handlers showed the split works, and four agents
+  built at once); the brief's three handlers with the jets inside melee (the boosters touch footwork, poses and the
+  body's lights: a file of their own); the source's names for the boss, the place or his moves (the owner's rule;
+  the suite's ban list keeps them out).
+
+## ADR-286 — The False Saint's shell chips away: one rig, two layers, look only, never regrowing (`?fsLook=a|b`) (2026-11-28)
+
+- **Context:** the owner's sheet shows four milestones of one man: 01 human (olive skin, side-parted black hair, an
+  asymmetric charcoal jacket); 02 the right cheek and forearm chipped to titanium; 03 half the head, the chest and an
+  arm bare; 04 the true frame (a faceted head with a dark sensor slot, three pale sensors). Their second sheet adds a
+  turnaround, the action row and the guard in all four states; the v04 pack (mid-build) makes its `anchor.png` the
+  visual authority and asks for one skeleton and cumulative shell loss: no regrowth, the same motion keys in every
+  state. A model swapped per phase would pop; a reveal tied to the fight needs a record of where he was hit.
+- **Decision:**
+  1. ONE RIG, TWO LAYERS (`gear.js`): the hero's skeleton carries the DISGUISE (the rebuilt face, the hair, the
+     jacket with its diagonal close and pale seams, the collar, the stone-grey shirt, a four-panel sprung skirt,
+     trousers, boots) over the FRAME (the faceted faceplate, a ceramic cranium, jaw plates, the diagonal slot and
+     three sensors, a woven neck, the thoracic shell, plated limbs with gimbal rings, metal hands, and the weapons:
+     the elbow boosters, the palm's iris, the forearm gun, the shoulder petals, the back and calf thrusters, the
+     mortar tubes, the core slit). Built on a quiet stream (no seeded fight shifts). The same height in every phase.
+  2. THE SHELL (`shell.js` `FsShell`, `d.shell`) is LOOK ONLY: no armour, no hitbox, no damage rule reads it. 15
+     parts (`headR` ... `shinL`), each 0..1. A landed cut chips the part it lands on by 0.12 (heavy x1.6) and the
+     next part by 0.35 of that (`chip`); molten steel, a tank's blast and a change's burn strip it (`strip`); a phase
+     change raises each part to its FLOOR (`FLOORS`: the milestones) and the whole body's LIMIT
+     (`TUNING.fsShell.limit` [0.08, 0.3, 0.68, 0.97]); a bonfire reset restores him whole. Old damage stays. The order
+     a part's pieces go in is a fixed hash: no random.
+  3. THE REVEAL (`look.js` `dressSaint`): the disguise is cut into shards per part, each with a threshold that rises
+     with its distance from the part's wound (the right cheek, the right forearm, the left collarbone ...): a shard is
+     gone while its part is past it. The thresholds are tuned so the floors draw the milestones: about 24 %, 64 % and
+     94 % bare after the changes into phases 2, 3 and 4 (the change's own burn included). Every torn edge has a pale
+     laminate rim; the frame under a part shows from its first chip. A weapon shows only where its part is bare. Work
+     is done only when `shell.version` or a weapon value moves.
+  4. THE ANCHOR AND THE V04 PASS: the face sculpted (cheekbones, a brow ridge, the nose, almond eyes, straight brows),
+     the hair short and black, parted on his left and swept right with a lock over the right brow (it was spiky),
+     olive skin [0.66, 0.55, 0.34], the cloth darker and matte, the titanium brighter and cooler, paler rims, the
+     sensors dimmer (0.27 + 0.6 x `eyesK`). His hands stay OPEN (the second sheet's guard): 'reach' on a palm's
+     contact, 'guard' otherwise, 'clench' only on the booster punch and Vespers' passes (`d.fsHandR` / `d.fsHandL`;
+     three shapes drawn).
+  5. `?fsLook=a|b` (read when his rig is built; awaiting the owner): `a` (drawn) both legs plated in phase 3, as the
+     second sheet and the v04 pack draw 03; `b` the right leg plated and the left trouser whole until phase 4, as the
+     first sheet (the anchor) draws it.
+- **Consequences:** the milestones are where a phase STARTS him; how he looks inside a phase is where the hero cut
+  him. Measured: 0 regrowths over 25 moves (`saint.mjs . v04Shell`); every hand shape on its beats (26 of 26 reach,
+  7 of 7 clench, none stray). At the game camera (36 m, 58 degrees) the face is a few pixels: the phases read apart
+  mostly by brightness and the level's light. The rig costs 252 meshes and 43.6k triangles.
+- **Alternatives turned down:** a model per phase swapped at the change (a pop, and the hero's cuts would not show);
+  a dissolve shader (a new rendering pass: the house style forbids one); the shell as armour (look only: his
+  difficulty is his moves); the brief's "closed plated fists from phase 2" (the owner's second sheet: open hands in
+  every phase).
+
+## ADR-287 — The False Saint's fight rules: COMBAT.md's floors although he is the fastest, cyan never a tell, every projectile in the ledger, molten steel burns him too (2026-11-28)
+
+- **Context:** the owner wants him "very fast" and the hardest hitter; the house rule (COMBAT.md) is that every blow is
+  told and readable to a watcher. The lead's brief first said "no windup under 0.42 s": a mistake. COMBAT.md's rule
+  is a first melee windup of 0.7 s or more in phase 1, a string's next hit 0.45 s or more after the last, the cue about
+  0.35 s before the impact; the v04 pack repeated it. The pack also says his cyan is cosmetic: blue in this game MEANS
+  parry, so nothing of his that signals an attack may be cyan or blue. His arsenal throws more at once than any boss
+  (up to 11 missiles, 20 shells, beams held 2 s).
+- **Decision:**
+  1. THE FLOORS: `TUNING.flashLead` 0.35, `minFirstWindup` 0.7, `minHitGap` 0.45, checked on the data in every phase
+     (`saint.mjs . data`: a first windup at least 0.7 x `windupScale`). Measured: the least phase-1 first windup
+     0.72 s; the least gap between two hits 0.46 s (Rosary's pistons, fixed: 0.41 s windups after 0.05 s blows), 0.51 s
+     in the melee strings; every arsenal first windup 0.9 s or more; every terrain windup fixed, 0.7 s or more. His speed is links, short recoveries (`recoveryScale` [0.8, 0.72, 0.66, 0.6]), gap closers
+     and the jet step, never a short windup.
+  2. CYAN IS COSMETIC: his sensors and his shell's sparks are tiny cyan glyph particles and a light, never heat, never
+     in step with an attack (`TUNING.arsenal.beams.eyes` 0.45 → 0, the lead's call). His sight lines are pale white
+     with a red cross, his marks red, his beams the `saint` palette's white-hot, the pass lines pale white. The white
+     contact glint stays the brightest thing at a contact.
+  3. THE LEDGER: every projectile flies through `fx.fly` (a fixed pool of 32: missiles, shells, bolts), each with its
+     own ledger handle (`brain.expect`) that the fairness guard may move later (`brain.fairDelay`) or drop (it is not
+     fired); a beam is a `selfHit` beat that the brain cues, holds and ledgers; a thrown piece's landing is asked of
+     the guard (a later landing, or uncued and harmless). Measured (`saint.mjs . arFair`, the arsenal agent's run: 10
+     seeds x 24 s of phases 3 and 4 with the swarm and the barrage likely): 341 missiles and shells landed against
+     171 guarding cues, none within 0.3 s of a cue that needs the other answer.
+  4. THE BARRAGE'S LANES: Kyrie's shells (r 1.25 m) leave lanes of 2.2 m of clear floor (1.3 m for the hero's
+     middle), each row laid so a lane's middle is within half a spacing of where he stands, the next row's lanes off
+     the last's; a safe spot is always within 2.35 m (a roll is 4.2 m). The effects' first driver had 1.5 m lanes, and
+     they read as a wall at the game camera.
+  5. THE MOLTEN POOLS HURT HIM TOO (the level's trick): a pool is cued red 0.55 s before it burns; then every 0.5 s
+     the hero in it takes 9 (14.4 of his 160) and is thrown out past its rim (one burn per entry, never a trap, never
+     on a hero who is down or held); HIM, through `onMolten`: 60 and 35 posture a burn, a strip of his shell, a
+     stagger at most every 2.5 s. A ladle the hero cuts down on him, or his own Crucible lured onto him, pays.
+  6. MERCY: the grab (Laying On of Hands) is never lethal and keeps the hero out of his own hands 1.9 s at most (the
+     hold 0.9 s, inside the player's 1.2 s cap, then the throw's knockdown); Last Rite takes at most the hero's HP - 1;
+     nothing lands on him through a phase's change until its push ring is out (the multi-form duelists' rule): a cut
+     rings off him.
+- **Consequences:** under COMBAT.md's floors no boss is faster: his windups sit on the floors and every other second
+  is spent. The guarding bot never meets two answers that need different buttons within 0.3 s (`tunePace`, every
+  seed and phase). A cyan glow means nothing in a fight here.
+- **Alternatives turned down:** the brief's 0.42 s floor (under COMBAT.md's rule, and a watcher could not follow it);
+  the sensors brightening with a charge (cyan reads as blue: a false parry cue); a barrage without lanes, or with
+  1.5 m ones (a wall, not a pattern); pools that hurt only the hero (the owner wanted the terrain in the fight both
+  ways).
+
+## ADR-288 — The False Saint's tuning: the phase scales kept, the jet step in place of a pick, strings that follow, eased feet, spared tanks, softer pools and Rosary (2026-11-28)
+
+- **Context:** after the merge the tuning agent played whole fights against four mortal bots (`saint.mjs .
+  tuneFight`: 160 HP, 5 flasks, skill 0.95, a 480 s cap; `guard` guards normal and blue cues and rolls out of red
+  ones, `parry` parries and rolls red, `roll` rolls out of everything, `strike` parries and rolls, answers fewer cues
+  and swings at him whenever he is in reach) and measured the pace (`tunePace`: a god-mode guarding bot roaming 2.5 /
+  5 / 9 m, seeds 4242, 7 and 99, 60 s a phase). Before the pass phase 1 never linked (0 links a minute), phase 4
+  never jet-stepped, a held guard always broke on Rosary (the guarding bot took 630 of its phase-2 damage from it),
+  his own pools broke him, Offertory hardly ever found a tank, and three Dies Irae slams broke 74 % of the floor.
+- **Decision:**
+  1. THE PHASE SCALES KEPT: `windupScale` [1, 0.94, 0.88, 0.84], `recoveryScale` [0.8, 0.72, 0.66, 0.6]. Faster ones
+     ([1, 0.92, 0.86, 0.8] / [0.8, 0.66, 0.58, 0.48]) gave phase 4 5 - 9 more cues a minute, and the striking bot
+     lost every seed. Settings x bots (seeds 4242, 7, 99; the parry bot 4242 and 7):
+
+     | Bot | before the pass | the pass, faster phases | the same, damage x1.45 | shipped |
+     |---|---|---|---|---|
+     | guard | 0 won, 3 dead | 0 won, 1 dead, 2 alive at the cap | - | 0 won, 0 dead, 3 alive (him at 22 - 32 % in phase 3) |
+     | parry | 2 of 2 won, 195 - 227 s | 2 of 2 won, 200 - 204 s | - | not run again |
+     | roll | 0 won, 1 dead, 2 alive | 0 won, 1 dead, 2 alive | - | 0 won, 0 dead, 3 alive |
+     | strike | 3 of 3 won, 201 - 233 s | 0 won, 3 dead | 1 won, 2 dead | 2 won (219 - 225 s), 1 dead |
+
+  2. THE JET STEP IN PLACE OF A PICK OR A LINK (`TUNING.boost.step`; `FsBrain._stepFirst` / `_startNext`): at 6 / 5.5 /
+     5 m, every 3.0 / 2.3 / 1.7 s in phases 2 / 3 / 4 (was 6.5 / 6 / 5.5 m, 3.4 / 2.7 / 2.1 s), and a share `pick`
+     0.3 / 0.45 / 0.6 of the picks and links made with the hero past that range wait for the step (unless the next
+     move closes the gap itself). Measured: 0 / 1.7 / 3.7 / 4.3 steps a minute.
+  3. FOLLOW LINKS (`links.js` `FOLLOW`): a string follows a hero its last blow slid 3 - 6 m off, checked by its first
+     blow's reach, not its band: phase 1 links 4.7 times a minute. The grab's throw links only to what a hero who is
+     getting up can read (the walk, the laser, the ladle, the barrage, from the recovery's end): a grab, a throw into
+     a pool and the dive had dealt 54 + 2 x 14 to one bot in 2.4 s.
+  4. HIS FEET (`kit.animOpts { liftEase 0.2 s, liftFromStep }`, `FS_FEET`; the engine's ease, Wen Yao's ADR-249): the
+     v04 audit found planted feet snapping 0.6 - 0.8 m in a frame. The largest foot jump in a frame, off / 0.12 / 0.2
+     / 0.3 s: Benediction 0.79 / 0.32 / 0.24 / 0.36 m (its planted foot's peak slide 8.1 / 18.9 / 11.6 / 7.5 m/s),
+     Genuflect 0.62 / 0.35 / 0.20 / 0.20 m, Lauds 0.71 / 0.27 / 0.27 / 0.27 m. No timing changes.
+  5. THE TANKS SPARED BY HIS SHOCKS (`terrain.js` `SPARED` gains 'tank'): the phase-4 nova and every Dies Irae front
+     burst the corner tanks, so Offertory was never picked in phase 4. His barrage, his beams and the hero's blade
+     still burst them. The fetch finds a piece 13 m off (was 11: the corner tanks stand 16.7 m from the middle; it
+     found one about 1 % of the time).
+  6. DIES IRAE CRACKS MORE THAN IT BREAKS (`diesIrae.plate` 0.45 → 0.25): three slams from phase 4's start broke 74 %
+     of the floor, now 51 %; the press still gives out after about six.
+  7. THE POOLS' POSTURE ON HIM 70 → 35 a burn: his own pools broke him 6 - 9 % of phase 2 against a hero who never
+     struck. A pool still strips him and costs him his bar.
+  8. ROSARY BLOCKABLE: a blocked piston costs 6 of the guard, the last blow 34 (`GUARD.cost` would have been 16 / 52:
+     the guard broke at the seventh piston); a piston steps in 0.6 m (was 1.0: x the pursuit's 1.6 it caught a roller
+     out of a 4.2 m roll).
+  9. AND: weights toward the busier strings, the beams and the lone blows rarer; `chain` [0.65, 0.72, 0.8, 0.85],
+     `floorAfter` [16, 12, 10, 8]; the swarm, the pass, the barrage, the full burst and the gun open from 3 m (2.8 the
+     swarm); the Long Walk's cooldown 7; the Training's roles (`ROLES.foundry`); the pace meter.
+- **Consequences:** the pace meter (`TUNING.pressure.meter`, asserted by `tunePace`): each phase at least `rampMean`
+  [1, 1.04, 0.97, 0.98] x the one before in the seeds' mean, at least `minRate` [40, 46, 44, 48] cues a minute per
+  seed, no gap over `maxGap` [7, 5.2, 5.5, 6.5] s, the jet step at least 0.75 x as frequent as the phase before.
+  Measured: 47.7 / 53.8 / 53.7 / 55.4 cues a minute (phase 4 63.4 on the build before Dies Irae's plates: the seeded
+  fights part, so the floors are loose). The Training plays its 82 situations for him; Death is the one his phase-1
+  red (the never-lethal grab) cannot show: reported, not failed. A guarding or rolling bot that never strikes does
+  not kill him in 480 s; a striking one usually does.
+- **Alternatives turned down:** the faster phase scales (the table); a lower damage scale with them (x1.45: 1 of 3);
+  the step only in a breather (phase 4 never stepped); a 0.12 s or 0.3 s foot ease (the 0.12 s ease's own last jump
+  came near the floor at 19 m/s; 0.3 s moved Benediction's pop elsewhere).

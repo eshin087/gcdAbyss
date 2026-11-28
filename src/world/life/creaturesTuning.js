@@ -220,6 +220,7 @@ export const CREATURES_TUNE = Object.freeze({
       // (no crowns here: in the air they show against the dark grass, so their backs catch the moon)
       birds: { kind: 'small', kinds: ['deadTree'], r: [15, 34], groups: 4, perGroup: [2, 3], yK: 0.85, inK: 0.2, look: { flyColor: [0.3, 0.32, 0.38] } },
     }),
+    // (foundry: nothing alive in the mill; its sparks are the weather's embers)
     grove: Object.freeze({
       // they hang almost still, fewer
       fireflies: { n: 30, r: [10, 30], inner: 8, innerR: [7, 13], wander: 0.12, windK: 0 },

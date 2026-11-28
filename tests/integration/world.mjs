@@ -28,7 +28,7 @@ const { rigidBones } = await imp('src/render/rigidBatch.js');
 const { Colliders } = await imp('src/world/colliders.js');
 const { Scorch } = await imp('src/world/scorch.js');
 const { GroundFire } = await imp('src/world/fire.js');
-const { Scars } = await imp('src/world/scars.js');
+const { Scars, reseedMarks } = await imp('src/world/scars.js');
 const { Destructibles, STATE, reseedBreaks } = await imp('src/world/destructibles.js');
 const { BREAK, BLOW, FIRE, SCAR } = await imp('src/world/breakTuning.js');
 const { createForest } = await imp('src/world/forest.js');
@@ -45,6 +45,7 @@ const { createWindlessGrove } = await imp('src/world/windlessGrove.js');
 const { createScriptHall } = await imp('src/world/scriptHall.js');
 const { createHalcyonPlaza, PLAZA, CITY } = await imp('src/world/halcyonPlaza.js');
 const { createVeiledCrossing, CROSSING, VEIL, THROWABLE } = await imp('src/world/veiledCrossing.js');
+const { createLastFoundry } = await imp('src/world/lastFoundry.js');
 // (every level the game can load, and the training room: the bite scenario walks them all, so a new
 // level is checked without being named here)
 const { LEVELS } = await imp('src/levels/index.js');
@@ -442,14 +443,14 @@ const S = {
 
   // ---------------------------------------------------------------- the sets list their breakables
   sets() {
-    for (const [name, make, kinds] of [['forest', createForest, ['tree', 'deadTree', 'stone', 'boulder', 'flagstone', 'bone']], ['courtyard', createCourtyard, ['pillar', 'lantern']], ['throne', createThroneHall, ['shard', 'slab', 'hover', 'swords', 'banner', 'cairn', 'cart']], ['ring a', ringSet('a'), ['tile', 'post', 'butte', 'butteTop', 'banner', 'mud', 'hoodoo']], ['ring b', ringSet('b'), ['tile', 'post', 'butte', 'butteTop', 'terrace', 'banner']], ['ring c', ringSet('c'), ['tile', 'post', 'butte', 'butteTop', 'spire', 'cairn']], ['grove', createWindlessGrove, ['bamboo', 'graveSword', 'paving', 'flagstone', 'stele', 'lantern', 'boulder', 'post']], ['script hall', createScriptHall, ['tile', 'step', 'flagstone', 'pillar', 'wall', 'liftDoor', 'gate', 'bench', 'planter', 'watcher', 'post', 'screen', 'rack', 'dais', 'codePillar']], ['city', createHalcyonPlaza, ['car', 'lamp', 'sign', 'shopSign', 'screen', 'statue', 'statueHead', 'statueArm', 'towerBase', 'towerTop', 'blockFront', 'kiosk', 'barrier', 'bench', 'hydrant', 'trafficLight', 'bin', 'shelter', 'asphalt', 'sidewalk']], ['crossing', createVeiledCrossing, ['car', 'slab', 'towerTop', 'towerBase', 'ruin', 'fallenTower', 'bridgeDeck', 'bridgePier', 'bridgeSpan', 'gantry', 'gantryBeam', 'bus', 'tank', 'heap', 'lamp', 'signal', 'floatSlab', 'floatCar', 'floatCorner', 'asphalt', 'sidewalk', 'scramble']]]) {
+    for (const [name, make, kinds] of [['forest', createForest, ['tree', 'deadTree', 'stone', 'boulder', 'flagstone', 'bone']], ['courtyard', createCourtyard, ['pillar', 'lantern']], ['throne', createThroneHall, ['shard', 'slab', 'hover', 'swords', 'banner', 'cairn', 'cart']], ['ring a', ringSet('a'), ['tile', 'post', 'butte', 'butteTop', 'banner', 'mud', 'hoodoo']], ['ring b', ringSet('b'), ['tile', 'post', 'butte', 'butteTop', 'terrace', 'banner']], ['ring c', ringSet('c'), ['tile', 'post', 'butte', 'butteTop', 'spire', 'cairn']], ['grove', createWindlessGrove, ['bamboo', 'graveSword', 'paving', 'flagstone', 'stele', 'lantern', 'boulder', 'post']], ['script hall', createScriptHall, ['tile', 'step', 'flagstone', 'pillar', 'wall', 'liftDoor', 'gate', 'bench', 'planter', 'watcher', 'post', 'screen', 'rack', 'dais', 'codePillar']], ['city', createHalcyonPlaza, ['car', 'lamp', 'sign', 'shopSign', 'screen', 'statue', 'statueHead', 'statueArm', 'towerBase', 'towerTop', 'blockFront', 'kiosk', 'barrier', 'bench', 'hydrant', 'trafficLight', 'bin', 'shelter', 'asphalt', 'sidewalk']], ['crossing', createVeiledCrossing, ['car', 'slab', 'towerTop', 'towerBase', 'ruin', 'fallenTower', 'bridgeDeck', 'bridgePier', 'bridgeSpan', 'gantry', 'gantryBeam', 'bus', 'tank', 'heap', 'lamp', 'signal', 'floatSlab', 'floatCar', 'floatCorner', 'asphalt', 'sidewalk', 'scramble']], ['foundry', createLastFoundry, ['plate', 'flagstone', 'ladle', 'jibPost', 'jib', 'column', 'gantry', 'press', 'pressHead', 'conveyor', 'frame', 'tank', 'ingots', 'girder', 'slag', 'pipes', 'catwalk', 'furnace', 'wall']]]) {
       const { D, set, colliders, U } = build(make);
       const L = D.list;
       // (Cinderwood: 664 since every tree of the wall and the landmarks break, 2026-11-16; 183 on 2026-11-15,
       // 80 before. The duelists' arenas break everything but their landmarks since 2026-11-16: the
       // courtyard 78 → 456 (293 of them its floor's slabs), the crater 36 → 222 (105 of its floor's plates); 255 on 2026-11-22, its felled trunks
       // swapped for the challengers' graves, banners and carts round it)
-      const [lo, hi] = { forest: [20, 1900], courtyard: [380, 520], throne: [180, 280], 'ring a': [1, 5000], 'ring b': [1, 5000], 'ring c': [1, 5000], terrace: [300, 520], grove: [420, 900], 'script hall': [300, 520], city: [300, 460], crossing: [280, 520] }[name]; // (the grove: 788 since ADR-151's clumps, 2026-11-22; 536 before)
+      const [lo, hi] = { forest: [20, 1900], courtyard: [380, 520], throne: [180, 280], 'ring a': [1, 5000], 'ring b': [1, 5000], 'ring c': [1, 5000], terrace: [300, 520], grove: [420, 900], 'script hall': [300, 520], city: [300, 460], crossing: [280, 520], foundry: [440, 560] }[name]; // (the grove: 788 since ADR-151's clumps, 2026-11-22; 536 before)
       assert(L.length >= lo && L.length <= hi, `${name}: ${L.length} breakables (${lo}..${hi})`);
       for (const k of kinds) assert(L.some((b) => b.kind === k), `${name}: has a breakable ${k}`);
       if (name === 'forest') {
@@ -1152,6 +1153,9 @@ const S = {
 
   // ---------------------------------------------------------------- wreckage stays, stops nothing, sinks at the cap
   wreck() {
+    // (from a known point of the break stream: what the felled trunk does is drawn from it, and where the
+    // scenarios before left it decided whether the check below passed: green on one PR, red on the next)
+    reseedBreaks(0x51ed);
     const { D, world, game, colliders, step } = build();
     const t = D.list.find((b) => b.kind === 'deadTree' && !b.wall);
     const n0 = colliders.circles.length;
@@ -1160,7 +1164,9 @@ const S = {
     D.topple(t, 1, 0, 'boss');
     step(2);
     const e = D.wreck.live.find((w) => w.kind === 0);
-    assert(e && e.on && e.mesh.visible && t.stub.visible && Math.abs(e.x - t.x) < 1 && e.dx > 0.99, `a felled tree's trunk lies along its fall (${e?.len.toFixed(1)} m, from its stump)`);
+    // (it lands turned off its fall by up to the blow's own `yaw`, BREAK.fell, by design: ADR-128)
+    const yawMax = (BREAK.fell[t.fk] ?? BREAK.fell.blunt).yaw;
+    assert(e && e.on && e.mesh.visible && t.stub.visible && Math.abs(e.x - t.x) < 1 && e.dx >= Math.cos(yawMax) - 0.005, `a felled tree's trunk lies along its fall, turned at most its blow's ${yawMax} rad (${e?.len.toFixed(1)} m from its stump, ${(Math.acos(Math.min(1, e?.dx ?? 0)) || 0).toFixed(2)} rad off)`);
     assert(colliders.circles.length === n0, `its wreckage adds no collider (${n0 - t.colliders.length + 1} circles: the stump's only)`);
     const mx = e.x + e.dx * e.len * 0.6, mz = e.z + e.dz * e.len * 0.6;
     const pos = new THREE.Vector3(mx, 0, mz);
@@ -2534,6 +2540,9 @@ const S = {
       ['tail arc', -55, -20, { kind: 'dash', power: 1.2, dx: 1, dz: 0, len: 6, arc: true, r: 4 }, [[4, 0], [4 * Math.cos(0.75), 4 * Math.sin(0.75)], [4 * Math.cos(1.4), 4 * Math.sin(1.4)]], [[0, 0]]],
       ['step', -55, 0, { kind: 'step', power: 1.2, dx: 1, dz: 0 }, [[0, 0]], [[1.5, 0]]],
     ];
+    // (the marks' jagged shapes come from scars.js's own stream: from a known point, not where the scenarios before
+    // left it; a new level's marks once moved the cut's edge off its middle sample)
+    reseedMarks();
     for (const [name, x, z, o, inside, outside] of kinds) {
       const tin = inside.map(([u, v]) => sc.tornAt(x + u, z + v));
       const ylift0 = scars.marks.length;

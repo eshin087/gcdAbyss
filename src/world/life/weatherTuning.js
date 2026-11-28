@@ -162,6 +162,30 @@ export const WEATHER_TUNE = Object.freeze({
     },
   },
 
+  // the Last Foundry: sparks off the furnace and the pour carried across the floor in a loose faint
+  // stream of tiny dots (a few brighter), and now and then the smoke hangs thicker (a grey-out); the set's
+  // ambience writes the light every frame (sky false: the light by his phase is the set's)
+  foundry: {
+    calm: 'still',
+    sky: false,
+    firstHold: [6, 10],
+    spells: {
+      still: { hold: [35, 60], fade: [15, 25], next: [['sparks', 3], ['smoke', 2]], embers: 0.35 },
+      sparks: { hold: [14, 24], fade: [10, 16], next: [['still', 1]], windK: 1.3, embers: 1 },
+      smoke: { hold: [30, 50], fade: [20, 30], next: [['still', 1]], embers: 0.3, grey: 1 },
+    },
+    embers: {
+      rate: 22, upwind: [4, 18], band: 7, wander: [6, 0.11], y: [0.4, 2.2], carry: 1.4, drift: [0, -2.2], min: 2.5,
+      rise: [0.4, 1.0], gravity: -0.04, drag: 0.04, life: [6, 9], size: 0.28, sizeEnd: 0.2,
+      color: [0.95, 0.34, 0.06], colorEnd: [0.3, 0.06, 0.01], flicker: 0.4, glyph: "..'.",
+      bright: 0.18, brightColor: [2.3, 0.95, 0.2],
+    },
+    grey: {
+      rate: 14, area: [46, 34], y: [1.5, 8], fall: [0.15, 0.3], carry: 0.3, drift: [0, -0.3], life: [8, 12],
+      size: 0.26, color: [0.3, 0.27, 0.25], colorEnd: [0.14, 0.12, 0.11], alpha: 0.38, glyph: ".,'`",
+    },
+  },
+
   grove: {
     calm: 'still',
     spells: {

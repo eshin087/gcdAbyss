@@ -3,7 +3,7 @@
 // Run: node tests/integration/life.mjs . hang
 // The breakables are built here on the toolbox's world (its world mock has none), as world.js builds them.
 
-const HANGERS = { ring: 'banner', fox: 'charmPost', starless: 'banner' };
+const HANGERS = { ring: 'banner', fox: 'charmPost', starless: 'banner', foundry: 'ladle' };
 
 /** A level with its breakables, the living world `spec` on. */
 async function level(T, id, spec = 'wind') {

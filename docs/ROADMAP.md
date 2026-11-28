@@ -55,6 +55,10 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
   - [x] The hero's meters and the boss's never overlap: the top row is fitted to the screen (ADR-131)
   - [x] Two pad switches to try: PAD LAYOUT "guard on left" (one thumb cuts, the other parries) and HOLD ATTACK (ADR-131)
   - [ ] Owner's pick on the phone: which of the two becomes the default, where GUARD stands
+  - [x] SWIPE DODGE: a flick on the right half dodges that way (ADR-278)
+  - [x] Owner's verdict on SWIPE DODGE: liked, on by default; GUARD against the stick with its own padlock (ADR-278)
+  - [x] A second guard under ATTACK, quieter GUARD and padlocks, LEFT / RIGHT GUARD switches, PAD LAYOUT picks BLOCK's place (ADR-278)
+  - [ ] The swipe's numbers on the phone; a touch timing allowance if parries are still late
   - [ ] Phone ideas not built yet (ADR-131 lists them): the game drawn under the notch (viewport-fit=cover), a
         drag-to-place layout editor, a left-handed mirror, an "add to home screen" hint for full screen on iOS
 - [x] Owner approval; released as v0.4.0
@@ -214,6 +218,26 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Only the drawn letters uploaded, empty batches out of the frame; the step flash and the wake return outside their reach (`?lifeFast=0` = before)
 - [x] BENCH (`?perf`) reads the living world's share
 - [ ] The owner's BENCH on the iPhone and the laptop; the trees' wind vertex cost on a quiet GPU
+## M1.103 — A tenth level: the Last Foundry and the False Saint (2026-11-28, `enemies/false-saint`, ADR-285 – ADR-288)
+- [x] `?level=foundry`: a steel mill at night, the casting floor's 400 plates, the pour, four ladles on jib cranes,
+      the press, the line of unfinished frames, the furnace, gas tanks that burst; 492 breakables; the hazard surface
+      (`game.world.forest.foundry`: ladles, molten pools, tanks); the light by his phase; the `foundry` palette; the
+      living world's blocks; a cost row
+- [x] Anselm, the False Saint, on the duelist engine: one bar, four phases, 32 moves in four handlers (melee, boost,
+      arsenal, terrain) routed by `moves.js`, `footwork` / `takeHit` / `onMoment` hooks; COMBAT.md's floors; cyan
+      cosmetic; every projectile in the ledger (`fx.fly`); the pools burn him too
+- [x] His body: one rig, the disguise over the frame, the shell chipped where cuts land and never regrowing; the v04
+      pass (the face, the hair, the colours, open hands by the beat); his effects in the fire field (`saint`), 35 sounds
+- [x] The Lab (LOOKS `fsLook`, `fsLetters`, `fsMark`; his FIGHT buttons), the Training's roles, `saint.mjs`, the
+      tuning pass (whole fights against four mortal bots, the pace meter)
+- [ ] The owner's picks: `?fsLook`, `?fsLetters`, `?fsMark` (sheets in `docs/looks/foundry/`)
+- [ ] The owner's playtest, on the iPhone too
+- [ ] His reward: the owner has not chosen one; his own music (the Obsidian Throne's for now)
+- [ ] The arsenal's and the terrain's poses audited at the game camera; the press's ram stroke; Anathema's and
+      Thurible's pops
+- [ ] Verdict's ring after a perfect dodge of the pillar; a `fixed` Passing Bell the guard cannot clear; the tanks' and
+      the columns' damage through `d.hitPlayer`
+
 ## M1.102 — A new fight stance: the middle guard (2026-11-28, `player/stance-four`, ADR-275)
 - [x] Four fight holds as data behind `?hold=` (middle, high, sword fingers, low trailing), filmed close and far in one clip
 - [x] The owner's pick, A the middle guard, the default; ADR-207's hold `?hold=ref`; the Lab's `hold` row
@@ -1447,6 +1471,7 @@ map, the cost budget, `npm run perf`); its open items stay there. This list is o
 - [~] Fixed rewards per boss: the first, One Breath (the Sheathed's draw-slash, ADR-146), and the second, the Long Second (Xin Yi's lean, ADR-158), ship; the rest (techniques, weapons, abilities, elements); weapons of other lengths
   - [ ] Halcyon's reward: the owner has not chosen one yet (ADR-161)
   - [ ] Bai Wuji's reward: the owner has not chosen one yet (ADR-241)
+  - [ ] The False Saint's reward: the owner has not chosen one yet (ADR-285)
   - [ ] The Thousand-Body Fox's Paper Double (a decoy the foe strikes instead of the hero): recorded on the level, not usable (ADR-148); needs the technique slot, a button on every input, a target indirection in every boss's AI
       (the animator, the hit segment and the blade FX read `DIM`)
 - [ ] A hub that links the levels (the bonfire)

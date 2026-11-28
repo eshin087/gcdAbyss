@@ -10133,13 +10133,24 @@ async function scenarioTouch() {
     {
       const guard = B('guard'), root = cls('tc-root');
       assert(!!guard && !guard.classList.contains('tc-tile') && t.layout === 'classic' && t.holdAttack === false && t.padPoint('guard') === null, 'the default: one thumb (no GUARD on the left), no held attack');
+      assert(t.cyclePad('lguard') === true && t.padPoint('guard') !== null, 'LEFT GUARD → on: a GUARD beside the stick (the arrangement unchanged)');
       const lay = t.cyclePad('layout'), Gd = t.padPoint('guard'), A2 = t.padPoint('attack'), D2 = t.padPoint('dodge');
-      assert(lay === 'split' && root.classList.contains('split') && !t.padGeo.tiles.block && !!D2 && t.padPoint('block') === null, 'PAD LAYOUT → split: the cluster keeps ATTACK / HEAVY / DODGE, no BLOCK tile');
-      assert(Gd && Gd.x < innerWidth * 0.4 && Gd.x - t.guardGeo.w / 2 > t.stick.ox + 62 && near(A2.x, A.x, 1e-6), `GUARD stands right of the stick's ring (its middle ${Gd?.x.toFixed(0)} px in), ATTACK where it was`);
+      const Bs = t.padPoint('block');
+      assert(lay === 'split' && root.classList.contains('split') && !!t.padGeo.tiles.block && !!D2 && !!Bs && near(Bs.x, A2.x, 1) && Bs.y > A2.y + 40, 'PAD LAYOUT → split: ATTACK / HEAVY / DODGE and a second guard (BLOCK) right under ATTACK');
+      // (ADR-278: close by the ring, its left edge just over the ring's glyphs)
+      const gEdge = Gd ? Gd.x - t.guardGeo.w / 2 : NaN, ringEdge = t.stick.ox + 62 * t.fit;
+      assert(Gd && Gd.x < innerWidth * 0.4 && gEdge > ringEdge - 10 && gEdge <= ringEdge + 2 && near(A2.x, A.x, 1e-6), `GUARD stands right against the stick's ring (its left edge ${gEdge.toFixed(0)} px, the ring's ${ringEdge.toFixed(0)}), ATTACK where it was`);
       P('pointerdown', 50, Bk.x, Bk.y);
       assert(!held('@block') && (held('@heavy') || held('@dodge')), 'a touch where BLOCK stood goes to the nearest tile left, never to a guard');
       P('pointerup', 50, Bk.x, Bk.y);
       frames(1.4);
+      // the second guard under ATTACK (ADR-278) guards like the left one, and the thumb slides to it from ATTACK
+      P('pointerdown', 56, A2.x, A2.y);
+      P('pointermove', 56, Bs.x, Bs.y);
+      assert(held('@block') && B('block').classList.contains('on') && !held('@attack'), 'the second GUARD under ATTACK: a slide from ATTACK raises the guard');
+      P('pointerup', 56, Bs.x, Bs.y);
+      assert(!held('@block'), 'lifted: the guard drops');
+      frames(1.2);
       // the right thumb is on ATTACK, the left one taps GUARD: both held, and the guard has the hero
       settle(G); place(G, 6);
       const s0 = c('player:attack');
@@ -10160,6 +10171,38 @@ async function scenarioTouch() {
       assert(guard.classList.contains('low'), 'GUARD carries the guard meter too');
       p.guard = p.maxGuard;
       p.guardWait = 0;
+      // the padlock drags GUARD too (ADR-278; kept, RESET puts it back)
+      {
+        assert(!!cls('tc-guardlock'), 'GUARD has a padlock of its own');
+        cls('tc-guardlock').dispatch('pointerdown', { pointerType: 'touch', pointerId: 70 });
+        assert(t.editing, 'its padlock opens the lock');
+        const g0 = t.padPoint('guard');
+        touch('pointerdown', guard, 71, g0.x, g0.y);
+        touch('pointermove', guard, 71, g0.x + 30, g0.y - 20);
+        assert(!held('@block'), 'open: a drag on GUARD raises no guard');
+        touch('pointerup', guard, 71, g0.x + 30, g0.y - 20);
+        const g1 = t.padPoint('guard');
+        assert(near(g1.x, g0.x + 30, 1) && near(g1.y, g0.y - 20, 1), `GUARD followed the drag (${g0.x.toFixed(0)},${g0.y.toFixed(0)} → ${g1.x.toFixed(0)},${g1.y.toFixed(0)})`);
+        cls('tc-guardlock').dispatch('pointerdown', { pointerType: 'touch', pointerId: 72 });
+        const kept = JSON.parse(globalThis.localStorage?.getItem?.('gcd.touchPad') ?? 'null')?.goff ?? [t.guardOff.x, t.guardOff.y];
+        assert(!t.editing && kept[0] > 20, `shut: GUARD kept where it was dragged (${JSON.stringify(kept)})`);
+        touch('pointerdown', guard, 73, g1.x, g1.y);
+        assert(held('@block'), 'shut: GUARD guards again, where it now is');
+        touch('pointerup', guard, 73, g1.x, g1.y);
+        t.resetPadOffset();
+        assert(near(t.padPoint('guard').x, g0.x, 1e-6), 'RESET puts GUARD back too');
+        frames(0.5);
+      }
+      // each guard can be turned off (ADR-278); one always stays; the arrangement can be swapped back
+      {
+        assert(t.cyclePad('rguard') === false && !t.padGeo.tiles.block && t.padPoint('block') === null && B('block').style.display === 'none' && !!t.padPoint('guard'), 'RIGHT GUARD → off: no BLOCK tile in the cluster, the left GUARD stays');
+        assert(t.cyclePad('lguard') === false && t.rightGuard === true && !!t.padGeo.tiles.block && t.padPoint('guard') === null, 'LEFT GUARD → off while the right is off: the right comes back (one always stays)');
+        assert(t.cyclePad('layout') === 'classic' && t.padPoint('block').x < t.padPoint('attack').x - 40 && near(t.padPoint('block').y, t.padPoint('attack').y, 1), 'PAD LAYOUT → classic: BLOCK beside ATTACK again');
+        t.cyclePad('layout');
+        t.cyclePad('lguard');
+        assert(t.layout === 'split' && t.leftGuard && t.rightGuard, 'both guards and the split arrangement restored');
+        frames(0.3);
+      }
       // ---- HOLD ATTACK: off, a held ATTACK is one cut; on, the thumb rests there and he keeps cutting
       settle(G); place(G, 6);
       let n0 = c('player:attack');
@@ -10206,6 +10249,7 @@ async function scenarioTouch() {
       frames(0.6);
       assert(c('player:attack') === n0 && !held('@attack'), 'ATTACK lifted: the string ends');
       t.cyclePad('hold');
+      t.cyclePad('lguard');
       assert(t.cyclePad('layout') === 'classic' && !root.classList.contains('split') && !!t.padGeo.tiles.block && t.padPoint('guard') === null && !t.holdAttack, 'cycled back: one thumb, no held attack');
     }
   }
@@ -10273,6 +10317,48 @@ async function scenarioTouch() {
   fireWin('pointerup', { pointerType: 'touch', pointerId: 31 });
   fireWin('pointerup', { pointerType: 'touch', pointerId: 32 });
   assert(rig.targetDistance < z1 - 3 && rig.targetDistance >= CONFIG.camera.mobileMinDistance, `pinch apart → closer (${z1} → ${rig.targetDistance.toFixed(1)} m)`);
+  // SWIPE DODGE (ADR-271): off by default; on, a quick flick on the bare right half dodges the way it
+  // flicked (over the stick), once per flick; the left half, a slow drag and a pinch do nothing
+  {
+    const flick = (id, x0, y0, dx, dy) => {
+      fireWin('pointerdown', { pointerType: 'touch', pointerId: id, target: G.canvas, clientX: x0, clientY: y0 });
+      fireWin('pointermove', { pointerType: 'touch', pointerId: id, clientX: x0 + dx * 0.3, clientY: y0 + dy * 0.3 });
+      fireWin('pointermove', { pointerType: 'touch', pointerId: id, clientX: x0 + dx, clientY: y0 + dy });
+      fireWin('pointermove', { pointerType: 'touch', pointerId: id, clientX: x0 + dx * 2, clientY: y0 + dy * 2 });
+      fireWin('pointerup', { pointerType: 'touch', pointerId: id });
+    };
+    frames(0.6);
+    const r0 = c('player:roll');
+    assert(t.swipeDodge === true, 'SWIPE DODGE: on by default (the owner, ADR-278)');
+    flick(42, 600, 200, -60, 0);
+    frames(0.05);
+    const d = p.rollDir;
+    assert(c('player:roll') === r0 + 1 && p.state === 'roll' && d.x < -0.95, `a flick left on the right half → one dodge, left (${c('player:roll') - r0}, ${p.state}, dir ${d.x.toFixed(2)},${d.z.toFixed(2)})`);
+    frames(1.0);
+    flick(43, 600, 200, 0, 60);
+    frames(0.05);
+    assert(c('player:roll') === r0 + 2 && p.rollDir.z > 0.95, `a flick down → a dodge toward the camera (dir ${p.rollDir.x.toFixed(2)},${p.rollDir.z.toFixed(2)})`);
+    frames(1.0);
+    flick(44, 200, 200, -60, 0); // (the left half of the bare screen)
+    frames(0.05);
+    assert(c('player:roll') === r0 + 2, 'the left half: no dodge');
+    fireWin('pointerdown', { pointerType: 'touch', pointerId: 45, target: G.canvas, clientX: 600, clientY: 200 });
+    fireWin('pointermove', { pointerType: 'touch', pointerId: 45, clientX: 610, clientY: 200 });
+    fireWin('pointerdown', { pointerType: 'touch', pointerId: 46, target: G.canvas, clientX: 700, clientY: 200 });
+    fireWin('pointermove', { pointerType: 'touch', pointerId: 45, clientX: 540, clientY: 200 });
+    fireWin('pointerup', { pointerType: 'touch', pointerId: 45 });
+    fireWin('pointerup', { pointerType: 'touch', pointerId: 46 });
+    frames(0.05);
+    assert(c('player:roll') === r0 + 2, 'a second finger (a pinch) is no swipe');
+    assert(t.cyclePad('swipe') === false, 'the pause switch turns it off');
+    frames(0.6);
+    flick(47, 600, 200, -60, 0);
+    frames(0.1);
+    assert(c('player:roll') === r0 + 2, 'off: a flick does not dodge');
+    t.cyclePad('swipe');
+    frames(1.0);
+    rig.targetDistance = z1;
+  }
   // explore at the bonfire: the "[E] Rest" prompt is a tap target
   assert(game.flow.debug.toState('explore') === true, 'toState(explore)');
   frames(0.3);

@@ -271,6 +271,7 @@ export class Player {
     this.rollBack = false;
     this.rollLean = false; // (a backstep that is the Long Second: TUNE.lean)
     this.rollDir = { x: 0, z: -1 };
+    this.rollAim = { x: 0, z: 0, set: false }; // a buffered dodge's own direction (a touch swipe; ADR-271)
     this.healApplied = false;
     this.burnT = 0;
     this.burnAcc = 0;
@@ -971,7 +972,16 @@ export class Player {
     I.z = -fin(m?.y); // W = north = −Z
     I.len = Math.hypot(I.x, I.z);
     I.sprint = inp.act('sprint');
-    if (inp.actPressed('dodge')) this._buffer('roll');
+    if (inp.actPressed('dodge')) {
+      this._buffer('roll');
+      // a swipe says where to dodge (input.dodgeToward): it rides with the buffered press, over the stick
+      const a = inp.dodgeAim, R = this.rollAim;
+      R.set = !!a?.set;
+      if (R.set) {
+        R.x = fin(a.x);
+        R.z = -fin(a.y);
+      }
+    }
     if (inp.actPressed('flask')) this._buffer('heal');
     if (inp.actPressed('lockOn')) this._toggleLock();
 
@@ -2846,7 +2856,9 @@ export class Player {
   }
 
   _startRoll() {
-    const I = this.intent;
+    const A = this.rollAim;
+    const I = A.set ? { x: A.x, z: A.z, len: 1 } : this.intent;
+    A.set = false;
     const back = I.len <= 0.1;
     // THE LONG SECOND (ADR-158): from a held guard, no direction: the lean in place
     const lean = back && (this.state === 'block' || this.rmb.held) && !!this.game.unlocks?.has?.('longSecond');

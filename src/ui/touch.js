@@ -19,7 +19,9 @@ import { aimWithoutCursor } from './aim.js';
 // (ADR-131, both off by default): PAD LAYOUT 'split' moves the guard to the left hand (a GUARD button
 // beside the stick; the right cluster keeps ATTACK, HEAVY and DODGE), and HOLD ATTACK makes a thumb
 // that rests on ATTACK keep cutting (input.pulse, CONFIG.touch.hold). ?pad=split|classic and
-// ?hold=1|0 in the URL set them for one page load.
+// ?hold=1|0 in the URL set them for one page load. SWIPE DODGE (ADR-271, a third switch there, ?swipe=1|0):
+// a quick flick on the bare right half of the screen dodges that way (input.dodgeToward), the DODGE
+// tile stays.
 // Aim: in a fight with the dragon targetable (and within CONFIG.touch.autoAimRange) game.mouseGround
 // is put on its lock point (auto-aim); otherwise it sits CONFIG.touch.aimDistance m ahead of the hero
 // along the last stick direction. Taps on the bare screen dismiss "press any key" screens (title,
@@ -43,7 +45,7 @@ const BUTTONS = [
   { id: 'heavy', code: '@heavy', glyph: '‡', label: 'HEAVY', sub: 'hold: charge', tile: true },
   { id: 'block', code: '@block', glyph: '[#]', label: 'BLOCK', sub: 'tap: parry', tile: true },
   { id: 'dodge', code: '@dodge', glyph: '»', label: 'DODGE', tile: true },
-  { id: 'guard', code: '@block', glyph: '[#]', label: 'GUARD', sub: 'tap: parry' }, // (PAD LAYOUT split: the left hand)
+  { id: 'guard', code: '@block', glyph: '[#]', label: 'BLOCK', sub: 'tap: parry' }, // (PAD LAYOUT split: the left hand)
   { id: 'flask', code: '@flask', glyph: '◆', label: 'FLASK' },
   { id: 'lock', code: '@lockOn', glyph: '◎', label: 'LOCK' },
   { id: 'pause', code: '@pause', glyph: '||', label: '' },
@@ -68,16 +70,37 @@ function urlTouch() {
   }
 }
 
+/** ?leftLook=a|b|c: how the stick and the left BLOCK are drawn (ADR-278; the owner picked c, glyphs only). */
+export const LEFT_LOOKS = ['a', 'b', 'c'];
+function urlLeftLook() {
+  try {
+    const v = new URLSearchParams(String(globalThis.location?.search ?? '')).get('leftLook');
+    return LEFT_LOOKS.includes(v) ? v : 'c';
+  } catch {
+    return 'c';
+  }
+}
+
 /** ?pad=split|classic and ?hold=1|0: the pad switches for this page load (a link to try one). */
 function urlPad() {
-  const o = { layout: null, hold: null };
+  const o = { layout: null, hold: null, swipe: null, lguard: null, rguard: null };
   try {
     const s = globalThis.location?.search;
     if (typeof s !== 'string') return o;
     const q = new URLSearchParams(s);
     const l = (q.get('pad') || '').toLowerCase();
-    if (PAD_LAYOUT.includes(l)) o.layout = l;
+    // ?pad=split: the left BLOCK on (the owner: with BLOCK beside ATTACK and DODGE under it, so the
+    // arrangement stays the player's); ?pad=classic: the left BLOCK off; ?pad=under: BLOCK under ATTACK
+    if (l === 'split') o.lguard = true;
+    else if (l === 'classic') {
+      o.lguard = false;
+      o.layout = 'classic';
+    } else if (l === 'under') o.layout = 'split';
+    const flag = (k) => (q.has(k) ? !['0', 'false', 'off'].includes((q.get(k) || '').toLowerCase()) : null);
+    if (flag('lguard') !== null) o.lguard = flag('lguard');
+    if (flag('rguard') !== null) o.rguard = flag('rguard');
     if (q.has('hold')) o.hold = !['0', 'false', 'off'].includes((q.get('hold') || '').toLowerCase());
+    if (q.has('swipe')) o.swipe = !['0', 'false', 'off'].includes((q.get('swipe') || '').toLowerCase());
   } catch {
     /* no URL: nothing asked */
   }
@@ -138,18 +161,29 @@ export class TouchControls {
     this.padPos = 'mid';
     this.padSize = 'm';
     this.padOff = { x: 0, y: 0 }; // the player's drag (px at fit 1: + left, + up), kept
+    this.guardOff = { x: 0, y: 0 }; // split: GUARD's own drag (px at fit 1: + right, + up), kept
+    this._gdrag = null; // { id, x, y, ox, oy } while a finger drags GUARD
     this.editing = false; // the padlock is open: a drag on the pad moves it
     this._drag = null; // { id, x, y, ox, oy } while a finger drags the pad
     this.fit = 1; // the touch layer's scale from the screen (CONFIG.touch.pad.fit)
-    this.layout = 'classic'; // PAD_LAYOUT: 'split' = the guard on the left hand
+    this.layout = 'classic'; // PAD_LAYOUT, the right cluster's arrangement: 'classic' BLOCK beside ATTACK, DODGE under; 'split' DODGE beside, BLOCK under
+    this.leftLook = urlLeftLook(); // ?leftLook=a|b|c (default c, the owner's pick)
+    this.leftGuard = false; // the GUARD button beside the stick (ADR-278: its own switch)
+    this.rightGuard = true; // the BLOCK tile in the right cluster (never both off)
     this.holdAttack = false; // a held ATTACK keeps cutting
+    this.swipeDodge = true; // SWIPE DODGE (on by default, the owner's pick): a flick on the bare right half dodges that way
+    this.swipes = new Map(); // pointerId → { x, y, t, done } (bare-screen fingers on the right half)
     this.guardGeo = null; // split: the GUARD button { x, y, w, h } (its middle, client px)
     this._hold = { t: 0, next: 0, quiet: 0 };
     this._peek = false;
     this._loadPad();
     const asked = urlPad();
     if (asked.layout) this.layout = asked.layout;
+    if (asked.lguard !== null) this.leftGuard = asked.lguard;
+    if (asked.rguard !== null) this.rightGuard = asked.rguard;
+    if (!this.leftGuard && !this.rightGuard) this.rightGuard = true;
     if (asked.hold !== null) this.holdAttack = asked.hold;
+    if (asked.swipe !== null) this.swipeDodge = asked.swipe;
     this._errors = 0;
 
     const on = (target, name, fn, opts) => target?.addEventListener?.(name, (e) => this._guard(name, fn, e), opts);
@@ -334,23 +368,32 @@ export class TouchControls {
   }
 
   /** Step the cluster's placement ('pos': low / mid / high), its size ('size': s / m / l), its
-   *  layout ('layout': classic / split) or the held attack ('hold': off / on); kept. */
+   *  layout ('layout': classic / split), the held attack ('hold': off / on) or the swipe dodge
+   *  ('swipe': off / on); kept. */
   cyclePad(what) {
     if (what === 'size') this.padSize = PAD_SIZE[(PAD_SIZE.indexOf(this.padSize) + 1) % PAD_SIZE.length];
-    else if (what === 'layout') {
+    else if (what === 'layout' || what === 'lguard' || what === 'rguard') {
       this._releaseControls(); // every button is somewhere else now: nothing stays held
-      this.layout = PAD_LAYOUT[(PAD_LAYOUT.indexOf(this.layout) + 1) % PAD_LAYOUT.length];
+      if (what === 'layout') this.layout = PAD_LAYOUT[(PAD_LAYOUT.indexOf(this.layout) + 1) % PAD_LAYOUT.length];
+      else if (what === 'lguard') {
+        this.leftGuard = !this.leftGuard;
+        if (!this.leftGuard) this.rightGuard = true; // (one guard stays)
+      } else {
+        this.rightGuard = !this.rightGuard;
+        if (!this.rightGuard) this.leftGuard = true;
+      }
     } else if (what === 'hold') this.holdAttack = !this.holdAttack;
+    else if (what === 'swipe') this.swipeDodge = !this.swipeDodge;
     else this.padPos = PAD_POS[(PAD_POS.indexOf(this.padPos) + 1) % PAD_POS.length];
     this._savePad();
     this._padLayout();
     if (this.stick.id === null) this._restStick();
-    return what === 'size' ? this.padSize : what === 'layout' ? this.layout : what === 'hold' ? this.holdAttack : this.padPos;
+    return what === 'size' ? this.padSize : what === 'layout' ? this.layout : what === 'lguard' ? this.leftGuard : what === 'rguard' ? this.rightGuard : what === 'hold' ? this.holdAttack : what === 'swipe' ? this.swipeDodge : this.padPos;
   }
 
   _savePad() {
     try {
-      const o = { pos: this.padPos, size: this.padSize, layout: this.layout, hold: this.holdAttack, off: [Math.round(this.padOff.x), Math.round(this.padOff.y)] };
+      const o = { v: 2, pos: this.padPos, size: this.padSize, layout: this.layout, lg: this.leftGuard, rg: this.rightGuard, hold: this.holdAttack, sw: this.swipeDodge, off: [Math.round(this.padOff.x), Math.round(this.padOff.y)], goff: [Math.round(this.guardOff.x), Math.round(this.guardOff.y)] };
       globalThis.localStorage?.setItem?.(PAD_KEY, JSON.stringify(o));
     } catch {
       /* private mode: the choice lasts for this page */
@@ -364,6 +407,7 @@ export class TouchControls {
     this._releaseControls();
     this.editing = on;
     this._drag = null;
+    this._gdrag = null;
     const u = this.ui;
     if (u) {
       u.root.classList.toggle('editing', on);
@@ -371,6 +415,7 @@ export class TouchControls {
         u.lockBtn.innerHTML = LOCK_SVG(on);
         u.lockBtn.setAttribute?.('aria-label', on ? 'Lock the controls here' : 'Move the controls');
       }
+      if (u.guardLock) u.guardLock.innerHTML = LOCK_SVG(on);
     }
     if (!on) this._savePad();
     return on;
@@ -380,6 +425,8 @@ export class TouchControls {
   resetPadOffset() {
     this.padOff.x = 0;
     this.padOff.y = 0;
+    this.guardOff.x = 0;
+    this.guardOff.y = 0;
     this._savePad();
     this._padLayout();
     if (this.stick.id === null) this._restStick();
@@ -406,8 +453,19 @@ export class TouchControls {
       const o = JSON.parse(globalThis.localStorage?.getItem?.(PAD_KEY) ?? 'null');
       if (PAD_POS.includes(o?.pos)) this.padPos = o.pos;
       if (PAD_SIZE.includes(o?.size)) this.padSize = o.size;
-      if (PAD_LAYOUT.includes(o?.layout)) this.layout = o.layout;
+      // (v2, ADR-278: a pad saved before kept 'split' for the left guard; the arrangement it meant is BLOCK
+      // under ATTACK, the owner's swap puts BLOCK beside it again, so an old save takes the default)
+      if (PAD_LAYOUT.includes(o?.layout) && o?.v === 2) this.layout = o.layout;
+      // (a pad saved before the guards had their own switches: 'split' was the guard on the left)
+      this.leftGuard = typeof o?.lg === 'boolean' ? o.lg : o?.layout === 'split';
+      if (typeof o?.rg === 'boolean') this.rightGuard = o.rg;
+      if (!this.leftGuard && !this.rightGuard) this.rightGuard = true;
       if (typeof o?.hold === 'boolean') this.holdAttack = o.hold;
+      if (typeof o?.sw === 'boolean') this.swipeDodge = o.sw;
+      if (Array.isArray(o?.goff)) {
+        this.guardOff.x = fin(Number(o.goff[0]));
+        this.guardOff.y = fin(Number(o.goff[1]));
+      }
       if (Array.isArray(o?.off)) {
         this.padOff.x = fin(Number(o.off[0]));
         this.padOff.y = fin(Number(o.off[1]));
@@ -454,11 +512,13 @@ export class TouchControls {
     const k = fin(P.size[this.padSize], 1) * fit;
     const places = (h > w && P.posPortrait) || P.pos;
     const pos = places[this.padPos] ?? places.mid;
-    const split = this.layout === 'split' && !!P.split;
+    const split = this.layout === 'split' && !!P.split; // (the arrangement)
+    const lguard = !!this.leftGuard && !!P.split; // (the GUARD beside the stick)
     const from = split ? P.split.tiles : P.tiles;
     const tiles = {};
     let W = 0, H = 0;
     for (const id in from) {
+      if (id === 'block' && !this.rightGuard) continue; // (no BLOCK tile: the player turned it off)
       const t = from[id];
       tiles[id] = [t.x * k, t.y * k, (t.x + t.w) * k, (t.y + t.h) * k];
       W = Math.max(W, tiles[id][2]);
@@ -477,13 +537,22 @@ export class TouchControls {
       this.padOff.y = (py - pos[1] * fit) / fit;
     }
     this.padGeo = { k, cx: w - px, cy: h - py, reach, stick: P.stick * k, tiles };
-    // split: GUARD beside the stick's ring (held upright: above it), on the cluster's bottom line
+    // the left GUARD beside the stick's ring (held upright: above it), on the cluster's bottom line
     let guard = null;
-    if (split) {
+    if (lguard) {
       const rest = this._stickRest(), up = h > w, g = (up && P.split.guardPortrait) || P.split.guard;
-      const gw = g.w * k, gh = g.h * k;
-      const left = up ? Math.max(8, rest.x - gw / 2) : rest.x + RING_R * fit + fin(g.gap, 14);
-      const bottom = up ? h - rest.y + RING_R * fit + fin(g.lift, 14) : py + fin(g.y) * k;
+      // (landscape: centred on the stick, ADR-278; look b: the stick's square tile's height, against its edge)
+      const pair = this.leftLook === 'b' && !up;
+      const gw = g.w * k, gh = pair ? 128 * fit : g.h * k;
+      const left0 = up ? Math.max(8, rest.x - gw / 2) : pair ? rest.x + 64 * fit : rest.x + RING_R * fit + fin(g.gap, 14) * fit;
+      const bottom0 = up ? h - rest.y + RING_R * fit + fin(g.lift, 14) * fit : h - rest.y - gh / 2;
+      // the player's drag (the padlock open), kept on the left half and clear of the top
+      const left = Math.min(Math.max(left0 + this.guardOff.x * fit, 4), Math.max(4, w * 0.5 - gw));
+      const bottom = Math.min(Math.max(bottom0 + this.guardOff.y * fit, 4), Math.max(4, h - gh - 52 * fit));
+      if (this.guardOff.x || this.guardOff.y) {
+        this.guardOff.x = (left - left0) / fit;
+        this.guardOff.y = (bottom - bottom0) / fit;
+      }
       guard = { left, bottom, w: gw, h: gh };
       this.guardGeo = { x: left + gw / 2, y: h - bottom - gh / 2, w: gw, h: gh };
     } else this.guardGeo = null;
@@ -497,12 +566,22 @@ export class TouchControls {
     setVar(u.root, '--tc-k', k.toFixed(3));
     setVar(u.root, '--tc-f', fit.toFixed(3));
     u.root.classList.toggle('split', split);
+    u.root.classList.toggle('lguard', lguard);
     const gs = this.btn?.guard?.el.style;
     if (guard && gs) {
       gs.left = px2(guard.left);
       gs.bottom = px2(guard.bottom);
       gs.width = px2(guard.w);
       gs.height = px2(guard.h);
+    }
+    // GUARD's own padlock: over its top-right corner (the same lock as the pad's)
+    const gl = u.guardLock?.style;
+    if (guard && gl) {
+      const lw2 = Math.max(22, 26 * fit);
+      gl.left = px2(guard.left + guard.w - lw2 * 0.65);
+      gl.bottom = px2(guard.bottom + guard.h - lw2 * 0.35);
+      gl.width = px2(lw2);
+      gl.height = px2(lw2);
     }
     for (const id in tiles) {
       const r = tiles[id], s = this.btn?.[id]?.el.style;
@@ -512,6 +591,7 @@ export class TouchControls {
       s.width = px2(r[2] - r[0]);
       s.height = px2(r[3] - r[1]);
     }
+    if (this.btn?.block) this.btn.block.el.style.display = tiles.block ? '' : 'none'; // (RIGHT GUARD off: no BLOCK tile)
     const f = fl, fs = this.btn?.flask?.el.style;
     if (f && fs) {
       fs.right = px2(px + f.x * k);
@@ -582,7 +662,7 @@ export class TouchControls {
       injectTouchStyle();
       const host = document.getElementById?.('ui') ?? document.body;
       if (!host) return;
-      const root = el('div', 'tc-root off', null, host);
+      const root = el('div', `tc-root off look-${this.leftLook}`, null, host);
       root.addEventListener('contextmenu', (e) => e.preventDefault?.());
 
       // left thumb: capture zone + the floating ASCII stick
@@ -612,19 +692,25 @@ export class TouchControls {
       this._bindPad(pad);
 
       // the padlock: tap to move the right-hand controls (drag the pad), tap again to keep them there
-      const lockBtn = el('button', 'tc-padlock', null, root);
-      lockBtn.type = 'button';
-      lockBtn.tabIndex = -1;
-      lockBtn.innerHTML = LOCK_SVG(false);
-      lockBtn.setAttribute?.('aria-label', 'Move the controls');
-      lockBtn.addEventListener('pointerdown', (e) =>
-        this._guard('padlock', () => {
-          e.preventDefault?.();
-          e.stopPropagation?.();
-          if (this._live()) this.setEditing(!this.editing);
-        }, e),
-      );
-      lockBtn.addEventListener('click', (e) => e.preventDefault?.());
+      // (split: GUARD has one too, ADR-278; the two are one lock: open, the pad and GUARD both drag)
+      const padlock = (cls) => {
+        const b = el('button', cls, null, root);
+        b.type = 'button';
+        b.tabIndex = -1;
+        b.innerHTML = LOCK_SVG(false);
+        b.setAttribute?.('aria-label', 'Move the controls');
+        b.addEventListener('pointerdown', (e) =>
+          this._guard('padlock', () => {
+            e.preventDefault?.();
+            e.stopPropagation?.();
+            if (this._live()) this.setEditing(!this.editing);
+          }, e),
+        );
+        b.addEventListener('click', (e) => e.preventDefault?.());
+        return b;
+      };
+      const lockBtn = padlock('tc-padlock');
+      this.ui.guardLock = padlock('tc-padlock tc-guardlock');
       const editHint = el('div', 'tc-edit-hint', null, root);
       el('span', 't', 'DRAG TO MOVE', editHint);
       const reset = el('button', 'tc-edit-reset', 'RESET', editHint);
@@ -676,9 +762,33 @@ export class TouchControls {
       } catch {
         /* synthetic pointer: capture is a nicety */
       }
+      if (this.editing && def.id === 'guard') {
+        // the padlock is open: GUARD is a piece to drag, not a button
+        if (!this._gdrag) this._gdrag = { id: e.pointerId, x: fin(e.clientX), y: fin(e.clientY), ox: this.guardOff.x, oy: this.guardOff.y };
+        return;
+      }
       this._press(rec, e.pointerId);
     };
-    const up = (e) => this._release(rec, e.pointerId);
+    const up = (e) => {
+      if (this._gdrag && this._gdrag.id === e.pointerId) {
+        this._gdrag = null;
+        this._savePad();
+        return;
+      }
+      this._release(rec, e.pointerId);
+    };
+    if (def.id === 'guard') {
+      b.addEventListener('pointermove', (e) =>
+        this._guard('guard', () => {
+          const D = this._gdrag;
+          if (!D || D.id !== e.pointerId) return;
+          const f = Math.max(0.1, this.fit);
+          this.guardOff.x = D.ox + (fin(e.clientX, D.x) - D.x) / f;
+          this.guardOff.y = D.oy - (fin(e.clientY, D.y) - D.y) / f;
+          this._padLayout();
+        }, e),
+      );
+    }
     b.addEventListener('pointerdown', (e) => this._guard(def.id, down, e));
     for (const n of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(n, (e) => this._guard(def.id, up, e));
     b.addEventListener('contextmenu', (e) => e.preventDefault?.());
@@ -943,12 +1053,54 @@ export class TouchControls {
     } else if (PLAY.has(st)) {
       this.pinch.set(e.pointerId, { x: fin(e.clientX), y: fin(e.clientY) });
       this.pinchD0 = 0;
+      // SWIPE DODGE: a finger on the bare right half may be a flick; a second bare finger is a pinch
+      if (this.pinch.size > 1) this.swipes.clear();
+      else if (this.swipeDodge && this._live() && fin(e.clientX) >= fin(globalThis.innerWidth, 800) * fin(CONFIG.touch.swipe?.from, 0.5)) {
+        this.swipes.set(e.pointerId, { x: fin(e.clientX), y: fin(e.clientY), t: this._now(), done: false });
+      }
     }
+  }
+
+  _now() {
+    const p = globalThis.performance;
+    return typeof p?.now === 'function' ? p.now() / 1000 : Date.now() / 1000;
+  }
+
+  /** A bare-screen finger on the right half moved: a quick enough flick dodges its way, once. */
+  _swipeMove(e) {
+    const S = this.swipes.get(e?.pointerId);
+    if (!S || S.done) return;
+    const W = CONFIG.touch.swipe ?? {};
+    if (!this._live() || this._now() - S.t > fin(W.time, 0.2)) {
+      this.swipes.delete(e.pointerId); // too slow: a drag, not a flick
+      return;
+    }
+    const dx = fin(e.clientX, S.x) - S.x, dy = fin(e.clientY, S.y) - S.y;
+    if (Math.hypot(dx, dy) < fin(W.dist, 30) * Math.max(0.5, this.fit)) return;
+    S.done = true;
+    this.game.input?.dodgeToward?.(dx, -dy); // screen y down → the move axis's y up (north)
+    this._swipeMark(S.x, S.y, dx, dy);
+  }
+
+  /** The flick's mark: a short ASCII streak where the thumb went, gone in a moment. */
+  _swipeMark(x, y, dx, dy) {
+    const root = this.ui?.root;
+    if (!root) return;
+    let m = this.ui.swipeEl;
+    if (!m) m = this.ui.swipeEl = el('div', 'tc-swipe', '»»»', root);
+    const a = (Math.atan2(dy, dx) * 180) / Math.PI;
+    m.style.left = `${Math.round(x)}px`;
+    m.style.top = `${Math.round(y)}px`;
+    m.style.transform = `translate(-10%, -50%) rotate(${a.toFixed(0)}deg)`;
+    m.classList.remove('on');
+    void m.offsetWidth; // restart the fade
+    m.classList.add('on');
   }
 
   _onMove(e) {
     const p = this.pinch.get(e?.pointerId);
     if (!p) return;
+    this._swipeMove(e);
     p.x = fin(e.clientX, p.x);
     p.y = fin(e.clientY, p.y);
     if (this.pinch.size !== 2) return;
@@ -969,6 +1121,7 @@ export class TouchControls {
   _onUp(e) {
     const id = e?.pointerId;
     if (this.pinch.delete(id)) this.pinchD0 = 0;
+    this.swipes.delete(id);
     this._tapUp(e);
   }
 
@@ -1004,6 +1157,7 @@ export class TouchControls {
     if (this.stick.id !== null || this.stick.sprint) this._stickRelease();
     this.pinch.clear();
     this.pinchD0 = 0;
+    this.swipes.clear();
   }
 
   _releaseAll() {

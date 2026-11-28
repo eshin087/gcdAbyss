@@ -218,6 +218,6 @@ export const FAUNA_TUNE = Object.freeze({
       },
     }),
     // starless: nothing alive. grove: stillness (the fireflies hang; nothing runs). code: an indoor
-    // hall of falling script: nothing alive.
+    // hall of falling script: nothing alive. foundry: a mill no one is left to feed: nothing alive.
   }),
 });

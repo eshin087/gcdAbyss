@@ -74,6 +74,8 @@ export const LAMPS_TUNING = Object.freeze({
   // white (steel: the fire slot is his Crimson Cast's in this fight); nothing else to light. Their
   // lights are cold and small
   veil: level({ kind: 'steel', start: 3, fight: 0, phase: [0, 0, 0, 0], flame: { ...DEFAULT.flame, rate: 10, heat: [0.6, 0.78] }, light: { ...DEFAULT.light, max: 2, color: [0.6, 0.66, 0.8], colorVoid: [0.6, 0.66, 0.8], intensity: 1.4, radius: 6 } }),
+  // the Last Foundry: no lanterns; its light is the furnace's, the pour's and his phase's (the set's ambience)
+  foundry: level({ start: 0, fight: 0, phase: [0, 0, 0, 0, 0] }),
 });
 
 export const lampsTuning = (id) => LAMPS_TUNING[id] ?? LAMPS_TUNING.DEFAULT;

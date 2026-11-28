@@ -4,12 +4,44 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-One hundred and forty-seven pieces of work since 0.4.0:
+One hundred and forty-eight pieces of work since 0.4.0:
 - **One kind of parry** (2026-11-28, ADR-279). *Changed:* every parry is now a perfect parry, anywhere in the
   parry window: the same look, freeze and rewards every time (more posture damage, the counter cut, a bullet sent
   back, a count toward the deathblow). Before, a press 0.20 - 0.22 s early was a plain parry with a different look.
   So Bai Wuji's barrier now opens on every parry, and every parried shot flies back at the one who fired it.
   `?parry=two` gives the two kinds back (the Lab's `parry`).
+- **A tenth level: the Last Foundry and the False Saint** (2026-11-28, ADR-285 – ADR-288). *Added:* a tenth level,
+  `?level=foundry` (also `saint`, `falsesaint`, `anselm`, `mill`, `machine`; the title screen lists it and the boss
+  rush ends there). **The Last Foundry**: a steel mill at the end of a war with the machines, at night, still running
+  with no one left to feed it. A casting floor of 400 riveted steel plates, 30 m across; the pour, an open channel of
+  molten steel, along its north edge; four ladles of molten steel hung from jib cranes; a forging press; a conveyor
+  line carrying unfinished plated frames; the blast furnace beyond the pour; columns, pipe racks venting steam, gas
+  tanks, ingots, girders, slag heaps, a catwalk, broken walls and a wreck field past them. Everything breaks (492
+  pieces) but the bonfire, the furnace's body (it chips) and the pour's kerb. A ladle cut down or broken spills a
+  molten pool that burns whoever stands in it, him too; a broken gas tank burns 0.9 s (a red cue) and bursts. The
+  light follows his phase: a quiet furnace glow; cold, with warning lamps; red alarm light and a turning beacon; the
+  furnace roaring, sparks raining. **Anselm, the False Saint**: a calm man in a charcoal jacket who kneels at the edge
+  of the pour as if in prayer; his skin is a shell over a machine's frame. One bar (18000), four phases: at 74 % THE
+  SKIN BREAKS, at 46 % WEAPONS FREE, at 20 % TRUE FRAME. The hardest hitter in the game (x1.6) and the fastest, on
+  COMBAT.md's floors (a first windup of 0.7 s or more in phase 1, hits 0.45 s apart, the cue 0.35 s before the
+  impact): his speed is links, short recoveries and his boosters. 32 moves in four families: open-hand strings, a
+  sweep and a knee, a red grab that throws you through the nearest piece, the Long Walk that light cuts do not stop,
+  a counter for each phase and his flurry (melee); the booster punch (up to 10 m in a blink), Rosary (7 - 10 piston
+  blows, the last blue), the dive knee, two jet strings, Vespers (four jet passes and a dive), Last Rite under 8 %
+  (the boosters); the eye's cutting laser, the palm cannon, three bolts (a perfect parry sends one back into his
+  chest), a missile swarm, a strafing pass, a creeping barrage with safe lanes, a lance from the sky, the full burst
+  (the arsenal); a gas tank kicked at you, a ladle's chain shot, a girder or a frame thrown, a column cut down onto
+  you, the press slammed into a shock across the whole floor (the terrain). Every blow, shot and beam breaks what it
+  meets and marks the floor. From phase 2 a jet step closes on you. Nothing lands on him through a phase's change.
+  His shell chips where your cuts land and stays chipped; each phase bares more (the right cheek and forearm; half
+  the head, the chest, the arm and the legs; the faceted head with three sensors); a rest at the bonfire makes him
+  whole. Cyan on him is only looks: no tell of his is blue or cyan. He dies on one knee, his three sensors going out
+  one by one. No reward yet. 35 sounds of his own; the music borrows the Obsidian Throne's for now. His look switches
+  await the owner's picks (`?fsLook=a|b`, `?fsLetters=a|0`, `?fsMark=disc|ring`; the Lab's LOOKS rows); the Lab's
+  FIGHT buttons for him (a pool at your feet, the shell whole / half / bare, into each phase, every effect alone).
+  *Changed:* `audio.js` plays the `fs…` sounds as it plays Bai Wuji's `wj…`; the fire field gains the `saint` and
+  `foundry` palettes; `SCAR.thin.foundry`; the Training's roles for the foundry (and `saint` among the boss kinds);
+  every living-world tuning file, the air, the world's sounds and the arrival shot have a foundry block; a cost row.
 - **The deathblow is not cut short** (2026-11-28, ADR-280). *Fixed:* pressing guard during a deathblow ended it at
   once with nothing dealt; the press now waits and the guard comes up as the finisher ends. A perfect parry of a
   boss's blue blow that would cross the blades now gives the deathblow (he recoils, the combo follows) instead of
@@ -72,6 +104,16 @@ One hundred and forty-seven pieces of work since 0.4.0:
   blade instead of the big white star and ring (the Lab's `blueTell`). *Changed (the owner's pick, the defaults):*
   the perfect parry is `c`, a pinpoint where the blades cross and its sparks, no gold burst; the blue cue is `a`
   (`?parryClash=0` / `?blueTell=0` as before).
+- **Swipe to dodge on touch** (2026-11-28, ADR-278). *Added (a pause-menu switch, on by default; `?swipe=0`):*
+  SWIPE DODGE: a quick flick on the bare right half of the screen dodges the way it flicked, the moment it moves
+  (no need to find the DODGE tile, which stays). *Changed:* with PAD LAYOUT → GUARD ON LEFT (`?pad=split`) the
+  GUARD button stands right against the stick and has its own padlock: unlock it to drag GUARD where your left
+  thumb wants it (kept), a second GUARD stands under ATTACK, and GUARD and the padlocks are drawn quieter so the
+  controls do not pull the eye. *Added (pause menu):* LEFT GUARD and RIGHT GUARD switches to show or hide either
+  guard button (one always stays), and PAD LAYOUT now picks where BLOCK sits in the right cluster (beside or
+  under ATTACK). Both guard buttons are named BLOCK, the gauge line under them is gone, and ATTACK's dagger points
+  down; the stick and the left BLOCK are drawn as glyphs only, no frames (`?leftLook=a|b` the other two looks);
+  on the right, BLOCK beside ATTACK and DODGE under it.
 - **One tap to begin, menus with a finish, and touch controls that fit and move** (2026-11-28, ADR-270). *Fixed:* on
   a phone, a tap on a world, BEGIN HERE or BOSS RUSH on the title acts at once (iOS took the first tap as a hover).
   *Changed:* the title's and the pause menu's buttons and panels in a finished look (cut corners, the world and its

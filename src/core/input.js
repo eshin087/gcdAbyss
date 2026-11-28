@@ -43,6 +43,7 @@ export class Input {
     this.vKeys = new Set();
     this.vButtons = [false, false, false];
     this.vAxis = { x: 0, y: 0 };
+    this.dodgeAim = { x: 0, y: 0, set: false }; // a direction for this frame's dodge press (touch swipe; ADR-271)
     // virtual (gamepad) source
     this.pKeys = new Set();
     this.pButtons = [false, false, false];
@@ -209,6 +210,17 @@ export class Input {
     setAxis(this.pAxis, x, y);
   }
 
+  /** A dodge press with its own direction (screen space: x right, y up), for this frame only: the
+   *  touch swipe (ADR-271). The player takes it with the press, so the stick's direction does not. */
+  dodgeToward(x, y) {
+    const l = Math.hypot(x, y);
+    if (!(l > 1e-6)) return;
+    this.dodgeAim.x = x / l;
+    this.dodgeAim.y = y / l;
+    this.dodgeAim.set = true;
+    this.pulse('@dodge');
+  }
+
   /** A one-frame `pressed` edge with no hold (the pad's "any button" on press-any-key screens). */
   pulse(code) {
     if (typeof code !== 'string' || !code) return;
@@ -225,6 +237,7 @@ export class Input {
 
   endFrame() {
     this.pressedKeys.clear();
+    this.dodgeAim.set = false;
     this.releasedKeys.clear();
     this.pressedButtons = [false, false, false];
     this.releasedButtons = [false, false, false];

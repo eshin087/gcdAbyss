@@ -324,9 +324,20 @@ export class PauseMenu {
     this.btnPadLayout = button(panel, 'tp-only', () => game.touch?.cyclePad?.('layout'));
     el('span', '', 'PAD LAYOUT', this.btnPadLayout);
     this.padLayoutVal = el('span', 'v', '', this.btnPadLayout);
+    // ... and which of the two guard buttons are drawn (ADR-278: the one beside the stick, the one in the cluster)
+    this.btnLGuard = button(panel, 'tp-only', () => game.touch?.cyclePad?.('lguard'));
+    el('span', '', 'LEFT BLOCK', this.btnLGuard);
+    this.lGuardVal = el('span', 'v', '', this.btnLGuard);
+    this.btnRGuard = button(panel, 'tp-only', () => game.touch?.cyclePad?.('rguard'));
+    el('span', '', 'RIGHT BLOCK', this.btnRGuard);
+    this.rGuardVal = el('span', 'v', '', this.btnRGuard);
     this.btnPadHold = button(panel, 'tp-only', () => game.touch?.cyclePad?.('hold'));
     el('span', '', 'HOLD ATTACK', this.btnPadHold);
     this.padHoldVal = el('span', 'v', '', this.btnPadHold);
+    // ... and whether a flick on the right half dodges (ADR-271)
+    this.btnPadSwipe = button(panel, 'tp-only', () => game.touch?.cyclePad?.('swipe'));
+    el('span', '', 'SWIPE DODGE', this.btnPadSwipe);
+    this.padSwipeVal = el('span', 'v', '', this.btnPadSwipe);
     // WHAT'S NEW (ui/changelogPanel.js): every version and what changed; the value counts the unread
     this.btnNews = null;
     if (news) {
@@ -347,7 +358,7 @@ export class PauseMenu {
     this.quitVal = el('span', 'v', '›', this.btnQuit);
     this.quitArmed = 0;
     // the buttons in order, for the gamepad's menu focus (ui/gamepad.js)
-    this.buttons = [resume, this.btnQuality, this.btnMute, this.btnCap, this.btnControls, this.btnFull, this.btnPadPos, this.btnPadSize, this.btnPadLayout, this.btnPadHold, this.btnNews, this.btnQuit].filter(Boolean);
+    this.buttons = [resume, this.btnQuality, this.btnMute, this.btnCap, this.btnControls, this.btnFull, this.btnPadPos, this.btnPadSize, this.btnPadLayout, this.btnLGuard, this.btnRGuard, this.btnPadHold, this.btnPadSwipe, this.btnNews, this.btnQuit].filter(Boolean);
     el('div', 'ab-sep', null, panel);
     controlsGrid(panel, 'kb').classList.add('kb-only');
     touchGrid(panel).classList.add('tp-only');
@@ -415,11 +426,25 @@ export class PauseMenu {
     const pl = tc?.layout, ph = tc?.holdAttack;
     if (pl !== this._pl) {
       this._pl = pl;
-      this.padLayoutVal.textContent = { classic: 'ONE THUMB', split: 'GUARD ON LEFT' }[pl] ?? '';
+      this.padLayoutVal.textContent = { classic: 'BLOCK BESIDE', split: 'BLOCK UNDER' }[pl] ?? '';
     }
     if (ph !== this._ph) {
       this._ph = ph;
       this.padHoldVal.textContent = ph ? 'ON' : 'OFF';
+    }
+    const lg = !!tc?.leftGuard, rg = tc?.rightGuard !== false;
+    if (lg !== this._lg) {
+      this._lg = lg;
+      this.lGuardVal.textContent = lg ? 'ON' : 'OFF';
+    }
+    if (rg !== this._rg) {
+      this._rg = rg;
+      this.rGuardVal.textContent = rg ? 'ON' : 'OFF';
+    }
+    const sw = !!tc?.swipeDodge;
+    if (sw !== this._sw) {
+      this._sw = sw;
+      this.padSwipeVal.textContent = sw ? 'ON' : 'OFF';
     }
     if (this.fullVal) {
       const f = !!globalThis.document?.fullscreenElement;
