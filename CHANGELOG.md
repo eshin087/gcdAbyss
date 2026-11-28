@@ -9,10 +9,10 @@ One hundred and fifty-one pieces of work since 0.4.0:
   picks):* `?halRef=a` rebuilds Halcyon after the owner's character pack (`docs/art/character-packs-v04/halcyon`):
   a lean, long-legged man (about 8 heads) printed solid in his own colours, in navy plates (chest, abdomen,
   shoulders, forearms, thighs, knees, shins) lined in pale blue, a gold strap across the chest, a high collar, square gold clasps, a gold belt and cuffs, bare hands, navy
-  boots with gold toe caps and heels, a square jaw, blond hair swept back, and a crimson mantle with a cape to his
+  boots with gold toe caps and heels, a square jaw, blond hair swept back, and a crimson mantle with one cape of cloth to his
   heels, red to its edge; his eyes dim until they kindle. `?halRefMove=a` poses him after the sheets: in the hover,
   his blows and the reactions he takes in the air the right knee drawn up and the left leg hanging (no planted
-  stance at the hover), a kick's other knee tucked, a lean as he brakes and a bank into a turn, Meteor's three-point
+  stance at the hover), in a punch the other fist up at the chin and the back leg long behind, a kick's other knee tucked, a lean as he brakes and a bank into a turn, Meteor's three-point
   landing, the car on his right palm and the statue's arm thrown from his right hand. The same
   timing, zones, damage and travel (`city.mjs . halref` checks every move, phase and branch). The Lab's `halRef` and
   `halRefMove` rows.

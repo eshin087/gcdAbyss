@@ -8475,7 +8475,12 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
      sheets' shape). HIS OWN PRINT: a per-material `uArtOwn` (materials.js; 0 for every other material)
      keeps a material's own fill under the bosses' print (ADR-194: no shared tone, no pale hem, no dark
      falloff), so he prints solid in the sheets' colours (look.js `HAL_OWN`: navy, pale-blue plates, gold,
-     crimson, blond, the skin). Colours: look.js outfit 'd' (navy suit and plates, the gold in the gold-ink `hair`
+     crimson, blond, the skin). FOURTH PASS ("rebuild his cape as one soft cloth" and the poses: "Both"): the
+     cape's five spring sheets fanned out in a blow like planks; it is ONE wide sheet curved round his back from
+     clasp to clasp, flaring to the heels, on one spring (REF_CAPE), so it swings as one mass (71 meshes against 95); the
+     strikes keep the sheets' chin guard (the hand that does not strike up at the chin, a punch leaning in:
+     motion.js `refArms`) and from the strike the sheets' lunge (the right knee up, the left leg long behind:
+     REF_HIT). Colours: look.js outfit 'd' (navy suit and plates, the gold in the gold-ink `hair`
      part, the blond in `hairTip`). His eyes a dim red until they kindle to the same full glow. 95 drawn meshes
      against 90: more objects, only under the switch, so no seeded fight shifts with it off.
   3. THE POSES, never the timing (`?halRefMove=a`): the sheets' leg language over the owner's `?halMotion=b` arms.

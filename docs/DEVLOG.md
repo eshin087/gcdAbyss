@@ -5,6 +5,21 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — Halcyon's cape as one cloth, the sheets' lunge (ADR-289; `halcyon-ref-look`)
+
+**Owner**, asked "rebuild his cape as one soft cloth next, or fix the poses first?": "Both".
+
+- **The cape (`refGear.js` REF_CAPE, `?halRef=a`):** the five spring sheets (they fanned out in a blow like
+  planks) replaced by ONE wide sheet curved round his back from clasp to clasp, flaring to the heels, on one
+  spring: it swings as one mass, its edges at his sides (as sheet 01's front view), hung a little off his back
+  so his legs do not poke through; phase 3 tears its lower edge into five tatters along its curve. 71 meshes (95 before).
+- **The strikes (`motion.js` REF_HIT, `?halRefMove=a`):** from the strike the right knee stays forward and up
+  and the left leg stretches long behind him (sheet 02's lunge in the air), where both legs trailed folded.
+  Poses only (`city.mjs . halref`).
+- **Comparisons (local):** `implementation/strikes-compare-v3.png` (sheet 02 / now, side-on).
+- **Open:** seen side-on the cape is a strip trailing at an angle, where the sheet's billows into a wide
+  mass behind him (a cloth with depth, not one curved sheet); a small kink shows where its two segments meet.
+
 ## 2026-11-28 — Halcyon's strikes after sheet 02: the chin guard, the lean (ADR-289; `halcyon-ref-look`)
 
 **Owner**, on the third rebuild: "Yes, keep going".
