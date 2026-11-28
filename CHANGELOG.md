@@ -26,8 +26,6 @@ One hundred and forty-nine pieces of work since 0.4.0:
   ground under the wyrm like every cast (it hung beside it before its jaws and followed the head about like a thing
   of its own), and a circle cast round its feet stays under it while it burns. `?wyrmFix=0` moves it as before (the
   Lab's `wyrmFix` row). Still to do: the feet still skate in the death and the wake (the tail spins: ADR-282).
-  Lab's `wyrmFix` row). Still to do: the tail sweeps and whips spin the body ~700°/s (a slower spin needs to be
-  aimed at the hero to keep its hit on the beat), and the feet still skate in the death and the wake.
 - **One kind of parry** (2026-11-28, ADR-279). *Changed:* every parry is now a perfect parry, anywhere in the
   parry window: the same look, freeze and rewards every time (more posture damage, the counter cut, a bullet sent
   back, a count toward the deathblow). Before, a press 0.20 - 0.22 s early was a plain parry with a different look.
