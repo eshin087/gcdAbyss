@@ -8150,3 +8150,23 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   reseeds the hero flurry's figure stream per situation, as it does `Math.random`. New checks are duel `deathblow` (g), the
   guard mashed through a combo, and (h), a perfect parry of Falling Ash under both modes. Not filmed: the visible
   change is a combo where a lock was.
+
+## ADR-291 — Costume 11: gcd dressed after the owner's costume reference, as an outfit option (`?heroLook=ref11`) (2026-11-28)
+
+- **Context:** the owner sent "COSTUME REFERENCE / 11" (a front three-quarter, side and rear view, the hood, fists,
+  hem, belt and boots) with: "Make the character where this design from the reference art. Make it have the same look
+  and vibe to test out separately". An earlier outfit from design sheet 06 (PR 211, `?heroLook=cloak`) was closed;
+  its file was the template for this one's structure and its lessons held (an ankle-length cloak goes under the
+  grass in the roll; a sheet hung on an arm swings through the body).
+- **Decision:** a set of six items in `gear/ref11.js` (hood, tunic, arms, legs, skirt, cloak) worn by the look `ref11`
+  (`HERO_LOOKS`, `hooded`: the face in shadow by design, no lit twin), off by default. Built from `heroGeo.js` shells and
+  sheets and the shared cloth builders (`hangSheet`, `panelSkirt`, `buildFreeHand`), printed through the hero's own
+  art; its colours a tint on its own materials (`REF11_TINT`: the torn cloth is the hero's `hem` ink, paler and more
+  violet; silver plate `spike` / `bevel`; the strap `welt`; the green stone `facing`; the sword's materials untouched).
+  `panelSkirt` panels may draw their torn strips in the hem's ink (`stripHem`). Fitted to the fight: the cloak is three
+  sheets down the back to mid-calf (not five to the ankle: flank sheets under the arms took 56 in-body frames and
+  most of the free hand's near passes, and the full length went under the grass in rolls), the skirts twelve strips.
+- **Consequences:** the default look is unchanged; nothing costs more until the owner picks it (then `REF11_LOADOUT`
+  becomes `DEFAULT_LOADOUT` with its tint). The `looks` suite walks it with the others: cloth in the body 1.0 % of
+  frames, the free hand near a sheet 1.4 %, the cloth's ends above the grass but for 5 frames of a roll, 24.4k
+  triangles. Open: the owner's verdict, the phone.

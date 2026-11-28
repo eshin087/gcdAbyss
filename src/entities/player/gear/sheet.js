@@ -66,7 +66,8 @@ export function hangSheet({ joint, mesh }, parent, d, mats) {
  * an anchor on the pelvis yawed to `az` → an upper and a lower sheet → its torn strips. `PANELS` =
  * panel defs: az, w [top, join, hem], len [upper, lower], strips (lengths), fork, out, flare, edge
  * (piping down that edge: ±1), skew, slant (COAT_PANELS in wanderer.js); and, read here only,
- * `hemFrom` (0..1 down the lower sheet where the pale hem takes over; default none); the animator
+ * `hemFrom` (0..1 down the lower sheet where the pale hem takes over; default none) and `stripHem` (the torn
+ * strips in the hem's ink, not the coat's); the animator
  * also reads `breeze` / `idleFlare` (a panel's own idle stir). `seed` varies the folds and tears.
  * Returns { coat }.
  */
@@ -118,7 +119,8 @@ export function panelSkirt({ pelvis, M, DIM, mesh, joint }, PANELS, { seed = 0 }
       const sj = joint(s1, Math.sin(a) * R2, -L1 - sl * (sk < 0 ? 1 - sk01 : sk01), (Math.cos(a) - 1) * R2);
       sj.rotation.y = a;
       const sw = Math.max(0.06, wr * 0.9);
-      mesh(sj, tatterStrip(Pn.strips[k], sw, { fork: !!Pn.fork[k], curl: 0.2, seed: 3000 + seed + i * 31 + k * 7 }), M.coat);
+      // (`stripHem`: the torn strips in the pale hem's ink, as the rags of a hem that is pale itself)
+      mesh(sj, tatterStrip(Pn.strips[k], sw, { fork: !!Pn.fork[k], curl: 0.2, seed: 3000 + seed + i * 31 + k * 7 }), Pn.stripHem ? M.hem : M.coat);
       strips.push({ joint: sj, len: Pn.strips[k], rest: a, phase: (i * 1.9 + k * 2.1) % (Math.PI * 2) });
     }
     coat.push({ anchor, segs: [s0, s1], def: Pn, strips, len: [L0, L1 + sl + (n ? Math.max(...Pn.strips) * 0.8 : 0)], r0: R0 });

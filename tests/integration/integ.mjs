@@ -9479,7 +9479,7 @@ async function scenarioLooks() {
         for (const k of ['rim', 'sub', 'inkGlow', 'glowK']) if (t[k] != null && !Number.isFinite(t[k])) bad.push(`${id}: ${name}.${k}`);
       }
     }
-    assert(!bad.length && HERO_LOOKS.shroud.loadout === DEFAULT_LOADOUT && HERO_LOOKS.shroud.tint === null && LOOK_IDS.join() === 'shroud,robe,robe-shade,swallow,swallow-shade,warden,warden-shade' && DEFAULT_LOOK === 'shroud',
+    assert(!bad.length && HERO_LOOKS.shroud.loadout === DEFAULT_LOADOUT && HERO_LOOKS.shroud.tint === null && LOOK_IDS.join() === 'shroud,robe,robe-shade,swallow,swallow-shade,warden,warden-shade,ref11' && DEFAULT_LOOK === 'shroud',
       `the outfit options: ${LOOK_IDS.map((id) => `${id} "${HERO_LOOKS[id].name}"`).join(', ')}; every loadout resolves and every tint is a cloth / metal part (${bad.join('; ') || 'ok'})`);
   }
 
@@ -9529,7 +9529,9 @@ async function scenarioLooks() {
         assert(skin === 0 && eye === 0 && shade > 0 && own === headSlot[L.of], `${id}: ${L.of}'s head with the face in shadow (${shade} face meshes in the shirt's black, ${skin} skin, ${eye} eyes; ${own} head-item meshes, as ${L.of}'s ${headSlot[L.of]})`);
         continue;
       }
-      if (isNew) assert(skin > 0 && eye > 0 && shade === 0, `${id}: the face lit (${skin} skin, ${eye} eye meshes)`);
+      // (a hooded look, costume 11: the face in the hood's shadow by design, no lit twin)
+      if (isNew && L.hooded) assert(skin === 0 && eye === 0 && shade > 0, `${id}: the face in the hood's shadow (${shade} face meshes in the shirt's black, ${skin} skin, ${eye} eyes)`);
+      else if (isNew) assert(skin > 0 && eye > 0 && shade === 0, `${id}: the face lit (${skin} skin, ${eye} eye meshes)`);
     }
     // the cloth over the sword shoulder (today's mantle, the Warden's capelet: back-slot coat on the
     // chest) against the right upper arm, its top 15 % left out (the cloth lies over the joint)

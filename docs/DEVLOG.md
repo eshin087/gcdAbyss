@@ -5,6 +5,25 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — Costume 11 for gcd, to try (ADR-291; `player/hero-ref11-anim`)
+
+**Owner:** dress gcd after "COSTUME REFERENCE / 11", the same look and vibe, to test separately.
+
+- **Built:** `gear/ref11.js`, six items, the look `ref11` (`?heroLook=ref11`, Lab OUTFIT "Costume 11"). From the sheet:
+  the deep hood (face in shadow), the heavy cowl with a square silver clasp, the wrap tunic, the cross strap, the plate
+  belt with its green stone, loose sleeves into silver gauntlets, plated boots with a pointed shin plate, layered
+  skirts and the long cloak, black above and torn lavender rags below, the pale glyph line down the back.
+- **Fitted by measuring (integ `looks`):** five cloak sheets to the ankle -> three to mid-calf (flank sheets: 56
+  in-body frames and the free hand's near passes; the length went 13 cm under the grass in the roll); the left back
+  sheet turned further back (the free hand passed within 6 cm of it on 2.1 % of frames -> 1.4 %); 16 skirt strips -> 12
+  (the cost bound); the hood lowered and the cowl lengthened after the first turnaround; the rags' ink more violet
+  after the game-camera frames (they read white).
+- **Checked:** the `looks` suite (cloth in the body 1.0 %, today's 30 %; hand near 1.4 %; 24.4k triangles), the full
+  `npm test`; turnarounds, six game-camera poses at 1440p, three films beside today's look.
+- **Open:** the owner's verdict; the phone; the sheet's ankle-length cloak and flank drapes left out for the fight.
+
+---
+
 ## 2026-11-28 — Swipe to dodge on touch, the guard on the left to try (ADR-278; `ui/touch-swipe-dodge`)
 
 **Owner:** too slow to parry or dodge on the phone compared with mouse / keyboard / controller; picked "guard on the
