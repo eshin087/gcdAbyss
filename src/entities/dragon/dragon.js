@@ -21,6 +21,7 @@ import { wallWind } from './wallReach.js';
 import { WyrmReact } from './react.js';
 import { CONTACT, contactOn } from '../../combat/contact.js';
 import { Incantation } from './incantation.js';
+import { fixOn } from './motionFix.js';
 import { Brood } from './brood.js';
 import { wyrmTopKnobs } from './faces.js';
 
@@ -36,6 +37,8 @@ const TARGETABLE = new Set(['waking', 'combat', 'staggered', 'airborne']);
 const POSTURE_STATES = new Set(['combat', 'staggered', 'airborne']);
 const PARTS = TUNING.partMult;
 // hurt volumes in model units (x SCALE): order matches _refreshHurt (four-legged drake, v0.4)
+// the fastest the yaw rate may grow (rad/s per s; the motion audit, motionFix.js): 0 to 3.2 rad/s in ~0.13 s
+const TURN_ACC = 25;
 const HURT = [
   ['head', 0.85], ['neck', 0.6], ['neck', 0.56], ['neck', 0.5],
   ['body', 1.35], ['body', 1.3], ['body', 1.25], // deep chest, waist, hips
@@ -613,7 +616,19 @@ export class Dragon {
   turnToward(target, rate, dt) {
     if (!Number.isFinite(target)) return;
     const before = this.yaw;
-    this.yaw = turnToward(this.yaw, target, rate * dt);
+    if (fixOn() && dt > 0) {
+      // (the motion audit) a turn speeds up over a few frames instead of jumping to full speed in one (0 to
+      // 3.2 rad/s at a string's change of side jerked the whole body, its 20 m wings most): the yaw rate
+      // gains at most TURN_ACC rad/s a second, and never overshoots its target
+      const fresh = this._turnAt !== undefined && this.time - this._turnAt < 2.5 * dt;
+      const v0 = fresh ? this._turnV : 0;
+      const diff = angleDiff(this.yaw, target), step = rate * dt;
+      let v = clamp(clamp(diff, -step, step) / dt, v0 - TURN_ACC * dt, v0 + TURN_ACC * dt);
+      if (Math.abs(v * dt) > Math.abs(diff)) v = diff / dt;
+      this.yaw += v * dt;
+      this._turnV = v;
+      this._turnAt = this.time;
+    } else this.yaw = turnToward(this.yaw, target, rate * dt);
     if (Math.abs(angleDiff(before, this.yaw)) > 1e-4) this.pose.speed = Math.max(this.pose.speed, 1.2);
   }
 
