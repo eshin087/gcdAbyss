@@ -8162,3 +8162,14 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   blows upright and straight-armed at chest height from a long stance (A1.5 / A1.6), the front kick to head
   height (A2.1), round and side kicks to chest height (A2.2 / A2.3), the low sweep in a deep crouch with the leg
   along the floor (A2.5). Still no root field is written; `woke.mjs . oneref` passes unchanged.
+- **Third pass (A3, A4, S1 - S2, the left hand; same day, the owner: "Yes, continue"):** refMoves.js keys the
+  acrobatic kicks' anticipation deeper (tornado, butterfly, aerial) and every take-off kick's landing low and long
+  (`leanTo` keeps a flip's whole turns in the pitch), the flying knee's fist up by the head, the drop heel upright
+  on a near heel (A2.6), the rise's crouch with a hand on the floor (S2.1), the Falling Fist's chamber (S2.2), the
+  Still Hand upright and narrow (S1.6). **The firing poses change only the legs and the free hand** (A4.1 / A4.2 /
+  A4.4: a wider stance; S1.1 / S1.3: a shorter one, the free hand down): a heavy shot's speed is set from where it
+  leaves, and the pushing arm is at full stretch, so a body raised or sunk round a "fixed" hand target still moved
+  the release 3.7 - 4.4 cm and the speed 1.5 % (tried, measured, dropped). The left hand: an open hand and a palm
+  on the left wrist (gear.js), swapped in by dressOne after the animator (which shows the free hand's fist every
+  frame); `handNow` returns both hands (a mirrored blow closes the left, the chain punches both). The `oneref` shot
+  check now names the first shot that differs.

@@ -5,6 +5,24 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — Xin Yi after the reference pack, third pass: the aerials, the guns, the Source (ADR-285)
+
+**Owner:** "Yes, continue" (after the redo below). Still behind `?oneRefMove=a` (and `?oneRef=a` for the hands):
+- A3: deeper anticipation before the tornado, butterfly and aerial; every take-off kick lands low and long; the
+  flying knee's fist drawn up by the head, the other hand reaching ahead. A2.6: the drop heel lands upright on a
+  heel planted just ahead (it split his legs a metre).
+- A4: the guns fired from a wider stance. S1.1 / S1.3: the bolt and the send from a shorter stance, the free hand
+  down. S1.6: the Still Hand upright and narrow. S2.1: the rise from a deep crouch, a hand on the floor. S2.2: the
+  Falling Fist chambered by the ear.
+- The left hand: open in phase 3 and gear 2's guard, palm-out for both-palm blows, a fist for mirrored punches and
+  the chain punches, closed behind his back in phase 1 gear 1.
+**Constraint found:** sinking or raising the body round a compensated hand target moved the shots and bolts 3.7 -
+4.4 cm (the arm is at full stretch) and a heavy shot's speed 1.5 %; so at the release only the legs and the free
+hand change. `woke.mjs . oneref`: shots and bolts 0.0 cm apart, same speeds, same fx calls; the whole `woke` suite
+passes. Stills: `docs/art/character-packs-v04/xin-yi/films/pass3-*.png` (local, not in the repo).
+**Open:** the gun aims and the bolt push are not upright as on the sheets (the release must not move); the
+turning wheel's handstand and the butterfly's arms are the first pass's; the owner's notes from the preview.
+
 ## 2026-11-28 — Xin Yi after the reference pack, redone closer to the sheets (ADR-285)
 
 **Owner:** "im not really seeing much was changed to look like the reference image": the first pass (below) kept

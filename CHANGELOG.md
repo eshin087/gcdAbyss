@@ -23,7 +23,16 @@ One hundred and forty-seven pieces of work since 0.4.0:
   hair over the crown and the collar, and an open right hand: open in his guard (the offer), a palm turned out
   through palm blows, a fist only through fist blows and with the guns. `?oneRefMove=a` lands palm blows upright
   with the arm straight at the chest's height (it was a deep crouch, the hand at the belly), kicks the front kick
-  to the head's height and the round kick to the chest's, and drops the low sweep into a deep crouch.
+  to the head's height and the round kick to the chest's, and drops the low sweep into a deep crouch. *Third
+  pass:* the acrobatic kicks (A3) sink deeper before they jump and land low and long; the flying knee draws its
+  fist up by the head with the other hand reaching ahead; the drop heel lands upright on a heel planted just ahead
+  (A2.6; it split his legs a metre); the guns are fired from a wider stance (A4.1 / A4.2 / A4.4); the palm bolt
+  from a shorter stance with the free hand at his side (S1.1); the Still Hand upright and narrow (S1.6); the rise
+  off the floor from a deep crouch with a hand on the floor (S2.1); the Falling Fist chambered by the ear (S2.2).
+  The left hand opens too (phase 3, gear 2's guard), turns palm-out for both-palm blows and closes for the
+  mirrored punches and the chain punches; phase 1's first gear keeps it closed behind his back. Shots and bolts
+  leave from exactly the same point at the same speed (the body and the firing arm are left as drawn at the
+  release).
 - **The deathblow is not cut short** (2026-11-28, ADR-280). *Fixed:* pressing guard during a deathblow ended it at
   once with nothing dealt; the press now waits and the guard comes up as the finisher ends. A perfect parry of a
   boss's blue blow that would cross the blades now gives the deathblow (he recoils, the combo follows) instead of
