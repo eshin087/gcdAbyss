@@ -25,9 +25,8 @@ export const HERO_LOOKS = Object.freeze({
   'warden-shade': Object.freeze({ id: 'warden-shade', name: 'Warden (shaded)', loadout: WARDEN_SHADED_LOADOUT, tint: WARDEN_TINT, of: 'warden' }),
   // the owner's costume reference 11 (2026-11-28, gear/ref11.js, ADR-291): the deep hood, the long cloak torn to
   // lavender rags, silver gauntlets and boots; the face in the hood's shadow by design (`hooded`: no lit twin)
-  // `slash`: its slash line in lavender, not white-hot (the owner, 2026-11-28: "the front slash also looks weird
-  // cause its white"; slashFx.js reads it); its steel lights at `bladeLit` of today's light on the cut (player.js),
-  // so the swing does not flare white (the sword keeps its own colours)
+  // `slash`: its slash line in lavender, not white-hot (slashFx.js reads it); its steel lights at `bladeLit` of
+  // today's light on the cut (player.js), so the swing does not flare white (the sword keeps its own colours)
   ref11: Object.freeze({ id: 'ref11', name: 'Costume 11', loadout: REF11_LOADOUT, tint: REF11_TINT, hooded: true, slash: REF11_SLASH, bladeLit: 0.3 }),
 });
 export const DEFAULT_LOOK = 'shroud';

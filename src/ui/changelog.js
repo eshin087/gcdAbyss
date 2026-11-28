@@ -23,7 +23,7 @@ export const RELEASES = [
         notes: [
           'A new outfit for gcd after the costume reference: a deep hood with his face in shadow, a heavy cowl with a silver clasp, silver gauntlets and plated boots, a silver belt with a green stone.',
           'His long cloak turns to torn lavender rags below the knee, with a line of pale glyphs down his back.',
-          'Slimmer cloak that hangs as one piece, a quilted vest with silver rivets, arm plates, a violet tabard, softer rags and a lavender slash.',
+          'Redrawn after the Layered Wanderer sheet: a three-tier mantle, one wide cloak fading to lavender rags, gold hair under the hood, silver gauntlets with a real fist, and a lavender slash.',
           'Add heroLook=ref11 to the address to try it, or pick Costume 11 in the Lab.',
         ],
       },

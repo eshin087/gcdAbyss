@@ -16,9 +16,10 @@ import { skirtSheet, tatterStrip, foldLines, ribbonCrease, lerp, sheetOffset, sh
  *   inMax?         how far a segment may swing IN toward the wearer (rad; a number or [root, tip];
  *                  negative = always at least that far out). Not applied lying (anim.js)
  *   hemFrom? (1)   0..1 down the lower segment where `mats.hem` takes over from `mats.face`
- *   fadeFrom?      0..hemFrom: from here to hemFrom the lower segment is in `mats.fade` (a step between the
- *                  face and the hem); the change to the hem runs along a torn line (`tear`, m: 0.03), the one
- *                  into the step barely ragged (a torn edge there read as another layer's hem)
+ *   fadeFrom?      0..hemFrom (or a rising list): from here to hemFrom the lower segment is in `mats.fade` (a
+ *                  material, or a list as long: steps between the face and the hem); the change to the hem
+ *                  runs along a torn line (`tear`, m: 0.03), the ones into the steps barely ragged (a torn edge
+ *                  there read as another layer's hem)
  *   ribbon?        a narrow ribbon (tatterStrip) instead of a curved sheet; `fork` splits its tip;
  *                  `crease` = the drawn crease's phase (default seed × 0.7)
  *   floor?         rolling or falling, its ends stay over the grass (anim.js; a head ribbon, a long scarf)
@@ -52,11 +53,14 @@ export function hangSheet({ joint, mesh }, parent, d, mats) {
     };
     put(s0, foldLines(skirtSheet(L0, w0, w1, d.wrap, 0.25, 0, seed, [0.004, 0.018, nF, ph]), pleat(0)), mats.face);
     const R1 = d.wrap + 0.25 * L0, fold = [0.018, 0.04, nF, ph];
-    const ff = d.fadeFrom != null && mats.fade ? Math.min(d.fadeFrom, hf) : hf, tj = ff < hf ? d.tear ?? 0.03 : 0;
-    const part = (t0, t1, m) => t1 > t0 && put(s1, foldLines(skirtSheet(L1, w1, w2, R1, 0.25, 0.008, seed + 7, fold, t0, t1, 0, w1, 0, [t0 <= ff + 1e-6 ? 0.008 : tj, t1 <= ff + 1e-6 ? 0.008 : tj].map((v) => (tj ? v : 0))), pleat(L0)), m);
-    part(0, Math.min(1, ff), mats.face);
-    part(Math.max(0, ff), Math.min(1, hf), mats.fade);
-    part(Math.max(0, hf), 1, mats.hem);
+    // the stretches down the lower segment: the face, the fade steps, the hem
+    const fm = mats.fade ? [].concat(mats.fade) : [], ff = d.fadeFrom != null && fm.length ? [].concat(d.fadeFrom).slice(0, fm.length).map((f) => Math.min(f, hf)) : [];
+    const tj = ff.length ? d.tear ?? 0.03 : 0, cuts = [0, ...ff, hf, 1], ms = [mats.face, ...fm.slice(0, ff.length), mats.hem];
+    const jag = (t) => (!tj || t <= 0 || t >= 1 ? 0 : Math.abs(t - hf) < 1e-6 ? tj : 0.014);
+    for (let k = 0; k < ms.length; k++) {
+      const t0 = Math.max(0, cuts[k]), t1 = Math.min(1, cuts[k + 1]);
+      if (t1 > t0) put(s1, foldLines(skirtSheet(L1, w1, w2, R1, 0.25, 0.008, seed + 7, fold, t0, t1, 0, w1, 0, [jag(t0), jag(t1)]), pleat(L0)), ms[k]);
+    }
   }
   const im = d.inMax;
   return {
