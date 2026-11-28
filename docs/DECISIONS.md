@@ -8435,3 +8435,79 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
 - **Consequences:** `integ wyrmfix` holds the death's and the wake's slide ≤ 0.15 m. The audit names the skating foot
   and when (`slideFoot`).
 
+## ADR-289 — Halcyon after the reference pack: his body rebuilt and his poses, behind two switches (`?halRef`, `?halRefMove`) (2026-11-28)
+
+- **Context:** the owner made a character pack for Halcyon (`docs/art/character-packs-v04/halcyon`: the selected
+  identity anchor 00, seven corrected sheets 01 - 07, a handoff, a source inventory of 24 move IDs and 21 reaction
+  clips) and asked for his look and animation to follow it: the anchor's blond adult man of a realistic build, the
+  navy armoured suit with gold trim, the red cape, bare hands, no weapon; hovering idle, guard, turns, braking and
+  strike legs; the grounded impacts and reactions kept; the knee-supported death; the props held physically; See the
+  World's left hand; the twin-eye beams and Crossed Glare's two opposing sweeps; no change to balance (damage, reach,
+  hitboxes, active windows, tells, travel, cooldowns, AI weights, phase eligibility, cue scheduling, fairness). A
+  first pass only recoloured today's figure; the owner, shown it beside sheet 01: "rebuild him to look identical to
+  the reference sheet and same with his attacks". Final aesthetic approval stays with the owner. ADR-277 is the
+  same request for Varr Nihil.
+- **Reconciled first:** the inventory's 24 move IDs and 21 clips match the source one for one. Already as the
+  sheets draw: the beams from his eyes (glare.js `eyePoint`), Crossed Glare's reversed second sweep
+  (`sweepSide: -1`), See the World's left hand, death / crashed / blinded ending on one knee (death on a 23° forward
+  lean, the hands low by the knee), the transitions' kneel, scream and hover.
+- **Decision:**
+  1. TWO SWITCHES, '0' (as shipped) until the owner picks (both in `lookSwitch.js` PENDING, the Lab's LOOKS rows
+     marked awaiting). `?halRef=a` (read when his rig is built) is the look, over any `?halLook=`; `?halRefMove=a`
+     (live, from his next move or reaction) the poses.
+  2. THE BODY, REBUILT (`halcyon/refGear.js`; gear.js routes every slot there under the switch): a V from broad
+     shoulders to a narrow waist; flat, squared pectoral plates, six abdominal plates and the serratus; a smaller,
+     muscular shoulder under a two-lame pauldron; bicep, forearm, thigh, knee and shin plates; every plate edged in a
+     thin line of gold (the sheets' armour reads by those lines), the gold strap across the chest, a high collar
+     with a gold rim, square gold clasps set as diamonds, the gold belt and a square buckle, gold cuffs; navy boots
+     with gold toe caps and heels; bare hands; a square jaw; blond hair swept straight back in three rows of locks.
+     THE CAPE: a crimson mantle over both shoulders and the upper back, and five sheets from the clasps to his heels
+     (about 1.3 m), wide and overlapping so they read as one cloth, a few deep folds, hanging close and swinging
+     less than the shipped cape. THIRD PASS (the owner: "it doesn't seem like the new look has any resemblance
+     to the reference art"; "build it by code first and dont worry about face details"): the rig's proportions
+     were the stocky hero's, so the drawn meshes are slimmed (arms x0.8, legs x0.84, the hips narrower, the
+     deltoids x0.85, a thin gold cuff for the gold cylinder, the hands x0.9), the head drawn x0.86 (about 8
+     heads; the skull, jaw and neck the rig drew move under a scaled joint, the beams' eye point unchanged), the
+     hair a cap over the crown and the back only with strands combed back and the face clear below the brow,
+     the knee a flat plate, the pectorals nearly flat, the torso's and thighs' plate lines in the plate's pale
+     blue (gold kept for the strap, the belt, the clasps, the cuffs, the collar, the boots' bands, toes and
+     heels), the cape without drawn fold lines (they printed as a tent of bright strokes; its folds are its
+     sheets' shape). HIS OWN PRINT: a per-material `uArtOwn` (materials.js; 0 for every other material)
+     keeps a material's own fill under the bosses' print (ADR-194: no shared tone, no pale hem, no dark
+     falloff), so he prints solid in the sheets' colours (look.js `HAL_OWN`: navy, pale-blue plates, gold,
+     crimson, blond, the skin). FOURTH PASS ("rebuild his cape as one soft cloth" and the poses: "Both"): the
+     cape's five spring sheets fanned out in a blow like planks; it is ONE wide sheet curved round his back from
+     clasp to clasp, flaring to the heels, on one spring (REF_CAPE), so it swings as one mass (71 meshes against 95); the
+     strikes keep the sheets' chin guard (the hand that does not strike up at the chin, a punch leaning in:
+     motion.js `refArms`) and from the strike the sheets' lunge (the right knee up, the left leg long behind:
+     REF_HIT). Colours: look.js outfit 'd' (navy suit and plates, the gold in the gold-ink `hair`
+     part, the blond in `hairTip`). His eyes a dim red until they kindle to the same full glow. 95 drawn meshes
+     against 90: more objects, only under the switch, so no seeded fight shifts with it off.
+  3. THE POSES, never the timing (`?halRefMove=a`): the sheets' leg language over the owner's `?halMotion=b` arms.
+     (a) The hover: the right knee drawn up, the left hanging, the toes pointed (01 B7, B8), in place of `b`'s long
+     hanging legs. (b) The blows (02): through the windup the right knee drawn up high, the left hanging; from the
+     strike both legs bent and trailing; a kick keeps its striking leg (carried out straight by limbs.js) and draws
+     the other knee up; `b`'s straight blows on the line kept. (c) The ten reactions he takes at the hover (ward,
+     wardR, wardHigh, clash, deflect, wardHold, flinch, backstep, sidestep, lock) were Tian Lei's planted stance
+     0.5 m up: they hang the hover's legs (07). The reactions the engine plays on the floor keep theirs: the open
+     ones (stagger, recoil, reeling, trampled, executed: struck out of the air he drops) and the kneeling ones
+     (broken, death, crashed, blinded). (d) The hover leans back as he brakes and banks into a turn (`pilot.halAcc`,
+     drawn only). (e) Meteor lands in a three-point landing, held into the recovery (the recovery's first key at
+     0.75, where the realiser ends the follow-through without one, so `b.F` does not move). (f) The car rides on his
+     right palm; the statue's arm leaves from his right hand in the throw.
+  4. KEPT AS THEY ARE: the pack draws stagger, recoil, reeling and trampled in the air (07 rows 10 - 13), but his
+     height is the hover rule's and those drop him; the pass, the beams, the props, every cue, root path and timing.
+     The blows still aim down at the hero (ADR-225 / ADR-254: the contact point is gameplay), where the sheets draw
+     the punches level.
+  5. CHECKED: `city.mjs . halref`: 1088 realisations (every move, phase, hold draw, flurry count; the shipped
+     switches, `halMotion` a / 0, the readable pace) time every beat the same on and off (start, impact, end, W, H, A,
+     S, F, close, flash); the reaction clips keep their length and hold; a seeded 24 s fight against the defender
+     lands the same 19 blows at the same times; at the hover the reactions draw the right knee up 0.29 - 0.39 m over
+     the left (planted at 0 before); Meteor's recovery kneels; the rebuilt body builds. The city suite passes with
+     both switches forced on (`GCD_LOOK=halRef=a,halRefMove=a`, now read for the whole run as asc.mjs does).
+- **Consequences:** the default game is unchanged until the owner picks. Under `?halRefMove=a` the car leaves from
+  his right hand, so its throw's flight time (from the distance) can differ by a few hundredths of a second; the cue
+  stays on the moving car. The rebuild is still the shared rig drawn in letters: the sheets' painted shading, the
+  face's features and the cape's cloth detail are under a letter at 720p, and the cape is five sheets on springs,
+  not cloth. The first pass's recolour of the shipped gear is gone (the rebuild replaced it). Open: what the owner
+  names from the comparison sheets and the preview.

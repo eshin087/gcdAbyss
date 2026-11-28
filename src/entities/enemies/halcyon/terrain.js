@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clamp, turnToward } from '../../../core/math.js';
 import { TELL, RESULT } from '../../../combat/rules.js';
+import { halRefMoveOn } from './motion.js';
 
 // What Halcyon does with his city (ADR-160): pieces of the set lifted, carried, thrown and torn down
 // (world/destructibles.js take / carry / throwTo / topple; ascendant/terrain.js is the reference).
@@ -438,8 +439,12 @@ export class Terrain {
       const act = d.mode === 'act' && d.brain.act;
       if (!act || pc.state !== HELD) this.drop();
       else {
-        const h = d.tellPoint('palms', _v);
-        if (this.heldKind === 'sky') W?.carry?.(pc, d.position.x, d.position.y + 2.0, d.position.z, 0, d.yaw);
+        // (ADR-289, `?halRefMove=a`: the car rides on his right palm, the statue's arm leaves from his
+        // right hand in the throw; otherwise between his hands, as before)
+        const ref = halRefMoveOn() && (this.heldKind === 'curb' || (this.heldKind === 'arm' && act.beats.some((b) => b.def.halArm === 'throw' && act.t >= b.start)));
+        const h = d.tellPoint(ref ? 'fistR' : 'palms', _v);
+        if (ref && this.heldKind === 'curb') W?.carry?.(pc, h.x, h.y + 0.32, h.z, 0, d.yaw);
+        else if (this.heldKind === 'sky') W?.carry?.(pc, d.position.x, d.position.y + 2.0, d.position.z, 0, d.yaw);
         else if (this.heldKind === 'arm') W?.carry?.(pc, h.x, Math.max(0.3, h.y - 0.3), h.z, Math.PI / 2, d.yaw + (d.brain.clipT % 1) * 0.0);
         else W?.carry?.(pc, h.x, h.y + 0.25, h.z, 0, d.yaw);
       }

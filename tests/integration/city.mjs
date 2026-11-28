@@ -4,7 +4,7 @@
 // the level's set (world/halcyonPlaza.js), or the real set with its breakables and its ambience (the
 // cars' fuses, setPhase). A bot drives the input. The harness is fox.mjs's (its build, bots, helpers).
 // usage: node city.mjs <repoRoot> [scenario]   (env: GCD_SEED=n reseeds the AI)
-//   scenario: levels | data | timing | flight | glare | pass | car | tower | statue | grab | phase | flow | pace | win | training | looks | herolike | all
+//   scenario: halref | levels | data | timing | flight | glare | pass | car | tower | statue | grab | phase | flow | pace | win | training | looks | herolike | all
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { ui, AUDIO, resetWindow } from './shim.mjs';
@@ -1282,6 +1282,10 @@ async function scenarioHeroLike() {
     assert(C.sheets.length === 5 && Math.abs(len(C) - k * len(full)) < 1e-9 && Math.abs(wid(C) - k * wid(full)) < 1e-9 && C.breeze === full.breeze,
       `?halCapeSize=${o}: the cape ${(len(C)).toFixed(2)} m long, its widest hem ${wid(C).toFixed(2)} m (x${k}), the billow kept`);
   }
+  // (the count of his look as it is built here: 90 for the shipped one; ?halRef=a's bare hands batch with
+  // his skin, GCD_LOOK)
+  let base = 0;
+  build().game.dragon.rig.root.traverse((m) => { if (m.isMesh) base++; });
   for (const o of ['0', 'c']) {
     LS.setLook('halCapeSize', o);
     let meshes = 0, ok = true;
@@ -1290,7 +1294,7 @@ async function scenarioHeroLike() {
       g.game.dragon.rig.root.traverse((m) => { if (m.isMesh) meshes++; });
       run(g, 0.5);
     } catch (e) { ok = false; out(`     ${o}: ${e.message}`); }
-    assert(ok && meshes === 90, `?halCapeSize=${o} builds, the same ${meshes} meshes (no new object on his rig)`);
+    assert(ok && meshes === base && (base === 90 || LOOK.halRefOn()), `?halCapeSize=${o} builds, the same ${meshes} meshes as at its own size (${base}; no new object on his rig)`);
   }
   LS.setLook('halCapeSize', null);
 }
@@ -1638,6 +1642,124 @@ async function scenarioHalMotion() {
 }
 
 /**
+ * HALREF (ADR-289): Halcyon after his reference pack (docs/art/character-packs-v04/halcyon). `?halRefMove=a`
+ * changes poses only: every move, phase and bait-hold draw realised with it on and off times every beat the
+ * same (start, impact, end, windup, hold, active, sustain, follow clock F, close, flash, the move's end and
+ * recovery) under the shipped switches, with `?halMotion=a` / `0` and with the readable pace; every reaction
+ * clip keeps its length and its hold; the same seeded fight against the defender lands the same blows at the
+ * same times. On the rig: each reaction he takes in the air hangs his legs (both feet behind his hips, the
+ * stance narrow: no planted fighting stance at the hover), the kneeling ones untouched; Meteor ends in the
+ * three-point landing. `?halRef=a`: the anchor's outfit builds (the hands bare, the hair blond), the same
+ * meshes as `?halLook=a` before batching, and a fight runs with nothing NaN.
+ */
+async function scenarioHalRef() {
+  out('\n== scenario HALREF (ADR-289: the reference pack behind ?halRef / ?halRefMove: the look and the poses, never the timing) ==');
+  const LS = await imp('src/entities/enemies/duelist/lookSwitch.js');
+  const { HAL_REF_CLIPS } = await imp('src/entities/enemies/halcyon/moves.js');
+  const { HOVER_REACT } = await imp('src/entities/enemies/halcyon/motion.js');
+  const rnd = (s) => () => ((s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const key = (A) => JSON.stringify([A.end, A.recoveryStart, A.hits, A.beats.map((b) => [b.index, b.start, b.impact, b.end, b.W, b.H, b.A, b.S, b.F, b.close, b.flash, b.feint])]);
+  let n = 0;
+  const diff = [];
+  for (const combo of [{}, { halMotion: 'a' }, { halMotion: '0' }, { halPace: 'a' }]) {
+    for (const [k, v] of Object.entries(combo)) LS.setLook(k, v);
+    for (const name of MOVE_NAMES) {
+      const def = MOVES[name];
+      for (let ph = 1; ph <= 3; ph++) {
+        if (def.transition && ph !== def.phase) continue;
+        for (let s = 1; s <= 4; s++) {
+          const opts = def.streak ? { count: 2 + s } : null;
+          LS.setLook('halRefMove', '0');
+          const a = realise(name, ph, rnd(s * 7919), opts);
+          LS.setLook('halRefMove', 'a');
+          const b = realise(name, ph, rnd(s * 7919), opts);
+          if (!a || !b) continue;
+          n++;
+          if (key(a) !== key(b)) diff.push(`${name} p${ph} s${s} ${JSON.stringify(combo)}`);
+        }
+      }
+    }
+    for (const k of Object.keys(combo)) LS.setLook(k, null);
+  }
+  LS.setLook('halRefMove', null);
+  assert(!diff.length && n > 900, `${n} realisations (every move, phase, hold draw, flurry count; the shipped switches, halMotion a / 0, the readable pace) time every beat the same with ?halRefMove on and off (${diff.slice(0, 4).join(', ') || 'none differ'})`);
+  // the reaction clips: the same length and hold; the flown set is the fourteen he takes in the air
+  const flown = Object.keys(HAL_REF_CLIPS.flown);
+  const clipBad = flown.filter((k) => HAL_REF_CLIPS.flown[k].dur !== HAL_REF_CLIPS.base[k].dur || !!HAL_REF_CLIPS.flown[k].hold !== !!HAL_REF_CLIPS.base[k].hold);
+  LS.setLook('halRefMove', 'a');
+  const served = flown.every((k) => CLIP[k] === HAL_REF_CLIPS.flown[k]) && ['stagger', 'recoil', 'reeling', 'trampled', 'broken', 'executed', 'death', 'crashed', 'blinded'].every((k) => CLIP[k] === HAL_REF_CLIPS.base[k]);
+  const d0open = build(SEED).game.dragon.brain.open;
+  LS.setLook('halRefMove', null);
+  const back = flown.every((k) => CLIP[k] === HAL_REF_CLIPS.base[k]);
+  assert(flown.length === HOVER_REACT.length && flown.length === 10 && !flown.some((k) => d0open.has(k)) && !clipBad.length && served && back, `${flown.length} reactions flown (${flown.join(', ')}; none the engine plays on the floor), each the same length and hold (${clipBad.join(', ') || 'all'}); served with the switch on, the floor's ones kept, the shipped ones with it off`);
+  // the same seeded fight, the same blows
+  const fight = (on) => {
+    LS.setLook('halRefMove', on ? 'a' : '0');
+    const G = build(SEED + 11);
+    duel(G, { dist: 3, ai: true });
+    G.defend = makeDefender(G);
+    const h0 = G.hits.length;
+    run(G, 24, () => G.defend.act());
+    LS.setLook('halRefMove', null);
+    return G.hits.slice(h0).map((h) => `${h.t.toFixed(3)} ${h.attack} ${h.r} ${h.damage}`);
+  };
+  const A = fight(false), B = fight(true);
+  const firstDiff = A.findIndex((h, i) => h !== B[i]);
+  assert(A.length > 4 && A.length === B.length && firstDiff < 0, `a seeded 24 s fight against the defender: ${A.length} blows off, ${B.length} on, the same times, moves and results${firstDiff >= 0 ? ` (first differs: ${A[firstDiff]} / ${B[firstDiff]})` : ''}`);
+  // the legs in a reaction at the hover, on the rig (his own frame: x across, z ahead)
+  const v = new THREE.Vector3();
+  const legs = (on, kind) => {
+    LS.setLook('halRefMove', on ? 'a' : '0');
+    const G = build(SEED + 5);
+    duel(G, { dist: 3 });
+    const d = G.game.dragon;
+    d.brain.startReact(kind);
+    run(G, Math.min(0.5, (CLIP[kind]?.dur ?? 1) * 0.5));
+    d.object3d.updateMatrixWorld(true);
+    const inv = d.object3d.matrixWorld.clone().invert();
+    const at = (j) => v.setFromMatrixPosition(j.matrixWorld).applyMatrix4(inv).clone();
+    const fR = at(d.rig.legs.R.foot), fL = at(d.rig.legs.L.foot), hR = at(d.rig.legs.R.thigh), hL = at(d.rig.legs.L.thigh);
+    const r = { width: Math.abs(fR.x - fL.x) * d.drawScale, lift: (fR.y - fL.y) * d.drawScale, y: d.position.y, mode: d.mode };
+    LS.setLook('halRefMove', null);
+    return r;
+  };
+  const rows = ['ward', 'clash', 'flinch', 'backstep', 'lock'].map((k) => [k, legs(false, k), legs(true, k)]);
+  for (const [k, a, b] of rows) out(`   ${k.padEnd(8)} at ${b.y.toFixed(2)} m: stance width ${a.width.toFixed(2)} -> ${b.width.toFixed(2)} m, right foot over the left ${a.lift.toFixed(2)} -> ${b.lift.toFixed(2)} m`);
+  assert(rows.every(([, a, b]) => b.mode === 'react' && b.y > 0.3 && b.lift > 0.15 && Math.abs(a.lift) < 0.1), `at the hover his reactions hang the sheets' legs (the right knee drawn up, the left hanging), no planted stance (${rows.map(([k, a, b]) => `${k} ${a.lift.toFixed(2)} -> ${b.lift.toFixed(2)} m`).join(', ')})`);
+  // Meteor ends in the three-point landing: the right hand low by his knee in the recovery
+  LS.setLook('halRefMove', 'a');
+  {
+    const G = build(SEED + 6);
+    duel(G, { dist: 6 });
+    const d = G.game.dragon;
+    d.debug.trigger('meteor');
+    const a = d.brain.act;
+    run(G, 8, null, () => d.mode === 'act' && d.brain.act === a && a.t >= a.recoveryStart + 0.2 * (a.end - a.recoveryStart));
+    d.object3d.updateMatrixWorld(true);
+    const hand = v.setFromMatrixPosition(d.rig.sword.matrixWorld).y - d.position.y;
+    assert(d.mode === 'act' && hand < 0.6 && d.position.y < 0.1, `Meteor's landing: in the recovery his right hand ${hand.toFixed(2)} m over the floor he kneels on (< 0.6), his root ${d.position.y.toFixed(2)} m`);
+  }
+  LS.setLook('halRefMove', null);
+  // the look
+  const count = (root) => { let m = 0; root.traverse((o) => { if (o.isMesh) m++; }); return m; };
+  const mk = (q) => { for (const [k, x] of Object.entries(q)) LS.setLook(k, x); const G = build(SEED + 3); for (const k of Object.keys(q)) LS.setLook(k, null); return G; };
+  const G0 = mk({}), G1 = mk({ halRef: 'a', halRefMove: 'a' });
+  const d1 = G1.game.dragon;
+  const used = new Set();
+  d1.rig.root.traverse((o) => { if (o.isMesh) used.add(o.material); });
+  const M = d1.rig.materials;
+  const blond = used.has(M.hairTip), bare = used.has(M.skin) && !used.has(M.welt), dressLook = d1.rig.root.userData.dress?.look;
+  LS.setLook('halRef', 'a');
+  LS.setLook('halRefMove', 'a');
+  duel(G1, { dist: 3, ai: true });
+  run(G1, 6);
+  const finite = Number.isFinite(d1.position.x + d1.position.y + d1.position.z);
+  LS.setLook('halRef', null);
+  LS.setLook('halRefMove', null);
+  assert(blond && bare && dressLook === 'd' && finite, `?halRef=a: the anchor's outfit (the hair in the gold-hair part ${blond}, the hands bare ${bare}, dressed '${dressLook}'), ${count(d1.rig.root)} meshes batched (?halLook=a: ${count(G0.game.dragon.rig.root)}); 6 s of a fight, nothing NaN`);
+}
+
+/**
  * LIMBS (ADR-254, `?halMotion=b`): the flier's limbs only move poses: every move realises with `a`'s beats,
  * windups, impacts and flashes. On the rig (AUDIT's measure, in his upright frame): every straight blow
  * lands within 12° of the line from its shoulder to the hero's upper chest (`a`: 35 - 66° across) with the
@@ -1663,8 +1785,11 @@ async function scenarioLimbs() {
   }
   assert(n > 150 && !diff.length, `${n} realisations: the same beats, windups, impacts, flashes and ends as a (${diff.slice(0, 6).join(', ') || 'all'})`);
   LS.setLook('halMotion', 'b');
+  // (b's own legs: the reference pack's poses, ?halRefMove, draw the sheets' knee up instead; halref checks those)
+  LS.setLook('halRefMove', '0');
   const rows = auditMoves(['meetAndGreet', 'backhand', 'tap', 'riposte', 'streakFlurry', 'flyBy', 'blink'], [false]).rows;
   LS.setLook('halMotion', null);
+  LS.setLook('halRefMove', (process.env.GCD_LOOK ?? '').match(/halRefMove=([^,]+)/)?.[1] ?? null); // (as the run forced it)
   const C = rows.flatMap((r) => r.contact.map((c) => ({ ...c, name: r.name })));
   const STRAIGHT = new Set(['meetAndGreet', 'backhand', 'tap', 'riposte']);
   const straight = C.filter((c) => STRAIGHT.has(c.name) || (c.name === 'blink' && c.i !== 1 && c.i !== 3) || (c.name === 'streakFlurry' && c.i === 0));
@@ -1739,6 +1864,7 @@ const S = {
   audit: scenarioAudit,
   halmotion: scenarioHalMotion,
   limbs: scenarioLimbs,
+  halref: scenarioHalRef,
   readable: scenarioReadable,
   levels: scenarioLevels,
   data: scenarioData,
@@ -1763,6 +1889,11 @@ S.bench = async () => { const { benchScenario } = await import('./bench.mjs'); r
 const OPT_IN = new Set(['smoke', 'audit', 'bench']);
 // GCD_SKIP (a comma list) leaves scenarios out of `all` (tests/run.mjs runs pace and win as processes of their own)
 const SKIP = new Set((process.env.GCD_SKIP ?? '').split(',').map((x) => x.trim()).filter(Boolean));
+// (GCD_LOOK='halRef=a,halRefMove=a': look switches forced for the whole run, as asc.mjs; the audit reads it too)
+{
+  const LS = await imp('src/entities/enemies/duelist/lookSwitch.js');
+  for (const kv of (process.env.GCD_LOOK ?? '').split(',').filter(Boolean)) LS.setLook(...kv.split('='));
+}
 const list = SCEN === 'all' ? Object.keys(S).filter((k) => !OPT_IN.has(k) && !SKIP.has(k)) : SCEN.split(',');
 for (const k of list) {
   if (!S[k]) { out(`unknown scenario ${k}`); process.exit(2); }

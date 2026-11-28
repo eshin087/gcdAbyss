@@ -186,6 +186,7 @@ function surfaceFeatures(o, cell) {
     uniforms.uArtRim = { value: h.rim ?? 1 };
     uniforms.uArtGlowK = { value: h.glow ?? 0 };
     uniforms.uArtSub = { value: h.sub ?? 0 }; // shade of a fold field's shadow side (model.js foldLines)
+    uniforms.uArtOwn = { value: 0 }; // 1: this material keeps its own fill under the bosses' print (uBossPrint: no shared tone, no pale hem, no falloff; Halcyon's ?halRef, ADR-289)
     uniforms.uArtPart = { value: part * 2 };
     // cloth folds: [bands per metre across aGUV x (rad), depth 0..1, wander down aGUV y]
     if (h.folds != null) {
@@ -595,6 +596,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform float uArtRim;
       uniform float uArtGlowK;
       uniform float uArtSub;
+      uniform float uArtOwn;
       uniform float uArtPart;
       uniform vec4 uBossPrint;
       uniform vec4 uBossHero;
@@ -1000,7 +1002,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float hemK = 0.0;
         float bossCloth = 0.0;
 #ifndef SG_HERO_SELF
-        if (uBossPrint.x > 0.5) {
+        if (uBossPrint.x > 0.5 && uArtOwn < 0.5) {
           float pidB = floor(uArtPart * 0.5 + 0.25);
           if (pidB > 2.5 && pidB < 16.5) {
             float mxB = max(max(uArtFill.r, uArtFill.g), max(uArtFill.b, 1e-3));

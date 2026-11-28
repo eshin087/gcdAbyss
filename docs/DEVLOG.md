@@ -5,6 +5,94 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — Halcyon's cape as one cloth, the sheets' lunge (ADR-289; `halcyon-ref-look`)
+
+**Owner**, asked "rebuild his cape as one soft cloth next, or fix the poses first?": "Both".
+
+- **The cape (`refGear.js` REF_CAPE, `?halRef=a`):** the five spring sheets (they fanned out in a blow like
+  planks) replaced by ONE wide sheet curved round his back from clasp to clasp, flaring to the heels, on one
+  spring: it swings as one mass, its edges at his sides (as sheet 01's front view), hung a little off his back
+  so his legs do not poke through; phase 3 tears its lower edge into five tatters along its curve. 71 meshes (95 before).
+- **The strikes (`motion.js` REF_HIT, `?halRefMove=a`):** from the strike the right knee stays forward and up
+  and the left leg stretches long behind him (sheet 02's lunge in the air), where both legs trailed folded.
+  Poses only (`city.mjs . halref`).
+- **Comparisons (local):** `implementation/strikes-compare-v3.png` (sheet 02 / now, side-on).
+- **Open:** seen side-on the cape is a strip trailing at an angle, where the sheet's billows into a wide
+  mass behind him (a cloth with depth, not one curved sheet); a small kink shows where its two segments meet.
+
+## 2026-11-28 — Halcyon's strikes after sheet 02: the chin guard, the lean (ADR-289; `halcyon-ref-look`)
+
+**Owner**, on the third rebuild: "Yes, keep going".
+
+- **Strikes:** under `?halRefMove=a` every builder blow keeps the hand that does not strike up at the chin
+  (a boxer's guard, sheet 02's every row), the striking hand there too before its windup and after it
+  comes back, and a punch leans the body into it (motion.js `refArms`, REF_GUARD). Poses only:
+  `city.mjs . halref` green (every beat times the same).
+- **Cape:** its silhouette line dimmed under `?halRef=a` (look.js HAL_OWN `outline`), so the five sheets
+  stop printing as pale-edged planks.
+- **Comparison (local):** `docs/art/character-packs-v04/halcyon/implementation/strikes-compare-v3.png`.
+- **Open:** the cape is still five stiff spring sheets that fan out in a blow; the sheet draws one soft
+  mass trailing behind him: the next step is one cloth. The camera of the capture follows his pelvis.
+
+## 2026-11-28 — Halcyon rebuilt by code a third time, to read as the sheet (ADR-289; `halcyon-ref-look`)
+
+**Owner**, shown the second pass: "it doesn't seem like the new look has any resemblance to the reference
+art"; then "build it by code first and dont worry about face details since its ascii".
+
+- **Why the second pass missed:** the details changed (gold edges, clasps, plates) on the shared rig's stocky
+  proportions, a helmet of hair over the face, and the bosses' print (a dim shared tone, bright outlines, a dark
+  falloff), so he read as the same mannequin.
+- **Now:** the drawn meshes slimmed (arms, legs, hips, deltoids, cuffs, hands), the head drawn x0.86, the hair a
+  swept cap with the face clear, flat knees and pectorals, the plate lines pale blue (gold only where the sheet
+  has it), the cape without drawn fold lines, and `uArtOwn` (materials.js): his materials keep their own fill
+  under the bosses' print, solid navy / crimson / gold / blond (look.js `HAL_OWN`). Bones, timing and hitboxes
+  untouched (`city.mjs . halref` green; 95 meshes).
+- **Comparison (local):** `docs/art/character-packs-v04/halcyon/implementation/look-compare-v3.png` (sheet 01,
+  the second pass, now; four views).
+- **Open:** the owner's verdict; the cape is five spring sheets (their seams show as faint lines); phase 1's
+  folded arms read as hands on the hips from the front.
+
+## 2026-11-28 — Halcyon rebuilt after the reference sheet, and his attacks (ADR-289, second pass; `halcyon-ref-look`)
+
+**Owner**, shown the first pass beside sheet 01: "rebuild him to look identical to the reference sheet and same with
+his attacks".
+
+- **The body (`halcyon/refGear.js`, `?halRef=a`):** a V-tapered torso with flat pectoral plates (a first try read as
+  breasts: flattened and squared), six ab plates, smaller shoulders under pauldrons, limb plates and greaves, every
+  plate edged in gold; collar, clasps, belt, cuffs, gold-capped boots; a square jaw; three rows of swept locks. The
+  cape: a mantle over the shoulders and five overlapping sheets to the heels, swinging less. Its lower third printed
+  lavender: the bosses' pale hem (ADR-194); a per-material `uArtNoHem` keeps it crimson (0 for everything else; renamed `uArtOwn` in the third pass).
+- **The attacks (`?halRefMove=a`):** sheet 02's legs (the right knee drawn up in the windup, bent and trailing from
+  the strike, a kick's other knee tucked), the hover and the hover reactions the same; `?halMotion=b`'s straight
+  arms kept. Timing identity re-checked (`halref`), the city suite green with both switches forced.
+- **Comparisons (local, beside the pack, `implementation/`):** `look-compare-v2.png` (sheet 01 / today / rebuilt,
+  four views), `strikes-compare-v2.png` (sheet 02's eight strikes at its four stages / today / after, side-on).
+- **Removed:** the first pass's recolour inside gear.js and the cape-size override (`lookExplicit`): the rebuild
+  replaced them.
+- **Open:** the owner's verdict; the blows still aim down at the hero where the sheet's punches are level (gameplay).
+
+## 2026-11-28 — Halcyon after the reference pack, behind `?halRef` / `?halRefMove` (ADR-289; `halcyon-ref-look`)
+
+**Owner:** implement Halcyon's selected look and animation references (`docs/art/character-packs-v04/halcyon`: the
+anchor 00 and the corrected sheets 01 - 07), on the shared rig, with no balance change; final approval is theirs.
+
+- **Reconciled:** the inventory's 24 moves and 21 clips match the source. Most of the sheets' flight already ships
+  (ADR-254's long legs and level pass; the eyes' beams; Crossed Glare's opposing sweeps; the left-hand grab; the
+  knee-supported death). What did not: the look (dark hair, gloves, a bright blue suit, red boots), and his ward /
+  clash / flinch / backstep / sidestep / lock reactions planted on air at the hover.
+- **Captured first:** turnaround and game-camera sheets of today's Halcyon, every move and reaction filmed at the
+  game camera (scratch rig: headless Edge, `__tick`, one seed per take).
+- **Stage 1, the look (`?halRef=a`):** outfit 'd' in gear.js / look.js: blond, navy and gold, a chest strap, diamond
+  clasps, bare hands, gold toes, a long red cape one red to its edge, eyes dim until they kindle. No new object.
+- **Stage 2, the poses (`?halRefMove=a`, live):** the ten hover reactions flown (limbs.js `legsFor`); the brake and
+  the bank; Meteor's three-point landing; the car on the right palm and the statue's arm thrown from the right hand.
+- **Verified:** `city.mjs . halref` (new: timing identity over 1088 realisations, a seeded fight, the legs, Meteor,
+  the outfit); the requested city scenarios with both switches forced (`GCD_LOOK`, now read for the whole run);
+  films before / after at full speed and slowed with flash / contact / active-end / follow-end markers, timing
+  identical on all 14 filmed items; stills at 720p / 1440p / 4K from four sides. HEROLIKE's mesh-count check now
+  compares a cape size with its own look's count (86 under `?halRef`, 90 shipped).
+- **Open:** the owner picks from the films; the pack's airborne stagger / recoil / reeling / trampled stay on the
+  floor (his height is gameplay); the strap and clasps are under a letter at 720p.
 ## 2026-11-28 — The wyrm's feet planted in the death and the wake (ADR-293; branch `dragon/planted-death-wake`)
 
 **Owner:** "fix the death and wake foot sliding next" (left by ADR-281).

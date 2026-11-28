@@ -5605,6 +5605,8 @@ data and a subclass with a few hooks.
   blade's way home is predicted while it still flies out), (d) `expect`. Queries: `conflict(at, ans, sep,
   ...)`, `clearShift(at, ans, sep, max, ...)`, `pending(ans, horizon)`, `liveHazards()`, `travel(b)`. Fixed
   pools; nothing allocated per frame.
+- `materials.js` hero-art materials carry `uArtOwn` (0; 1 keeps a material's own fill under the bosses' print, no shared tone, no pale
+  hem, no shadow falloff, `uBossPrint`: only Halcyon's `?halRef=a` body sets it, ADR-289).
 - `lookSwitch.js` (ADR-122): the look options behind URL switches (STYLE.md "The look switches").
   `PICKED` (the owner's picks, 2026-11-16: name → option; the Skybreak Ring's of 2026-11-21: `ring`,
   `ascLook`, `ascAura`, `ascBeam`, `ascLift`, all 'a'). `lookOf(name, def = '0', pick = 'a')` → the

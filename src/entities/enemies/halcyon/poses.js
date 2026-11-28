@@ -54,6 +54,14 @@ export function hoverLoco(p, A) {
   p[P.pitch] += Math.max(-0.25, Math.min(0.45, fwd * 0.045)) * (0.4 + 0.6 * k);
   p[P.roll] += Math.max(-0.3, Math.min(0.3, -side * 0.03));
   p[P.bodyY] = -0.02;
+  // (ADR-289, `?halRefMove=a`) the brake and the bank: his acceleration in his own axes (pilot.halAcc,
+  // halcyon.js; zero with the switch off): slowing, he leans back (the long legs of `?halMotion=b` swing
+  // forward with the lean, hoverLegs); in a turn he banks into it
+  const ac = pl.halAcc;
+  if (ac && (ac.f || ac.s)) {
+    p[P.pitch] += Math.max(-0.32, Math.min(0.2, ac.f * 0.022));
+    p[P.roll] += Math.max(-0.26, Math.min(0.26, -ac.s * 0.02));
+  }
   // the arms folded (phase 1), or down and open
   const f = Math.max(0, Math.min(1, pl.armsK ?? 1));
   if (f > 0) {
@@ -69,7 +77,8 @@ export function hoverLoco(p, A) {
     to3(p, P.lH, 0.1, -0.36, -0.3, g);
     p[P.pitch] += 0.25 * g;
   }
-  if (lookOf('halMotion', '0') === 'b') hoverLegs(p, t);
+  // (ADR-289, `?halRefMove=a`: the sheets' hover (01 B7, B8), the right knee drawn up, the left hanging, as above)
+  if (lookOf('halMotion', '0') === 'b' && lookOf('halRefMove', '0') === '0') hoverLegs(p, t);
 }
 
 const LEG = DIM.thigh + DIM.shin;

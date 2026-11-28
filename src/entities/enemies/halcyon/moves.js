@@ -3,7 +3,7 @@ import { compileClip, completeBeat, GUARD, FOLDED } from './poses.js';
 import { TUNING } from './tuning.js';
 import { makeRealise } from '../duelist/realise.js';
 import { X as ASC, CLIPS as ASC_CLIPS } from '../ascendant/moves.js';
-import { halKeys } from './motion.js';
+import { halKeys, halRefMoveOn, HOVER_REACT, flyReactKeys } from './motion.js';
 import { buildPace, paceCue, paceOn } from './pace.js';
 import { SNAP_KEYS } from '../ascendant/motion.js';
 
@@ -316,20 +316,40 @@ export const REACT = Object.freeze({ crashed: { travel: 0 }, blinded: { travel: 
 export const OPEN = Object.freeze(['crashed', 'blinded']);
 
 /** Compiled reaction clips (build time). */
-export const CLIP = Object.fromEntries(Object.entries(CLIPS).map(([k, c]) => [k, compileClip(c.keys.map(([t, pose]) => ({ t, ...pose })), c.dur, { hold: !!c.hold })]));
-for (const [k, c] of Object.entries(CLIP)) c.name = k;
+const compileReact = (c, keys = c.keys) => compileClip(keys.map(([t, pose]) => ({ t, ...pose })), c.dur, { hold: !!c.hold });
+const CLIP_BASE = Object.fromEntries(Object.entries(CLIPS).map(([k, c]) => [k, compileReact(c)]));
+for (const [k, c] of Object.entries(CLIP_BASE)) c.name = k;
+/** (ADR-289, `?halRefMove=a`: motion.js) the reactions he takes in the air, flown: the same times. */
+const CLIP_FLOWN = Object.fromEntries(HOVER_REACT.filter((k) => CLIPS[k]).map((k) => [k, compileReact(CLIPS[k], flyReactKeys(CLIPS[k].keys))]));
+for (const [k, c] of Object.entries(CLIP_FLOWN)) c.name = k;
+/** The kit's clips: a flown reaction behind the live switch (read as a reaction starts). */
+export const CLIP = {};
+for (const k of Object.keys(CLIP_BASE)) {
+  Object.defineProperty(CLIP, k, { enumerable: true, get: () => (CLIP_FLOWN[k] && halRefMoveOn() ? CLIP_FLOWN[k] : CLIP_BASE[k]) });
+}
+/** (tests) Both sets: { base, flown }. */
+export const HAL_REF_CLIPS = Object.freeze({ base: CLIP_BASE, flown: CLIP_FLOWN });
 
 // ---------------------------------------------------------------- realising a move
 // (ADR-225: `?halMotion=a` plays his reworked motion through `keysOf`: motion.js; ADR-254: `?halMotion=b`
 // the flier's limbs on top, limbs.js; `?halPace=a` the readable pace, pace.js: a held cock, a later cue)
 const PACE = buildPace(MOVES, TUNING);
 let PH = 1;
+// (ADR-289, `?halRefMove=a`: motion.js) Meteor: from the impact a three-point landing (the right knee
+// down, the right hand on the ground, the left arm out, the head up at the hero), held into the recovery,
+// then up. The impact key (u 1, e: 'i') and every time are the move's own; the recovery's first key is at
+// 0.75, where the realiser puts the follow-through's end without one, so its clock (b.F) is unchanged.
+const LAND3 = F({ bY: -0.5, pitch: 0.42, spX: 0.12, hdX: -0.12, yaw: 0, rH: [-0.08, -0.66, 0.34], rP: [-0.4, -0.9, 0.2], lH: [0.3, -0.24, 0.1], lP: [0.9, 0.0, -0.3], rF: [-0.13, -0.36], lF: [0.16, 0.36], rK: [-0.05, -0.8, 0.6], lK: [0.1, 0, 1], flat: 0.6 });
+const LAND_UP = F({ ...LAND3, bY: -0.3, pitch: 0.2, hdX: -0.05, rH: [-0.1, -0.4, 0.2], lH: [0.2, -0.32, 0.1] });
+const REF_KEYS = new Map([[MOVES.meteor.beats[0], [[0.4, DIVE_TOP], [0.85, DIVE_TOP], [1.0, { ...DIVE_HIT, e: 'i' }], [1.6, LAND3], [2.0, LAND3]]]]);
+const REF_RECOVERY = new Map([[MOVES.meteor, [[0.75, LAND3], [0.95, LAND_UP]]]]);
 const keysOf = (b) => {
-  const k = halKeys(b);
+  const k = halKeys(b) ?? (halRefMoveOn() ? REF_KEYS.get(b) ?? null : null);
   const h = paceOn() ? PACE[Math.min(3, Math.max(1, PH)) - 1].get(b) ?? 0 : 0;
   return h > 0 ? { keys: k, hold: h } : k;
 };
-const base = makeRealise({ TUNING, MOVES, compileClip: (keys, dur) => compileClip(keys, dur), completeBeat, keysOf });
+const recoveryKeysOf = (m) => (halRefMoveOn() ? REF_RECOVERY.get(m) ?? null : null);
+const base = makeRealise({ TUNING, MOVES, compileClip: (keys, dur) => compileClip(keys, dur), completeBeat, keysOf, recoveryKeysOf });
 export function realise(name, phase = 1, rnd = Math.random, opts = null) {
   PH = phase;
   const A = base(name, phase, rnd, opts);

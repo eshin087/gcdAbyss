@@ -12,6 +12,12 @@ import { setFill } from '../ashDisciple/bodyArt.js';
 //            b   the idol: a navy suit, gold shoulder pieces of his own shape, white gloves, a cape with
 //                a bright lining, blond slick hair.
 //            c   tomorrow's tyrant: black and chrome, a crimson cape, white hair.
+//   ?halRef=a   THE ANCHOR (ADR-289; docs/art/character-packs-v04/halcyon, 00 and 01: the owner's selected
+//                identity, 2026-11-28; PENDING, waiting for the owner; over any ?halLook=, as ADR-277's
+//                ?lordRef=a): his body REBUILT after the sheets (refGear.js: a V-tapered man in sculpted navy
+//                plates edged in gold, a square jaw, blond hair swept back, bare hands, gold-capped boots, a
+//                crimson mantle and a cape to his heels), coloured as the outfit 'd' below; his eyes dim
+//                until they kindle. More objects than the shipped rig, only under the switch.
 //   ?glare=a|b|c   his eyes' heat (fx.js; the owner picked a, 2026-11-23): a crimson with a white-hot steel core, b crimson alone, c the
 //                  engine's orange fire with a steel core.
 //   ?halCape=0|1|2|3   how his cape and colours read at game size (the look pass of 2026-11-23: at
@@ -71,8 +77,12 @@ export function halCapeNow() {
   return Number.isInteger(n) && n >= 0 && n <= 3 ? n : Number(HAL_CAPE_STEP);
 }
 
-/** The outfit his rig is built in: 'a' | 'b' | 'c' (an unknown value draws a). */
+/** The reference pack's look is on (`?halRef=a`, ADR-289; read when his rig is built). */
+export const halRefOn = () => lookOf('halRef', '0') !== '0';
+
+/** The outfit his rig is built in: 'a' | 'b' | 'c', or 'd' (the anchor: `?halRef=a`); an unknown value draws a. */
 export function halLookNow() {
+  if (halRefOn()) return 'd';
   const o = halLook('halLook');
   return o === 'b' || o === 'c' ? o : 'a';
 }
@@ -93,6 +103,12 @@ export const HAL_TINT = {
     pants: [0.03, 0.03, 0.035], armor: [0.5, 0.52, 0.56], piping: [1.0, 0.2, 0.15], trim: [0.68, 0.7, 0.74],
     collar: [0.04, 0.04, 0.045], coat: [0.42, 0.015, 0.03], lining: [0.12, 0.01, 0.015], hem: [0.32, 0.01, 0.02],
     shirt: [0.85, 0.85, 0.88], welt: [0.05, 0.05, 0.06], skin: [0.84, 0.6, 0.46],
+  },
+  // the anchor (gear.js: the hair in `hairTip`, the seams and the strap in the gold, the hands bare)
+  d: {
+    pants: [0.035, 0.05, 0.2], armor: [0.06, 0.09, 0.34], piping: [0.85, 0.6, 0.14], trim: [0.85, 0.6, 0.14],
+    collar: [0.04, 0.055, 0.22], coat: [0.62, 0.05, 0.04], lining: [0.24, 0.02, 0.02], hem: [0.5, 0.035, 0.03],
+    shirt: [0.05, 0.04, 0.035], welt: [0.06, 0.1, 0.32], skin: [0.86, 0.6, 0.45], hairTip: [0.95, 0.72, 0.32],
   },
 };
 /**
@@ -117,6 +133,25 @@ export const HAL_BRIGHT = {
     pants: [0.025, 0.025, 0.03], armor: [0.8, 0.84, 0.92], piping: [1.2, 0.12, 0.1], trim: [0.95, 0.98, 1.05],
     collar: [0.03, 0.03, 0.035], coat: [0.85, 0.02, 0.1], lining: [2.0, 0.04, 0.22], hem: [1.3, 0.03, 0.14],
   },
+  // the anchor: a navy that stays navy at game size (a's blue printed bright blue), a deep red cape, a
+  // clear gold, a pale blond
+  d: {
+    pants: [0.045, 0.075, 0.36], armor: [0.07, 0.13, 0.6], hair: [0.95, 0.58, 0.05], hairTip: [1.05, 0.78, 0.34],
+    collar: [0.05, 0.08, 0.34], coat: [3.3, 0.2, 0.12], lining: [3.3, 0.2, 0.12], hem: [1.4, 0.08, 0.05],
+  },
+};
+/** The anchor's own print (`?halRef=a`): the fill each part keeps (linear, before the key light) and its ink
+ *  lines' colour, so he reads solid as on the sheets: a navy suit, navy-blue plates, gold, a crimson cape,
+ *  the blond, the skin. */
+export const HAL_OWN = {
+  pants: { fill: [0.07, 0.1, 0.34], ink: [0.3, 0.38, 0.8] },
+  armor: { fill: [0.11, 0.15, 0.48], ink: [0.55, 0.65, 1.1] },
+  collar: { fill: [0.07, 0.1, 0.34], ink: [0.3, 0.38, 0.8] },
+  hair: { fill: [0.75, 0.48, 0.08], ink: [1.1, 0.75, 0.2] },
+  hairTip: { fill: [1.0, 0.72, 0.3], ink: [1.2, 0.9, 0.45] },
+  coat: { fill: [1.0, 0.07, 0.06], ink: [1.0, 0.14, 0.1], outline: 0.12 },
+  lining: { fill: [0.95, 0.06, 0.05], ink: [1.0, 0.14, 0.1], outline: 0.12 },
+  skin: { fill: [0.4, 0.21, 0.15], ink: [0.6, 0.34, 0.24] },
 };
 /** ?halCape=1 and up: the cape's own rim (the cool moonlit edge turned the red pink) and the lift. */
 const BRIGHT_RIM = { coat: 0.1, lining: 0.1, hem: 0.1, collar: 0.3, trim: 0.3 };
@@ -141,6 +176,19 @@ export function tintHalcyon(M) {
   }
   // ?halPrint=a|b: the hero's quieter print (ADR-166)
   if (P) for (const k in P.fill) M[k]?.uniforms?.uArtFill?.value.multiplyScalar(P.fill[k]);
+  // (d, the anchor: the cape's own ink red, so its lines print red, not pale)
+  if (o === 'd') {
+    // the sheets print him solid in his own colours: every part keeps its own fill (uArtOwn: none of the
+    // bosses' shared tone, pale hem or dark falloff), at HAL_OWN's brightness
+    for (const k in HAL_OWN) {
+      const u = M[k]?.uniforms;
+      if (!u) continue;
+      if (u.uArtOwn) u.uArtOwn.value = 1;
+      u.uArtFill?.value.setRGB(...HAL_OWN[k].fill);
+      if (HAL_OWN[k].ink) u.uInk?.value.setRGB(...HAL_OWN[k].ink);
+      if (HAL_OWN[k].outline != null && u.uOutline) u.uOutline.value = HAL_OWN[k].outline;
+    }
+  }
   // the neon seams light themselves a little (their ink lines glow), the eyes burn
   const pu = M.piping?.uniforms;
   if (pu?.uInkGlow) pu.uInkGlow.value = 0.5;
@@ -155,7 +203,7 @@ export function tintHalcyon(M) {
 
 /** The dressing record on his rig (gear.js registers the pieces that change by phase). */
 export function dressOf(root) {
-  return (root.userData.dress ??= { kind: 'hal', phase: 0, at: [] });
+  return (root.userData.dress ??= { kind: 'hal', phase: 0, at: [], look: halLookNow() });
 }
 /** Show mesh `m` from phase `from` to phase `to`. */
 export function at(D, m, from, to = 9) {
@@ -180,7 +228,9 @@ export function dressHalcyon(d) {
   const fu = d.rig.materials.flask?.uniforms;
   if (fu) {
     const dead = d.mode === 'dead' || (d.mode === 'dying' && d.brain.modeT > 1.6);
-    const k = dead ? 0 : 0.7 + 0.9 * Math.min(1, fin(d.eyesK)) + 0.08 * Math.sin(fin(d.time) * 9);
+    // (the anchor, ?halRef=a: his eyes a dim red at rest, as on its face sheet; they kindle the same)
+    const e = Math.min(1, fin(d.eyesK));
+    const k = dead ? 0 : (D.look === 'd' ? 0.22 + 1.38 * e : 0.7 + 0.9 * e) + 0.08 * Math.sin(fin(d.time) * 9);
     if (fu.uGlow) fu.uGlow.value = k;
     if (fu.uInkGlow) fu.uInkGlow.value = k;
   }

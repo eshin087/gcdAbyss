@@ -5,11 +5,12 @@ import {
   shellGeometry, skirtSheet, tatterStrip, bandGeometry, boxGeometry, mergeGeometries, sub, foldLines, ribbonCrease, lerp, limb,
   gripFist, orient, orientTo, clumpGeometry, partGeometry,
 } from '../../player/heroGeo.js';
-import { halLookNow, halCapeNow, halCapeSizeNow, dressOf, at } from './look.js';
+import { halLookNow, halCapeNow, halCapeSizeNow, halRefOn, dressOf, at } from './look.js';
+import { REF_BUILD } from './refGear.js';
 
 // Halcyon's gear: the hero's skeleton (buildHero), no weapon (bare-handed: the right fist on the sword
 // joint), drawn in the hero's ink-line art. Three outfits (`?halLook=a|b|c`, look.js; read when his rig
-// is built). No letter, shield or symbol anywhere on him (ADR-160, the line on the homage): what reads is
+// is built); `?halRef=a` builds every slot from refGear.js instead (ADR-289). No letter, shield or symbol anywhere on him (ADR-160, the line on the homage): what reads is
 // the colour and the shape: the suit, the cape, the belt, the eyes.
 //
 // His material instances (look.js tintHalcyon writes the colours): `pants` = the suit (torso, arms,
@@ -297,12 +298,12 @@ function buildCape(ctx) {
 
 /** The set (registered into the hero's gear registry on import: gear/index.js registerItem). */
 export const HAL_ITEMS = [
-  { id: 'hal.head', slot: 'head', name: 'Slick Hair', hidesHair: true, build: buildHead },
-  { id: 'hal.suit', slot: 'chest', name: 'Saviour Plate', build: buildChest },
-  { id: 'hal.arms', slot: 'arms', name: 'Saviour Gauntlets', build: buildArms },
-  { id: 'hal.legs', slot: 'legs', name: 'Saviour Boots', build: buildLegs },
-  { id: 'hal.belt', slot: 'waist', name: 'Gold Belt', build: buildWaist },
-  { id: 'hal.cape', slot: 'back', name: 'Long Red Cape', build: buildCape },
+  { id: 'hal.head', slot: 'head', name: 'Slick Hair', hidesHair: true, build: (c) => (halRefOn() ? REF_BUILD.head(c) : buildHead(c)) },
+  { id: 'hal.suit', slot: 'chest', name: 'Saviour Plate', build: (c) => (halRefOn() ? REF_BUILD.chest(c) : buildChest(c)) },
+  { id: 'hal.arms', slot: 'arms', name: 'Saviour Gauntlets', build: (c) => (halRefOn() ? REF_BUILD.arms(c) : buildArms(c)) },
+  { id: 'hal.legs', slot: 'legs', name: 'Saviour Boots', build: (c) => (halRefOn() ? REF_BUILD.legs(c) : buildLegs(c)) },
+  { id: 'hal.belt', slot: 'waist', name: 'Gold Belt', build: (c) => (halRefOn() ? REF_BUILD.waist(c) : buildWaist(c)) },
+  { id: 'hal.cape', slot: 'back', name: 'Long Red Cape', build: (c) => (halRefOn() ? REF_BUILD.back(c) : buildCape(c)) },
 ];
 for (const item of HAL_ITEMS) registerItem(item);
 

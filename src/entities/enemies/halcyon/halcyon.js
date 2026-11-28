@@ -8,7 +8,7 @@ import { wrapAngle } from '../../../core/math.js';
 import { HAL_LOADOUT, HAL_FIST } from './gear.js';
 import { HAL_POSES } from './poses.js';
 import { MOVES, MOVE_NAMES, CLIP, TRANSITIONS, AFTER, REACT, OPEN, realise } from './moves.js';
-import { halMotionOn, halLimbsOn } from './motion.js';
+import { halMotionOn, halLimbsOn, halRefMoveOn } from './motion.js';
 import { TUNING } from './tuning.js';
 import { LINKS } from './links.js';
 import { tintHalcyon, dressHalcyon, halLettersOn } from './look.js';
@@ -383,10 +383,30 @@ export class Halcyon extends Duelist {
       const b = B && this.mode === 'act' ? beatNow(this.brain.act) : null;
       this.anim.kickStretch = b?.def?.mo?.fam === 'kick' ? B.kickStretch : null;
     }
+    this._halAcc(dt);
     this.glare.frame(dt);
     this.terrain.frame(dt);
     this.flight.frame(dt);
     this.pilot.armsK = (this.pilot.armsK ?? 1) + ((this.phase <= 1 ? 1 : 0) - (this.pilot.armsK ?? 1)) * Math.min(1, dt * 3);
+  }
+
+  /** (ADR-289, `?halRefMove=a`) His glide's acceleration in his own axes, smoothed (pilot.halAcc: the
+   *  hover's brake and bank, poses.js); { f: 0, s: 0 } with the switch off or out of his footwork. Drawn only. */
+  _halAcc(dt) {
+    const A = (this.pilot.halAcc ??= { f: 0, s: 0 }), v = this.pilot.groundVel;
+    const vx = fin(v?.x), vz = fin(v?.z);
+    if (!halRefMoveOn() || !(dt > 0) || this.mode !== 'foot') {
+      A.f = A.s = 0;
+      this._vPrev = null;
+      return;
+    }
+    const P = (this._vPrev ??= { x: vx, z: vz });
+    const ax = (vx - P.x) / dt, az = (vz - P.z) / dt;
+    P.x = vx;
+    P.z = vz;
+    const sy = Math.sin(this.yaw), cy = Math.cos(this.yaw), k = 1 - Math.exp(-dt * 6);
+    A.f += (fin(ax * sy + az * cy) - A.f) * k;
+    A.s += (fin(ax * cy - az * sy) - A.s) * k;
   }
 
   /** After the pose: his eyes' light, the trail off the striking limb through a blow, the stars of a break. */

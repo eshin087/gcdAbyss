@@ -56,7 +56,7 @@ function fly(pose, beat, strike) {
   return o;
 }
 
-const cacheB = new WeakMap();
+const cacheB = new WeakMap(), cacheR = new WeakMap();
 /** His keys for a beat under the switch (null: the beat's own). `b` (ADR-254, limbs.js): `a`'s, then the
  *  flier's long legs in place of the folded ones, the straight blows on the line, the kicks long; his
  *  flying beats (the pass, the tower) their level flier's line. */
@@ -65,20 +65,24 @@ export function halKeys(beat) {
   if (m === '0' || !beat) return null;
   if (m === 'b' && !beat.mo) return flyKeys(beat);
   if (!beat.mo) return null;
-  const C = m === 'b' ? cacheB : cache;
+  // (ADR-289, `?halRefMove=a`: the sheets' legs, `refLegs`, in place of `b`'s long ones; `b`'s arms kept)
+  const ref = m === 'b' && halRefMoveOn();
+  const C = ref ? cacheR : m === 'b' ? cacheB : cache;
   if (C.has(beat)) return C.get(beat);
   const base = ASC_MOTION.keysFor(beat) ?? beat.keys ?? [];
   const cock = beat.cock ?? 0.7;
   let keys = base.map(([u, pose]) => [u, fly(pose, beat, u >= cock - 1e-6)]);
   if (m === 'b') {
     const kick = beat.mo.fam === 'kick';
-    if (!kick) keys = keys.map(([u, p]) => [u, legsFor(p, u >= cock - 1e-6)]);
+    if (ref) keys = keys.map(([u, p]) => [u, refLegs(p, beat, u >= cock - 1e-6)]);
+    else if (!kick) keys = keys.map(([u, p]) => [u, legsFor(p, u >= cock - 1e-6)]);
     else {
       // (a kick: the other leg hangs long, not folded under him as if he stood on air)
       const other = (beat.part ?? 'footR').endsWith('R') ? 'L' : 'R';
       keys = keys.map(([u, p]) => [u, legsFor(p, u >= cock - 1e-6, other)]);
     }
     keys = limbKeys(beat, keys);
+    if (ref) keys = keys.map(([u, p]) => [u, refArms(p, beat, u)]);
   }
   C.set(beat, keys);
   return keys;
@@ -88,3 +92,74 @@ export function halKeys(beat) {
 export const halMotionOn = () => lookOf('halMotion', '0') !== '0';
 /** True under `b` (ADR-254: the flier's limbs, the level pass; read live). */
 export const halLimbsOn = () => lookOf('halMotion', '0') === 'b';
+
+// ---------------------------------------------------------------- the reference pack's poses (ADR-289)
+// `?halRefMove=a` (lookSwitch PENDING: the owner picks it from the films; '0' as today), live: his pose
+// keys after the character pack (docs/art/character-packs-v04/halcyon/: 01 B, 03, 06, 07). Poses only:
+// no key time, ease, zone, reach, root height, cue or travel changes (city.mjs HALREF checks it).
+//   1. THE FLOWN REACTIONS: Tian Lei's reaction clips (ward ... lock) kept his planted stance: at the
+//      hover (0.5 m) he stood on air. Every key of the ten he takes at the hover gets the flier's legs of
+//      `?halMotion=b` (limbs.js legsFor: long, the knees soft, trailing with the body's lean). The ones the
+//      engine plays on the floor keep theirs: the open reactions (stagger, recoil, reeling, trampled,
+//      executed: struck out of the air he drops, flight.js) and the kneeling ones (broken, death, crashed,
+//      blinded). The pack draws stagger / recoil / reeling / trampled in the air (07 rows 10 - 13); his
+//      height is gameplay (the hover rule), so they stay grounded.
+//   2. THE BRAKE AND THE BANK (poses.js hoverLoco, pilot.halAcc from halcyon.js brainFrame): slowing, he
+//      leans back; in a turn he banks into it (01 B10, B11).
+//   3. METEOR'S LANDING: a three-point landing in the crater, held into the recovery (03 row 6, 06 row 5).
+//   4. WHAT HE HOLDS (terrain.js): the car on his right palm (03 row 4), the statue's arm thrown from his
+//      right hand (03 row 7).
+export const halRefMoveOn = () => lookOf('halRefMove', '0') !== '0';
+
+/** The reactions he takes in the air (the hover): their keys flown. */
+export const HOVER_REACT = Object.freeze(['ward', 'wardR', 'wardHigh', 'clash', 'deflect', 'wardHold', 'flinch', 'backstep', 'sidestep', 'lock']);
+
+/** A reaction clip's keys flown: the sheets' hovering legs on every key (build time; 07: the right knee
+ *  drawn up, the left hanging, the toes pointed). */
+export function flyReactKeys(keys) {
+  return keys.map(([t, pose]) => {
+    const o = { ...pose };
+    for (const f of LEG_FIELDS) o[f] = Array.isArray(LEGS_COIL[f]) ? LEGS_COIL[f].slice() : LEGS_COIL[f];
+    return [t, o];
+  });
+}
+
+/** THE SHEETS' LEGS (02, 03, 07; `?halRefMove=a` over `?halMotion=b`): through a blow's windup the right
+ *  knee drawn up high and the left leg hanging, the toes pointed (crouched in the air); from the strike
+ *  the right knee kept up and the left leg long behind him (REF_HIT); a kick keeps its striking leg (the builder's,
+ *  carried out straight by limbs.js) and draws the other knee up under him (REF_KICK_OTHER). */
+const REF_COIL = { rF: [-0.1, ANK + 0.4, 0.14], lF: [0.12, ANK + 0.08, -0.04], rK: [-0.1, 0.4, 1], lK: [0.1, 0.1, 1], flat: 0.2, rFy: -0.12, lFy: 0.1 };
+/** From the strike (02's contact and follow-through): the right knee kept forward and up, the left leg
+ *  long behind him, the toes pointed (a lunge in the air, not both legs folded back). */
+const REF_HIT = { rF: [-0.1, ANK + 0.3, 0.06], lF: [0.11, ANK + 0.12, -0.5], rK: [-0.1, 0.4, 1], lK: [0.1, -0.2, 1], flat: 0.15, rFy: -0.12, lFy: 0.1 };
+const REF_KICK_OTHER = { R: { rF: [-0.1, ANK + 0.38, 0.1], rK: [-0.1, 0.4, 1], rFy: -0.1 }, L: { lF: [0.1, ANK + 0.38, 0.1], lK: [0.1, 0.4, 1], lFy: 0.1 } };
+function refLegs(p, beat, strike) {
+  const o = { ...p };
+  if (beat.mo?.fam === 'kick') {
+    const other = (beat.part ?? 'footR').endsWith('R') ? 'L' : 'R';
+    for (const [f, v] of Object.entries(REF_KICK_OTHER[other])) o[f] = Array.isArray(v) ? v.slice() : v;
+    return o;
+  }
+  const L = strike ? REF_HIT : REF_COIL;
+  for (const f of LEG_FIELDS) o[f] = Array.isArray(L[f]) ? L[f].slice() : L[f];
+  return o;
+}
+
+/** THE SHEETS' GUARD (02: every strike row): the hand that does not strike held up at the chin, a
+ *  boxer's guard, the knuckles forward; the striking hand there too before its windup and once it has
+ *  come back (`u` past REF_GUARD.back); a punch leans the body into it. Hand offsets from the shoulder,
+ *  body axes (limbs.js aimHand). Poses only: no key time moves. */
+const REF_GUARD = { rH: [0.11, 0.04, 0.24], lH: [-0.11, 0.04, 0.24], rP: [-0.9, -0.3, -0.5], lP: [0.9, -0.3, -0.5], back: 1.6, lean: 0.18 };
+function refArms(p, beat, u) {
+  const o = { ...p };
+  const kick = beat.mo?.fam === 'kick';
+  const strike = kick ? [] : hands(beat);
+  for (const h of ['rH', 'lH']) {
+    if (strike.includes(h) && u > 0.05 && u < REF_GUARD.back) continue;
+    o[h] = REF_GUARD[h].slice();
+    const pk = h === 'rH' ? 'rP' : 'lP';
+    o[pk] = REF_GUARD[pk].slice();
+  }
+  if (!kick) o.pitch = (o.pitch ?? 0) + REF_GUARD.lean;
+  return o;
+}

@@ -110,6 +110,8 @@ export const LOOK_SWITCHES = Object.freeze([
   ['wyrmHead', ['0', 'a'], '0', 'a', false, ['cinderwood'], "the meteors' roar (ADR-258): a the neck rises up and forward, the snout to the sky ahead of it; 0 the head tipped back past upright"],
   // --- city: Halcyon Plaza and Halcyon (ADR-161; every one waits for the owner, read when built: a reload)
   ['halLook', ['a', 'b', 'c'], 'a', 'a', true, ['city'], 'Halcyon\'s body: a blue suit and red cape, b the idol, c tomorrow\'s tyrant (a reload)'],
+  ['halRef', ['0', 'a'], '0', 'a', true, ['city'], 'Halcyon after his reference pack (ADR-289): a the anchor: blond, a navy suit with gold seams and a gold strap, gold clasps, bare hands, navy boots with gold toes, the long red cape, the eyes dim until they kindle; 0 as today (over halLook; a reload)', 'awaiting'],
+  ['halRefMove', ['0', 'a'], '0', 'a', false, ['city'], 'Halcyon\'s poses after his reference pack (ADR-289): a his reactions flown (no planted stance in the air), a brake and a bank in his glide, Meteor\'s three-point landing, the car on his right palm, the statue\'s arm thrown from his right hand; 0 as today (live, from his next move or reaction)', 'awaiting'],
   ['halCape', ['0', '1', '2', '3'], '3', '3', true, ['city'], 'his cape and colours at game size: 0 as first built, 1 brighter, 2 + a wide flared cape, 3 + its billow and a long trail (a reload)'],
   ['halLetters', ['0', 'a'], 'a', 'a', false, ['city'], 'his letters: a follow his size as the hero\'s do, 0 the bosses\' fixed fine cell'],
   ['halPrint', ['0', 'a', 'b'], 'a', 'a', true, ['city'], 'his print: 0 the lit step-3 figure, a the hero\'s quieter print, b between (a reload)'],
