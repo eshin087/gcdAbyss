@@ -37,7 +37,15 @@ export const WYRM_STRIKE = Object.freeze({
   // hangs in the air; the snap runs the head to its goal on u^2 (`ease` its start's share of linear)
   // arriving on the impact, `headRate` the rig's follow (high: the path is the motion)
   // the body also surges `surge` units toward the hero over the lead (only when it stands `surgeFrom` units off)
-  bite: Object.freeze({ lead: 0.1, lower: 0.42, pitch: 0.22, settle: 0.12, ease: 0.35, headRate: 70, surge: 0.4, surgeFrom: 4 }),
+  bite: Object.freeze({ lead: 0.1, lower: 0.42, pitch: 0.22, settle: 0.12, ease: 0.35, headRate: 70, surge: 0.4, surgeFrom: 4,
+    // THE SNAP SPREAD (2026-11-28, the motion audit: `?wyrmFix=0` as before): the head no longer hangs still
+    // through the lead and then jumps its 7 - 9 m in the 3 - 4 frames to the impact (a 3 - 4 m step in one
+    // frame, the chain whipping after it): it sets off as the body surges, over the lead and the impact
+    // (~10 frames), from rest (`v1`: its speed at the contact, x the average), on an arc round the neck's
+    // base (a straight line passed 1.7 m from it, nearer than the neck can fold)
+    // (`pre`: the head sets off this long before the active, after the cue (0.35 s): ~16 frames for the path;
+    // `followRate`: the rig follows the path closely while it runs)
+    snap: true, v1: 0.9, pre: 0.2, followRate: 200 }),
 });
 
 /** THE PAW BLOWS' TELLS (pawTells.js; `?pawBlue=a|b|c`, `?pawRed=a|b`; '0' as they shipped; the owner's picks, the

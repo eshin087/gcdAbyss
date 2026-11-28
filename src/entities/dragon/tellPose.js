@@ -32,8 +32,10 @@ export function tellPose(d, tell, k, part = null) {
   pose.lower += C.lower * w;
   pose.pitch += C.pitch * w;
   if (C.rear && (part === 'snout' || part === 'head' || part === 'mouth')) pose.rear = Math.max(pose.rear, C.rear * w);
-  pose.headOffset.y += C.headUp * S * w;
-  if (f && Number.isFinite(f.x + f.z)) {
+  // (not while a bite's spread snap runs its path, strike.js: the path starts from where this pose put the head)
+  const head = d._snapAt !== d.time;
+  if (head) pose.headOffset.y += C.headUp * S * w;
+  if (head && f && Number.isFinite(f.x + f.z)) {
     pose.headOffset.x -= f.x * C.headBack * S * w;
     pose.headOffset.z -= f.z * C.headBack * S * w;
   }

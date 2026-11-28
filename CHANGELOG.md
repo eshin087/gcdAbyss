@@ -4,7 +4,22 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-One hundred and forty-eight pieces of work since 0.4.0:
+One hundred and forty-nine pieces of work since 0.4.0:
+- **The Cinder Wyrm moves like a living animal** (2026-11-28, ADR-281). *Fixed (the owner: "fix them all", from a frame-by-frame audit of all
+  59 of its moves and states, `integ wyrmmotion`):* its wings no longer go through the ground (finger tips went up
+  to 3.2 m under it in the wing buffet, the sweeps, the slams, stagger and the posture break; 17 moves → 0); its
+  paws, hind feet and head no longer jump metres in one frame between blows (the feet's lead along a lunge was
+  eased; bites start their snap as the body surges, swung round the neck's base, still on the beat); the head
+  stays on its neck's line (75 - 104° off it in bites and the pivot lash → at most ~70°) and out of the ground and
+  its own chest in the dives; turns speed up instead of jumping to full speed; the tail no longer folds 70 - 90°
+  where it meets the ground (37 moves → 2); the resting neck has no kink; wing sweeps pivot at 170°/s, not 260;
+  the feet plant where they land instead of skating; a foreleg lying on the ground bends up, not through it; the
+  sky strafe's landing brakes from its pass speed. A bite connects no sooner than 0.06 s before its cue's impact
+  (as it already could not land later than 0.07 s after). The incantation of the kamikaze wisps is a circle on the
+  ground under the wyrm like every cast (it hung beside it before its jaws and followed the head about like a thing
+  of its own), and a circle cast round its feet stays under it while it burns. `?wyrmFix=0` moves it as before (the
+  Lab's `wyrmFix` row). Still to do: the tail sweeps and whips spin the body ~700°/s (a slower spin needs to be
+  aimed at the hero to keep its hit on the beat), and the feet still skate in the death and the wake.
 - **One kind of parry** (2026-11-28, ADR-279). *Changed:* every parry is now a perfect parry, anywhere in the
   parry window: the same look, freeze and rewards every time (more posture damage, the counter cut, a bullet sent
   back, a count toward the deathblow). Before, a press 0.20 - 0.22 s early was a plain parry with a different look.

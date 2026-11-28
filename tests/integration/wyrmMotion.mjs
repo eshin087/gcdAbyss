@@ -93,7 +93,7 @@ export function makeWyrmMotion({ THREE, G, DT, SCALE, place, settle }) {
           seen[gi][j]++;
           // under the ground
           const lowOk = k === 'foot' || k === 'paw' ? -0.02 : 0;
-          if (p.y < lowOk && -p.y > row.under) { row.under = -p.y; row.underK = k; row.at.under = +T.toFixed(2); row.at.underPh = phaseOf(); }
+          if (p.y < lowOk && -p.y > row.under) { row.under = -p.y; row.underK = k + j; row.at.under = +T.toFixed(2); row.at.underPh = phaseOf(); }
           if (k === 'wing' && p.y < 0 && -p.y > row.wingG) row.wingG = -p.y;
         });
       });

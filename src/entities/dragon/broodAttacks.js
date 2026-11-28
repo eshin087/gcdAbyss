@@ -63,7 +63,7 @@ const drakelings = {
   start(d, a) {
     a.n = Math.max(1, perPhase(BROOD.drakeling.count, d.phase) | 0);
     a.spawned = 0;
-    a.cid = d.incantation?.cast?.({ x: d.position.x, z: d.position.z, r: MD.r, dur: a.list[0][1] + MD.cast + 0.9, kind: 'ground' }) ?? 0;
+    a.cid = d.incantation?.cast?.({ r: MD.r, dur: a.list[0][1] + MD.cast + 0.9, kind: 'ground', under: true }) ?? 0;
     d.emit('dragon:spell', { name: 'drakelings', x: d.position.x, z: d.position.z });
   },
   enter(d, a, phase) {
@@ -142,7 +142,9 @@ const wisps = {
     return perPhase(MW.weight, d.phase);
   },
   start(d, a) {
-    a.cid = d.incantation?.cast?.({ kind: 'jaws', r: MW.r, dur: a.list[0][1] + MW.cast + 0.4 }) ?? 0;
+    // (on the ground under it, like every cast: the seal that hung before its jaws followed the head
+    // about beside it like a thing of its own; the owner, 2026-11-28)
+    a.cid = d.incantation?.cast?.({ r: MW.r, dur: a.list[0][1] + MW.cast + 0.4, kind: 'ground', under: true }) ?? 0;
     const n = Math.max(1, perPhase(BROOD.wisp.count, d.phase) | 0), W = a.list[0][1];
     // they swell on the body through the charge and tear off one by one from the roar on
     for (let i = 0; i < n; i++) {

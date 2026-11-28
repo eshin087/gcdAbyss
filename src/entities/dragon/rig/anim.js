@@ -4,6 +4,7 @@ import { ANATOMY as A, SCALE as S } from '../tuning.js';
 import { Chain, aimJoint, aimJointStable, constrainDir } from './chain.js';
 import { solveTwoBone } from './ik.js';
 import { Gait } from './gait.js';
+import { fixOn } from '../motionFix.js';
 
 // Procedural animation for the four-legged drake. Each frame the AI writes a `pose` (targets); the
 // rig smooths them and solves: body (hips/chest, breathing, gait bob) -> neck (FABRIK toward a head
@@ -367,10 +368,15 @@ export const NECK_MODE = (() => {
 const HEAD_AIM_RATE = 11;
 /**
  * Dying (s.dead), the head may hang at most this much LESS far off the neck's last segment (rad): the
- * limp head was laid level whatever the neck did, so on the death's raised neck it hinged ~60� off its
- * end, a broken neck (2026-11-27). 1.1 - 0.55 = 0.55 rad (~31�) once dead. `?deathNeck=0`: as before.
+ * limp head was laid level whatever the neck did, so on the death's raised neck it hinged ~60째 off its
+ * end, a broken neck (2026-11-27). 1.1 - 0.55 = 0.55 rad (~31째) once dead. `?deathNeck=0`: as before.
  */
 const DEAD_HINGE = String(new URLSearchParams(globalThis.location?.search ?? '').get('deathNeck') ?? '') === '0' ? 0 : 0.55;
+/** The snout's length from the head joint (model units) and the least height its tip keeps (m; the motion audit). */
+const SNOUT_LEN = 1.05;
+const SNOUT_FLOOR = 0.3;
+/** How fast the neck may pull a head that fell outside its cone back in (rad/s; the motion audit). */
+const HEAD_RECONE_RATE = 18;
 /** ... and when a hit sphere rides on it (pose.headExact). */
 const HEAD_EXACT_RATE = 45;
 /** Waking, the resting S only fades in once the sleeping curl (s.sleep) is below this. */
@@ -399,6 +405,80 @@ const mixParams = (a, b, t, out) => {
   for (const k in a) out[k] = a[k] + ((b[k] ?? 0) - a[k]) * t;
   return out;
 };
+
+
+// THE WINGS (the motion audit, 2026-11-28; motionFix.js): the flap angle has a soft floor so no part of the wing
+// goes under the ground (band, rad: the stroke slows into it), its finger clamps lift by a hinge
+const WING_FLOOR = 0.3; // m x SCALE above the ground every wing point keeps
+const LIMB_FLOOR = 0.15; // an elbow below this (x SCALE) bends upward instead
+const LIMB_BAND = 0.5; // ... eased in over this band above it
+const WING_FLOOR_BAND = 0.35;
+/** The flap angle (theta, + = up) raised just enough that the wing (wrist target + the straight finger tips),
+ *  swung rigidly about its root by the flap, keeps every point >= floor (world y). Same maths as the solve. */
+function _flapFloor(theta, side, K, CW, rx, ry, rz, ox, oy, floor) {
+  const e = CW.elements, m10 = e[1], m11 = e[5], m12 = e[9], m13 = e[13];
+  const sc = Math.hypot(e[0], e[1], e[2]) || 1;
+  const g = (psi) => {
+    const ph = side * psi, c = Math.cos(ph), s = Math.sin(ph);
+    let lo = Infinity;
+    for (let f = -1; f < 4; f++) {
+      let X = ox, Y = oy, Z = K.wrist[2] - rz;
+      if (f >= 0) {
+        const kd = K.fingers[f], n = Math.hypot(kd[0], kd[1], kd[2]) || 1, len = (A.fingers[f] * S) / sc / n;
+        X += side * kd[0] * len; Y += kd[1] * len; Z += kd[2] * len;
+      }
+      const y = m10 * (rx + X * c - Y * s) + m11 * (ry + X * s + Y * c) + m12 * (rz + Z) + m13;
+      if (y < lo) lo = y;
+    }
+    return lo;
+  };
+  const B = WING_FLOOR_BAND;
+  if (g(theta - B) >= floor) return theta;
+  let a = theta - B, b = theta + 1.4;
+  if (g(b) < floor) return b;
+  for (let i = 0; i < 12; i++) { const m = 0.5 * (a + b); if (g(m) >= floor) b = m; else a = m; }
+  // b = the lowest flap angle the floor allows; a soft floor (band B rad, C1): the stroke slows into it
+  if (!(B > 0)) return Math.max(theta, b);
+  return theta >= b + B ? theta : b + B * Math.exp((theta - b - B) / B);
+}
+
+/** Critically damped step toward T (exact per frame); v = [velocity] slot. w = 2.15 x the old damp rate
+ *  (the same 63 % time as damp), so a target that steps no longer steps the velocity. */
+function _spring(x, T, rate, dt, V, i, snap) {
+  if (snap || !(dt > 0)) { V[i] = 0; return T; }
+  const w = 2.15 * rate, x0 = x - T, e = Math.exp(-w * dt), j = (V[i] + w * x0) * dt;
+  V[i] = (V[i] - w * j) * e;
+  return T + (x0 + j) * e;
+}
+
+
+const _hA = new THREE.Vector3(), _hP = new THREE.Vector3(), _hQ = new THREE.Vector3();
+/** Lift unit dir d (in place) to d.y >= my by turning it about the wing's flap axis (chest +Z x side), in the
+ *  lifting sense only (undoing the downstroke): stable where d points straight down. (The motion audit: the
+ *  old clamp set y then normalized, which pushed y back under the floor; a finger pointing down kept 3 m under.) */
+function _hingeUp(d, my, qChest, side) {
+  if (!(d.y < my)) return;
+  my = Math.min(my, 0.95);
+  const a = _hA.set(0, 0, side).applyQuaternion(qChest);
+  const dp = d.dot(a);
+  const p = _hP.copy(d).addScaledVector(a, -dp), q = _hQ.crossVectors(a, p);
+  const c0 = a.y * dp, R = Math.hypot(p.y, q.y);
+  if (R > 1e-5) {
+    const b = Math.atan2(q.y, p.y), r = (my - c0) / R;
+    let sg = r >= 1 ? b : b - Math.acos(Math.max(-1, r));
+    sg = ((sg % TAU) + TAU) % TAU;
+    const cs = Math.cos(sg), sn = Math.sin(sg);
+    d.set(a.x * dp + p.x * cs + q.x * sn, a.y * dp + p.y * cs + q.y * sn, a.z * dp + p.z * cs + q.z * sn);
+  }
+  if (d.y < my) {
+    const h = Math.hypot(d.x, d.z), hs = Math.sqrt(1 - my * my);
+    if (h > 1e-6) {
+      d.x *= hs / h;
+      d.z *= hs / h;
+    }
+    d.y = my;
+  }
+}
 
 export class Rig {
   constructor(model, dragon) {
@@ -600,7 +680,7 @@ export class Rig {
     const restT = pose.head === null && pose.lookDown <= 0.14 + 1e-6 ? (1 - pose.stagger) * (1 - pose.sleep) * (1 - pose.dead) * (1 - pose.airborne) * clamp(1 - s.sleep / WAKE_REST_SLEEP, 0, 1) : 0;
     s.rest = sm(s.rest, restT, restT > s.rest ? 2.5 : 9);
     for (let k = 0; k < 2; k++) {
-      s.spread[k] = sm(s.spread[k], pose.spread[k], pose.spreadRate);
+      s.spread[k] = fixOn() ? _spring(s.spread[k], pose.spread[k], pose.spreadRate, dt, (this._spV ??= [0, 0, 0]), k, snap) : sm(s.spread[k], pose.spread[k], pose.spreadRate);
       s.pawW[k] = sm(s.pawW[k], pose.pawOv[k].w, pose.pawOvRate);
       // a paw that lands (rake end, slam) becomes a ground contact at once (within the leg's reach);
       // the gait steps it home
@@ -624,7 +704,7 @@ export class Rig {
     s.hover = sm(s.hover, pose.hover, 4);
     s.glide = sm(s.glide, pose.glide, 3.5);
     s.dive = sm(s.dive, pose.dive, 7);
-    s.flapAmp = sm(s.flapAmp, pose.flap, 5);
+    s.flapAmp = fixOn() ? _spring(s.flapAmp, pose.flap, 5, dt, (this._spV ??= [0, 0, 0]), 2, snap) : sm(s.flapAmp, pose.flap, 5);
     if (s.flapAmp > 0.02) {
       s.flapPhase += dt * pose.flapHz * TAU;
       const c = Math.cos(s.flapPhase);
@@ -898,6 +978,15 @@ export class Rig {
       for (let i = 0; i <= n; i++) this._swingP[i].copy(vis.p[i]);
       this._swingAt = this._frame;
     }
+    if (fixOn() && this._swingAt !== this._frame) {
+      // (not while a driven move pins the head to the measured chain: the drawn neck would part from it)
+      // (the motion audit) the neck's bend spread along it: a FABRIK solve toward a low goal from the high
+      // resting curve left one joint at its limit in nearly every move (a kink); relax, then reach again
+      const E2 = (this._nrE ??= V()).copy(vis.p[n]);
+      vis.relaxKinks(4);
+      vis.solve(E2, 3);
+      vis.relaxKinks(1);
+    }
     vis.apply(qNeckBase, this._qNeckEnd);
     // (pinned: the head is placed as if the measured chain were shown; not while a strike leads it)
     const pin = this._swingAt === this._frame && pose.headLead.lengthSq() < 1e-8;
@@ -986,7 +1075,8 @@ export class Rig {
     }
     // at most ~63째 off the neck's last segment; resting, ~34째: past that the head reads as hinged off
     // the neck's end (a broken neck), so the resting head looks down less instead
-    constrainDir(dir, last, 1.1 - 0.5 * s.rest - DEAD_HINGE * s.dead);
+    const hMax = 1.1 - 0.5 * s.rest - DEAD_HINGE * s.dead;
+    constrainDir(dir, last, hMax);
     // the head's aim turns at most HEAD_AIM_RATE: a look target passing under or behind the head (the
     // leap's dive onto its mark, the death fall, a target swapped mid-move) flipped it 30-90째 in one
     // frame. Attacks whose hit spheres ride on the snout or the mouth set pose.headExact for their
@@ -995,6 +1085,27 @@ export class Rig {
     // (exact, still at most HEAD_EXACT_RATE: a bite's first frame turned the head alone 75째 as its
     // look jumped onto the hero; two frames now, the snout on its mark from the next; ADR-203)
     if (!snap && hd.lengthSq() > 0.5 && !(pose.headExact && NECK_MODE === '0')) constrainDir(dir, hd, (pose.headExact ? HEAD_EXACT_RATE : HEAD_AIM_RATE) * dt);
+    if (fixOn()) {
+      // (the motion audit, 2026-11-28) the neck CARRIES the head: the turn-rate limit above pulled it back
+      // toward last frame's aim, and a neck swinging faster than that left it bent 75 - 104 deg off the
+      // neck's end (a broken neck); and the snout stays above the ground (a dive's look at its mark
+      // tipped it 0.45 m under)
+      const minY = clamp((SNOUT_FLOOR - hc.p[n].y) / (SNOUT_LEN * S), -1, 1);
+      // (in the air only: on the ground its jaws reach down to what it bites, the hurl's tree at its base)
+      if (dir.y < minY && (s.airborne > 0.3 || s.alt > 0.5)) {
+        const h = Math.hypot(dir.x, dir.z);
+        if (h > 1e-5) {
+          const k = Math.sqrt(Math.max(0, 1 - minY * minY)) / h;
+          dir.set(dir.x * k, minY, dir.z * k);
+        }
+      }
+      // (the neck has the last word: a head low on a steep neck dips its snout instead), at most
+      // HEAD_RECONE_RATE: a neck whipping round fast snapped the snout 2.7 m in one frame back into the cone
+      const cone = this._v[11].copy(dir);
+      constrainDir(cone, last, hMax);
+      if (snap) dir.copy(cone);
+      else dir.copy(constrainDir(cone, dir, HEAD_RECONE_RATE * dt)).normalize();
+    }
     hd.copy(dir);
     aimJoint(m.head, dir, qEnd, this._qHead);
     // the head is held level about its own snout (the brow up, toward the sky and a little toward the
@@ -1148,6 +1259,7 @@ export class Rig {
     if (snap) tail.snap();
     else {
       this._stiff = damp(this._stiff ?? 1, stiff, 6, dt);
+      tail.relax = !legacy && fixOn() && s.airborne < 0.5 ? 4 : 0; // (the motion audit: kinks where it meets the ground smoothed out; not in flight)
       tail.spring(Math.min(dt, 1 / 30), 70 * this._stiff, 10 * this._stiff * this._stiff, 0.5);
     }
     tail.apply(qTailBase, this._q[2]);
@@ -1169,6 +1281,19 @@ export class Rig {
     const turnLead = clamp(this.yawRate * (turning ? 0.22 : walk ? 0.3 : 0.1), -0.45, 0.45) * awake * (1 - s.airborne) * (1 - s.restep);
     const hy = this.d.yaw + turnLead, hc = Math.cos(hy), hs = Math.sin(hy), P = this.d.position;
     const home = (out, x, z) => out.set(P.x + x * hc + z * hs, 0, P.z - x * hs + z * hc);
+    // the feet's lead along the body's travel, eased (the motion audit: a lunge starting or stopping moved
+    // every home 2.2 m in one frame, and a foot landing then landed on it: paws and feet popped 2 m)
+    const lv = (this._leadV ??= new THREE.Vector3());
+    {
+      const tx = pose.vel.x * lead, tz = pose.vel.z * lead;
+      if (snap || !fixOn()) lv.set(tx, 0, tz);
+      else {
+        const f = 1 - Math.exp(-6 * dt);
+        lv.x += (tx - lv.x) * f;
+        lv.z += (tz - lv.z) * f;
+        lv.y = 0;
+      }
+    }
     // the combat stance plants all four feet a little wider and longer than the anatomy's homes
     const st = REST_POSE.stance;
     // standing and watching, it stalks: one diagonal pair reaches (left fore forward, right hind back)
@@ -1179,11 +1304,19 @@ export class Rig {
       const l = gait.limbs[k];
       const stagger = (side > 0 ? st.stalk.hindL : st.stalk.hindR) * stalk;
       home(l.home, side * (lerp(A.footHome[0], 1.5, lying) + (s.stanceH + st.hindOut) * awake) * S, (lerp(A.footHome[2], -0.95, lying) + (s.strideH + st.hindBack) * awake + stagger) * S);
-      l.home.addScaledVector(pose.vel, lead);
+      l.home.add(lv);
       l.home.y = 0;
       // (off the ground as soon as the body has left it: a leap's take-off used to drag the planted
       // hind feet up to 0.4 m a frame for a few frames until the airborne blend caught up)
+      const wasFree = l.free;
       l.free = s.airborne > 0.3 || s.alt > 0.6 * S;
+      // (the motion audit) a foot coming down from the air plants where it is drawn, not at its home: it
+      // skated ~0.4 m over the ground after every landing while its air pose faded
+      if (fixOn() && wasFree && !l.free && !snap) {
+        gait.plantAt(k, pt.legs[k].toe);
+        l.landed = true;
+      }
+      if (l.free || s.airborne < 0.01) l.landed = false;
       // dying, every foot stays where it stands: the body falls and rolls over them (they used to
       // keep stepping toward the lying homes, or be hauled out stiff through the rolling body)
       l.lock = (!!pose.hindLock || s.dead > 0.01) && !l.free;
@@ -1193,9 +1326,15 @@ export class Rig {
       const l = gait.limbs[2 + k];
       const stagger = (side > 0 ? st.stalk.frontL : st.stalk.frontR) * stalk;
       home(l.home, side * (lerp(A.handHome[0], 1.35, lying) + (s.stanceF + st.frontOut) * awake) * S, (lerp(A.handHome[2], 3.15, lying) + (s.strideF + st.frontFwd) * awake + stagger) * S);
-      l.home.addScaledVector(pose.vel, lead);
+      l.home.add(lv);
       l.home.y = 0;
+      const wasFree = l.free;
       l.free = s.airborne > 0.3 || s.rear > 0.35 || s.pawW[k] > 0.35;
+      if (fixOn() && wasFree && !l.free && !snap && s.airborne > 0.05) {
+        gait.plantAt(2 + k, pt.arms[k].toe); // (a landing, as the hind feet)
+        l.landed = true;
+      }
+      if (l.free || s.airborne < 0.01) l.landed = false;
       l.lock = s.dead > 0.01 && !l.free;
     }
 
@@ -1252,7 +1391,9 @@ export class Rig {
         const hv = s.hover, rch = s.airReach;
         const bx = lerp(1.0, 1.15, hv), by = lerp(-1.6, -2.45, hv), bz = lerp(-1.9, -0.55, hv) + 0.12 * hv * Math.sin(this.time * 2.3 + side);
         const tuck = v[6].set(side * lerp(bx, 1.2, rch), lerp(by, -2.55, rch), lerp(bz, 0.1, rch)).applyMatrix4(m.hips.matrixWorld);
-        toeT.lerp(tuck, s.airborne);
+        // (planted again after a landing, only its height still eases from the air pose: the audit)
+        if (fixOn() && limb.landed) toeT.y = lerp(toeT.y, tuck.y, s.airborne);
+        else toeT.lerp(tuck, s.airborne);
       }
       const ankleT = v[7].copy(toeT);
       ankleT.x += ankleOff.z * fwdFlat.x;
@@ -1305,7 +1446,8 @@ export class Rig {
         const hv = s.hover, rch = s.airReach;
         const bx = lerp(0.9, 1.0, hv), by = lerp(-1.55, -2.1, hv), bz = lerp(0.2, 0.75, hv);
         const tuck = v[6].set(side * lerp(bx, 1.2, rch), lerp(by, -2.6, rch), lerp(bz, 1.0, rch)).applyMatrix4(m.chest.matrixWorld);
-        toeT.lerp(tuck, s.airborne);
+        if (fixOn() && gait.limbs[2 + k].landed) toeT.y = lerp(toeT.y, tuck.y, s.airborne);
+        else toeT.lerp(tuck, s.airborne);
         freeW = Math.max(freeW, s.airborne);
       }
       if (s.pawW[k] > 0.001) {
@@ -1329,6 +1471,14 @@ export class Rig {
       const bend = this._bend.arms[k];
       if (snap) bend.set(0, 0, 0);
       solveTwoBone(out.shoulder, wristT, A.humerus * S, A.forearm * S, pole, out.elbow, out.wrist, bend);
+      if (fixOn() && out.elbow.y < (LIMB_FLOOR + LIMB_BAND) * S) {
+        // (the motion audit) a body lying on its side: "outward" points into the ground, and the lower
+        // foreleg's elbow went 1.6 m under it; the lower the elbow would go, the more it bends up toward the
+        // sky instead (blended over a band: a switch made it jump)
+        const w = clamp(((LIMB_FLOOR + LIMB_BAND) * S - out.elbow.y) / (LIMB_BAND * 2 * S), 0, 1);
+        const pole2 = v[10].set(0, 1, 0).addScaledVector(left, side * 0.4).multiplyScalar(pole.length() || 1).lerp(pole, 1 - w);
+        solveTwoBone(out.shoulder, wristT, A.humerus * S, A.forearm * S, pole2, out.elbow, out.wrist, bend);
+      }
       this._wq(arm.shoulder, qa);
       aimJointStable(arm.humerus, v[9].subVectors(out.elbow, out.shoulder), qa, qb, snap);
       aimJointStable(arm.forearm, v[9].subVectors(out.wrist, out.elbow), qb, qc, snap);
@@ -1420,7 +1570,7 @@ export class Rig {
       }
       // wing beats: the fingers fold ~30 % on the upstroke (theta rising) and fan out on the downstroke
       if (s.flapAmp > 0.25) {
-        const up = Math.max(0, Math.cos(s.flapPhase)) * 0.3;
+        const up = Math.max(0, Math.cos(s.flapPhase)) * 0.3 * (fixOn() ? Math.min(1, (s.flapAmp - 0.25) / 0.2) : 1); // (eased in with the beat: it switched on in one frame)
         const F = WING_KEYS.FOLD.fingers;
         for (let f = 0; f < 4; f++) for (let i = 0; i < 3; i++) K.fingers[f][i] += (F[f][i] - K.fingers[f][i]) * up;
       }
@@ -1457,7 +1607,7 @@ export class Rig {
       // wrist target in the chest frame, rotated about the root's forward axis by the flap angle
       const rx = side * A.wingRoot[0], ry = A.wingRoot[1], rz = A.wingRoot[2];
       const ox = side * K.wrist[0] - rx, oy = K.wrist[1] - ry;
-      const phi = side * theta;
+      const phi = side * (fixOn() ? _flapFloor(theta, side, K, CW, rx, ry, rz, ox, oy, WING_FLOOR * S) : theta);
       const c = Math.cos(phi), sn = Math.sin(phi);
       const wx = rx + ox * c - oy * sn, wy = ry + ox * sn + oy * c;
       const wristT = v[5].set(wx, wy, K.wrist[2]).applyMatrix4(CW);
@@ -1508,7 +1658,8 @@ export class Rig {
         const len = A.fingers[f] * S, l0 = len * A.knuckle[f], l1 = len - l0;
         // keep finger tips above the ground (crouched / rolled / collapsed body)
         const minDy = (0.15 * S - out.wrist.y) / len;
-        if (dirW.y < minDy) {
+        if (fixOn()) _hingeUp(dirW, minDy, qChest, side);
+      else if (dirW.y < minDy) {
           dirW.y = Math.min(minDy, 0.95);
           dirW.normalize();
         }
@@ -1524,7 +1675,8 @@ export class Rig {
           dist.copy(dirW).multiplyScalar(Math.cos(kk)).addScaledVector(perp, Math.sin(kk));
         } else dist.copy(dirW);
         const minD = (0.12 * S - out.knuckles[f].y) / Math.max(1e-3, l1);
-        if (dist.y < minD) {
+        if (fixOn()) _hingeUp(dist, minD, qChest, side);
+        else if (dist.y < minD) {
           dist.y = Math.min(minD, 0.95);
           dist.normalize();
         }

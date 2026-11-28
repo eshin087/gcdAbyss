@@ -12,6 +12,7 @@ import { wallWind } from './wallReach.js';
 import { heldMode, tellPose } from './tellPose.js';
 import { WYRM_HELD } from './tuningMotion.js';
 import { biteLead, biteSnap } from './strike.js';
+import { fixOn } from './motionFix.js';
 import { pawBlueOf, pawRedOf, blueWindup, blueAim, blueActive, blueEnd, redWindup } from './pawTells.js';
 
 /** Wing spread the actions return to (the mantled HALF sails, TUNING.rest). */
@@ -205,7 +206,20 @@ function biteStart(st) {
   st.from = V();
   st.held = false;
   st.snapFrom = false;
+  st.lead = 0; // (strike.js: how long the spread snap ran in the windup; 0 = it did not)
   return st;
+}
+
+/** The bite's goal as the active is about to lock it, for the spread snap (strike.js biteLead). */
+function bitePredict(d, st, reach, impact) {
+  st.impact = impact;
+  st.predict ??= (o) => {
+    biteAim(d, _lead, st.reachNow);
+    o.copy(_lead.goal);
+    return true;
+  };
+  st.reachNow = reach;
+  return st.predict;
 }
 
 /** Lock the bite target: the player's chest (led a little), limited to the neck's reach and arc. */
@@ -263,7 +277,7 @@ function biteWindup(d, a, k, dt, reach = T.bite.reach, st = a) {
   pose.spread[0] = pose.spread[1] = k < 0.75 ? 0.6 : REST_SPREAD;
   pose.spreadRate = 6;
   d.throat = 0.3 * k;
-  if (!biteLead(d, a, st, dt)) strikeLead(d, a, dt, reach);
+  if (!biteLead(d, a, st, dt, bitePredict(d, st, reach, st.impactOf ?? T.bite.impact))) strikeLead(d, a, dt, reach);
 }
 
 /** The neck uncoils and the shoulders drive forward off the planted hind feet; the jaw snaps at k 0.62. */
@@ -339,7 +353,9 @@ const bite = {
     else biteRecover(d, a, a.k);
   },
   hit(d, a) {
-    if (a.phase === 'active') biteHit(d, a, T.bite);
+    // (not before its impact: the spread snap reached a hero 4 m out 0.06 s before the cue said, at the
+    // active's first frame, so a guard raised for the cue's impact was taken as a parry)
+    if (a.phase === 'active' && (!fixOn() || a.t >= T.bite.impact - 1e-6)) biteHit(d, a, T.bite);
   },
   end(d) {
     d.throat = 0;
@@ -1569,7 +1585,12 @@ const OVERHEAD = {
     const pose = d.pose, ov = pose.pawOv[h.wi];
     if (h.plant && !h.planted) {
       ov.w = 1;
-      ov.pos.copy(h.plant);
+      // (the motion audit: the paw slides from where its strike left it onto the plant over the first 15 %
+      // of the recovery; snapped there, it jumped 2 - 3 m: the plant is the clamped, reachable spot)
+      if (fixOn()) {
+        h.fromPlant ??= V().copy(d.rig.pt.arms[h.wi].toe);
+        ov.pos.lerpVectors(h.fromPlant, h.plant, smoothstep(0, 0.15, k));
+      } else ov.pos.copy(h.plant);
       pose.pawOvRate = 30;
       if (k > 0.15) {
         h.planted = true;
@@ -1593,6 +1614,7 @@ const BITE = {
     h.st = biteStart({});
   },
   windup(d, a, h, k, dt) {
+    h.st.impactOf = h.spec.impact ?? T.bite.impact;
     biteWindup(d, a, k, dt, h.spec.reach ?? T.bite.reach, h.st);
   },
   aim(d, a, h) {
@@ -1607,7 +1629,9 @@ const BITE = {
   hit(d, a, h, stage) {
     // a string's bite connects up to TUNING.biteLate s after its impact, never later (a late contact
     // came after the flash had promised the blow)
-    if (stage === 'active' && a.t <= h.spec.impact + TUNING.biteLate) biteHit(d, a, h.spec);
+    // (and not sooner than TUNING.biteEarly before it, the motion audit's spread snap: its swing round the
+    // neck's base crossed a close hero's chest ~0.1 s before the cue's impact)
+    if (stage === 'active' && a.t <= h.spec.impact + TUNING.biteLate && (!fixOn() || a.t >= h.spec.impact - TUNING.biteEarly)) biteHit(d, a, h.spec);
   },
 };
 
@@ -1645,7 +1669,7 @@ const REAR_BITE = {
       pose.headOffset.y += Math.sin(d.time * 5.3) * 0.08 * S * w;
       pose.jaw += Math.sin(d.time * 27) * 0.06 * w;
     }
-    if (!biteLead(d, a, h.st, dt)) strikeLead(d, a, dt, h.spec.reach ?? T.bite.reach);
+    if (!biteLead(d, a, h.st, dt, bitePredict(d, h.st, h.spec.reach ?? T.bite.reach, h.spec.impact ?? T.bite.impact))) strikeLead(d, a, dt, h.spec.reach ?? T.bite.reach);
   },
   aim: BITE.aim,
   active: BITE.active,
@@ -1674,7 +1698,7 @@ const LUNGE_BITE = {
     pose.spread[0] = pose.spread[1] = REST_SPREAD + 0.12 * Math.sin(Math.PI * k);
     pose.spreadRate = 8;
     d.throat = 0.25 * k;
-    if (!biteLead(d, a, h.st, dt)) strikeLead(d, a, dt, h.spec.reach);
+    if (!biteLead(d, a, h.st, dt, bitePredict(d, h.st, h.spec.reach, h.spec.impact ?? T.bite.impact))) strikeLead(d, a, dt, h.spec.reach);
   },
   aim(d, a, h) {
     biteAim(d, h.st, h.spec.reach);
@@ -2130,9 +2154,12 @@ const WING_SWEEP = {
     // down, then across: the beat's downstroke brings the wing low in the first part of the stroke,
     // then the body pivots it over the ground to the far side (the fingers rake through him)
     const u = smoothstep(0, W.drop ?? 0.4, k);
-    const sweep = easeInOutSine(clamp((k - (W.sweepAt ?? 0.2)) / (1 - (W.sweepAt ?? 0.2)), 0, 1));
+    // (the motion audit: the body pivots through the whole stroke, 0.9 rad, instead of 1.2 rad packed into
+    // its last 80 %: a 260 deg/s turntable spin)
+    const fx = fixOn(), sAt = fx ? 0 : (W.sweepAt ?? 0.2);
+    const sweep = easeInOutSine(clamp((k - sAt) / (1 - sAt), 0, 1));
     flapTo(d, h.top + Math.PI * u, W.amp ?? 0.9, dt);
-    d.yaw = h.yaw0 - side * (W.sweep ?? 1.2) * sweep;
+    d.yaw = h.yaw0 - side * (fx ? Math.min(W.sweep ?? 1.2, 0.9) : (W.sweep ?? 1.2)) * sweep;
     pose.spread[h.wi] = W.spread ?? 0.85;
     pose.spread[1 - h.wi] = 0.25;
     pose.spreadRate = 8;
