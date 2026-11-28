@@ -500,7 +500,7 @@ const tailKeys = (n) => {
   return TAIL_KEYS;
 };
 /**
- * THE AIMED SPIN (the motion audit, ADR-278; motionFix.js, `?wyrmFix=0` as before). The tail sweeps, whips
+ * THE AIMED SPIN (the motion audit, ADR-282; motionFix.js, `?wyrmFix=0` as before). The tail sweeps, whips
  * and jabs set the body's yaw on a fixed curve through their short active (220 deg in 0.45 s, 180 in 0.3):
  * a 20 m body spinning 700 - 950 deg/s in place, then ~130 deg more after the blow. Instead the spin starts
  * `pre` s before the active (after the backswing) and is STEERED: every frame its yaw rate is set from the
