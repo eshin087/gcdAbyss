@@ -4,7 +4,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-One hundred and forty-nine pieces of work since 0.4.0:
+One hundred and fifty pieces of work since 0.4.0:
 - **The Cinder Wyrm turns into its tail blows instead of spinning on the spot** (2026-11-28, ADR-282). *Changed (the owner: "Yes, the spins next"):* the tail sweep and the
   tail whips no longer spin the whole wyrm ~700°/s in place: the turn starts during the wind-up, after the
   backswing, and is steered onto the blow (the part of the tail that will touch you reaches you exactly on the
