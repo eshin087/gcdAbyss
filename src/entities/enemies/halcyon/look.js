@@ -140,6 +140,19 @@ export const HAL_BRIGHT = {
     collar: [0.05, 0.08, 0.34], coat: [3.3, 0.2, 0.12], lining: [3.3, 0.2, 0.12], hem: [1.4, 0.08, 0.05],
   },
 };
+/** The anchor's own print (`?halRef=a`): the fill each part keeps (linear, before the key light) and its ink
+ *  lines' colour, so he reads solid as on the sheets: a navy suit, navy-blue plates, gold, a crimson cape,
+ *  the blond, the skin. */
+export const HAL_OWN = {
+  pants: { fill: [0.07, 0.1, 0.34], ink: [0.3, 0.38, 0.8] },
+  armor: { fill: [0.11, 0.15, 0.48], ink: [0.55, 0.65, 1.1] },
+  collar: { fill: [0.07, 0.1, 0.34], ink: [0.3, 0.38, 0.8] },
+  hair: { fill: [0.75, 0.48, 0.08], ink: [1.1, 0.75, 0.2] },
+  hairTip: { fill: [1.0, 0.72, 0.3], ink: [1.2, 0.9, 0.45] },
+  coat: { fill: [1.0, 0.07, 0.06], ink: [1.0, 0.14, 0.1] },
+  lining: { fill: [0.95, 0.06, 0.05], ink: [1.0, 0.14, 0.1] },
+  skin: { fill: [0.4, 0.21, 0.15], ink: [0.6, 0.34, 0.24] },
+};
 /** ?halCape=1 and up: the cape's own rim (the cool moonlit edge turned the red pink) and the lift. */
 const BRIGHT_RIM = { coat: 0.1, lining: 0.1, hem: 0.1, collar: 0.3, trim: 0.3 };
 
@@ -165,11 +178,14 @@ export function tintHalcyon(M) {
   if (P) for (const k in P.fill) M[k]?.uniforms?.uArtFill?.value.multiplyScalar(P.fill[k]);
   // (d, the anchor: the cape's own ink red, so its lines print red, not pale)
   if (o === 'd') {
-    for (const k of ['coat', 'lining']) {
+    // the sheets print him solid in his own colours: every part keeps its own fill (uArtOwn: none of the
+    // bosses' shared tone, pale hem or dark falloff), at HAL_OWN's brightness
+    for (const k in HAL_OWN) {
       const u = M[k]?.uniforms;
-      u?.uInk?.value.setRGB(1.1, 0.16, 0.1);
-      // the cape crimson to its edge: no pale boss hem below the knee (the sheets' cape is red to the heels)
-      if (u?.uArtNoHem) u.uArtNoHem.value = 1;
+      if (!u) continue;
+      if (u.uArtOwn) u.uArtOwn.value = 1;
+      u.uArtFill?.value.setRGB(...HAL_OWN[k].fill);
+      if (HAL_OWN[k].ink) u.uInk?.value.setRGB(...HAL_OWN[k].ink);
     }
   }
   // the neon seams light themselves a little (their ink lines glow), the eyes burn

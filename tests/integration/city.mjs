@@ -1785,8 +1785,11 @@ async function scenarioLimbs() {
   }
   assert(n > 150 && !diff.length, `${n} realisations: the same beats, windups, impacts, flashes and ends as a (${diff.slice(0, 6).join(', ') || 'all'})`);
   LS.setLook('halMotion', 'b');
+  // (b's own legs: the reference pack's poses, ?halRefMove, draw the sheets' knee up instead; halref checks those)
+  LS.setLook('halRefMove', '0');
   const rows = auditMoves(['meetAndGreet', 'backhand', 'tap', 'riposte', 'streakFlurry', 'flyBy', 'blink'], [false]).rows;
   LS.setLook('halMotion', null);
+  LS.setLook('halRefMove', (process.env.GCD_LOOK ?? '').match(/halRefMove=([^,]+)/)?.[1] ?? null); // (as the run forced it)
   const C = rows.flatMap((r) => r.contact.map((c) => ({ ...c, name: r.name })));
   const STRAIGHT = new Set(['meetAndGreet', 'backhand', 'tap', 'riposte']);
   const straight = C.filter((c) => STRAIGHT.has(c.name) || (c.name === 'blink' && c.i !== 1 && c.i !== 3) || (c.name === 'streakFlurry' && c.i === 0));

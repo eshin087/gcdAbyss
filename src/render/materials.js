@@ -186,7 +186,7 @@ function surfaceFeatures(o, cell) {
     uniforms.uArtRim = { value: h.rim ?? 1 };
     uniforms.uArtGlowK = { value: h.glow ?? 0 };
     uniforms.uArtSub = { value: h.sub ?? 0 }; // shade of a fold field's shadow side (model.js foldLines)
-    uniforms.uArtNoHem = { value: 0 }; // 1: this material keeps its fill below the bosses' hem line (uBossPrint; Halcyon's ?halRef cape, ADR-289)
+    uniforms.uArtOwn = { value: 0 }; // 1: this material keeps its own fill under the bosses' print (uBossPrint: no shared tone, no pale hem, no falloff; Halcyon's ?halRef, ADR-289)
     uniforms.uArtPart = { value: part * 2 };
     // cloth folds: [bands per metre across aGUV x (rad), depth 0..1, wander down aGUV y]
     if (h.folds != null) {
@@ -596,7 +596,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       uniform float uArtRim;
       uniform float uArtGlowK;
       uniform float uArtSub;
-      uniform float uArtNoHem;
+      uniform float uArtOwn;
       uniform float uArtPart;
       uniform vec4 uBossPrint;
       uniform vec4 uBossHero;
@@ -1002,7 +1002,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
         float hemK = 0.0;
         float bossCloth = 0.0;
 #ifndef SG_HERO_SELF
-        if (uBossPrint.x > 0.5) {
+        if (uBossPrint.x > 0.5 && uArtOwn < 0.5) {
           float pidB = floor(uArtPart * 0.5 + 0.25);
           if (pidB > 2.5 && pidB < 16.5) {
             float mxB = max(max(uArtFill.r, uArtFill.g), max(uArtFill.b, 1e-3));
@@ -1014,7 +1014,7 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
             // the hem: every part but the trousers, the hair, the plate and the crest (5, 11, 12, 15)
             if (abs(pidB - 5.0) > 0.5 && abs(pidB - 11.0) > 0.5 && abs(pidB - 12.0) > 0.5 && abs(pidB - 15.0) > 0.5) {
               float rag = sin(vW.x * 17.0 + vW.z * 5.0) * 0.6 + sin(vW.z * 23.0 - vW.x * 7.0) * 0.4;
-              hemK = step(vW.y, uBossPrint.z + uBossPrint.w + 0.08 * rag) * (1.0 - uArtNoHem);
+              hemK = step(vW.y, uBossPrint.z + uBossPrint.w + 0.08 * rag);
               vec3 lav = vec3(0.486, 0.459, 0.675);
               artFill = mix(artFill, mix(lav, lav * 0.55 + hueB * 0.189, uBossPrint.y), hemK);
             }

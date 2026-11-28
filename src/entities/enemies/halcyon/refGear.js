@@ -2,7 +2,7 @@ import { ellipsoidGeometry } from '../../../render/glyphGeometry.js';
 import { buildFreeHand } from '../../player/gear/hands.js';
 import {
   shellGeometry, skirtSheet, tatterStrip, bandGeometry, boxGeometry, mergeGeometries, sub, foldLines, ribbonCrease, lerp, limb,
-  gripFist, orientTo, clumpGeometry, partGeometry, arcPlate, strapGeometry, orient,
+  gripFist, arcPlate, strapGeometry, orient,
 } from '../../player/heroGeo.js';
 import { dressOf, at } from './look.js';
 
@@ -19,6 +19,11 @@ import { dressOf, at } from './look.js';
 // `M.pants`, the plates `M.armor`, the boots `M.collar`, the cape `M.coat` / `M.lining`.
 // More objects than the shipped outfit: only under the switch (the default rig, and with it every seeded
 // fight, is untouched).
+
+/** The head drawn smaller than the rig's (its meshes only). */
+const HEAD_K = 0.86;
+/** Slimmer limbs than the rig's athletic build (the sheets' long, lean man): radius multipliers. */
+const SLIM = { arm: 0.8, leg: 0.84 };
 
 const ySp = (h) => h - 1.035; // world idle height → spine space
 const yPv = (h) => h - 0.955; // → pelvis space
@@ -60,48 +65,50 @@ const edge = (pts, w = 0.009, th = 0.006, side = [0, 0, 1]) => {
 
 // ================================================================= the head: a square jaw, the swept blond hair
 function buildHead(ctx) {
-  const { head, M, mesh } = ctx;
+  const { head, M, mesh, joint } = ctx;
+  // a smaller head (the sheets: about 8 heads tall, the shared rig 7.3): the skull, the jaw, the neck the
+  // rig drew move under a joint scaled HEAD_K (drawn only: the beams' eye point is the head joint's own)
+  const hs = joint(head);
+  hs.scale.setScalar(HEAD_K);
+  for (const c of head.children.filter((c) => c.isMesh)) hs.add(c);
   const hair = M.hairTip;
-  // a square, strong jaw over the body's narrow one (the anchor's jaw and chin), and cheekbones
-  const jaw = ellipsoidGeometry(0.058, 0.04, 0.06, { widthSegs: 12, heightSegs: 6 });
+  // a square jaw over the rig's narrow one
+  const jaw = ellipsoidGeometry(0.056, 0.038, 0.058, { widthSegs: 12, heightSegs: 6 });
   const jp = jaw.attributes.position;
   for (let i = 0; i < jp.count; i++) {
     const y = jp.getY(i), z = jp.getZ(i);
-    // flatten the underside, square the front corners
     if (y < 0) jp.setY(i, y * 0.7);
-    if (z > 0) jp.setX(i, jp.getX(i) * (1 - 0.15 * (z / 0.06)));
+    if (z > 0) jp.setX(i, jp.getX(i) * (1 - 0.15 * (z / 0.058)));
   }
   jaw.computeVertexNormals();
-  mesh(head, jaw, M.skin, 0, 0.082, 0.024);
-  // the hair: a full cap, locks swept straight back with volume, lifted at the brow, short at the nape
-  const SC = [0, 0.154, -0.007], SR = [0.11, 0.125, 0.118];
-  const scalp = (az, el, k = 0.98) => [SC[0] + Math.sin(az) * Math.cos(el) * SR[0] * k, SC[1] + Math.sin(el) * SR[1] * k, SC[2] + Math.cos(az) * Math.cos(el) * SR[2] * k];
-  const nrm = (v) => {
-    const l = Math.hypot(...v) || 1;
-    return v.map((x) => x / l);
-  };
-  mesh(head, partGeometry('hair.cap'), hair);
-  const locks = [];
-  // three rows of locks from the brow back over the crown: the front row lifted (the swept wave)
-  for (const [row, el, lift, L, w] of [[0, 0.6, 0.28, 0.13, 0.058], [1, 0.84, 0.05, 0.15, 0.06], [2, 1.05, -0.15, 0.13, 0.058]]) {
-    const n = row === 2 ? 5 : 7;
-    for (let i = 0; i < n; i++) {
-      const az = (i / (n - 1) - 0.5) * (row === 2 ? 1.2 : 1.8);
-      const a = scalp(az, el, 0.99 + 0.015 * (2 - row));
-      const dir = nrm([Math.sin(az) * 0.3, lift, -1]);
-      const g = clumpGeometry(L + 0.02 * Math.cos(az), w, 0.02, { curl: 0.22, taper: 0.9, cols: 6, rows: 2 });
-      locks.push(sub(orientTo(g, a, dir, nrm([0, -1, -0.3])), (i + row) & 1));
+  mesh(hs, jaw, M.skin, 0, 0.08, 0.026);
+  // the hair: a cap over the crown and the back of the skull only (the face stays clear below the
+  // brow), its front lifted a little and swept straight back, short at the nape
+  const SC = [0, 0.15, -0.004], SR = [0.088, 0.1, 0.108];
+  const cap = ellipsoidGeometry(SR[0], SR[1], SR[2], { widthSegs: 20, heightSegs: 12 });
+  const cp = cap.attributes.position;
+  for (let i = 0; i < cp.count; i++) {
+    let x = cp.getX(i), y = cp.getY(i), z = cp.getZ(i);
+    const zf = z / SR[2]; // 1 the brow, -1 the nape
+    const cut = 0.03 * zf - 0.025 - 0.035 * Math.max(0, -zf); // the hairline: high at the brow, low at the nape
+    const side = Math.abs(x) / SR[0];
+    const cutS = cut + 0.018 * side * Math.max(0, zf + 0.3); // the temples clear, over the ears
+    if (y < cutS) {
+      y = cutS;
+      x *= 0.97;
+      z *= 0.97;
     }
+    // the volume swept back: lifted at the front of the crown
+    if (y > 0) y += 0.04 * Math.max(0, zf + 0.1) * (y / SR[1]);
+    if (zf > 0.5 && y > -0.02) z += 0.012 * (zf - 0.5);
+    cp.setXYZ(i, x, y, z);
   }
-  // the sides combed back over the ears, short
-  for (const s of [-1, 1]) {
-    const g = clumpGeometry(0.13, 0.06, 0.018, { curl: 0.05, taper: 0.8, cols: 6, rows: 2 });
-    locks.push(sub(orientTo(g, scalp(s * 1.2, 0.35, 0.99), nrm([s * 0.12, 0.05, -1]), [0, 0, -1]), 1));
-  }
-  mesh(head, mergeGeometries(locks), hair);
-  // the eyes: his own, a red glint that kindles to the beams' fire (the `flask` part glows; look.js)
-  const eyes = mergeGeometries([0.032, -0.032].map((ex) => ellipsoidGeometry(0.012, 0.006, 0.005, { widthSegs: 8, heightSegs: 4 }).translate(ex, 0.128, 0.1)));
-  const e = mesh(head, eyes, M.flask);
+  cap.computeVertexNormals();
+  // the strands combed straight back: lines from the brow over the crown
+  mesh(hs, foldLines(cap.translate(...SC), (x, y, z) => 0.5 + 0.65 * Math.sin(x * 95 + z * 8)), hair);
+  // the eyes: a red glint that kindles to the beams' fire (the `flask` part glows; look.js)
+  const eyes = mergeGeometries([0.03, -0.03].map((ex) => ellipsoidGeometry(0.008, 0.004, 0.004, { widthSegs: 8, heightSegs: 4 }).translate(ex, 0.128, 0.1)));
+  const e = mesh(hs, eyes, M.flask);
   return { keep: [e] };
 }
 
@@ -113,13 +120,13 @@ function buildChest(ctx) {
   // the pectoral plates: two sculpted shells over the chest, a valley between
   const pecs = [];
   for (const s of [-1, 1]) {
-    const g = ellipsoidGeometry(0.1, 0.058, 0.02, { widthSegs: 12, heightSegs: 8 });
+    const g = ellipsoidGeometry(0.11, 0.065, 0.007, { widthSegs: 12, heightSegs: 8 });
     const gp = g.attributes.position;
     for (let k = 0; k < gp.count; k++) if (gp.getY(k) < -0.02) gp.setY(k, -0.02 + (gp.getY(k) + 0.02) * 0.35); // squared lower edge
     g.computeVertexNormals();
     g.rotateY(s * 0.38);
     g.rotateZ(s * 0.1);
-    const p = onTorso(1.385, s * 0.4, -0.006);
+    const p = onTorso(1.385, s * 0.4, -0.004);
     pecs.push(sub(g.translate(p[0], p[1], p[2]), s > 0 ? 1 : 0));
   }
   mesh(spine, mergeGeometries(pecs), M.armor);
@@ -127,7 +134,7 @@ function buildChest(ctx) {
   const abs = [];
   for (let r = 0; r < 3; r++) for (const s of [-1, 1]) {
     const y = 1.285 - r * 0.052, p = onTorso(y, s * 0.19, 0.004);
-    abs.push(sub(boxGeometry(0.052, 0.042, 0.022, p[0], p[1], p[2] - 0.006, -0.05, s * 0.18, 0), (r + (s > 0 ? 1 : 0)) & 1));
+    abs.push(sub(boxGeometry(0.05, 0.04, 0.014, p[0], p[1], p[2] - 0.006, -0.05, s * 0.18, 0), (r + (s > 0 ? 1 : 0)) & 1));
   }
   for (const s of [-1, 1]) for (let r = 0; r < 3; r++) {
     const y = 1.33 - r * 0.045, p = onTorso(y, s * 0.95, 0.002);
@@ -148,6 +155,8 @@ function buildChest(ctx) {
     for (let k = 0; k <= 4; k++) absSide.push(onTorso(lerp(1.31, 1.13, k / 4), s * 0.36, 0.014));
     lines.push(edge(absSide, 0.007));
   }
+  mesh(spine, mergeGeometries(lines), M.armor);
+  lines.length = 0;
   const strap = [];
   for (let k = 0; k <= 8; k++) {
     const t = k / 8;
@@ -172,18 +181,19 @@ function buildChest(ctx) {
 function buildArms(ctx) {
   const { arms, sword, M, DIM, BODY, mesh } = ctx;
   const gold = M.hair;
-  const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
+  const [ua0, ua1] = BODY.upperArm.map((r) => r * SLIM.arm), [fa0, fa1] = BODY.foreArm.map((r) => r * SLIM.arm), HK = BODY.hand * 0.9;
+  const DL = BODY.deltoid.map((r) => r * 0.85);
   for (const side of [-1, 1]) {
     const { upper, fore } = arms[side < 0 ? 'R' : 'L'];
     // the sleeve and a smaller, muscular shoulder (the anchor's shoulders are a man's, not two balls)
     mesh(upper, mergeGeometries([
       sub(limb({ length: DIM.upperArm, r0: ua0 + 0.002, r1: ua1, bulge: 0.018 }), 1),
-      sub(ellipsoidGeometry(BODY.deltoid[0] - 0.004, BODY.deltoid[1] - 0.006, BODY.deltoid[2] - 0.004, { widthSegs: 12, heightSegs: 8 }).translate(side * 0.008, -0.03, 0), 1),
+      sub(ellipsoidGeometry(DL[0], DL[1], DL[2], { widthSegs: 12, heightSegs: 8 }).translate(side * 0.008, -0.03, 0), 1),
     ]), M.pants);
     // the pauldron: a plate capping the shoulder, in two lames, each edged in gold
     const lames = [], lameEdge = [];
     for (let k = 0; k < 2; k++) {
-      const y0 = 0.025 - k * 0.05, y1 = y0 - 0.06, r = BODY.deltoid[0] + 0.012 - k * 0.006;
+      const y0 = 0.025 - k * 0.05, y1 = y0 - 0.06, r = DL[0] + 0.012 - k * 0.006;
       lames.push(sub(arcPlate(y0, y1, r - 0.025, r, side * Math.PI / 2, 1.25, 10), k));
       lameEdge.push(bandGeometry(r + 0.002, r * 0.95, 0.008, 18).translate(0, y1 + 0.004, 0));
     }
@@ -196,12 +206,12 @@ function buildArms(ctx) {
       sub(limb({ length: 0.09, r0: ua1 + 0.004, r1: ua1 }), 1),
       sub(limb({ length: 0.2, r0: fa0 + 0.006, r1: fa1 + 0.002, radial: 10, rings: 3, bulge: 0.008 }).translate(0, -0.05, 0), 1),
     ]), M.pants);
-    mesh(fore, sub(limb({ length: 0.15, r0: fa0 + 0.016, r1: fa1 + 0.012, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.07, 0), 0), M.armor);
+    mesh(fore, sub(limb({ length: 0.15, r0: fa0 + 0.01, r1: fa1 + 0.008, radial: 10, rings: 2, capSegs: 1 }).translate(0, -0.07, 0), 0), M.armor);
     const y1 = -DIM.foreArm + 0.04;
     mesh(fore, mergeGeometries([
-      bandGeometry(fa0 + 0.019, fa0 + 0.019, 0.008, 14).translate(0, -0.075, 0),
-      limb({ length: 0.06, r0: fa1 + 0.02, r1: fa1 + 0.016, radial: 12, rings: 1, capSegs: 1 }).translate(0, y1 + 0.06, 0),
-      boxGeometry(0.006, 0.13, 0.006, 0, -0.15, fa0 + 0.02),
+      bandGeometry(fa0 + 0.013, fa0 + 0.013, 0.008, 14).translate(0, -0.075, 0),
+      bandGeometry(fa1 + 0.012, fa1 + 0.012, 0.03, 14).translate(0, y1 + 0.03, 0),
+      boxGeometry(0.006, 0.13, 0.006, 0, -0.15, fa0 + 0.014),
     ]), gold);
   }
   // bare hands: the right fist on the sword joint, the left free
@@ -217,8 +227,8 @@ function buildLegs(ctx) {
   const { pelvis, legs, M, DIM, BODY, mesh } = ctx;
   const gold = M.hair;
   const [hx, hy, hz] = BODY.hips.r;
-  mesh(pelvis, orient.up(ellipsoidGeometry(hx + 0.004, hz + 0.004, hy + 0.01)), M.pants, ...BODY.hips.c);
-  const [th0, th1] = BODY.thigh, [sh0, sh1] = BODY.shin, Fo = BODY.foot;
+  mesh(pelvis, orient.up(ellipsoidGeometry(hx * 0.9, hz * 0.92, hy + 0.01)), M.pants, ...BODY.hips.c);
+  const [th0, th1] = BODY.thigh.map((r) => r * SLIM.leg), [sh0, sh1] = BODY.shin.map((r) => r * SLIM.leg), Fo = BODY.foot;
   for (const side of [-1, 1]) {
     const { thigh, shin, foot } = legs[side < 0 ? 'R' : 'L'];
     mesh(thigh, limb({ length: DIM.thigh, r0: th0 + 0.004, r1: th1 + 0.004, bulge: 0.016 }), M.pants);
@@ -232,25 +242,25 @@ function buildLegs(ctx) {
     for (const a of [-0.75, 0.75, side * 1.35 + 0.5 * side]) {
       tl.push(strapGeometry([Math.sin(a) * (th0 + 0.02), -0.07, Math.cos(a) * (th0 + 0.02)], [Math.sin(a) * (th1 + 0.018), -0.35, Math.cos(a) * (th1 + 0.018)], 0.008, 0.005, [Math.cos(a), 0, -Math.sin(a)]));
     }
-    mesh(thigh, mergeGeometries(tl), gold);
+    mesh(thigh, mergeGeometries(tl), M.armor);
     // the knee plate: a kite over the joint
-    mesh(shin, sub(ellipsoidGeometry(0.042, 0.055, 0.016, { widthSegs: 10, heightSegs: 6 }).translate(0, 0.005, th1 - 0.004), 1), M.armor);
+    mesh(shin, sub(arcPlate(0.04, -0.05, th1 + 0.006, th1 + 0.01, 0, 0.7, 6), 1), M.armor);
     // the boot to below the knee: the greave plate in front, gold edges, the gold top band
     const bootTop = -0.1;
     const shaft = DIM.shin + bootTop - 0.01;
     const t = lerp(sh0, sh1, Math.min(1, -bootTop / DIM.shin));
     mesh(shin, limb({ length: -bootTop + 0.02, r0: th1 + 0.004, r1: sh0 + 0.004, bulge: 0.01 }), M.pants);
-    mesh(shin, sub(limb({ length: shaft, r0: t + 0.014, r1: sh1 + 0.014, radial: 12, rings: 3, capSegs: 1 }).translate(0, bootTop, 0), 0), M.collar);
-    mesh(shin, sub(arcPlate(bootTop - 0.02, bootTop - shaft + 0.04, t + 0.03, sh1 + 0.024, 0, 0.8, 8), 1), M.armor);
-    const gl = [bandGeometry(t + 0.03, t + 0.03, 0.02, 16).translate(0, bootTop - 0.005, 0)];
+    mesh(shin, sub(limb({ length: shaft, r0: t + 0.008, r1: sh1 + 0.01, radial: 12, rings: 3, capSegs: 1 }).translate(0, bootTop, 0), 0), M.collar);
+    mesh(shin, sub(arcPlate(bootTop - 0.02, bootTop - shaft + 0.04, t + 0.02, sh1 + 0.018, 0, 0.8, 8), 1), M.armor);
+    const gl = [bandGeometry(t + 0.022, t + 0.022, 0.01, 16).translate(0, bootTop - 0.005, 0)];
     for (const a of [-0.8, 0.8]) gl.push(strapGeometry([Math.sin(a) * (t + 0.032), bootTop - 0.02, Math.cos(a) * (t + 0.032)], [Math.sin(a) * (sh1 + 0.026), bootTop - shaft + 0.05, Math.cos(a) * (sh1 + 0.026)], 0.008, 0.005, [Math.cos(a), 0, -Math.sin(a)]));
     gl.push(strapGeometry([Math.sin(-0.8) * (t + 0.032), bootTop - shaft * 0.45, Math.cos(-0.8) * (t + 0.032)], [Math.sin(0.8) * (t + 0.032), bootTop - shaft * 0.45 - 0.05, Math.cos(0.8) * (t + 0.032)], 0.008, 0.005, [0, 1, 0]));
     mesh(shin, mergeGeometries(gl), gold);
     // the foot: navy, a gold toe cap and a gold heel
     mesh(foot, ellipsoidGeometry(Fo.r[0], Fo.r[1] * 0.95, Fo.r[2], { widthSegs: 10, heightSegs: 6 }).translate(Fo.c[0], Fo.c[1] - 0.002, Fo.c[2] + 0.004), M.collar);
     mesh(foot, mergeGeometries([
-      ellipsoidGeometry(Fo.r[0] + 0.006, Fo.r[1] * 0.8, Fo.r[2] * 0.42, { widthSegs: 10, heightSegs: 6 }).translate(Fo.c[0], Fo.c[1] - 0.008, Fo.c[2] + Fo.r[2] * 0.66),
-      boxGeometry(Fo.r[0] * 1.5, 0.04, 0.05, Fo.c[0], Fo.c[1] - 0.02, Fo.c[2] - Fo.r[2] * 0.82),
+      ellipsoidGeometry(Fo.r[0] * 0.8, Fo.r[1] * 0.6, Fo.r[2] * 0.26, { widthSegs: 10, heightSegs: 6 }).translate(Fo.c[0], Fo.c[1] - 0.012, Fo.c[2] + Fo.r[2] * 0.8),
+      boxGeometry(Fo.r[0] * 1.3, 0.03, 0.03, Fo.c[0], Fo.c[1] - 0.025, Fo.c[2] - Fo.r[2] * 0.86),
     ]), gold);
   }
   return {};
@@ -294,7 +304,7 @@ function buildCape(ctx) {
     { y: yCh(1.47), rx: 0.27, rz: 0.15, cz: -0.01 },
     { y: yCh(1.4), rx: 0.29, rz: 0.16, cz: -0.02 },
   ];
-  const mg = foldLines(shellGeometry(mantle, { sub: 3, cols: 26, arc: [0.75, Math.PI * 2 - 0.75] }), (x, y, z) => 0.5 + 0.6 * Math.sin(Math.atan2(x, z) * 7));
+  const mg = sub(shellGeometry(mantle, { sub: 3, cols: 26, arc: [0.75, Math.PI * 2 - 0.75] }), 0);
   mesh(chest, mg, M.coat);
   mesh(chest, mg, M.lining);
   REF_CAPE.sheets.forEach((d, i) => {
@@ -303,22 +313,16 @@ function buildCape(ctx) {
     const [w0, w1, w2] = d.w, [L0, L1] = d.len;
     // few, deep folds: the heavy cloth of the sheets (one wave per ~0.24 m)
     const nF = Math.max(1, Math.round(w2 / 0.24)) + 0.5, ph = i * 1.9 + 0.4;
-    const wAt = (dd) => (dd < L0 ? lerp(w0, w1, dd / L0) : lerp(w1, w2, Math.min(1, (dd - L0) / L1)));
-    const pleat = (d0) => (x, y, z, u, gy) => {
-      const dd = d0 - gy, w = wAt(dd);
-      const f = Math.PI * 2 * nF * (u / w + 0.5) + ph + Math.PI;
-      return 0.5 + 0.55 * Math.sin(f) - 0.9 * Math.max(0, 1 - dd / 0.12);
-    };
     const s0 = joint(base);
-    const g0 = foldLines(skirtSheet(L0, w0, w1, d.wrap, 0.12, 0, d.seed, [0.012, 0.03, nF, ph]), pleat(0));
+    const g0 = sub(skirtSheet(L0, w0, w1, d.wrap, 0.12, 0, d.seed, [0.015, 0.045, nF, ph]), 0);
     mesh(s0, g0, M.coat);
     mesh(s0, g0, M.lining);
     const s1 = joint(s0, 0, -L0, 0);
-    const R1 = d.wrap + 0.12 * L0, fold = [0.03, 0.055, nF, ph];
-    const g1 = foldLines(skirtSheet(L1, w1, w2, R1, 0.12, 0.02, d.seed + 7, fold, 0, 0.7), pleat(L0));
+    const R1 = d.wrap + 0.12 * L0, fold = [0.045, 0.08, nF, ph];
+    const g1 = sub(skirtSheet(L1, w1, w2, R1, 0.12, 0.02, d.seed + 7, fold, 0, 0.7), 0);
     mesh(s1, g1, M.coat);
     mesh(s1, g1, M.lining);
-    const g2 = foldLines(skirtSheet(L1, w1, w2, R1, 0.12, 0.03, d.seed + 7, fold, 0.7, 1), pleat(L0));
+    const g2 = sub(skirtSheet(L1, w1, w2, R1, 0.12, 0.03, d.seed + 7, fold, 0.7, 1), 0);
     const h0 = mesh(s1, g2, M.coat), h1 = mesh(s1, g2, M.lining);
     if (TORN.has(i)) {
       // phase 3: the lower edge torn away, three tatters in its place
