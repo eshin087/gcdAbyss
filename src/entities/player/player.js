@@ -23,6 +23,8 @@ import { newDeathblowState, armDeathblow, tickDeathblow, deathblowTakeHit, death
 import { deathblowFxUpdate, deathblowFxClear } from '../../combat/deathblowFx.js';
 import { deathblowMatrixUpdate, deathblowMatrixClear } from '../../combat/deathblowMatrix.js';
 import { SwordMystic } from './swordMystic.js';
+import { MixHero } from './mixamo/mixHero.js';
+import { mixHeroMode } from './mixamo/mixClips.js';
 import { BREAK, SCAR } from '../../world/breakTuning.js';
 import { chipLook, cutStops } from '../../world/destructibles.js';
 import { mowSwing } from '../../world/grass.js';
@@ -364,6 +366,9 @@ export class Player {
 
     this.anim = new HeroAnimator(this.rig, this, null, { freeHand: true });
     this.anim.onFootstep = (side, dust) => this._footstep(side, dust);
+    // `?hero=mixamo|mixrig`: the Mixamo hero trial draws over this rig (mixamo/mixHero.js; ADR-294)
+    const mixMode = mixHeroMode();
+    this.mix = mixMode ? new MixHero(this, mixMode) : null;
     this.fx = new PlayerFx(game, this.rig);
     this.slashFx = new SlashFx(this); // every swing's instant slash line (slashFx.js; ?slash=arc: the crescent)
     this.mystic = new SwordMystic(this); // the sword's green flame (on by default; ?mystic=0 = nothing drawn)
@@ -797,6 +802,17 @@ export class Player {
     return this.rig.loadout;
   }
 
+  /** A hero in his rest pose, never drawn (the Mixamo trial measures and dresses from it): the
+   *  shared per-part ink a build rewrites is put back, as in setLoadout. */
+  restHero() {
+    const U = this.game.U, saved = PART_UNIFORMS.map((k) => U[k]?.value?.map((v) => v.clone()) ?? null);
+    try {
+      return buildHero(U, this.rig.loadout);
+    } finally {
+      saved.forEach((a, i) => a && U[PART_UNIFORMS[i]].value.forEach((v, j) => a[j] && v.copy(a[j])));
+    }
+  }
+
   /** Put item `id` (or null: take it off) in `slot`. See setLoadout. */
   equip(slot, id) {
     return this.setLoadout({ ...this.rig.loadout, [slot]: id ?? null });
@@ -834,6 +850,7 @@ export class Player {
     const onFootstep = this.anim.onFootstep;
     this.anim = new HeroAnimator(rig, this, null, { freeHand: true });
     this.anim.onFootstep = onFootstep;
+    this.mix?.rebind();
     this.fx.rig = rig;
     this.sweep.sword = rig.sword;
     this.sweep.valid = false;
@@ -925,6 +942,7 @@ export class Player {
     this.lean.on = false;
     this.hitReact.restore(); // (CONTACT: last frame's drawn reaction off his joints)
     // (the flurry runs on real time while the world is held: so do his pose and his cloth)
+    this.mix?.restore(); // (the Mixamo trial's drawn sword off his hand before the animator reads it)
     this.anim.update(this.state === 'flurry' ? this.flurry.animDt : dt);
     this.lean.on = true;
     this.object3d.updateMatrixWorld(true);
@@ -936,6 +954,8 @@ export class Player {
       this.lean.on = true;
       this.object3d.updateMatrixWorld(true);
     }
+    // the Mixamo trial: drawn after the hits read the blade, before the FX read it
+    this.mix?.update(this.state === 'flurry' ? this.flurry.animDt : dt);
     this._updateFx(dt);
     this._updateMaterials(dt);
 

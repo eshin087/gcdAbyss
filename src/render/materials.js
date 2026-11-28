@@ -519,12 +519,20 @@ export function createSurfaceGlyphMaterial(U, o = {}) {
       attribute float aPart;
       varying float vPart;
 #endif
+      // a skinned mesh (three sets USE_SKINNING for a SkinnedMesh only: the Mixamo hero trial,
+      // player/mixamo/mixHero.js); every other mesh compiles exactly as before
+      #include <skinning_pars_vertex>
       void main() {
         // the mesh's own matrix, or its bone's when it is drawn as part of a rigid batch
         mat4 mm = rigidMatrix();
-        vec4 wp = mm * vec4(position, 1.0);
+        vec3 transformed = vec3(position);
+        vec3 objectNormal = vec3(normal);
+        #include <skinbase_vertex>
+        #include <skinnormal_vertex>
+        #include <skinning_vertex>
+        vec4 wp = mm * vec4(transformed, 1.0);
         vW = wp.xyz;
-        vN = normalize(mat3(mm) * normal);
+        vN = normalize(mat3(mm) * objectNormal);
         vG = aGUV;
 #ifdef SG_AXIS
         vNO = normal; // object space: glowAxis / inkAxis stay glued to the part

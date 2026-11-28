@@ -19,6 +19,13 @@ export const RELEASES = [
     entries: [
       {
         date: '2026-11-28',
+        title: "A trial hero moved by Mixamo's great sword clips",
+        notes: [
+          'A test version of gcd moved by motion-captured great sword moves, in two looks: a new body wearing his hair, coat and cape, or his own body. Only on a test link for now; the game is unchanged.',
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: "The Cinder Wyrm's feet stay planted as it dies and as it wakes",
         notes: [
           'When the Cinder Wyrm falls dead or gets up from its sleep, its feet stay where they stand instead of sliding over the ground.',
