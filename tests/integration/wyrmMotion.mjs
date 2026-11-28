@@ -114,13 +114,19 @@ export function makeWyrmMotion({ THREE, G, DT, SCALE, place, settle }) {
         b.subVectors(Tl.p[j + 1], Tl.p[j]).normalize();
         { const v = ang(a, b); if (v > row.tailK) { row.tailK = v; row.at.tail = +T.toFixed(2); row.at.tailPh = phaseOf(); } }
       }
+      // GCD_FOOTDBG=0..3 (paw L, paw R, hind L, hind R): that foot's drawn toe, its contact and its state every 4th frame
+      if (process.env.GCD_FOOTDBG && i % 4 === 0) {
+        const j = +process.env.GCD_FOOTDBG, l = R.gait?.limbs?.[[2, 3, 0, 1][j]];
+        const t = [pt.arms[0].toe, pt.arms[1].toe, pt.legs[0].toe, pt.legs[1].toe][j], s = R.s, f = (p) => p ? `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}` : '-';
+        console.log(`    ${T.toFixed(2)} toe ${f(t)} contact ${f(l?.pos)} lock ${l?.lock} free ${l?.free} step ${l?.stepping} dead ${s?.dead?.toFixed(2)} sleep ${s?.sleep?.toFixed(2)} air ${s?.airborne?.toFixed(2)} ${phaseOf()}`);
+      }
       // planted feet skating (four feet: two paws, two hind)
       const toes = [pt.arms[0].toe, pt.arms[1].toe, pt.legs[0].toe, pt.legs[1].toe];
       toes.forEach((t, j) => {
         const plant = t.y < 0.12;
         if (plant && wasPlant[j]) {
           const dx = Math.hypot(t.x - lastToe[j].x, t.z - lastToe[j].z);
-          if (dx / DT < 2.5 && dx > 0.002) row.slide = Math.max(row.slide, (row['_s' + j] = (row['_s' + j] ?? 0) + dx));
+          if (dx / DT < 2.5 && dx > 0.002) { const v = (row['_s' + j] = (row['_s' + j] ?? 0) + dx); if (v > row.slide) { row.slide = v; row.at.slide = +T.toFixed(2); row.at.slideFoot = ['paw L', 'paw R', 'hind L', 'hind R'][j]; } }
         } else row['_s' + j] = 0;
         wasPlant[j] = plant;
         lastToe[j].copy(t);
@@ -172,7 +178,7 @@ export function makeWyrmMotion({ THREE, G, DT, SCALE, place, settle }) {
     if (row.hinge > L.hinge) row.flags.push(`head hinged ${row.hinge.toFixed(0)}° off the neck`);
     if (row.bend > L.bend) row.flags.push(`neck kinks ${row.bend.toFixed(0)}°`);
     if (row.tailK > L.tailK) row.flags.push(`tail kinks ${row.tailK.toFixed(0)}°`);
-    if (row.slide > L.slide) row.flags.push(`a planted foot skates ${row.slide.toFixed(2)} m`);
+    if (row.slide > L.slide) row.flags.push(`a planted foot skates ${row.slide.toFixed(2)} m (${row.at.slideFoot}, to ${row.at.slide} s)`);
     if (row.under > L.under) row.flags.push(`${row.underK} ${row.under.toFixed(2)} m under the ground`);
     if (row.inside > L.inside) row.flags.push(`${row.insideK} ${row.inside.toFixed(2)} m inside the body`);
     if (row.spin > L.spin) row.flags.push(`spins in place ${row.spin.toFixed(0)}°/s`);

@@ -1395,10 +1395,19 @@ export class Rig {
         if (fixOn() && limb.landed) toeT.y = lerp(toeT.y, tuck.y, s.airborne);
         else toeT.lerp(tuck, s.airborne);
       }
+      // (the motion audit) the hock's offset from the toe is as long as the metatarsus, so the toe drawn
+      // at the end of that bone lands on its contact: the offset lerps between the standing and the lying
+      // one (sleep, wake, death) and is ~15 % shorter halfway, so the toe was drawn up to 0.3 m past its
+      // planted spot and slid out and back while the body sank or rose
+      let ao = 1;
+      if (fixOn()) {
+        const len = Math.hypot(ankleOff.y, ankleOff.z);
+        if (len > 1e-4) ao = lerp((A.meta * S) / len, 1, s.airborne);
+      }
       const ankleT = v[7].copy(toeT);
-      ankleT.x += ankleOff.z * fwdFlat.x;
-      ankleT.z += ankleOff.z * fwdFlat.z;
-      ankleT.y += ankleOff.y;
+      ankleT.x += ankleOff.z * ao * fwdFlat.x;
+      ankleT.z += ankleOff.z * ao * fwdFlat.z;
+      ankleT.y += ankleOff.y * ao;
       // knee forward and a little out
       const pole = v[8].copy(fwd).addScaledVector(left, side * 0.35).addScaledVector(up, 0.15);
       const bend = this._bend.legs[k];
@@ -1455,12 +1464,19 @@ export class Rig {
         freeW = Math.max(freeW, s.pawW[k]);
       }
       if (toeT.y < 0) toeT.y = 0;
+      // (the motion audit) on the ground too the wrist sits a hand's length from the toe, as the hind hock
+      // does: the offset lerping to the lying one left the paw drawn ~0.1 m off its planted spot
+      let wo = 1;
+      if (fixOn()) {
+        const len = Math.hypot(wristOff.y, wristOff.z);
+        if (len > 1e-4) wo = (A.hand * S) / len;
+      }
       const wristT = v[7].copy(toeT);
-      wristT.x += wristOff.z * fwdFlat.x * (1 - freeW);
-      wristT.z += wristOff.z * fwdFlat.z * (1 - freeW);
+      wristT.x += wristOff.z * wo * fwdFlat.x * (1 - freeW);
+      wristT.z += wristOff.z * wo * fwdFlat.z * (1 - freeW);
       // a free paw hangs a hand's length under the wrist so the toe lands ON its target (a paw held on
       // the ground by an override no longer sinks 0.2 into it)
-      wristT.y += lerp(wristOff.y, A.hand * S, freeW);
+      wristT.y += lerp(wristOff.y * wo, A.hand * S, freeW);
       // elbow back (the reverse of the hind knee), out a little; further out on a rake
       // braced / buckled forelegs bow their elbows outward (elbowsOut). A paw raised in front of the
       // chest (rear-up, airborne tuck) points the shoulder -> wrist axis forward, straight into the
