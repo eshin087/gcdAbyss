@@ -6,10 +6,7 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 ## [Unreleased]
 One hundred and forty-seven pieces of work since 0.4.0:
 - **Shen Hui after the reference pack, to try** (2026-11-28, ADR-289). *Added (options, off by default: the owner
-  picks):* `?ashRef=a` draws Shen Hui after the owner's reference pack (`docs/art/character-packs-v04/shen-hui`): a
-  bracer of old bronze on his sword arm, a brick-red fold down the front and back of his robe, and the robe layered
-  and ragged in every phase (an over-robe edge torn at mid-thigh, the hem run out into torn ends); his hat, jian,
-  tassel, colours and phase dressing kept. `?ashRefMove=a` poses him after the strips: a lower, wider guard, blows
+  picks):* `?ashRef=a|b|c` redraws Shen Hui from the owner's reference pack (`docs/art/character-packs-v04/shen-hui`, the identity anchor): a loose ash-grey robe with a crossed collar over a long brick-red inner robe, a thick sash of brown cord wound three times, the skirt in two torn layers, wide torn sleeves (the sword forearm bare under a bracer of old bronze), loose trousers in crossed white wraps, a frayed hat, his hair in a long tail; a after the anchor, b fuller and longer, c leaner; his jian, colours and phase dressing kept. `?ashRefMove=a` poses him after the strips: a lower, wider guard, blows
   that load and sink into the cut, the free hand out in opposition, bigger reactions; the same timing, zones, damage
   and travel (`duel.mjs . ashref` checks every move, phase, branch and flurry count). The Lab's `ashRef` and
   `ashRefMove` rows.

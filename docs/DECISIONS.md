@@ -8193,6 +8193,19 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
      switches, each off, both off) time every beat the same with the layer on and off; the same seeded fights in
      phases 1 and 3 land the same blows at the same times; the sword audit holds (wrist ≤ 40°, the blade ≥ 0.18 m
      from his head and hat, the elbow opening ≥ 156°, thrusts on the arm's line); the look's pieces and their cost.
+- **Revised the same day (the owner: "it doesn't seem like the new look has any resemblance to the reference art"):**
+  point 2's trim (a bracer, a red fold and torn edges on the shipped robe) was not a rebuild. `?ashRef` now draws
+  every piece he wears again after the anchor (`ashDisciple/refGear.js`): a loose robe with a crossed collar and a
+  dark lapel facing, bloused over a sash of brown cord wound three times (the hero's unused `piping`); the skirt
+  as eight panels in two torn layers, the front panels parting over a long brick-red inner robe (front and
+  back; the robe's six keep the coat's panel order, the red ones come last); wide upper sleeves, the sword
+  sleeve torn off below the elbow over a bare forearm and the bronze bracer, the free sleeve a torn bell to the
+  wrist; loose trousers gathered into white cloth wound crosswise; the owner's hat size with a frayed brim; black
+  hair (in the charcoal `shirt`: the `hair` part's lines are gold on every rig) in a tail on a spring, two
+  locks by the face. Three steps of one build (refLook.js REF_BUILD): a after the anchor, b fuller and longer,
+  c leaner. +14 % triangles on his rig (`duel.mjs . ashref` holds it under 20 %). What still separates him from
+  the sheet is the drawing (ADR-220's `?ashHero=c`: the hero's shading and outline, the owner's pick) and the
+  pose (the sheet's front view stands at rest; in the fight he is in his guard): neither changed here.
 - **Consequences:** the default game is unchanged until the owner picks. The pose layer is broad (every beat at
   once), not a hand re-key of 138 beats: the strips draw the beats he already plays, and the differences were of
   bearing (lower, committed, the free arm in opposition), not of path. A per-move pass is open on what the owner

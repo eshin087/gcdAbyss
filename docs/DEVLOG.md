@@ -33,6 +33,12 @@ headings in phases 1 and 3, portraits in phases 1 - 3, tellAt / flash / impact /
 full-speed loops (P1 thrusts, cuts and sweeps; P2 burns and the leap; P3 flits, ghost dash and the qi storm): flashes
 fall on the same frames on both sides. `npm run perf -- --levels ash`: 76 draw calls either way, 234k -> 236k triangles on screen; GPU and script ms within run-to-run noise (the GPU is shared).
 
+**Rebuilt (same day):** the owner said the look had no resemblance to the reference. Right: it was a trim on
+the shipped robe. `?ashRef=a|b|c` now redraws every piece after the anchor (`refGear.js`, ADR-289 "Revised"):
+robe, sash, two-layer torn skirt over the red inner robe, asymmetric sleeves, trousers and crossed wraps, frayed
+hat, hair tail. Three graded builds; +14 % triangles; `duel.mjs . ashref` green. Sheets: the anchor over
+turnarounds of 0 / a / b / c in phases 1 and 3, and the game camera.
+
 **Open:** the owner picks (`?ashRef`, `?ashRefMove`); the red fold and the bronze read in close views more than at
 the game camera; the layer is broad, not a per-beat re-key (a per-move pass on what the owner names); not checked on
 the iPhone.
