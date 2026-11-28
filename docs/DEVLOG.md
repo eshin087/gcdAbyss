@@ -33,6 +33,16 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
   (cloth in the body 1.3 %, hand near 1.7 %, 25.8k triangles, 19 draws), `heropolish`, `offhand`, `heroidles`;
   before/after stills at the game camera and two films. Open: the owner's verdict; the sword's own colour unchanged
   by rule, so its lines still read pale on the cut.
+- **Third pass (same day).** Owner sent the sheet "LAYERED WANDERER / ALTERNATIVE 13": more like it; no white line in
+  the back, no silver slash on the front, silver only on the gloves; the first layer must not read as another cloak;
+  layers on the shoulders; the left hand a real fist; a stunning cloak. Done: the second pass's trim out (vest,
+  rivets, lames, edging) with the strap and the glyph line; the skirts in the tunic's black, plain hems; a mantle of
+  three torn tiers; the cloak wider, through two dusk steps into the rags (the first step off the hip seam); gold
+  locks under the hood; a gauntlet fist from the sword hand's finger rolls. Kept the lavender slash. Found on the
+  way: the main checkout's node_modules was emptied at 11:37 by someone else; this worktree's junction to it broke
+  the page, so the worktree has its own install now. Checked: `looks` (cloth in the body 0.9 %, hand near 1.8 %,
+  25.3k triangles, 20 draws), the full `npm test`, turnarounds against the last preview, the fist up close, two films.
+  Open: the owner's verdict; the cloak still ends at mid-calf (the sheet's is longer: the roll).
 
 ---
 

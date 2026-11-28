@@ -1191,7 +1191,7 @@ sword fingers); `sheet.js` `hangSheet(ctx, parent, d, mats)`
 builds one streamer sheet (or a ribbon) from data and returns its record, `panelSkirt(ctx, PANELS,
 { seed, fade })` a skirt of coat panels (returns `{ coat }`; a panel's `hemFrom` puts the pale `hem` over
 the end of its lower sheet, `fadeFrom` with the `fade` material a step before it along torn lines (a sheet's `fadeFrom`
-with `mats.fade` alike), `mat` a panel in another HERO_INK cloth; `cone` (default 0.25) how fast it widens down its length, `jag` (default
+with `mats.fade` alike, either may be a list of steps), `mat` a panel in another HERO_INK cloth; `cone` (default 0.25) how fast it widens down its length, `jag` (default
 0.006) its hem's raggedness). `heroGeo.js` `shellGeometry(rings, { arc: [a0, a1] })` builds one arc
 of a shell (rad: 0 = his front, + = his left). `model.js` `tintHero(M, tint)` recolours ONE rig's
 material instances (`{ <HERO_INK name>: { fill?, ink?, emissive?, spec?, rim?, sub?, inkGlow?,

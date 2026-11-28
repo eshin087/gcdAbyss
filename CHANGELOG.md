@@ -24,7 +24,13 @@ One hundred and forty-eight pieces of work since 0.4.0:
   longer near white at the bottom); its slash drawn in lavender and its steel's light on the cut at 0.3 of today's
   (`HERO_LOOKS.ref11.slash` / `bladeLit`; the sword keeps its colours). Built on the combo polish (ADR-292), so the
   left hand stays in sight through the light combo. Cloth in the body 1.3 %, the free hand near a sheet 1.7 %, 25.8k
-  triangles, 19 draws.
+  triangles, 19 draws. *Third pass, after the owner's sheet "Layered Wanderer / Alternative 13":* silver only on the
+  gauntlets (with the boots, the belt and the clasp the sheet draws in silver): the vest, its rivets, the arm lames
+  and the cloak's edging are gone, and so are the strap across the chest and the line of glyphs down the back; the
+  skirts are the tunic's own black with plain hems (they read as a second cloak); the mantle over the shoulders is
+  three torn tiers; the cloak one wide drape, black through two dusk steps into the lavender rags; gold locks at the
+  sides of the shadowed face; the free hand a closed gauntlet fist. Cloth in the body 0.9 %, the free hand near a
+  sheet 1.8 %, 25.3k triangles, 20 draws.
 - **gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi and a prouder bearing** (2026-11-28, ADR-292). *Fixed:* in the light chain's fifth hit the torn drape on gcd's left upper
   arm stood straight out from his shoulder as both hands took the grip (its pale torn points a wing at shoulder height
   from behind, at its swing limit every finisher); a sheet on an arm now hangs from the shoulder as that arm lifts or

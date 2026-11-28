@@ -8184,6 +8184,19 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   draw its slash in its own colours (`HERO_LOOKS[...].slash`, read by slashFx.js) and light its steel less on the
   cut (`bladeLit`, player.js); it still never tints the sword (the looks test forbids it). The left hand: this
   branch carries the combo polish (ADR-292, its `out` hand), merged in.
+- **Third pass (the owner's sheet "LAYERED WANDERER / ALTERNATIVE 13": "more like this. no white line in the back.
+  no silver slash on the front. make only his gloves and silver. make his 1st layer not look like another cloak layer
+  ... show the different layers on the top shoulder area ... his left hand doesn't look like a fist ... make the
+  cloak look stunning and beautiful"):** layers by the sheet's own pieces, not by added trim. Out: the vest and its
+  rivets, the arm lames, the cloak's silver edging, the glyph line down the back and the chest strap (the "silver
+  slash on the front": its bright lines; the wrap's crossing edge stays as a fold of the tunic's black). Silver is
+  left on the gauntlets and, as the sheet draws them, the boots, the belt and the clasp. The skirts take the tunic's
+  cloth (`mat: 'shirt'`) with plain hems and no rags. The cowl became three torn tiers (`REF11_MANTLE`), each
+  starting outside the one under it so every edge shows. The cloak is wider at the hem and passes through two dusk
+  steps (`fadeFrom` may now be a list, `mats.fade` a list as long) into the rags; the first step starts below the
+  hip seam (at the seam it drew a straight line, a second layer again). The hood keeps the cap, the fringe and the
+  left lock (the sheet's gold under the hood). The free hand is a gauntlet's fist made of the sword hand's finger
+  rolls (`gauntletFist`): the default fist is a smooth lump in plate. The lavender slash stays (the owner saw it).
 
 ## ADR-292 — gcd's light combo polished: the cloak held calm, the left hand in sight, the ending slash on the sword's path, a chiburi and a prouder bearing (2026-11-28)
 
