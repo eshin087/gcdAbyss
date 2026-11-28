@@ -279,19 +279,15 @@ function buildWaist(ctx) {
 }
 
 // ================================================================= the cape: a mantle over the shoulders, a heavy fall to the heels
-/** Its sheets on the chest joint: the back three wide and overlapping, the outer two from the clasps over
- *  the shoulders' fronts; long (to the heels: ~1.3 m), hanging close (little flare), few deep folds. */
+/** ONE CLOTH (the sheets draw one soft red mass behind him, never a fan of panels): a single wide sheet
+ *  curved round his back from clasp to clasp (`w`: its width at the top, the knee, the hem; `wrap`: the
+ *  curve's radius at the top, `flare` its growth down the cape), long (to the heels: ~1.3 m), on one spring,
+ *  so the whole cape swings as one; heavy (`lag` < 1, `max`: it trails ~50° back at most in a blow). */
 export const REF_CAPE = {
-  lag: 0.8, max: 1.2, breeze: [0.1, 1.4],
-  sheets: [
-    { at: [0, 0.22, -0.15], ry: Math.PI, w: [0.3, 0.5, 0.74], len: [0.62, 0.72], out: 0.1, wrap: 0.36, seed: 5 },
-    { at: [0.15, 0.225, -0.13], ry: Math.PI - 0.42, w: [0.24, 0.44, 0.62], len: [0.62, 0.7], out: 0.12, wrap: 0.32, seed: 19 },
-    { at: [-0.15, 0.225, -0.13], ry: Math.PI + 0.42, w: [0.24, 0.44, 0.62], len: [0.62, 0.7], out: 0.12, wrap: 0.32, seed: 31 },
-    { at: [0.24, 0.24, -0.01], ry: Math.PI - 1.3, w: [0.16, 0.36, 0.62], len: [0.6, 0.68], out: 0.24, wrap: 0.26, seed: 43 },
-    { at: [-0.24, 0.24, -0.01], ry: Math.PI + 1.3, w: [0.16, 0.36, 0.62], len: [0.6, 0.68], out: 0.24, wrap: 0.26, seed: 59 },
-  ],
+  lag: 1.0, max: 1.15, breeze: [0.08, 1.2],
+  sheets: [{ at: [0, 0.23, -0.13], ry: Math.PI, w: [0.58, 0.84, 1.08], len: [0.62, 0.72], out: 0.24, wrap: 0.24, flare: 0.4, seed: 5 }],
 };
-const TORN = new Set([0, 3, 4]);
+const TORN = new Set([0]);
 
 function buildCape(ctx) {
   const { chest, M, mesh, joint, root } = ctx;
@@ -312,17 +308,17 @@ function buildCape(ctx) {
     base.rotation.y = d.ry;
     const [w0, w1, w2] = d.w, [L0, L1] = d.len;
     // few, deep folds: the heavy cloth of the sheets (one wave per ~0.24 m)
-    const nF = Math.max(1, Math.round(w2 / 0.24)) + 0.5, ph = i * 1.9 + 0.4;
+    const nF = Math.max(1, Math.round(w2 / 0.24)) + 0.5, ph = i * 1.9 + 0.4, fl = d.flare ?? 0.12;
     const s0 = joint(base);
-    const g0 = sub(skirtSheet(L0, w0, w1, d.wrap, 0.12, 0, d.seed, [0.015, 0.045, nF, ph]), 0);
+    const g0 = sub(skirtSheet(L0, w0, w1, d.wrap, fl, 0, d.seed, [0.015, 0.045, nF, ph]), 0);
     mesh(s0, g0, M.coat);
     mesh(s0, g0, M.lining);
     const s1 = joint(s0, 0, -L0, 0);
-    const R1 = d.wrap + 0.12 * L0, fold = [0.045, 0.08, nF, ph];
-    const g1 = sub(skirtSheet(L1, w1, w2, R1, 0.12, 0.02, d.seed + 7, fold, 0, 0.7), 0);
+    const R1 = d.wrap + fl * L0, fold = [0.045, 0.08, nF, ph];
+    const g1 = sub(skirtSheet(L1, w1, w2, R1, fl, 0.02, d.seed + 7, fold, 0, 0.7), 0);
     mesh(s1, g1, M.coat);
     mesh(s1, g1, M.lining);
-    const g2 = sub(skirtSheet(L1, w1, w2, R1, 0.12, 0.03, d.seed + 7, fold, 0.7, 1), 0);
+    const g2 = sub(skirtSheet(L1, w1, w2, R1, fl, 0.03, d.seed + 7, fold, 0.7, 1), 0);
     const h0 = mesh(s1, g2, M.coat), h1 = mesh(s1, g2, M.lining);
     if (TORN.has(i)) {
       // phase 3: the lower edge torn away, three tatters in its place
@@ -330,9 +326,13 @@ function buildCape(ctx) {
         at(D, m, 1, 2);
         keep.push(m);
       }
-      for (let k = 0; k < 3; k++) {
-        const x = (k - 1) * w1 * 0.3;
-        const t = mesh(s1, foldLines(tatterStrip(L1 * (0.4 + 0.12 * k), w1 * 0.24, { fork: true, curl: 0.15, seed: d.seed + k }), ribbonCrease(w1 * 0.24, k)).translate(x, -L1 * 0.6, R1 * 0.02), M.coat);
+      for (let k = 0; k < 5; k++) {
+        const x = (k - 2) * w1 * 0.19;
+        const t = mesh(s1, foldLines(tatterStrip(L1 * (0.4 + 0.06 * ((k * 3) % 5)), w1 * 0.17, { fork: true, curl: 0.15, seed: d.seed + k }), ribbonCrease(w1 * 0.17, k)).translate(0, -L1 * 0.6, 0), M.coat);
+        // (on the cloth's curve at the tear: the sheet's radius there, R1 + flare x 0.6 of its length)
+        const Rt = R1 + fl * L1 * 0.6, ang = x / Rt;
+        t.rotation.y = ang;
+        t.position.set(Math.sin(ang) * Rt * 1.02, 0, (Math.cos(ang) - 1) * Rt + 0.02 * Rt);
         at(D, t, 3, 3);
         keep.push(t);
       }

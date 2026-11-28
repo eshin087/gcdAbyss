@@ -126,9 +126,12 @@ export function flyReactKeys(keys) {
 
 /** THE SHEETS' LEGS (02, 03, 07; `?halRefMove=a` over `?halMotion=b`): through a blow's windup the right
  *  knee drawn up high and the left leg hanging, the toes pointed (crouched in the air); from the strike
- *  both legs bent and trailing behind him (LEGS_HIT); a kick keeps its striking leg (the builder's,
+ *  the right knee kept up and the left leg long behind him (REF_HIT); a kick keeps its striking leg (the builder's,
  *  carried out straight by limbs.js) and draws the other knee up under him (REF_KICK_OTHER). */
 const REF_COIL = { rF: [-0.1, ANK + 0.4, 0.14], lF: [0.12, ANK + 0.08, -0.04], rK: [-0.1, 0.4, 1], lK: [0.1, 0.1, 1], flat: 0.2, rFy: -0.12, lFy: 0.1 };
+/** From the strike (02's contact and follow-through): the right knee kept forward and up, the left leg
+ *  long behind him, the toes pointed (a lunge in the air, not both legs folded back). */
+const REF_HIT = { rF: [-0.1, ANK + 0.3, 0.06], lF: [0.11, ANK + 0.12, -0.5], rK: [-0.1, 0.4, 1], lK: [0.1, -0.2, 1], flat: 0.15, rFy: -0.12, lFy: 0.1 };
 const REF_KICK_OTHER = { R: { rF: [-0.1, ANK + 0.38, 0.1], rK: [-0.1, 0.4, 1], rFy: -0.1 }, L: { lF: [0.1, ANK + 0.38, 0.1], lK: [0.1, 0.4, 1], lFy: 0.1 } };
 function refLegs(p, beat, strike) {
   const o = { ...p };
@@ -137,7 +140,7 @@ function refLegs(p, beat, strike) {
     for (const [f, v] of Object.entries(REF_KICK_OTHER[other])) o[f] = Array.isArray(v) ? v.slice() : v;
     return o;
   }
-  const L = strike ? LEGS_HIT : REF_COIL;
+  const L = strike ? REF_HIT : REF_COIL;
   for (const f of LEG_FIELDS) o[f] = Array.isArray(L[f]) ? L[f].slice() : L[f];
   return o;
 }
