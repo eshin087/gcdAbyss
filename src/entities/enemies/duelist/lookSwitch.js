@@ -104,7 +104,7 @@ export const PICKED = Object.freeze({
   wyrmQuick: 'a', // Snap swipe
   // the wyrm's paw blows told apart (ADR-274; the owner's picks, 2026-11-28, from the films: "the leap and the scythe look good")
   pawBlue: 'a', // the blue paw: the scythe (wound out wide and back, swept across); 0 the overhead as shipped
-  wyrmFix: 'a', // the wyrm's motion audit fixes (ADR-276; the owner: "Yes, fix them all", 2026-11-28); 0 the wyrm before them
+  wyrmFix: 'a', // the wyrm's motion audit fixes (ADR-277; the owner: "Yes, fix them all", 2026-11-28); 0 the wyrm before them
   pawRed: 'a', // the red stomp: the leap (off the ground with a wing beat, down on both paws); 0 the rear-up as shipped
   wyrmHead: 'a', // the meteors' roar: the head up and forward, never tipped back past upright (the owner asked, 2026-11-27; ADR-258)
   wyrmStrike: 'a', // the wyrm's bites: the body surges first, the head snaps onto the beat (the owner's pick, 2026-11-27, from the films; ADR-257)
