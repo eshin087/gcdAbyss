@@ -15832,8 +15832,13 @@ async function scenarioWyrmFix() {
   assert(db.under <= 0.15 && db.slide <= 0.2 && db.hinge < 72, `the dive bomb: the snout clear of the ground (${db.under.toFixed(2)}), the feet plant on landing (slide ${db.slide.toFixed(2)} m)`);
   // 4. the death: nothing through the ground, the neck whole
   const de = A.measure('death', () => { settle(G); place(G, 9, 0.3); d.debug.kill(); }, { secs: 3 });
-  out(`  death: under ${de.under.toFixed(2)} m, hinge ${de.hinge.toFixed(0)}°`);
+  out(`  death: under ${de.under.toFixed(2)} m, hinge ${de.hinge.toFixed(0)}°, slide ${de.slide.toFixed(2)} m`);
   assert(de.under <= 0.15 && de.hinge < 45, `the death: nothing through the ground (${de.under.toFixed(2)} m), the head on its neck (${de.hinge.toFixed(0)}°)`);
+  // 5. the feet stay planted while the body sinks to lie down or rises (the hock / wrist a bone's length
+  // from the toe): before, the death's hind toe slid 0.6 m out and back, the wake's 0.4 m
+  const wk = A.measure('wake', () => { d.debug.reset(); run(G, 0.5, { passive: true }); place(G, 12, 0); d.debug.wake(); }, { secs: 6, done: () => d.state === 'combat' && !d.brain.action });
+  out(`  wake: slide ${wk.slide.toFixed(2)} m (${wk.at.slideFoot ?? '-'})`);
+  assert(de.slide <= 0.15 && wk.slide <= 0.15, `the death's and the wake's feet stay planted (slide ${de.slide.toFixed(2)} / ${wk.slide.toFixed(2)} m ≤ 0.15)`);
   return G;
 }
 
