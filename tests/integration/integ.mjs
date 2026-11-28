@@ -4736,7 +4736,9 @@ async function scenarioAblaze() {
   // firestorm, drakelings, wisps; no existing attack changed: without them it still hashes to 103cbc42)
   // (3c37e8c0 since ADR-223: the table gained the quick Snap swipe (its weight read through its switch, the
   // owner's pick a); no existing attack changed: without it it still hashes to c08725a9)
-  const BASE_ATTACKS = '3c37e8c0';
+  // (4838366d since ADR-281: the wisps cast their circle round the wyrm's feet, its r 2.6 → 10 m, as the
+  // drakelings'; no other attack changed: with the wisps' r at 2.6 it still hashes to 3c37e8c0)
+  const BASE_ATTACKS = '4838366d';
   const table0 = JSON.stringify(TUNING.attacks);
   M.setAblazeLook('b');
   const G = build();
@@ -6320,7 +6322,9 @@ async function scenarioCombos() {
         p.slashFx.onLine = () => lines++;
         for (let k = 0; k < n; k++) {
           if (k === n - 1) {
-            p.debug.teleport(c.x + fx * (c.r + 2), c.z + fz * (c.r + 2));
+            // (1.5 m off the body's front sphere, inside every hit's reach (2.1 - 2.3 m): at 2 m combo a's
+            // fifth hit only grazed the head 9 m up, and a 4 cm change of the wyrm's idle head made it miss)
+            p.debug.teleport(c.x + fx * (c.r + 1.5), c.z + fz * (c.r + 1.5));
             p.yaw = Math.atan2(c.x - p.position.x, c.z - p.position.z);
             lines = 0;
             G.watch = (nn, e) => { if (nn === 'player:hitDragon' && !hit) hit = { combo: p.atk?.def?.combo, t: p.atk?.t ?? NaN, def: p.atk?.def, guarded: e.guarded }; };
@@ -11038,6 +11042,11 @@ async function scenarioBroodBusy() {
   const { BULLET, CUE } = await imp('src/entities/dragon/bullets.js');
   const answerOf = (tell) => (tell === TELL.RED || tell === TELL.BLACK ? 'dodge' : 'guard');
   const lead = TUNING.flashLead, HM = BROOD.hold.max, LT = BROOD.late;
+  // (the motion before ADR-281's fixes, `?wyrmFix=0`: this scripted spell was tuned so one cue's hold runs
+  // out under it; the fixes' eased turns move the moves a frame or two and no cue waits out its hold. The
+  // brood's scheduling is the subject here, not the wyrm's motion)
+  const { setLook } = await imp('src/entities/enemies/duelist/lookSwitch.js');
+  setLook('wyrmFix', '0');
   const G = build();
   const { game } = G;
   fightSetup(G);
@@ -11151,6 +11160,7 @@ async function scenarioBroodBusy() {
   assert(ember === CUE.CLASH && orb === CUE.NEW, 'a red brood cue bars embers due beside it (a dud: CLASH), not orbs (they cue themselves)');
   B.clear();
   G.watch = null;
+  setLook('wyrmFix', null);
   return G;
 }
 

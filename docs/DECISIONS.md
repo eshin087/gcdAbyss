@@ -8410,4 +8410,11 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
 - **Consequences:** the hit spheres ride on what moved (the snout, the paws, the wing tips now at hero height
   instead of under the ground): the timing, strings, melee, reach, flight, plunge, death, brood and paw-tell
   suites pass. `integ wyrmfix` holds the worst offenders under the new limits.
+- **After the rebase onto ADR-279 (one parry):** the lone bite connects no sooner than its impact (the spread snap
+  reached a hero 4 m out at the active's first frame, 0.06 s early, and a guard raised for the cue's impact became a
+  parry, so the bite did not link: `integ pressure`); the attack table's base hash is 4838366d (the wisps' r 2.6 → 10
+  m only); `integ combos` stands the hero 1.5 m off the body (at 2 m combo a's fifth hit only grazed the head);
+  `integ broodbusy` runs with `wyrmFix` off (its scripted spell no longer let a cue wait out its hold); the wreckage
+  meter's `burnt` bound 12 → 20 (seeds 1 - 6 burn 1 - 14 pieces on main and 3 - 13 with the fixes: the bound sat
+  inside the fights' spread).
 

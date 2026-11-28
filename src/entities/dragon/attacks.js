@@ -353,7 +353,9 @@ const bite = {
     else biteRecover(d, a, a.k);
   },
   hit(d, a) {
-    if (a.phase === 'active') biteHit(d, a, T.bite);
+    // (not before its impact: the spread snap reached a hero 4 m out 0.06 s before the cue said, at the
+    // active's first frame, so a guard raised for the cue's impact was taken as a parry)
+    if (a.phase === 'active' && (!fixOn() || a.t >= T.bite.impact - 1e-6)) biteHit(d, a, T.bite);
   },
   end(d) {
     d.throat = 0;

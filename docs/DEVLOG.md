@@ -26,6 +26,12 @@ the neck > 70° 11 → 2, skating 10 → 2, snout in the chest 2 → 0. Integ ti
 **Verified:** integ wyrmfix (new), pawtells, brood, strings, timing, melee, reach, red, plunge, deflect, flight, die,
 wyrmheld; duel fxlooks. Not run here (the owner's new rule): the full suite; CI runs it.
 
+**CI after the rebase onto ADR-279:** integ failed 9 checks (pressure, combos, training, wreckage, broodbusy, ablaze),
+all passing with `GCD_NOFIX=1` and on main: the lone bite now waits for its impact (it landed 0.06 s early, a held
+guard became a parry), the attack table's base hash moved (the wisps' r), combos' hero stands 1.5 m off the body,
+broodbusy runs with the fixes off, the wreckage meter's `burnt` bound 12 → 20 (main itself burns 14 on seed 3)
+(ADR-281's last bullet).
+
 **Open / next:** the tail sweeps' ~700°/s spin (an aimed spin), the death / wake foot skating, the measured neck at
 its limit in strikes, the neck's resting curve (a look: the owner's call); a film of before / after for the owner.
 ## 2026-11-28 — The tenth level: the Last Foundry and the False Saint (ADR-285 – ADR-288; enemies/false-saint)
