@@ -24,6 +24,7 @@
 import { SWINGS } from './swings.js';
 import { DIM } from './model.js';
 import { ARC_TONE } from './fx.js';
+import { HERO_LOOKS } from './gear/looks.js';
 import * as THREE from 'three';
 
 const _pv = new THREE.Vector3(), _OUT = [0, 0, 0];
@@ -580,6 +581,9 @@ export class SlashFx {
   /** Draw the line a → b, or its piece [f0, f1) of it (the strokes of the whole line that fall there). */
   _draw(ax, ay, az, bx, by, bz, thrust, kick, f0 = 0, f1 = 1) {
     const look = this.look, Lk = SLASH[LOOKS[look]];
+    // (an outfit may draw its slash in its own colours: HERO_LOOKS[...].slash.light / .heavy { hot, core, end, edge })
+    const Tn = HERO_LOOKS[this.p.look]?.slash?.[LOOKS[look]];
+    const cHot = Tn?.hot ?? Lk.hot, cCore = Tn?.core ?? Lk.core, cEnd = Tn?.end ?? Lk.end, cEdge = Tn?.edge ?? Lk.edge ?? cCore;
     if (f0 <= 0) {
       this.onLine?.(ax, ay, az, bx, by, bz, LOOKS[look], this.kind);
       const la = this.last;
@@ -629,7 +633,7 @@ export class SlashFx {
     const o = this._o, seg = len / n, k0 = thrust ? 0.75 : 1;
     const rows = thrust ? 1 : Math.max(1, Lk.rows | 0);
     o.rot = rot;
-    o.colorEnd = Lk.end;
+    o.colorEnd = cEnd;
     for (let r = 0; r < rows; r++) {
       // (the middle row is the line; the rows beside it thinner, shorter, no flash, no hairline)
       const mid = (rows - 1) / 2, off = rows > 1 ? (r - mid) * Lk.gap : 0, side = off !== 0, k = side ? k0 * Lk.outer : k0;
@@ -654,7 +658,7 @@ export class SlashFx {
             o.stretch = Math.min(30, (seg / size) * 1.8);
             o.life = (Lk.life[0] + (Lk.life[1] - Lk.life[0]) * w) * (side ? 0.9 : 1);
             o.alphaEnd = Lk.fade;
-            o.color = side ? Lk.edge ?? Lk.core : w > 0.92 ? Lk.hot : Lk.core;
+            o.color = side ? cEdge : w > 0.92 ? cHot : cCore;
             o.alpha = (0.55 + 0.45 * w) * (side ? 0.7 : 1);
           } else if (pass === 2) {
             // the flash: for a few frames the middle of the line is a blade of light
@@ -663,7 +667,7 @@ export class SlashFx {
             o.sizeEnd = Lk.size * k;
             o.stretch = Math.min(30, (seg / o.size) * 1.8);
             o.life = Lk.flash.life;
-            o.color = Lk.hot;
+            o.color = cHot;
             o.alpha = 1;
             o.alphaEnd = 0;
           } else {
@@ -672,7 +676,7 @@ export class SlashFx {
             o.sizeEnd = Lk.hair.size * k * 0.5;
             o.stretch = Math.min(40, (seg / o.size) * 1.6);
             o.life = Lk.hair.life * (0.6 + 0.4 * w);
-            o.color = Lk.core;
+            o.color = cCore;
             o.alpha = Lk.hair.alpha * w;
             o.alphaEnd = 0;
           }

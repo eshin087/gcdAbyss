@@ -16,12 +16,15 @@ import { skirtSheet, tatterStrip, foldLines, ribbonCrease, lerp, sheetOffset, sh
  *   inMax?         how far a segment may swing IN toward the wearer (rad; a number or [root, tip];
  *                  negative = always at least that far out). Not applied lying (anim.js)
  *   hemFrom? (1)   0..1 down the lower segment where `mats.hem` takes over from `mats.face`
+ *   fadeFrom?      0..hemFrom: from here to hemFrom the lower segment is in `mats.fade` (a step between the
+ *                  face and the hem); the change to the hem runs along a torn line (`tear`, m: 0.03), the one
+ *                  into the step barely ragged (a torn edge there read as another layer's hem)
  *   ribbon?        a narrow ribbon (tatterStrip) instead of a curved sheet; `fork` splits its tip;
  *                  `crease` = the drawn crease's phase (default seed × 0.7)
  *   floor?         rolling or falling, its ends stay over the grass (anim.js; a head ribbon, a long scarf)
  *   seed           the folds' and the tears' seed
- * `mats` = { face, back | null, hem }: the outer face, the inner face (a BackSide material, or null
- * for a ribbon in a DoubleSide one), the pale hem. Returns the streamer record.
+ * `mats` = { face, back | null, hem, fade? }: the outer face, the inner face (a BackSide material, or null
+ * for a ribbon in a DoubleSide one), the pale hem, the step between them. Returns the streamer record.
  */
 export function hangSheet({ joint, mesh }, parent, d, mats) {
   const base = joint(parent, d.at[0], d.at[1], d.at[2]);
@@ -49,8 +52,11 @@ export function hangSheet({ joint, mesh }, parent, d, mats) {
     };
     put(s0, foldLines(skirtSheet(L0, w0, w1, d.wrap, 0.25, 0, seed, [0.004, 0.018, nF, ph]), pleat(0)), mats.face);
     const R1 = d.wrap + 0.25 * L0, fold = [0.018, 0.04, nF, ph];
-    if (hf > 0) put(s1, foldLines(skirtSheet(L1, w1, w2, R1, 0.25, 0.008, seed + 7, fold, 0, Math.min(1, hf)), pleat(L0)), mats.face);
-    if (hf < 1) put(s1, foldLines(skirtSheet(L1, w1, w2, R1, 0.25, 0.008, seed + 7, fold, Math.max(0, hf), 1), pleat(L0)), mats.hem);
+    const ff = d.fadeFrom != null && mats.fade ? Math.min(d.fadeFrom, hf) : hf, tj = ff < hf ? d.tear ?? 0.03 : 0;
+    const part = (t0, t1, m) => t1 > t0 && put(s1, foldLines(skirtSheet(L1, w1, w2, R1, 0.25, 0.008, seed + 7, fold, t0, t1, 0, w1, 0, [t0 <= ff + 1e-6 ? 0.008 : tj, t1 <= ff + 1e-6 ? 0.008 : tj].map((v) => (tj ? v : 0))), pleat(L0)), m);
+    part(0, Math.min(1, ff), mats.face);
+    part(Math.max(0, ff), Math.min(1, hf), mats.fade);
+    part(Math.max(0, hf), 1, mats.hem);
   }
   const im = d.inMax;
   return {
@@ -66,12 +72,13 @@ export function hangSheet({ joint, mesh }, parent, d, mats) {
  * an anchor on the pelvis yawed to `az` → an upper and a lower sheet → its torn strips. `PANELS` =
  * panel defs: az, w [top, join, hem], len [upper, lower], strips (lengths), fork, out, flare, edge
  * (piping down that edge: ±1), skew, slant (COAT_PANELS in wanderer.js); and, read here only,
- * `hemFrom` (0..1 down the lower sheet where the pale hem takes over; default none) and `stripHem` (the torn
- * strips in the hem's ink, not the coat's); the animator
+ * `hemFrom` (0..1 down the lower sheet where the pale hem takes over; default none), `fadeFrom` (with the option
+ * `fade`, a material: from here to hemFrom a step between the coat and the hem, along torn lines) and `stripHem`
+ * (the torn strips in the hem's ink, not the coat's), `mat` (a HERO_INK name: the panel's cloth, not the coat); the animator
  * also reads `breeze` / `idleFlare` (a panel's own idle stir). `seed` varies the folds and tears.
  * Returns { coat }.
  */
-export function panelSkirt({ pelvis, M, DIM, mesh, joint }, PANELS, { seed = 0 } = {}) {
+export function panelSkirt({ pelvis, M, DIM, mesh, joint }, PANELS, { seed = 0, fade = null } = {}) {
   const coat = [];
   PANELS.forEach((Pn, i) => {
     const sa = Math.sin(Pn.az), ca = Math.cos(Pn.az);
@@ -90,21 +97,20 @@ export function panelSkirt({ pelvis, M, DIM, mesh, joint }, PANELS, { seed = 0 }
       return 0.5 + 0.6 * Math.sin(ph) - 0.9 * Math.max(0, 1 - d / 0.1);
     };
     const cone = Pn.cone ?? 0.25; // (how fast the skirt widens down its length: m out per m down; `jag`: the hem's raggedness, m)
+    const face = (Pn.mat && M[Pn.mat]) || M.coat; // (`mat`: a panel in another cloth, by HERO_INK name: a tabard)
     const g0 = foldLines(skirtSheet(L0, Pn.w[0], Pn.w[1], R0, cone, 0, 81 + seed + i, [0.002, 0.008, nF, fph], 0, 1, sk, w0), pleat(0));
-    mesh(s0, g0, M.coat);
+    mesh(s0, g0, face);
     mesh(s0, g0, M.lining);
     const s1 = joint(s0, 0, -L0, 0);
     const R1 = R0 + cone * L0, hf = Pn.hemFrom ?? 1;
-    const lower = (t0, t1) => foldLines(skirtSheet(L1, Pn.w[1], Pn.w[2], R1, cone, Pn.jag ?? 0.006, 91 + seed + i, [0.008, 0.016, nF, fph], t0, t1, sk, w0, sl), pleat(L0));
-    if (hf > 0) {
-      const g1 = lower(0, Math.min(1, hf));
-      mesh(s1, g1, M.coat);
+    const ff = Pn.fadeFrom != null && fade ? Math.min(Pn.fadeFrom, hf) : hf, tj = ff < hf ? Pn.tear ?? 0.025 : 0;
+    const bjOf = (t0, t1) => [t0 <= ff + 1e-6 ? 0.006 : tj, t1 <= ff + 1e-6 ? 0.006 : tj].map((v) => (tj ? v : 0));
+    const lower = (t0, t1) => foldLines(skirtSheet(L1, Pn.w[1], Pn.w[2], R1, cone, Pn.jag ?? 0.006, 91 + seed + i, [0.008, 0.016, nF, fph], t0, t1, sk, w0, sl, bjOf(t0, t1)), pleat(L0));
+    for (const [t0, t1, m] of [[0, Math.min(1, ff), face], [Math.max(0, ff), Math.min(1, hf), fade], [Math.max(0, hf), 1, M.hem]]) {
+      if (!(t1 > t0)) continue;
+      const g1 = lower(t0, t1);
+      mesh(s1, g1, m);
       mesh(s1, g1, M.lining);
-    }
-    if (hf < 1) {
-      const g2 = lower(Math.max(0, hf), 1);
-      mesh(s1, g2, M.hem);
-      mesh(s1, g2, M.lining);
     }
     if (Pn.edge) {
       mesh(s0, sheetEdge(L0, Pn.w[0], Pn.w[1], R0, Pn.edge, 1, cone, sk, w0), M.piping);

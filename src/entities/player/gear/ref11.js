@@ -1,7 +1,7 @@
 import { ellipsoidGeometry } from '../../../render/glyphGeometry.js';
 import {
   shellGeometry, gridGeometry, bandGeometry, boxGeometry, kiteGeometry, mergeGeometries, sub, foldLines, lerp, limb, gripFist, arcPlate, orient,
-  tatterStrip, ribbonCrease, sheetOffset,
+  tatterStrip, ribbonCrease, sheetOffset, sheetEdge,
 } from '../heroGeo.js';
 import { hangSheet, panelSkirt } from './sheet.js';
 import { buildFreeHand } from './hands.js';
@@ -15,8 +15,12 @@ import { buildFreeHand } from './hands.js';
 // to torn lavender rags at the hem, a thin line of pale glyphs down the middle of the back; layered skirts of the
 // same torn cloth between its edges; dark trousers into silver plated boots. Over the Wanderer's sword (unchanged).
 // Colours: REF11_TINT. Silver plate is `spike`, its lines and the clasp `bevel`, the strap `welt`, the green
-// stone `facing` (the sword draws in armor / trim / leather / blade / bladeTip / gem: none of them is tinted). The
-// lavender of the torn cloth is the hero's own `hem` ink, made paler.
+// stone `facing`. The owner's second pass (2026-11-28, after an ASCII armour reel: layers, not "one big clump of
+// black") added a quilted vest (`collar`) with silver rivets, lames on the upper arms, the front skirts as a violet
+// tabard (`piping`), silver edging down the cloak's sides and a dusk step (`collarIn`) before the rags. The sword
+// draws in armor / trim / leather / blade / bladeTip / gem: none is tinted (an outfit never recolours the sword);
+// its light on the cut is dimmed instead (HERO_LOOKS.ref11.bladeLit) and its slash drawn in lavender (REF11_SLASH).
+// The lavender of the torn cloth is the hero's own `hem` ink, dimmer.
 //   head   ref11.hood    the deep hood (hidesHair, shadowsFace)
 //   chest  ref11.tunic   the wrap tunic, the cross strap, the belt and its stone
 //   arms   ref11.arms    loose sleeves, the silver gauntlets (both hands in silver)
@@ -51,7 +55,10 @@ function buildHood({ head, M, mesh }) {
 // ---------------------------------------------------------------- chest: the wrap tunic, the strap, the belt
 /** The strap across the chest (world idle heights; its centre's angle round the body, rad: 0 = his front,
  *  + = his left): from over the right shoulder (behind, round the top) down to the left hip. */
-export const REF11_STRAP = { lo: 1.14, hi: 1.47, cLo: 0.85, cHi: -0.55, half: 0.05, off: 0.03 };
+export const REF11_STRAP = { lo: 1.14, hi: 1.47, cLo: 0.85, cHi: -0.55, half: 0.05, off: 0.034 };
+/** The quilted vest over the tunic (world idle heights): from `lo` to `hi`, `off` off the body, open ±`open` rad
+ *  at his front. */
+export const REF11_VEST = { lo: 1.21, hi: 1.43, off: 0.02, open: 0.42 };
 
 function buildTunic({ spine, M, BODY, REST, mesh }) {
   const ySp = (h) => h - REST.spine;
@@ -67,6 +74,24 @@ function buildTunic({ spine, M, BODY, REST, mesh }) {
   const rings = [...SHELL, { y: top.y + 0.02, rx: 0.06, rz: 0.058 }].map((r) => ({ ...r, rx: r.rx + 0.008, rz: r.rz + 0.008, gap: 0, y: ySp(r.y) }));
   const wrap = (x, y, z) => (z > 0 ? 0.5 + 0.6 * Math.sin(40 * (x * 0.8 - (y - ySp(1.3)) * 0.6)) : 0.5 + 0.5 * Math.sin(34 * x));
   mesh(spine, foldLines(shellGeometry(rings, { sub: 3, cols: 28 }), wrap), M.shirt);
+  // the quilted vest over it (the owner, 2026-11-28: "more details and layers on his outfit ... instead of just one
+  // big clump of black"): plum-brown cloth from the ribs to the shoulders, open down the front so the tunic and
+  // its wrap show, quilted in rows; a line of silver rivets down each front edge
+  {
+    const V = REF11_VEST;
+    const vr = SHELL.filter((r) => r.y >= V.lo - 0.001 && r.y <= V.hi + 0.001).map((r) => ({ ...r, rx: r.rx + V.off, rz: r.rz + V.off, gap: 0, y: ySp(r.y) }));
+    const quilt = (x, y, z, u, v) => 0.5 + 0.6 * Math.sin(v * 95) + 0.25 * Math.sin(u * 60);
+    mesh(spine, foldLines(shellGeometry(vr, { sub: 2, cols: 22, arc: [V.open, Math.PI * 2 - V.open] }), quilt), M.collar);
+    const rv = [];
+    for (let h = V.lo + 0.03; h <= V.hi - 0.04; h += 0.038) {
+      const R = at(h);
+      for (const sd of [-1, 1]) {
+        const a = sd * (V.open + 0.035);
+        rv.push(boxGeometry(0.012, 0.012, 0.008, Math.sin(a) * (R[0] + V.off + 0.004), ySp(h), Math.cos(a) * (R[1] + V.off + 0.004) + R[2], 0, a, Math.PI / 4));
+      }
+    }
+    mesh(spine, mergeGeometries(rv), M.bevel);
+  }
   // the strap: a band whose middle turns round the body as it rises, from his left hip to over his right shoulder
   {
     const W = REF11_STRAP;
@@ -92,6 +117,8 @@ function buildTunic({ spine, M, BODY, REST, mesh }) {
 }
 
 // ---------------------------------------------------------------- arms: loose sleeves, silver gauntlets
+/** The lames on each upper arm (y from the shoulder joint, m: top, bottom), the lower one tucked under the upper. */
+export const REF11_LAMES = [[-0.1, -0.16], [-0.145, -0.2]];
 function buildArms(ctx) {
   const { arms, sword, M, DIM, BODY, mesh } = ctx;
   const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
@@ -111,6 +138,10 @@ function buildArms(ctx) {
       sub(ellipsoidGeometry(ua1 + 0.02, ua1 + 0.014, ua1 + 0.022, { widthSegs: 10, heightSegs: 6 }).translate(0, -DIM.upperArm, -0.004), 1),
     ]), M.coat);
     mesh(fore, sub(limb({ length: -cuffY + 0.03, r0: fa0 + 0.018, r1: lerp(fa0, fa1, 0.5) + 0.026, radial: 12, rings: 4 }), 1), M.coat);
+    // two silver lames over the outside of the upper arm, just under the cowl's edge, each with a bright rim
+    const ac = side * Math.PI * 0.5, rU = (y) => lerp(ua0, ua1, -y / DIM.upperArm) + 0.03;
+    mesh(upper, mergeGeometries(REF11_LAMES.map(([y0, y1]) => arcPlate(y0, y1, rU(y0) + 0.004, rU(y1), ac, 1.25, 7))), steel);
+    mesh(upper, mergeGeometries(REF11_LAMES.map(([, y1]) => arcPlate(y1 + 0.008, y1, rU(y1) + 0.004, rU(y1) + 0.004, ac, 1.25, 7))), M.bevel);
     // the bracer: plated silver from the sleeve's cuff to the wrist, three lames' edges round it
     const rB = (y) => lerp(fa0, fa1, -y / DIM.foreArm) + 0.012;
     mesh(fore, limb({ length: DIM.foreArm + cuffY - 0.04, r0: rB(cuffY) + 0.004, r1: fa1 + 0.01, radial: 12, rings: 3 }), steel, 0, cuffY, 0);
@@ -157,32 +188,38 @@ function buildLegs({ pelvis, legs, M, DIM, BODY, mesh }) {
 }
 
 // ---------------------------------------------------------------- waist: the layered skirts
-/** The tunic's skirts on the pelvis (panelSkirt): layered panels to the shin, black at the belt and torn lavender
- *  below `hemFrom` of their lower sheet, ragged strips at the hem (`stripHem`: in the hem's lavender). The front
- *  pair overlap (the wrap), the sides and the back sit under the cloak. */
+/** The tunic's skirts on the pelvis (panelSkirt): layered panels to the shin, black at the belt, a dusk violet
+ *  from `fadeFrom` of their lower sheet and the torn lavender from `hemFrom` (both changes along torn lines),
+ *  ragged strips at the hem (`stripHem`: in the hem's lavender). The front pair overlap (the wrap) as a violet
+ *  tabard (`mat`); the sides and the back sit under the cloak, the back pair short enough to end above its hem
+ *  (level with it, their rags drew a second torn row under the cloak's from behind). */
 export const REF11_PANELS = [
-  { az: 0.42, w: [0.15, 0.2, 0.26], len: [0.27, 0.3], strips: [0.12, 0.15], fork: [0, 1], out: 0.006, flare: 0.18, skew: 0.8, slant: 0.05, hemFrom: 0.3, jag: 0.02, stripHem: true },
-  { az: -0.42, w: [0.15, 0.2, 0.26], len: [0.27, 0.32], strips: [0.15, 0.11], fork: [0, 1], out: 0.01, flare: 0.18, skew: -0.8, slant: 0.05, hemFrom: 0.3, jag: 0.02, stripHem: true },
-  { az: 1.35, w: [0.15, 0.2, 0.27], len: [0.28, 0.3], strips: [0.1, 0.14], fork: [1, 0], out: 0, flare: 0.4, hemFrom: 0.28, jag: 0.02, stripHem: true },
-  { az: -1.35, w: [0.15, 0.2, 0.27], len: [0.28, 0.3], strips: [0.13, 0.09], fork: [0, 1], out: 0, flare: 0.4, hemFrom: 0.28, jag: 0.02, stripHem: true },
-  { az: 2.6, w: [0.16, 0.22, 0.3], len: [0.28, 0.3], strips: [0.1, 0.14], fork: [0, 1], out: 0.006, flare: 0.3, hemFrom: 0.28, jag: 0.02, stripHem: true },
-  { az: -2.6, w: [0.16, 0.22, 0.3], len: [0.28, 0.3], strips: [0.12, 0.13], fork: [1, 0], out: 0.006, flare: 0.3, hemFrom: 0.28, jag: 0.02, stripHem: true },
+  { az: 0.42, w: [0.15, 0.2, 0.26], len: [0.27, 0.3], strips: [0.12, 0.15], fork: [0, 1], out: 0.006, flare: 0.18, skew: 0.8, slant: 0.05, fadeFrom: 0.12, hemFrom: 0.55, jag: 0.02, stripHem: true, mat: 'piping' },
+  { az: -0.42, w: [0.15, 0.2, 0.26], len: [0.27, 0.32], strips: [0.15, 0.11], fork: [0, 1], out: 0.01, flare: 0.18, skew: -0.8, slant: 0.05, fadeFrom: 0.12, hemFrom: 0.55, jag: 0.02, stripHem: true, mat: 'piping' },
+  { az: 1.35, w: [0.15, 0.2, 0.27], len: [0.28, 0.3], strips: [0.1, 0.14], fork: [1, 0], out: 0, flare: 0.4, fadeFrom: 0.1, hemFrom: 0.52, jag: 0.02, stripHem: true },
+  { az: -1.35, w: [0.15, 0.2, 0.27], len: [0.28, 0.3], strips: [0.13, 0.09], fork: [0, 1], out: 0, flare: 0.4, fadeFrom: 0.1, hemFrom: 0.52, jag: 0.02, stripHem: true },
+  { az: 2.6, w: [0.16, 0.22, 0.28], len: [0.26, 0.2], strips: [0.07, 0.09], fork: [0, 1], out: 0.006, flare: 0.3, fadeFrom: 0.1, hemFrom: 0.52, jag: 0.02, stripHem: true },
+  { az: -2.6, w: [0.16, 0.22, 0.28], len: [0.26, 0.2], strips: [0.07, 0.09], fork: [1, 0], out: 0.006, flare: 0.3, fadeFrom: 0.1, hemFrom: 0.52, jag: 0.02, stripHem: true },
 ];
 
 function buildSkirt(ctx) {
-  return panelSkirt(ctx, REF11_PANELS, { seed: 11 });
+  return panelSkirt(ctx, REF11_PANELS, { seed: 11, fade: ctx.M.collarIn });
 }
 
 // ---------------------------------------------------------------- back: the cowl, the clasp, the long cloak
-/** The cloak's sheets (hangSheet, on the chest): a wide one down the middle of his back and one each side wrapping
- *  toward his flanks, to the ankles with their torn points (no sheet over the flanks under the arms: there the
- *  thighs and the free hand went into it, 56 frames of the route; the skirts cover his sides); black to
- *  `hemFrom` of the lower sheet, then the lavender rags. `inMax`: the roots held a little out, the lower halves
- *  free to wrap in so a roll lifts them off the grass (`floor`). `strips`: the torn points' lengths (m). */
+/** The cloak's sheets (hangSheet, on the chest): one down the middle of his back and one each side, close to the
+ *  body (the owner, 2026-11-28: the first cut stood out from his back under the cowl like a second layer, "too
+ *  plumpy", its side tips apart): their roots under the cowl's edge, the side sheets overlapping the middle one's
+ *  edges so the hem runs on as one, all three the same length; to mid-calf with their torn points (no sheet over
+ *  the flanks under the arms: there the thighs and the free hand went into it; the skirts cover his sides). Black,
+ *  a dusk violet from `fadeFrom` of the lower sheet, the lavender rags from `hemFrom`, along torn lines. `inMax`:
+ *  the roots held a little out, the lower halves free to wrap in so a roll lifts them off the grass (`floor`).
+ *  `strips`: the torn points' lengths (m); `trim`: the side sheet's outer edge piped in silver (-1 / +1: its
+ *  local -X / +X edge). */
 export const REF11_SHEETS = [
-  { at: [0, 0.2, -0.18], ry: Math.PI, w: [0.26, 0.36, 0.46], len: [0.48, 0.43], out: 0.16, wrap: 0.28, lag: 0.42, max: 1.35, inMax: [-0.06, 0.3], floor: true, hemFrom: 0.22, strips: [0.13, 0.08, 0.15, 0.1, 0.14], fork: [0, 1, 0, 0, 1], seed: 7 },
-  { at: [0.12, 0.19, -0.15], ry: Math.PI - 0.82, w: [0.15, 0.23, 0.3], len: [0.46, 0.41], out: 0.32, wrap: 0.22, lag: 0.42, max: 1.35, inMax: [-0.08, 0.12], floor: true, hemFrom: 0.2, strips: [0.13, 0.08, 0.12], fork: [0, 1, 0], seed: 13 },
-  { at: [-0.13, 0.19, -0.14], ry: Math.PI + 0.9, w: [0.15, 0.23, 0.31], len: [0.46, 0.41], out: 0.3, wrap: 0.22, lag: 0.42, max: 1.35, inMax: [-0.08, 0.12], floor: true, hemFrom: 0.2, strips: [0.12, 0.08, 0.13], fork: [1, 0, 0], seed: 19 },
+  { at: [0, 0.2, -0.155], ry: Math.PI, w: [0.28, 0.33, 0.4], len: [0.48, 0.43], out: 0.07, wrap: 0.3, lag: 0.42, max: 1.35, inMax: [-0.04, 0.3], floor: true, fadeFrom: 0.04, hemFrom: 0.5, strips: [0.13, 0.08, 0.15, 0.1, 0.14], fork: [0, 1, 0, 0, 1], seed: 7 },
+  { at: [0.145, 0.19, -0.105], ry: Math.PI - 0.62, w: [0.14, 0.2, 0.25], len: [0.48, 0.43], out: 0.12, wrap: 0.24, lag: 0.42, max: 1.35, inMax: [-0.06, 0.12], floor: true, fadeFrom: 0.04, hemFrom: 0.5, strips: [0.12, 0.09, 0.13], fork: [0, 1, 0], seed: 13, trim: -1 },
+  { at: [-0.145, 0.19, -0.105], ry: Math.PI + 0.62, w: [0.14, 0.2, 0.25], len: [0.48, 0.43], out: 0.12, wrap: 0.24, lag: 0.42, max: 1.35, inMax: [-0.06, 0.12], floor: true, fadeFrom: 0.04, hemFrom: 0.5, strips: [0.13, 0.08, 0.12], fork: [1, 0, 0], seed: 19, trim: 1 },
 ];
 /** The pale glyph line down the middle of the back sheet: marks (m along the sheet from its root, height) in a
  *  column, a hair to either side now and then, like a line of small letters. Seeded, the same every build. */
@@ -206,17 +243,17 @@ function buildCloak(ctx) {
   // throat, its folds running down and round; a second roll of it gathered round the neck
   {
     const rings = [
-      { y: yCh(1.24), rx: 0.33, rz: 0.24, cz: -0.036, gap: 0.12 },
-      { y: yCh(1.3), rx: 0.312, rz: 0.228, cz: -0.032, gap: 0.09 },
-      { y: yCh(1.37), rx: 0.296, rz: 0.216, cz: -0.028, gap: 0.072 },
-      { y: yCh(1.42), rx: 0.268, rz: 0.2, cz: -0.022, gap: 0.06 },
-      { y: yCh(1.468), rx: 0.214, rz: 0.162, cz: -0.012, gap: 0.046 },
-      { y: yCh(1.505), rx: 0.13, rz: 0.11, cz: 0.0, gap: 0.036 },
+      { y: yCh(1.31), rx: 0.288, rz: 0.2, cz: -0.026, gap: 0.11 },
+      { y: yCh(1.36), rx: 0.282, rz: 0.196, cz: -0.024, gap: 0.088 },
+      { y: yCh(1.41), rx: 0.264, rz: 0.188, cz: -0.02, gap: 0.07 },
+      { y: yCh(1.455), rx: 0.226, rz: 0.164, cz: -0.012, gap: 0.054 },
+      { y: yCh(1.49), rx: 0.17, rz: 0.13, cz: -0.004, gap: 0.042 },
+      { y: yCh(1.515), rx: 0.12, rz: 0.1, cz: 0.0, gap: 0.034 },
     ];
     const g = foldLines(sub(shellGeometry(rings, { sub: 2, cols: 27 }), 1), (x, y, z, u) => 0.5 + 0.6 * Math.sin(u * 30 + y * 14));
     // a torn lower edge
     const p = g.attributes.position;
-    for (let i = 0; i <= 27; i++) p.setY(i, p.getY(i) + (i % 3 === 0 ? -0.045 : i % 3 === 1 ? 0.012 : -0.016));
+    for (let i = 0; i <= 27; i++) p.setY(i, p.getY(i) + (i % 3 === 0 ? -0.03 : i % 3 === 1 ? 0.01 : -0.012));
     g.computeVertexNormals();
     mesh(chest, g, M.coat);
     mesh(chest, g, M.lining);
@@ -235,7 +272,12 @@ function buildCloak(ctx) {
     mesh(cl, mergeGeometries([boxGeometry(0.004, 0.016, 0.003, -0.003, 0, 0.011), boxGeometry(0.01, 0.003, 0.003, 0.001, 0.004, 0.011)]), M.welt);
   }
   const streamers = REF11_SHEETS.map((d) => {
-    const S = hangSheet(ctx, chest, d, { face: M.coat, back: M.lining, hem: M.hem });
+    const S = hangSheet(ctx, chest, d, { face: M.coat, back: M.lining, hem: M.hem, fade: M.collarIn });
+    if (d.trim) {
+      // the outer edge piped in silver down its whole length (the reference's bright-edged layers)
+      mesh(S.segs[0], sheetEdge(d.len[0], d.w[0], d.w[1], d.wrap, d.trim), M.bevel);
+      mesh(S.segs[1], sheetEdge(d.len[1], d.w[1], d.w[2], d.wrap + 0.25 * d.len[0], d.trim), M.bevel);
+    }
     // the torn points along its hem, rigid on the lower sheet, in the lavender
     const [w0, , w2] = d.w, [L0, L1] = d.len, n = d.strips.length;
     const R1 = d.wrap + 0.25 * L0, R2 = R1 + 0.25 * L1, wr = w2 / Math.max(1, n);
@@ -271,13 +313,26 @@ export const REF11_LOADOUT = Object.freeze({
 });
 
 /** Its colours (model.js tintHero, this rig only): the cloak and the hood today's black cloth (`coat` untinted);
- *  a near-black tunic and trousers; the torn cloth's lavender paler than today's hem (the sheet's rags); bright
+ *  a near-black tunic and trousers; the torn cloth's lavender dimmer than today's hem, a dusk step before it; bright
  *  silver plate (`spike`: gauntlets, boots, belt, clasp) and its lines (`bevel`: the lames, the glyph line); the
  *  strap and the clasp's mark near black (`welt`); the belt's green stone self-lit (`facing`). */
+/** Its slash line's colours (slashFx.js, HERO_LOOKS.ref11.slash): the flash, the line, what it cools to, the heavy
+ *  line's side rows; lavender to violet, under today's white-hot. */
+export const REF11_SLASH = Object.freeze({
+  light: { hot: [1.7, 1.25, 2.6], core: [0.9, 0.55, 1.6], end: [0.22, 0.06, 0.5] },
+  heavy: { hot: [1.6, 1.0, 2.6], core: [0.85, 0.4, 1.7], end: [0.3, 0.05, 0.6], edge: [0.6, 0.2, 1.3] },
+});
+
 export const REF11_TINT = {
-  shirt: { fill: [0.05, 0.05, 0.06] },
-  pants: { fill: [0.05, 0.05, 0.06] },
-  hem: { fill: [0.5, 0.42, 0.66], ink: [0.8, 0.62, 1.08] },
+  shirt: { fill: [0.075, 0.07, 0.1] },
+  pants: { fill: [0.055, 0.055, 0.07] },
+  // (the owner, 2026-11-28: the rags were "too white at the bottom" and wanted a subtler change: a dusk violet
+  // step (collarIn) between the black and a dimmer lavender (hem), each change along a torn line)
+  collarIn: { fill: [0.11, 0.09, 0.16] },
+  hem: { fill: [0.24, 0.2, 0.33], ink: [0.46, 0.38, 0.64] },
+  // the layers over the black: the quilted vest (collar) and the violet tabard (piping)
+  collar: { fill: [0.34, 0.25, 0.27] },
+  piping: { fill: [0.3, 0.2, 0.46] },
   spike: { fill: [0.5, 0.52, 0.58], sub: 0.55, spec: [1.3, 22] },
   bevel: { fill: [0.72, 0.74, 0.82] },
   welt: { fill: [0.07, 0.07, 0.08] },

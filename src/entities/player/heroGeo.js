@@ -115,7 +115,7 @@ export function sheetOffset(w, w0, skew = 0) {
 /** A coat-skirt sheet hanging −Y from its joint: width wTop → wBot over `len`, curved around the
  *  hips with a radius that grows down the panel (R0 + flare × depth) so neighbours form a cone.
  *  Local +Z = outward; the front face points out (the lining is the back face). */
-export function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, fold = [0, 0, 0], t0 = 0, t1 = 1, skew = 0, w0 = wTop, slant = 0) {
+export function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, fold = [0, 0, 0], t0 = 0, t1 = 1, skew = 0, w0 = wTop, slant = 0, bJag = 0) {
   const r = rng(seed);
   const cols = 16, rows = Math.max(3, Math.round(8 * (t1 - t0)));
   const jitter = Array.from({ length: cols + 1 }, () => (r() - 0.5) * jag);
@@ -132,9 +132,17 @@ export function skirtSheet(len, wTop, wBot, R0, flare = 0.3, jag = 0, seed = 1, 
     const u = (s - 0.5) * w + sheetOffset(w, w0, skew);
     const R = R0 + flare * t * len;
     const a = u / R;
-    // slant: the sheet runs this much longer at its outer edge (the side its skew flares to), so the
+    // bJag (m, or [top, bottom]): a stretch's top / bottom edge inside the sheet (t0 > 0 / t1 < 1) ragged by up to this much, the
+  // same at the same height whichever stretch draws it (the two meet without a gap): a colour change down the
+  // sheet that runs along a torn line, not a ruled one
+  const bjA = Array.isArray(bJag) ? bJag : [bJag, bJag];
+  const bj = (c, t, top) => {
+    const v = Math.sin(c * 12.9898 + Math.round(t * 1000) * 78.233) * 43758.5453;
+    return (v - Math.floor(v) - 0.5) * 2 * bjA[top ? 0 : 1];
+  };
+  // slant: the sheet runs this much longer at its outer edge (the side its skew flares to), so the
     // hem slopes down from the vent / front edge to the outer point
-    const y = -t * (len + 0.02 + slant * (skew < 0 ? 1 - s : s)) + (tt === 1 && t1 === 1 ? jitter[Math.round(s * cols)] : 0);
+    const y = -t * (len + 0.02 + slant * (skew < 0 ? 1 - s : s)) + (tt === 1 && t1 === 1 ? jitter[Math.round(s * cols)] : 0) + (tt === 0 && t0 > 0 ? bj(Math.round(s * cols), t, true) : tt === 1 && t1 < 1 ? bj(Math.round(s * cols), t, false) : 0);
     const f = lerp(fold[0], fold[1], t) * Math.sin(s * Math.PI * 2 * fold[2] + ph) * Math.sin(Math.PI * Math.min(1, s * 6) * 0.5) * Math.sin(Math.PI * Math.min(1, (1 - s) * 6) * 0.5);
     o[0] = Math.sin(a) * (R + f);
     o[1] = y;
