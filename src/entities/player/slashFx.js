@@ -27,6 +27,7 @@ import { ARC_TONE } from './fx.js';
 import * as THREE from 'three';
 
 const _pv = new THREE.Vector3(), _OUT = [0, 0, 0];
+const clampN = (x, a, b) => (x < a ? a : x > b ? b : x);
 
 /** 'line' (the default): the instant slash; 'arc': the curved crescent as before. */
 export const SLASH_IDS = ['line', 'arc'];
@@ -51,10 +52,24 @@ export function setSlash(m) {
  *    body    across him, centred on his chest
  *    blade   along the blade's own path (the first instant slash: the chord of the swing)
  *  and when: '0' as the swing ends (default), 'beat' END.beat s later (the 'already cut' beat, the pose held). */
-export const PLACE_IDS = ['enemy', 'target', 'body', 'blade'];
+export const PLACE_IDS = ['sweep', 'enemy', 'target', 'body', 'blade'];
 export const BEAT_IDS = ['0', 'beat'];
-// (the owner's baseline, 2026-11-26: "combo A with the slash on the enemy", as the swing ends)
-let placeNow = 'enemy', beatNow = '0';
+// THE SWEEP (ADR-292, the default; the owner, 2026-11-28: "the instant slashes coming from the auto attacks don't
+// look accurate based on the sword swing. make sure it looks good and accurate no matter which camera view the
+// player is facing"). Measured: on a whiff `enemy` hung the line END.ahead (1.9 m) out in front of him, which the
+// camera behind him draws ABOVE his head (the finisher's violet band floated a body's height over a blade that
+// ended at his hip), and its 3.6 - 5.6 m ran far past the steel; its way was the hand's, not the blade's. The
+// sweep is the steel's own path ON THE SCREEN, read through the camera's projection so it holds from every side:
+//   way     the weighted sum of the screen steps of three points along the blade (SWEEP.along: near the hand,
+//           the middle, the drawn point), each step weighted by the square of the point's speed that frame (the
+//           fast cut decides it, not the slow raise before it)
+//   place   across: the speed-weighted middle of where those points passed; along: from the first to the last
+//           place the steel reached while it was moving fast, carried SWEEP.ext of that past each end
+//   depth   the blade's middle at the fastest frame (a landed blow: the contact, and the line is moved across to
+//           run through it, so it still cuts through what it hit)
+// It is laid in the screen's plane at that depth: what the eye saw the sword do is where the slash is.
+// (the owner's baseline before, 2026-11-26: "combo A with the slash on the enemy", as the swing ends: `enemy`)
+let placeNow = 'sweep', beatNow = '0';
 export const placeMode = () => placeNow;
 export const beatMode = () => beatNow;
 export function setPlace(m) {
@@ -83,6 +98,11 @@ export const END = { ahead: 1.9, y: [0.55, 1.7], len: [3.6, 5.6], thrust: 2.4, m
 // reads as the swing does, from where the sword came down to where it went; `reveal` pieces drawn `step` s
 // apart, from the swing's start to its end: the slash runs the way the sword did)
 const NP = 24; // ending slashes' pieces waiting for their time
+/** The sweep's numbers: `along` the points on the blade (0 its base, 1 the drawn point) whose path is read,
+ *  `fast` x the fastest step a frame counts as the cut (its place), `ext` the share carried on past each end,
+ *  `len` [light, heavy] [shortest, longest] (m, x his scale), `thrust` a thrust streak's length (m). */
+export const SWEEP = { along: [0.25, 0.6, 1], fast: 0.35, ext: 0.18, len: [[1.1, 2.6], [1.6, 3.4]], thrust: 1.2 };
+const _sa = new THREE.Vector3(), _sb = new THREE.Vector3();
 
 /** The line's looks: strokes, their size at the middle (m), life (s) at the ends … the middle, the
  *  four-frame flash, the hairline that outlasts it, the colours (the arc's: white-hot → its core → the
@@ -130,6 +150,7 @@ export class SlashFx {
     this.H = [0, 0, 0];
     this.buf = new Float32Array(NB * 3); // the point, frame by frame
     this.mid = new Float32Array(NB * 3); // … and the blade near the hand (END.at): the swing's way on the screen
+    this.base = new Float32Array(NB * 3); // … and the blade's base (the sweep: points along the steel)
     this.spd = new Float32Array(NB); // … and how far it moved that frame
     this.nb = 0;
     this.peak = 0; // the fastest frame's step, and its index
@@ -212,6 +233,7 @@ export class SlashFx {
       B[n * 3 + 2] = T[2];
       const H = this.H, M = this.mid, f = END.at;
       for (let c = 0; c < 3; c++) M[n * 3 + c] = H[c] + (T[c] - H[c]) * f;
+      for (let c = 0; c < 3; c++) this.base[n * 3 + c] = H[c];
       this.spd[n] = sp;
       this.nb = n + 1;
     }
@@ -249,7 +271,8 @@ export class SlashFx {
    *  place, the way the blade near the hand crossed the screen. */
   _swing(i0, i1, kick, delay) {
     this._dly = delay;
-    if (placeNow === 'blade') {
+    if (placeNow === 'sweep') this._sweep(i0, i1, kick);
+    else if (placeNow === 'blade') {
       const B = this.buf;
       this._cut(B[i0 * 3], B[i0 * 3 + 1], B[i0 * 3 + 2], B[i1 * 3], B[i1 * 3 + 1], B[i1 * 3 + 2], kick);
     } else {
@@ -277,6 +300,107 @@ export class SlashFx {
       }
     }
     this._dly = 0;
+  }
+
+  /** THE SWEEP: the cut from buffered frame i0 to i1 as the steel crossed the screen (SWEEP above): its way, its
+   *  place and its length from points along the blade, laid in the screen's plane at the blade's (or the
+   *  contact's) depth, then drawn as the line is (_end keeps it where it is). */
+  _sweep(i0, i1, kick) {
+    const cam = this.game?.camera, Bt = this.buf, Bb = this.base, S = this.spd, A = SWEEP.along;
+    if (!cam || !(i1 > i0)) return;
+    const asp = cam.aspect || 1;
+    // the way: every point's screen steps, each weighted by the square of the point's speed that frame
+    let wx = 0, wy = 0;
+    for (const f of A) {
+      let px = 0, py = 0;
+      for (let i = i0; i <= i1; i++) {
+        const o = i * 3;
+        _pv.set(Bb[o] + (Bt[o] - Bb[o]) * f, Bb[o + 1] + (Bt[o + 1] - Bb[o + 1]) * f, Bb[o + 2] + (Bt[o + 2] - Bb[o + 2]) * f).project(cam);
+        const x = _pv.x * asp, y = _pv.y;
+        if (i > i0) {
+          const w = S[i] * S[i];
+          wx += (x - px) * w;
+          wy += (y - py) * w;
+        }
+        px = x;
+        py = y;
+      }
+    }
+    const wl = Math.hypot(wx, wy);
+    if (!(wl > 1e-9)) return;
+    const ux = wx / wl, uy = wy / wl, vx = -uy, vy = ux;
+    // the place: along the way, from the first to the last place the steel reached moving fast; across it, the
+    // speed-weighted middle; the depth of the blade's middle at the fastest frame
+    let s0 = Infinity, s1 = -Infinity, cs = 0, cw = 0, top = 0, iPk = i0;
+    for (let i = i0 + 1; i <= i1; i++) if (S[i] > top) { top = S[i]; iPk = i; }
+    for (let i = i0; i <= i1; i++) {
+      const fast = S[i] >= SWEEP.fast * top || i === i0 || i === i1;
+      const o = i * 3;
+      for (const f of A) {
+        _pv.set(Bb[o] + (Bt[o] - Bb[o]) * f, Bb[o + 1] + (Bt[o + 1] - Bb[o + 1]) * f, Bb[o + 2] + (Bt[o + 2] - Bb[o + 2]) * f).project(cam);
+        const x = _pv.x * asp, y = _pv.y, sa = x * ux + y * uy, sc = x * vx + y * vy;
+        if (fast) {
+          if (sa < s0) s0 = sa;
+          if (sa > s1) s1 = sa;
+        }
+        const w = S[i] + 1e-6;
+        cs += sc * w;
+        cw += w;
+      }
+    }
+    if (!(s1 > s0) || !(cw > 0)) return;
+    let c = cs / cw;
+    {
+      const o = iPk * 3;
+      _pv.set((Bb[o] + Bt[o]) / 2, (Bb[o + 1] + Bt[o + 1]) / 2, (Bb[o + 2] + Bt[o + 2]) / 2).project(cam);
+    }
+    let z = _pv.z;
+    // a landed blow: through the contact, at its depth (still as long as the steel's way)
+    if (this.hitRec === this.rec) {
+      _sa.set(this.hit[0], this.hit[1], this.hit[2]).project(cam);
+      if (Number.isFinite(_sa.x + _sa.y + _sa.z) && Math.abs(_sa.z) < 1) {
+        const x = _sa.x * asp, y = _sa.y, sa = x * ux + y * uy;
+        c = x * vx + y * vy;
+        z = _sa.z;
+        if (sa < s0) s0 = sa;
+        if (sa > s1) s1 = sa;
+      }
+    }
+    if (!(Math.abs(z) < 1)) return;
+    const e = (s1 - s0) * SWEEP.ext;
+    s0 -= e;
+    s1 += e;
+    // back to the world: the ends at that depth, the length held to the look's bounds (in metres, x his scale)
+    const ax = (ux * s0 + vx * c) / asp, ay = uy * s0 + vy * c, bx = (ux * s1 + vx * c) / asp, by = uy * s1 + vy * c;
+    _sa.set(ax, ay, z).unproject(cam);
+    _sb.set(bx, by, z).unproject(cam);
+    if (!Number.isFinite(_sa.x + _sa.y + _sa.z + _sb.x + _sb.y + _sb.z)) return;
+    const sc = this.p.drawScale || 1, [lo, hi] = SWEEP.len[this.look], d = _sa.distanceTo(_sb);
+    if (!(d > 1e-4)) return;
+    const L = clampN(d, lo * sc, hi * sc);
+    if (L !== d) {
+      _pv.subVectors(_sb, _sa).multiplyScalar((L - d) / (2 * d));
+      _sa.sub(_pv);
+      _sb.add(_pv);
+    }
+    // kept off the floor (a line cut where it meets it)
+    let x0 = _sa.x, y0 = _sa.y, z0 = _sa.z, x1 = _sb.x, y1 = _sb.y, z1 = _sb.z;
+    const fl = SLASH.floor;
+    if (y0 < fl && y1 < fl) return;
+    if (y0 < fl || y1 < fl) {
+      const t = (fl - y0) / (y1 - y0);
+      if (y0 < fl) {
+        x0 += (x1 - x0) * t;
+        z0 += (z1 - z0) * t;
+        y0 = fl;
+      } else {
+        x1 = x0 + (x1 - x0) * t;
+        z1 = z0 + (z1 - z0) * t;
+        y1 = fl;
+      }
+    }
+    if (Math.hypot(x1 - x0, y1 - y0, z1 - z0) < 0.2) return;
+    this._end(x0, y0, z0, x1, y1, z1, false, kick);
   }
 
   /** A direction across the screen (sx right, sy up, in pixels' proportions) as a world direction in the
@@ -341,7 +465,17 @@ export class SlashFx {
   /** The ending slash: the cut's line (a → b) moved to its place (placeNow) at the cut's angle, kept off the
    *  floor, drawn now or after the beat (beatNow). */
   _end(ax, ay, az, bx, by, bz, thrust, kick) {
-    if (placeNow !== 'blade') {
+    // (the sweep's line is already where the steel went; its thrust runs on off the point, SWEEP.thrust long)
+    if (placeNow === 'sweep' && thrust) {
+      const l = Math.hypot(bx - ax, by - ay, bz - az);
+      if (l > 1e-4) {
+        const k = (SWEEP.thrust * (this.p.drawScale || 1) * (this.look ? 1.4 : 1)) / l;
+        bx = ax + (bx - ax) * k;
+        by = ay + (by - ay) * k;
+        bz = az + (bz - az) * k;
+      }
+    }
+    if (placeNow !== 'blade' && placeNow !== 'sweep') {
       let dx = bx - ax, dy = by - ay, dz = bz - az;
       const l = Math.hypot(dx, dy, dz);
       if (!(l > 1e-4)) return;

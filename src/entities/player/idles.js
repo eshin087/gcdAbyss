@@ -38,6 +38,7 @@ import { dirLerp, kf } from './anim.js';
 import { onTheBelt, standLife } from './stances.js';
 import { DIM } from './heroDims.js';
 import { REF_STAND, REF_READY, FLAT_ROLL } from './refStance.js';
+import { FLICK } from './bearing.js';
 
 const DEG = Math.PI / 180;
 // a sword-hand offset → the same point as a free-hand offset (x): the two shoulders' spacing (anim.js's own)
@@ -769,6 +770,19 @@ function spellBreath(p, P, A, u, e) {
   p[P.bodyY] += 0.01 * br * e;
   p[P.hdX] += 0.2 * w;
 }
+
+/** The chiburi after the chain (bearing.js FLICK, ADR-292): the flick's motion on a quicker clock (the snap
+ *  FLICK.snap of the way in), the eyes kept on the foe instead of turned down to the blade, the chin up through
+ *  the hold. Played in either stance, only as the chain ends (anim.js _idleLife). */
+function comboFlick(p, P, A, u, e) {
+  const s = FLICK.snap, v = u < s ? (u / s) * 0.45 : 0.45 + ((u - s) / (1 - s)) * 0.55;
+  trickFlick(p, P, A, v, e);
+  const snap = smoothstep(0.38, 0.45, v), back = smoothstep(0.62, 0.86, v), hold = snap * (1 - back) * e;
+  p[P.hdY] += 0.16 * hold;
+  p[P.hdX] -= 0.06 * hold;
+  p[P.spX] -= 0.03 * hold;
+}
+export const COMBO_FLICK = Object.freeze({ name: 'comboFlick', dur: FLICK.dur, fn: comboFlick, trick: true, blade: true });
 
 export const EASE_TRICKS = [
   { name: 'spin', dur: 2.4, fn: trickSpin, trick: true, blade: true },

@@ -4,7 +4,22 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-One hundred and forty-six pieces of work since 0.4.0:
+One hundred and forty-seven pieces of work since 0.4.0:
+- **gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi and a prouder bearing** (2026-11-28, ADR-292). *Fixed:* in the light chain's fifth hit the torn drape on gcd's left upper
+  arm stood straight out from his shoulder as both hands took the grip (its pale torn points a wing at shoulder height
+  from behind, at its swing limit every finisher); a sheet on an arm now hangs from the shoulder as that arm lifts or
+  crosses his chest, and every cloak sheet keeps the whip of the arms and the chest's turn out of its swing (his own
+  travel streams it as before), so the cloak moves about as much in a cut as at a run (`?cloth=old` as before). The
+  left hand no longer disappears in hits 1 - 4: combo A tucked it behind his back, under the cloak from the game camera;
+  it is now held out from his left side as a counterweight (`?offhand=out`, the default; `?offhand=sign` sword fingers
+  held out at the foe, `back` / `side` the others), drawn in toward him through a turning swing. *Changed:* the ending
+  slash lies on the sword's own path across the screen, from every side (`?endslash=sweep`, the default): its way,
+  length and place come from three points along the blade as the camera sees them, through what it hit; on a whiff
+  it no longer floats 1.9 m ahead of him (above his head from behind) and no longer runs 3.6 - 5.6 m past the steel
+  (`?endslash=enemy` as before). *Added:* after the chain's last hit, when he stops there, gcd flicks the blade clean
+  (a chiburi: up, a snap down and out to his right, a held beat, the free hand to the hilt; any move, guard or attack
+  cuts it; `?flick=0` none); and a prouder bearing: chest carried up and chin lifted standing and between hits
+  (`?bearing=0` as before). The Lab's `offhand`, `endslash`, `cloth`, `bearing` and `flick` rows.
 - **The deathblow is not cut short** (2026-11-28, ADR-280). *Fixed:* pressing guard during a deathblow ended it at
   once with nothing dealt; the press now waits and the guard comes up as the finisher ends. A perfect parry of a
   boss's blue blow that would cross the blades now gives the deathblow (he recoils, the combo follows) instead of
