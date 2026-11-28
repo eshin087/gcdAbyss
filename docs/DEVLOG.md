@@ -5,6 +5,28 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — The aimed tail spin (ADR-278; branch `dragon/aimed-tail-spin`)
+
+**Owner:** "Yes, the spins next" (the ~700°/s tail spins ADR-277 left).
+
+**What:** `aimSpin`: the sweep's / whip's turn starts 0.35 s before the active and is steered onto the cue (the
+angle to whatever part of the tail touches the hero first, over the time left; acceleration capped), then runs on
+to the old final facing on a damped spring. Old curve kept where steering missed: straight behind (±10°), > 3.5 rad
+to go, the jab, a string's sweep, a string's second whip.
+
+**How it got there** (integ timing, tail moves): steering on the tail's mid joint alone: 302 contacts off (the
+spheres touch first); aimed at the first touch: 41; the string's next blow early after a short follow-through →
+running on to the old final facing; straight-behind misses → the fallbacks: 0 off.
+
+**Measured:** spin 674 → 153°/s (the sweep), 271 - 299 (pivot lash, rear guard, cinder rake, cataclysm); tail
+lash ~680 kept.
+
+**Verified:** integ timing (all strings), strings, melee, reach, red, plunge, deflect, wyrmfix, pawtells, wyrmheld.
+
+**Open / next:** the tail lash (jab + sweep) and straight-behind sweeps still spin fast; the death / wake foot
+skating; a film for the owner.
+
+## 2026-11-28 — The wyrm's motion audit and its fixes; the incantation under the wyrm (ADR-277; branch `dragon/motion-audit-fixes`)
 ## 2026-11-28 — The wyrm's motion audit and its fixes; the incantation under the wyrm (ADR-281; branch `dragon/motion-audit-fixes`)
 
 **Owner:** "there are still some weird dragon animations and movement that looks unnatural and off ... analyze all

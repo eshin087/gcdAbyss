@@ -5,6 +5,13 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 One hundred and forty-nine pieces of work since 0.4.0:
+- **The Cinder Wyrm turns into its tail blows instead of spinning on the spot** (2026-11-28, ADR-278). *Changed (the owner: "Yes, the spins next"):* the tail sweep and the
+  tail whips no longer spin the whole wyrm ~700°/s in place: the turn starts during the wind-up, after the
+  backswing, and is steered onto the blow (the part of the tail that will touch you reaches you exactly on the
+  cue, wherever you stand), then runs on and slows to a stop. The tail sweep turns at most ~150°/s, the pivot
+  lash, rear guard, cinder rake and cataclysm ~260 - 300°/s. Where steering could not keep the blow on its cue
+  (you almost straight behind it, a turn of more than half a circle still to go, the jab and the sweep of the
+  tail lash, a string's second whip) the old spin stays. `?wyrmFix=0` as before.
 - **The Cinder Wyrm moves like a living animal** (2026-11-28, ADR-281). *Fixed (the owner: "fix them all", from a frame-by-frame audit of all
   59 of its moves and states, `integ wyrmmotion`):* its wings no longer go through the ground (finger tips went up
   to 3.2 m under it in the wing buffet, the sweeps, the slams, stagger and the posture break; 17 moves → 0); its
@@ -18,6 +25,7 @@ One hundred and forty-nine pieces of work since 0.4.0:
   (as it already could not land later than 0.07 s after). The incantation of the kamikaze wisps is a circle on the
   ground under the wyrm like every cast (it hung beside it before its jaws and followed the head about like a thing
   of its own), and a circle cast round its feet stays under it while it burns. `?wyrmFix=0` moves it as before (the
+  Lab's `wyrmFix` row). Still to do: the feet still skate in the death and the wake (the tail spins: the next entry).
   Lab's `wyrmFix` row). Still to do: the tail sweeps and whips spin the body ~700°/s (a slower spin needs to be
   aimed at the hero to keep its hit on the beat), and the feet still skate in the death and the wake.
 - **One kind of parry** (2026-11-28, ADR-279). *Changed:* every parry is now a perfect parry, anywhere in the

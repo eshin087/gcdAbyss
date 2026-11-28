@@ -8418,3 +8418,24 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   meter's `burnt` bound 12 → 20 (seeds 1 - 6 burn 1 - 14 pieces on main and 3 - 13 with the fixes: the bound sat
   inside the fights' spread).
 
+## ADR-278 — The aimed tail spin: the sweeps and whips steer onto the beat (2026-11-28)
+- **Context:** ADR-277 left the tail sweeps and whips spinning the body ~700°/s (the sweep: 220° in 0.45 s on an
+  ease, its impact at 0.2 s; the whip: 180° in 0.3 s), with ~130° after the blow. A fixed slower curve that started
+  in the windup missed `integ timing` by up to 283 ms: near and straight-behind heroes were hit early, flank ones
+  late. The owner: "Yes, the spins next".
+- **Decision** (`attacks.js` `aimSpin`, `SPIN`; behind `?wyrmFix`): the turn starts `pre` 0.35 s before the active
+  (after the backswing; not while the tail still lies within 0.45 rad of the hero) and is STEERED every frame: the
+  yaw rate = the angle still to go / the time to the cue's impact, the angle measured to whatever touches him
+  first (the mid joint's crossing, less the hit's tolerance, or a tail sphere at his distance, less its angular
+  size), its growth capped at 20 rad/s²; past him the body runs on to the old curve's final facing on a damped
+  spring (the next blow of a string was timed from that facing; braking short of it put the wing sweep after a
+  whip 100 - 170 ms early). The blow keeps the old curve where steering missed the beat: a hero within ~10° of
+  straight behind (the old backswing is tuned for a tail lying on his bearing), more than 3.5 rad still to turn
+  when steering would begin, the tail jab and a string's tail sweep (steered, they reached a close hero up to
+  0.23 s early), a string's second whip.
+- **Measured:** spin in place (the audit's placements): the tail sweep 674 → 153°/s, pivot lash 706 → 271, rear
+  guard 703 → 278, cinder rake 705 → 258, cataclysm 705 → 299; the tail lash keeps ~680 (its jab and sweep).
+  `integ timing`: every contact within ±85 ms, no first hit missed.
+- **Consequences:** the tail lash's spins and the straight-behind cases are the old motion; a later pass could
+  steer them with a longer windup (a timing change: the owner's call).
+

@@ -19,6 +19,14 @@ export const RELEASES = [
     entries: [
       {
         date: '2026-11-28',
+        title: 'The Cinder Wyrm turns into its tail blows instead of spinning on the spot',
+        notes: [
+          'When the Cinder Wyrm lashes its tail, it now swings round into the blow and slows to a stop afterwards, instead of spinning in place at full speed.',
+          'The tail still reaches you exactly when its warning says.',
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: 'The Cinder Wyrm moves like a living animal',
         notes: [
           "The Cinder Wyrm's wings no longer pass through the ground, and its claws, feet and head no longer jump from one place to the next between blows.",
