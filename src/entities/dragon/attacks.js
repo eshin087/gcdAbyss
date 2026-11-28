@@ -12,6 +12,7 @@ import { wallWind } from './wallReach.js';
 import { heldMode, tellPose } from './tellPose.js';
 import { WYRM_HELD } from './tuningMotion.js';
 import { biteLead, biteSnap } from './strike.js';
+import { fixOn } from './motionFix.js';
 import { pawBlueOf, pawRedOf, blueWindup, blueAim, blueActive, blueEnd, redWindup } from './pawTells.js';
 
 /** Wing spread the actions return to (the mantled HALF sails, TUNING.rest). */
@@ -1582,7 +1583,12 @@ const OVERHEAD = {
     const pose = d.pose, ov = pose.pawOv[h.wi];
     if (h.plant && !h.planted) {
       ov.w = 1;
-      ov.pos.copy(h.plant);
+      // (the motion audit: the paw slides from where its strike left it onto the plant over the first 15 %
+      // of the recovery; snapped there, it jumped 2 - 3 m: the plant is the clamped, reachable spot)
+      if (fixOn()) {
+        h.fromPlant ??= V().copy(d.rig.pt.arms[h.wi].toe);
+        ov.pos.lerpVectors(h.fromPlant, h.plant, smoothstep(0, 0.15, k));
+      } else ov.pos.copy(h.plant);
       pose.pawOvRate = 30;
       if (k > 0.15) {
         h.planted = true;

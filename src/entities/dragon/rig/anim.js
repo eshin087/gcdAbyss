@@ -1189,6 +1189,19 @@ export class Rig {
     const turnLead = clamp(this.yawRate * (turning ? 0.22 : walk ? 0.3 : 0.1), -0.45, 0.45) * awake * (1 - s.airborne) * (1 - s.restep);
     const hy = this.d.yaw + turnLead, hc = Math.cos(hy), hs = Math.sin(hy), P = this.d.position;
     const home = (out, x, z) => out.set(P.x + x * hc + z * hs, 0, P.z - x * hs + z * hc);
+    // the feet's lead along the body's travel, eased (the motion audit: a lunge starting or stopping moved
+    // every home 2.2 m in one frame, and a foot landing then landed on it: paws and feet popped 2 m)
+    const lv = (this._leadV ??= new THREE.Vector3());
+    {
+      const tx = pose.vel.x * lead, tz = pose.vel.z * lead;
+      if (snap || !fixOn()) lv.set(tx, 0, tz);
+      else {
+        const f = 1 - Math.exp(-6 * dt);
+        lv.x += (tx - lv.x) * f;
+        lv.z += (tz - lv.z) * f;
+        lv.y = 0;
+      }
+    }
     // the combat stance plants all four feet a little wider and longer than the anatomy's homes
     const st = REST_POSE.stance;
     // standing and watching, it stalks: one diagonal pair reaches (left fore forward, right hind back)
@@ -1199,7 +1212,7 @@ export class Rig {
       const l = gait.limbs[k];
       const stagger = (side > 0 ? st.stalk.hindL : st.stalk.hindR) * stalk;
       home(l.home, side * (lerp(A.footHome[0], 1.5, lying) + (s.stanceH + st.hindOut) * awake) * S, (lerp(A.footHome[2], -0.95, lying) + (s.strideH + st.hindBack) * awake + stagger) * S);
-      l.home.addScaledVector(pose.vel, lead);
+      l.home.add(lv);
       l.home.y = 0;
       // (off the ground as soon as the body has left it: a leap's take-off used to drag the planted
       // hind feet up to 0.4 m a frame for a few frames until the airborne blend caught up)
@@ -1213,7 +1226,7 @@ export class Rig {
       const l = gait.limbs[2 + k];
       const stagger = (side > 0 ? st.stalk.frontL : st.stalk.frontR) * stalk;
       home(l.home, side * (lerp(A.handHome[0], 1.35, lying) + (s.stanceF + st.frontOut) * awake) * S, (lerp(A.handHome[2], 3.15, lying) + (s.strideF + st.frontFwd) * awake + stagger) * S);
-      l.home.addScaledVector(pose.vel, lead);
+      l.home.add(lv);
       l.home.y = 0;
       l.free = s.airborne > 0.3 || s.rear > 0.35 || s.pawW[k] > 0.35;
       l.lock = s.dead > 0.01 && !l.free;
