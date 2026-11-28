@@ -82,6 +82,7 @@ export function halKeys(beat) {
       keys = keys.map(([u, p]) => [u, legsFor(p, u >= cock - 1e-6, other)]);
     }
     keys = limbKeys(beat, keys);
+    if (ref) keys = keys.map(([u, p]) => [u, refArms(p, beat, u)]);
   }
   C.set(beat, keys);
   return keys;
@@ -138,5 +139,24 @@ function refLegs(p, beat, strike) {
   }
   const L = strike ? LEGS_HIT : REF_COIL;
   for (const f of LEG_FIELDS) o[f] = Array.isArray(L[f]) ? L[f].slice() : L[f];
+  return o;
+}
+
+/** THE SHEETS' GUARD (02: every strike row): the hand that does not strike held up at the chin, a
+ *  boxer's guard, the knuckles forward; the striking hand there too before its windup and once it has
+ *  come back (`u` past REF_GUARD.back); a punch leans the body into it. Hand offsets from the shoulder,
+ *  body axes (limbs.js aimHand). Poses only: no key time moves. */
+const REF_GUARD = { rH: [0.11, 0.04, 0.24], lH: [-0.11, 0.04, 0.24], rP: [-0.9, -0.3, -0.5], lP: [0.9, -0.3, -0.5], back: 1.6, lean: 0.18 };
+function refArms(p, beat, u) {
+  const o = { ...p };
+  const kick = beat.mo?.fam === 'kick';
+  const strike = kick ? [] : hands(beat);
+  for (const h of ['rH', 'lH']) {
+    if (strike.includes(h) && u > 0.05 && u < REF_GUARD.back) continue;
+    o[h] = REF_GUARD[h].slice();
+    const pk = h === 'rH' ? 'rP' : 'lP';
+    o[pk] = REF_GUARD[pk].slice();
+  }
+  if (!kick) o.pitch = (o.pitch ?? 0) + REF_GUARD.lean;
   return o;
 }

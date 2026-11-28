@@ -149,8 +149,8 @@ export const HAL_OWN = {
   collar: { fill: [0.07, 0.1, 0.34], ink: [0.3, 0.38, 0.8] },
   hair: { fill: [0.75, 0.48, 0.08], ink: [1.1, 0.75, 0.2] },
   hairTip: { fill: [1.0, 0.72, 0.3], ink: [1.2, 0.9, 0.45] },
-  coat: { fill: [1.0, 0.07, 0.06], ink: [1.0, 0.14, 0.1] },
-  lining: { fill: [0.95, 0.06, 0.05], ink: [1.0, 0.14, 0.1] },
+  coat: { fill: [1.0, 0.07, 0.06], ink: [1.0, 0.14, 0.1], outline: 0.12 },
+  lining: { fill: [0.95, 0.06, 0.05], ink: [1.0, 0.14, 0.1], outline: 0.12 },
   skin: { fill: [0.4, 0.21, 0.15], ink: [0.6, 0.34, 0.24] },
 };
 /** ?halCape=1 and up: the cape's own rim (the cool moonlit edge turned the red pink) and the lift. */
@@ -186,6 +186,7 @@ export function tintHalcyon(M) {
       if (u.uArtOwn) u.uArtOwn.value = 1;
       u.uArtFill?.value.setRGB(...HAL_OWN[k].fill);
       if (HAL_OWN[k].ink) u.uInk?.value.setRGB(...HAL_OWN[k].ink);
+      if (HAL_OWN[k].outline != null && u.uOutline) u.uOutline.value = HAL_OWN[k].outline;
     }
   }
   // the neon seams light themselves a little (their ink lines glow), the eyes burn

@@ -5,6 +5,20 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — Halcyon's strikes after sheet 02: the chin guard, the lean (ADR-289; `halcyon-ref-look`)
+
+**Owner**, on the third rebuild: "Yes, keep going".
+
+- **Strikes:** under `?halRefMove=a` every builder blow keeps the hand that does not strike up at the chin
+  (a boxer's guard, sheet 02's every row), the striking hand there too before its windup and after it
+  comes back, and a punch leans the body into it (motion.js `refArms`, REF_GUARD). Poses only:
+  `city.mjs . halref` green (every beat times the same).
+- **Cape:** its silhouette line dimmed under `?halRef=a` (look.js HAL_OWN `outline`), so the five sheets
+  stop printing as pale-edged planks.
+- **Comparison (local):** `docs/art/character-packs-v04/halcyon/implementation/strikes-compare-v3.png`.
+- **Open:** the cape is still five stiff spring sheets that fan out in a blow; the sheet draws one soft
+  mass trailing behind him: the next step is one cloth. The camera of the capture follows his pelvis.
+
 ## 2026-11-28 — Halcyon rebuilt by code a third time, to read as the sheet (ADR-289; `halcyon-ref-look`)
 
 **Owner**, shown the second pass: "it doesn't seem like the new look has any resemblance to the reference
