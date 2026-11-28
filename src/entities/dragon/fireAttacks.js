@@ -298,8 +298,15 @@ const skyStrafe = {
       // the landing on the far side: a braking glide down, legs reaching, the wings snapping open
       const u = clamp(k / 0.55, 0, 1);
       if (!a.landed) {
-        const e = easeOutCubic(u);
-        this.place(d, a, lerp(a.sLand, a.D, e));
+        if (fixOn() && Number.isFinite(a.vf)) {
+          // (the motion audit) the glide starts at the pass's own speed and brakes to a stop (a Hermite):
+          // easeOutCubic started it at 3x its average, a 1 m jump in the body the frame the pass ended
+          const T = 0.55 * Math.max(0.05, a.dur), L = a.D - a.sLand, v0 = clamp(a.vf, 0, (3 * Math.max(0, L)) / T);
+          this.place(d, a, a.sLand + v0 * T * (u - 2 * u * u + u * u * u) + L * (3 * u * u - 2 * u * u * u));
+        } else {
+          const e = easeOutCubic(u);
+          this.place(d, a, lerp(a.sLand, a.D, e));
+        }
         fly(pose, a.altLand * (1 - smoothstep(0, 1, u)), 0.65, 2.7);
         pose.glide = 0.35 * (1 - u);
         pose.airReach = smoothstep(0.2, 0.8, u);

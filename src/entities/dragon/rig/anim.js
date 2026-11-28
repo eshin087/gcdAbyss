@@ -375,6 +375,8 @@ const DEAD_HINGE = String(new URLSearchParams(globalThis.location?.search ?? '')
 /** The snout's length from the head joint (model units) and the least height its tip keeps (m; the motion audit). */
 const SNOUT_LEN = 1.05;
 const SNOUT_FLOOR = 0.3;
+/** How fast the neck may pull a head that fell outside its cone back in (rad/s; the motion audit). */
+const HEAD_RECONE_RATE = 18;
 /** ... and when a hit sphere rides on it (pose.headExact). */
 const HEAD_EXACT_RATE = 45;
 /** Waking, the resting S only fades in once the sleeping curl (s.sleep) is below this. */
@@ -1096,7 +1098,12 @@ export class Rig {
           dir.set(dir.x * k, minY, dir.z * k);
         }
       }
-      constrainDir(dir, last, hMax); // (the neck has the last word: a head low on a steep neck dips its snout instead)
+      // (the neck has the last word: a head low on a steep neck dips its snout instead), at most
+      // HEAD_RECONE_RATE: a neck whipping round fast snapped the snout 2.7 m in one frame back into the cone
+      const cone = this._v[11].copy(dir);
+      constrainDir(cone, last, hMax);
+      if (snap) dir.copy(cone);
+      else dir.copy(constrainDir(cone, dir, HEAD_RECONE_RATE * dt)).normalize();
     }
     hd.copy(dir);
     aimJoint(m.head, dir, qEnd, this._qHead);

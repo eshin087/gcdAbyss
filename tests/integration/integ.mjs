@@ -15781,6 +15781,52 @@ async function scenarioWyrmMotion() {
   return G;
 }
 
+// ================================================================== scenario: wyrmfix (2026-11-28, ADR-276)
+// The motion audit's fixes (motionFix.js), held: a few of the worst offenders through the audit
+// (tests/integration/wyrmMotion.mjs), each limit the fix set; and `?wyrmFix=0` gives the motion before back.
+async function scenarioWyrmFix() {
+  out('\n== scenario WYRMFIX (the motion audit fixes: wings out of the ground, no teleports, the head on its neck, a smooth tail, planted landings) ==');
+  const { makeWyrmMotion } = await import(pathToFileURL(`${ROOT}/tests/integration/wyrmMotion.mjs`).href);
+  const { setLook } = await imp('src/entities/enemies/duelist/lookSwitch.js');
+  const { ATTACKS } = await imp('src/entities/dragon/attacks.js');
+  const G = build();
+  fightSetup(G);
+  const { game } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.noRiposte = true;
+  p.debug.god = true;
+  const A = makeWyrmMotion({ THREE, G, DT, SCALE, place, settle });
+  const move = (name, dist = 5.5, ang = 0.1) => A.measure(name, () => {
+    settle(G);
+    const ph = Math.max(1, TUNING.attacks[name]?.phase ?? ATTACKS[name].phase ?? 1);
+    if (d.phase !== ph) d.enterPhase(ph);
+    d.hazards?.clear?.();
+    d.brood?.clear?.();
+    place(G, dist, ang);
+    d.brain.startAction(ATTACKS[name]);
+  }, { secs: 14, done: () => !d.brain.action });
+  // 1. the wing buffet: before, its finger tips went 3 m under the ground; the switch gives that back
+  setLook('wyrmFix', '0');
+  const wb0 = move('wingBuffet');
+  setLook('wyrmFix', null);
+  const wb = move('wingBuffet');
+  out(`  wingBuffet: under the ground ${wb0.under.toFixed(2)} m before, ${wb.under.toFixed(2)} m now (${wb.underK}); wing pop ${wb0.pop.wing.toFixed(0)} -> ${wb.pop.wing.toFixed(0)} m/s`);
+  assert(wb0.under > 1 && wb.under <= 0.15, `the wing buffet's wings stay out of the ground (${wb.under.toFixed(2)} m; ?wyrmFix=0: ${wb0.under.toFixed(2)} m)`);
+  // 2. a string of claws and bites: no paw or head teleports, the head on its neck, the tail smooth
+  const cf = move('cinderFlurry');
+  out(`  cinderFlurry: pops head ${cf.pop.head.toFixed(0)} paw ${cf.pop.paw.toFixed(0)} foot ${cf.pop.foot.toFixed(0)} m/s, hinge ${cf.hinge.toFixed(0)}°, tail ${cf.tailK.toFixed(0)}°`);
+  assert(cf.pop.head < 80 && cf.pop.paw < 140 && cf.pop.foot < 80 && cf.hinge < 72 && cf.tailK < 50 && cf.under <= 0.15, `the cinder flurry: no teleport (head ${cf.pop.head.toFixed(0)} < 80, paw ${cf.pop.paw.toFixed(0)} < 140, foot ${cf.pop.foot.toFixed(0)} < 80 m/s), the head on its neck (${cf.hinge.toFixed(0)}° < 72), a smooth tail (${cf.tailK.toFixed(0)}° < 50)`);
+  // 3. a dive: the snout above the ground, the feet planted on landing
+  const db = move('diveBomb', 11, 0);
+  out(`  diveBomb: under ${db.under.toFixed(2)} m (${db.underK}), slide ${db.slide.toFixed(2)} m, hinge ${db.hinge.toFixed(0)}°`);
+  assert(db.under <= 0.15 && db.slide <= 0.2 && db.hinge < 72, `the dive bomb: the snout clear of the ground (${db.under.toFixed(2)}), the feet plant on landing (slide ${db.slide.toFixed(2)} m)`);
+  // 4. the death: nothing through the ground, the neck whole
+  const de = A.measure('death', () => { settle(G); place(G, 9, 0.3); d.debug.kill(); }, { secs: 3 });
+  out(`  death: under ${de.under.toFixed(2)} m, hinge ${de.hinge.toFixed(0)}°`);
+  assert(de.under <= 0.15 && de.hinge < 45, `the death: nothing through the ground (${de.under.toFixed(2)} m), the head on its neck (${de.hinge.toFixed(0)}°)`);
+  return G;
+}
+
 const SCENARIOS = {
   wyrmmotion: scenarioWyrmMotion,
   wyrmhead: scenarioWyrmHead,
@@ -15867,8 +15913,9 @@ const SCENARIOS = {
   breach: scenarioBreach,
   forestedge: scenarioForestEdge,
   probe: scenarioProbe,
-  // (last: its Math.random draws shift no other scenario's seeded run)
+  // (last: their Math.random draws shift no other scenario's seeded run)
   pawtells: scenarioPawTells,
+  wyrmfix: scenarioWyrmFix,
 };
 // (one parry, ADR-279: ?parry=one, the default, makes every parry perfect. These scenarios press a PLAIN parry on purpose
 // (a perfect one would lock the blades, break him, or send a shot back): they run with ?parry=two)
