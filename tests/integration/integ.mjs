@@ -11252,7 +11252,16 @@ async function scenarioBrood() {
   circle = null;
   assert(d.debug.trigger('wisps') === true, 'Lab: wisps forced');
   run(G, 0.05, { passive: true });
-  assert(circle && circle.kind === 'jaws', 'the wisps incantation hangs before its jaws');
+  assert(circle && circle.kind === 'ground' && circle.under, 'the wisps incantation is a circle on the ground under the wyrm (no longer a seal hanging before its jaws)');
+  {
+    // it stays under the wyrm while it burns: the wyrm moved 3 m, the circle with it
+    const I2 = game.dragon.incantation, at = {};
+    game.dragon.position.x += 3;
+    run(G, 0.05, { passive: true });
+    const ok = I2.at(circle.id, at) && Math.hypot(at.x - game.dragon.position.x, at.z - game.dragon.position.z) < 0.05;
+    game.dragon.position.x -= 3;
+    assert(ok, `the circle follows the wyrm while it burns (${JSON.stringify(at)})`);
+  }
   const nw = BROOD.wisp.count[1];
   run(G, 10, { passive: true }, () => { p.hp = p.maxHp; return B.count('wisp') === 0 && spawns.length > 0; });
   G.watch = null;
