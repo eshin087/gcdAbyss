@@ -54,6 +54,12 @@ const CITY_OWN = ['pace', 'win'];
 // veil's (the Veiled Crossing): the pace meter, a process of its own (the later agents' scenarios run in `veil`)
 const VEIL = 'tests/integration/veil.mjs';
 const VEIL_OWN = ['pace'];
+// saint's (the Last Foundry and the False Saint): its heaviest scenarios, each a process of its own (as one process
+// beside three other suites the whole suite ran 676 s on CI and pushed its share past the 20-minute job limit,
+// 2026-11-28). Local seconds alone: tunePace 39, v04Shell 29, v04Motion 29, v04Hands 21, tuneTraining 15, arFair 14,
+// mllinks 13; the rest 157. `saint` runs `all` without them, so a new scenario lands there by itself.
+const SAINT = 'tests/integration/saint.mjs';
+const SAINT_OWN = ['tunePace', 'v04Shell', 'v04Motion', 'v04Hands', 'tuneTraining', 'arFair', 'mllinks'];
 // fxlooks' TERRAIN check (TERRAIN under '0', then under one look) was nearly all of it: about 9 min,
 // the whole CI run's wall. Each look is a process of its own (lord.mjs GCD_FX); the main fxlooks task
 // leaves those out, so a part added there runs in it by itself.
@@ -91,7 +97,14 @@ const TASKS = [
   ['veil', [VEIL, '.', 'all'], { GCD_SKIP: VEIL_OWN.join(',') }, 45],
   ['veil pace', [VEIL, '.', 'pace'], {}, 90],
   // saint's (the Last Foundry and the False Saint): the later agents' scenarios run in `saint` too
-  ['saint', ['tests/integration/saint.mjs', '.', 'all'], {}, 40],
+  ['saint', [SAINT, '.', 'all'], { GCD_SKIP: SAINT_OWN.join(',') }, 310],
+  ['saint pace', [SAINT, '.', 'tunePace'], {}, 80],
+  ['saint v04 shell', [SAINT, '.', 'v04Shell'], {}, 60],
+  ['saint v04 motion', [SAINT, '.', 'v04Motion'], {}, 60],
+  ['saint v04 hands', [SAINT, '.', 'v04Hands'], {}, 45],
+  ['saint training', [SAINT, '.', 'tuneTraining'], {}, 30],
+  ['saint fair', [SAINT, '.', 'arFair'], {}, 30],
+  ['saint links', [SAINT, '.', 'mllinks'], {}, 28],
   ['groundfx', ['tests/integration/groundfx.mjs', '.', 'all'], {}, 15],
   ['dragonProps', ['tests/integration/dragonProps.mjs', '.', 'all'], {}, 15],
   ['dggrass', ['tests/integration/dgGrass.mjs', '.'], {}, 15],
