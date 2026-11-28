@@ -21,6 +21,18 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 - **Checked:** the `looks` suite (cloth in the body 1.0 %, today's 30 %; hand near 1.4 %; 24.4k triangles), the full
   `npm test`; turnarounds, six game-camera poses at 1440p, three films beside today's look.
 - **Open:** the owner's verdict; the phone; the sheet's ankle-length cloak and flank drapes left out for the fight.
+- **Second pass (same day).** Owner: the cloak reads as two layers and makes him plump from behind and the side,
+  its side tips look apart; more details and layers like an ASCII armour reel (separate pieces in their own letters
+  and tones) instead of one clump of black; the rags too white, wants a subtler change; the slash white; the left hand
+  poor in the auto attack. Found: the cowl ended mid-back and the cloak stood 16-32 cm off his back under it (two
+  tiers); the back skirts' rags hung level with the cloak's (a second torn row); the white on the cut was the blade's
+  own flare as much as the slash; the hand was combo A's `back` hand behind him. Done: a shorter, slimmer cowl, the
+  cloak close under its edge with overlapping side sheets of one length; shorter back skirts; a plum quilted vest with
+  rivets, arm lames, a violet front tabard, silver edging; a dusk step before dimmer rags (soft line into it, torn line
+  out of it); a lavender slash and the steel's light at 0.3; PR 217 merged in for the `out` hand. Checked: `looks`
+  (cloth in the body 1.3 %, hand near 1.7 %, 25.8k triangles, 19 draws), `heropolish`, `offhand`, `heroidles`;
+  before/after stills at the game camera and two films. Open: the owner's verdict; the sword's own colour unchanged
+  by rule, so its lines still read pale on the cut.
 
 ---
 

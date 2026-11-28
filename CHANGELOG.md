@@ -15,7 +15,16 @@ One hundred and forty-eight pieces of work since 0.4.0:
   for the fight: the cloak ends at mid-calf (longer, its ends went under the grass in rolls) and has no sheet over
   the flanks (the thighs and the free hand went into them); the skirts cover his sides. Its cloth goes into his body
   on 1.0 % of the route's frames (today's cloak: 30 %), near the free hand on 1.4 % (3.7 %); 24.4k triangles and 16
-  draws (today's ~26.6k and 18).
+  draws (today's ~26.6k and 18). *Second pass, after the owner's notes:* the cloak no longer reads as a second layer
+  standing off his back under the cowl (a shorter, slimmer cowl; the three cloak sheets close to the back, the side
+  ones overlapping the middle one so the hem runs on as one, all the same length; the back skirts end above the
+  cloak's hem instead of drawing a second row of rags under it); more layers over the black (a quilted plum vest
+  open down the front with silver rivets, two silver lames on each upper arm, the front skirts a violet tabard,
+  silver edging down the cloak's sides); the rags dimmer, reached through a dusk violet step along a torn line (no
+  longer near white at the bottom); its slash drawn in lavender and its steel's light on the cut at 0.3 of today's
+  (`HERO_LOOKS.ref11.slash` / `bladeLit`; the sword keeps its colours). Built on the combo polish (ADR-292), so the
+  left hand stays in sight through the light combo. Cloth in the body 1.3 %, the free hand near a sheet 1.7 %, 25.8k
+  triangles, 19 draws.
 - **gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi and a prouder bearing** (2026-11-28, ADR-292). *Fixed:* in the light chain's fifth hit the torn drape on gcd's left upper
   arm stood straight out from his shoulder as both hands took the grip (its pale torn points a wing at shoulder height
   from behind, at its swing limit every finisher); a sheet on an arm now hangs from the shoulder as that arm lifts or

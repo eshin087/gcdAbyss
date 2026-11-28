@@ -8170,6 +8170,20 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   becomes `DEFAULT_LOADOUT` with its tint). The `looks` suite walks it with the others: cloth in the body 1.0 % of
   frames, the free hand near a sheet 1.4 %, the cloth's ends above the grass but for 5 frames of a roll, 24.4k
   triangles. Open: the owner's verdict, the phone.
+- **Second pass (the owner, the same day, after an ASCII armour reel they pointed to):** "the cloak looks like there
+  are 2 layers and makes his back and side view too plumpy ... the left and right tips of the cloak seems
+  disconnected ... more details and layers on his outfit ... instead of just one big clump of black ... the bottom
+  gray tattered look ... too white at the bottom ... the front slash also looks weird cause its white ... his left
+  hand also doesn't look good during the auto attack swing". The cowl is shorter and slimmer and the cloak hangs
+  close under its edge (out 0.07 / 0.12, not 0.16 / 0.32), its side sheets overlapping the middle one, one length;
+  the back skirts end above its hem. Layers by value and texture, not by more black: a quilted vest (`collar`,
+  plum) with silver rivets, lames on the upper arms, the front skirts a violet tabard (`piping`; `panelSkirt` panels
+  take a `mat`), silver edging (`bevel`) down the cloak's sides. The cloth builders gained a step before the hem
+  (`fadeFrom` + a `fade` material, `collarIn` here) and torn colour lines (`skirtSheet`'s `bJag`): the change into
+  the step barely ragged (a torn edge there read as another layer's hem), the one into the rags torn. An outfit may
+  draw its slash in its own colours (`HERO_LOOKS[...].slash`, read by slashFx.js) and light its steel less on the
+  cut (`bladeLit`, player.js); it still never tints the sword (the looks test forbids it). The left hand: this
+  branch carries the combo polish (ADR-292, its `out` hand), merged in.
 
 ## ADR-292 — gcd's light combo polished: the cloak held calm, the left hand in sight, the ending slash on the sword's path, a chiburi and a prouder bearing (2026-11-28)
 

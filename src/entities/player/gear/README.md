@@ -171,7 +171,8 @@ any item:
   `{ joint, len, rest, phase }`. The idle breeze has per-panel values for the first six panels
   (`BREEZE` / `IDLE_FLARE`); later ones get none unless they set their own. `COAT_PANELS` in
   `wanderer.js` is the worked example; `panelSkirt` (`sheet.js`) builds a skirt from such a table
-  (plus `hemFrom`: 0..1 down the lower sheet where the pale `hem` takes over).
+  (plus `hemFrom`: 0..1 down the lower sheet where the pale `hem` takes over; `fadeFrom` with the option
+  `fade`: a step between the coat and the hem along torn lines; `mat`: the panel in another HERO_INK cloth).
 - **Streamers** (`streamers`). Two-segment springs: `segs[0]` at the root, `segs[1]` at
   `−len[0]` below it; `out` is the resting outward flare; `lag` (default 1) scales how far the
   sheet trails the motion: 1 is a light ribbon that streams out level at a run, the cloak uses 0.5;

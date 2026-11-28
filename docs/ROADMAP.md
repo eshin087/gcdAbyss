@@ -30,6 +30,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 ## M1.105 — Costume 11, an outfit to try (2026-11-28, `player/hero-ref11-anim`, ADR-291)
 - [x] `gear/ref11.js`: hood, cowl and clasp, tunic, strap and belt, sleeves and gauntlets, boots, skirts, the long torn cloak and its glyph line
 - [x] `?heroLook=ref11` / the Lab's OUTFIT row; the `looks` suite walks it (cloth, hand, grass, cost)
+- [x] Second pass after the owner's notes: one slim cloak, layers (vest, rivets, arm lames, tabard, edging), a softer hem, a lavender slash, the left hand (on ADR-292)
 - [ ] The owner's verdict on the preview; if picked, it becomes the default loadout
 ## M1.5 — Look pass from the v0.2 review
 - [x] Calm, world-anchored v0.1-style grass (no swimming ground)
