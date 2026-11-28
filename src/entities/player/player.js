@@ -23,6 +23,7 @@ import { newDeathblowState, armDeathblow, tickDeathblow, deathblowTakeHit, death
 import { deathblowFxUpdate, deathblowFxClear } from '../../combat/deathblowFx.js';
 import { deathblowMatrixUpdate, deathblowMatrixClear } from '../../combat/deathblowMatrix.js';
 import { SwordMystic } from './swordMystic.js';
+import { Presence } from './presence.js';
 import { BREAK, SCAR } from '../../world/breakTuning.js';
 import { chipLook, cutStops } from '../../world/destructibles.js';
 import { mowSwing } from '../../world/grass.js';
@@ -367,6 +368,7 @@ export class Player {
     this.fx = new PlayerFx(game, this.rig);
     this.slashFx = new SlashFx(this); // every swing's instant slash line (slashFx.js; ?slash=arc: the crescent)
     this.mystic = new SwordMystic(this); // the sword's green flame (on by default; ?mystic=0 = nothing drawn)
+    this.presence = new Presence(this); // an outfit's presence, ?presence= (presence.js; nothing unless the look asks)
     this.flurry = new Flurry(this, TUNE);
     // camera lean (model.js LEAN): visual only; hits and the dragon's aim use unleaned positions
     this.lean = installLean(this.object3d, this.drawScale);
@@ -4183,6 +4185,7 @@ export class Player {
       }
     }
     this.mystic?.update(dt); // (swordMystic.js; returns at once with ?mystic=0)
+    this.presence?.update(dt); // (presence.js; returns at once when off)
   }
 
   _updateMaterials(dt) {

@@ -37,6 +37,7 @@ import { SLASH_IDS, slashMode, setSlash } from '../entities/player/slashFx.js';
 import { OFFHAND_IDS, offHandMode, setOffHand } from '../entities/player/offHand.js';
 import { CLOTH_IDS, clothMode, setCloth } from '../entities/player/clothCalm.js';
 import { bearingOn, setBearing, flickOn, setFlick } from '../entities/player/bearing.js';
+import { PRESENCE_IDS, presenceMode, setPresence } from '../entities/player/presence.js';
 import { FEEL_IDS, feelMode, setFeel } from '../entities/player/feel.js';
 import { COMBO_IDS, COMBOS, comboMode, setCombo } from '../entities/player/combos.js';
 import { COUNTER_IDS, counterMode, setCounterMode } from '../combat/flashChain.js';
@@ -1566,6 +1567,7 @@ export class Lab {
       ['cloth', CLOTH_IDS, setCloth, 'clothBtns', "the cloak in the swings (ADR-292): calm = the arm's drape hangs from the shoulder as the arm lifts, the arms' whip kept out of the sheets (the default); old = as before (?cloth=old)", (m) => m],
       ['bearing', ['on', '0'], (m) => setBearing(m === 'on'), 'bearingBtns', 'his bearing (ADR-292): on = the chest carried up and the chin lifted, standing and between hits (the default); 0 = as before (?bearing=0)', (m) => (m === '0' ? 'off' : m)],
       ['flick', ['on', '0'], (m) => setFlick(m === 'on'), 'flickBtns', 'the chiburi after the chain (ADR-292): on = when he stops after the last hit he flicks the blade clean (the default); 0 = none (?flick=0)', (m) => (m === '0' ? 'off' : m)],
+      ['presence', PRESENCE_IDS, (m) => setPresence(m), 'presenceBtns', 'the outfit presence (costume 11 only, ADR-291): wisps = faint letters drifting off the cloak hem; sway = a heavy cloak on the wind; aura = a violet pulse on heavy hits and the finisher; off = none (?presence=)', (m) => m],
       ['clash', CLASH_IDS, setClashMode, 'clashBtns', "the clash dance against the duelists (?clash=): dance = parries in a row inside one of his moves pay more posture each (x1, x1.25, x1.5, x1.75), their ring rises a little, and his posture recovers more slowly as his health drops; dance is the default; old = the numbers before (?clash=0). Read at each parry", (m) => (m === '0' ? 'old' : m)],
       ['contact', CONTACT_IDS, setContactMode, 'contactBtns', "where blows meet (?contact=, ADR-259): a = every hit, block and guard is drawn ON what it strikes (the edge bites in, a fist lands on the body; held through the freeze, a heavy longer, then the swing carries on), the sparks at the meeting, and the body hit answers by where it was struck; b = a, and a boss's blow that would fall short is reached into (his drawn body eases into it, feet planted): the default, the owner's pick; c = b, and past the reach his whole drawn body steps in; old = as before. Read at each contact", (m) => (m === '0' ? 'old' : m === 'b' ? 'b reach' : m === 'c' ? 'c step' : m)],
     ]) {
@@ -1697,6 +1699,7 @@ export class Lab {
     for (const { m, el: b } of this.ui.clothBtns ?? []) setClass(b, 'on', clothMode() === m);
     for (const { m, el: b } of this.ui.bearingBtns ?? []) setClass(b, 'on', (bearingOn() ? 'on' : '0') === m);
     for (const { m, el: b } of this.ui.flickBtns ?? []) setClass(b, 'on', (flickOn() ? 'on' : '0') === m);
+    for (const { m, el: b } of this.ui.presenceBtns ?? []) setClass(b, 'on', presenceMode() === m);
     for (const { m, el: b } of this.ui.feelBtns ?? []) setClass(b, 'on', feelMode() === m);
     for (const { m, el: b } of this.ui.comboBtns ?? []) setClass(b, 'on', comboMode() === m);
     for (const { m, el: b } of this.ui.counterBtns ?? []) setClass(b, 'on', counterMode() === m);

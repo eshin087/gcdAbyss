@@ -23,6 +23,7 @@ import { skirtSheet, tatterStrip, foldLines, ribbonCrease, lerp, sheetOffset, sh
  *   ribbon?        a narrow ribbon (tatterStrip) instead of a curved sheet; `fork` splits its tip;
  *                  `crease` = the drawn crease's phase (default seed × 0.7)
  *   floor?         rolling or falling, its ends stay over the grass (anim.js; a head ribbon, a long scarf)
+ *   pleat? (1), foldK? (1)  the drawn pleats' strength and the folds' depth (a smoother drape below 1)
  *   seed           the folds' and the tears' seed
  * `mats` = { face, back | null, hem, fade? }: the outer face, the inner face (a BackSide material, or null
  * for a ribbon in a DoubleSide one), the pale hem, the step between them. Returns the streamer record.
@@ -44,15 +45,15 @@ export function hangSheet({ joint, mesh }, parent, d, mats) {
     put(s1, foldLines(tatterStrip(L1, w1, { fork: !!d.fork, tip: true, curl: 0.12, seed: seed + 5 }), ribbonCrease(w1, cr + 1.3)), hf < 1 ? mats.hem : mats.face);
   } else {
     // drawn folds fanning down the sheet (as on the cloak's sheets, shroud.js)
-    const nF = Math.max(1, Math.round(w2 / 0.11)) + 0.5, ph = seed * 0.37;
+    const nF = Math.max(1, Math.round(w2 / 0.11)) + 0.5, ph = seed * 0.37, pk = d.pleat ?? 1, fk = d.foldK ?? 1;
     const wAt = (dd) => (dd < L0 ? lerp(w0, w1, dd / L0) : lerp(w1, w2, Math.min(1, (dd - L0) / L1)));
     const pleat = (d0) => (x, y, z, u, gy) => {
       const dd = d0 - gy, w = wAt(dd);
       const f = Math.PI * 2 * nF * (u / w + 0.5 + 0.05 * Math.sin(dd * 8 + ph * 1.7)) + ph + Math.PI;
-      return 0.5 + 0.62 * (Math.sin(f) + 0.3 * Math.sin(f * 2.3 + 1.7)) - 0.9 * Math.max(0, 1 - dd / 0.14);
+      return 0.5 + 0.62 * pk * (Math.sin(f) + 0.3 * Math.sin(f * 2.3 + 1.7)) - 0.9 * Math.max(0, 1 - dd / 0.14);
     };
-    put(s0, foldLines(skirtSheet(L0, w0, w1, d.wrap, 0.25, 0, seed, [0.004, 0.018, nF, ph]), pleat(0)), mats.face);
-    const R1 = d.wrap + 0.25 * L0, fold = [0.018, 0.04, nF, ph];
+    put(s0, foldLines(skirtSheet(L0, w0, w1, d.wrap, 0.25, 0, seed, [0.004 * fk, 0.018 * fk, nF, ph]), pleat(0)), mats.face);
+    const R1 = d.wrap + 0.25 * L0, fold = [0.018 * fk, 0.04 * fk, nF, ph];
     // the stretches down the lower segment: the face, the fade steps, the hem
     const fm = mats.fade ? [].concat(mats.fade) : [], ff = d.fadeFrom != null && fm.length ? [].concat(d.fadeFrom).slice(0, fm.length).map((f) => Math.min(f, hf)) : [];
     const tj = ff.length ? d.tear ?? 0.03 : 0, cuts = [0, ...ff, hf, 1], ms = [mats.face, ...fm.slice(0, ff.length), mats.hem];

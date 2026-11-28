@@ -26,8 +26,9 @@ export const HERO_LOOKS = Object.freeze({
   // the owner's costume reference 11 (2026-11-28, gear/ref11.js, ADR-291): the deep hood, the long cloak torn to
   // lavender rags, silver gauntlets and boots; the face in the hood's shadow by design (`hooded`: no lit twin)
   // `slash`: its slash line in lavender, not white-hot (slashFx.js reads it); its steel lights at `bladeLit` of
-  // today's light on the cut (player.js), so the swing does not flare white (the sword keeps its own colours)
-  ref11: Object.freeze({ id: 'ref11', name: 'Costume 11', loadout: REF11_LOADOUT, tint: REF11_TINT, hooded: true, slash: REF11_SLASH, bladeLit: 0.3 }),
+  // today's light on the cut (player.js), so the swing does not flare white (the sword keeps its own colours);
+  // `presence`: the look takes ?presence= (presence.js: wisps / sway / aura, none by default)
+  ref11: Object.freeze({ id: 'ref11', name: 'Costume 11', loadout: REF11_LOADOUT, tint: REF11_TINT, hooded: true, slash: REF11_SLASH, bladeLit: 0.3, presence: true }),
 });
 export const DEFAULT_LOOK = 'shroud';
 export const LOOK_IDS = Object.keys(HERO_LOOKS);

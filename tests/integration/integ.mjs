@@ -6486,6 +6486,56 @@ async function scenarioOffHand() {
 // facings every ending slash's middle (a thrust's start) lies within 0.9 m of where the blade passed in that swing
 // (the old `enemy` place hung it END.ahead out), its ends finite and its length within SWEEP.len. (d) the bearing: standing at
 // ease the head is lifted (hdX lower than with `?bearing=0`).
+// ================================================================== scenario: an outfit's presence (?presence=)
+// presence.js (ADR-291's fourth pass): wisps / sway / aura, only for a look that asks (costume 11). Each mode run
+// through the light chain to its finisher and a still beat: wisps spawn letters off the cloak's hem, the aura fires
+// one pulse on the finisher, the sway hangs a breeze and a wind push on the cloak's streamers (and takes them off
+// again), and nothing is built or spawned while off or on a look that does not ask; the rig stays finite.
+async function scenarioPresence() {
+  out('\n== scenario PRESENCE (an outfit\'s presence: ?presence=wisps|sway|aura, costume 11 only: presence.js) ==');
+  const PR = await imp('src/entities/player/presence.js');
+  const m0 = PR.presenceMode();
+  let last = null;
+  const run = (look, mode) => {
+    PR.setPresence(mode);
+    const G = (last = build({ heroLook: look }));
+    fightSetup(G);
+    const { game, input } = G, p = game.player, d = game.dragon;
+    p.debug.god = true;
+    p.debug.teleport(d.position.x + 14, d.position.z + 14);
+    p.yaw = Math.atan2(d.position.x - p.position.x, d.position.z - p.position.z);
+    aimAt(G);
+    let bad = 0, sway = 0;
+    for (let i = 0, N = Math.round(3.4 / DT); i < N; i++) {
+      if (i % Math.round(0.42 / DT) === 0 && i < Math.round(2.0 / DT)) input.click(0);
+      G.tick(DT);
+      for (const S of p.rig.streamers) {
+        if (S.windPush && S.breeze) sway++;
+        for (const j of S.segs) if (!Number.isFinite(j.rotation.x + j.rotation.y + j.rotation.z)) bad++;
+      }
+    }
+    const P = p.presence;
+    return { spawned: P.spawned, pulses: P.pulses, built: !!P.lb, sway, bad, mode: P.mode() };
+  };
+  try {
+    const r = {};
+    for (const m of PR.PRESENCE_IDS) r[m] = run('ref11', m);
+    const other = run('shroud', 'aura');
+    for (const m of PR.PRESENCE_IDS) out(`   ref11 ${m}: ${r[m].spawned} letters, ${r[m].pulses} pulses, sway frames ${r[m].sway}, built ${r[m].built}, bad ${r[m].bad}`);
+    out(`   shroud with ?presence=aura: ${other.spawned} letters, ${other.pulses} pulses, built ${other.built}`);
+    assert(PR.PRESENCE_IDS.join() === 'off,wisps,sway,aura' && r.off.mode === 'off' && !r.off.built && r.off.spawned === 0 && r.off.sway === 0,
+      `off: nothing built, nothing spawned, no sway (${r.off.spawned} letters, built ${r.off.built})`);
+    assert(r.wisps.spawned > 40 && r.wisps.pulses === 0 && r.wisps.sway === 0, `wisps: letters drift off the hem (${r.wisps.spawned} > 40), no pulse, no sway`);
+    assert(r.aura.pulses === 1 && r.aura.spawned > 40 && r.aura.sway === 0, `aura: one pulse on the chain's finisher (${r.aura.pulses}), ${r.aura.spawned} letters`);
+    assert(r.sway.sway > 0 && r.sway.spawned === 0 && !r.sway.built, `sway: the cloak's streamers take the breeze and the wind (${r.sway.sway} frames), no letters`);
+    assert(other.mode === 'off' && other.spawned === 0 && !other.built, `a look that does not ask (today's): ?presence= does nothing (${other.spawned} letters)`);
+    assert(Object.values(r).every((x) => x.bad === 0), 'the cloak finite in every mode');
+  } finally {
+    PR.setPresence(m0);
+  }
+  return last;
+}
+
 async function scenarioHeroPolish() {
   out('\n== scenario HEROPOLISH (the cloak held calm, the chiburi, the slash on the sword, the bearing: ADR-292) ==');
   const CL = await imp('src/entities/player/clothCalm.js');
@@ -15974,6 +16024,7 @@ const SCENARIOS = {
   feel: scenarioFeel,
   offhand: scenarioOffHand,
   heropolish: scenarioHeroPolish,
+  presence: scenarioPresence,
   streakfx: scenarioStreakFx,
   timerip: scenarioTimeRip,
   swordmystic: scenarioSwordMystic,

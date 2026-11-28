@@ -4993,8 +4993,9 @@ export class HeroAnimator {
       let parentA = 0, parentB = 0;
       for (let s = 0; s < 2; s++) {
         const c = st[s];
-        const lag = COAT_LAG[s] * (1 + COAT_LAG_V * vs);
-        const fl = (D.flap ? 0.05 : D.flare ?? COAT_FLARE) + (breeze + (D.idleFlare ?? IDLE_FLARE[i] ?? 0) * (s ? 0.7 : 1)) * still + Math.sin(this.time * 9 + i * 1.7 + s * 1.3) * 0.07 * flut + UPDRAFT_COAT * this.updraft * (s ? 1.3 : 1);
+        // (`lagK` / `flutK`: a panel's own share of the swing and the flutter; a short fitted skirt barely moves)
+        const lag = COAT_LAG[s] * (1 + COAT_LAG_V * vs) * (D.lagK ?? 1);
+        const fl = (D.flap ? 0.05 : D.flare ?? COAT_FLARE) + (breeze + (D.idleFlare ?? IDLE_FLARE[i] ?? 0) * (s ? 0.7 : 1)) * still + Math.sin(this.time * 9 + i * 1.7 + s * 1.3) * 0.07 * flut * (D.flutK ?? 1) + UPDRAFT_COAT * this.updraft * (s ? 1.3 : 1);
         let hx = _g.x + nx * fl - _v.x * lag;
         let hy = _g.y - _v.y * lag * 0.5;
         let hz = _g.z + nz * fl - _v.z * lag;
@@ -5304,7 +5305,7 @@ export class HeroAnimator {
       // … and its own billow (`breeze`: [extra out, rate]; a streamer without it is untouched): a slow
       // swell of the flare while the wearer is near still, gone at a run (Halcyon's cape hovering)
       const bz = S.breeze;
-      const bw = bz ? 1 - Math.min(1, sp / 4) : 0;
+      const bwAll = 1 - Math.min(1, sp / 4), bw = bz ? bwAll : 0;
       const so = (S.out ?? STREAM_OUT) + this.updraft * UPDRAFT_STREAM[0] * lerp(UPDRAFT_STREAM[1], 1, right) + (bz ? bz[0] * bw * (0.5 + 0.5 * Math.sin(this.time * bz[1] + i * 1.3)) : 0);
       // a sheet's own weight: `lag` < 1 trails less (the heavy cloak hangs ~40° back at a run, where
       // a light ribbon streams out level)
@@ -5322,7 +5323,9 @@ export class HeroAnimator {
         const c = st.segs[s], j = S.segs[s];
         const lag = STREAM_LAG[s] * lg * (1 + 0.08 * sp);
         const wob = (0.08 + 0.12 * Math.min(1, sp / 4) + 0.1 * bw) * Math.sin(ph + s * 1.4);
-        _v.set(ox * so - vel.x * lag - oz * wob, -1 - vel.y * lag * 0.5 + Math.abs(wob) * 0.5, oz * so - vel.z * lag + ox * wob);
+        // (`windPush` [x, z]: the wind on a heavy cloak's hem, more on the lower segment; presence.js sets it)
+        const wp = S.windPush, wk = wp ? (s ? 1 : 0.4) * bwAll : 0;
+        _v.set(ox * so - vel.x * lag - oz * wob + (wp ? wp[0] * wk : 0), -1 - vel.y * lag * 0.5 + Math.abs(wob) * 0.5, oz * so - vel.z * lag + ox * wob + (wp ? wp[1] * wk : 0));
         _v.normalize().applyQuaternion(_qInv2.copy(_q0).invert());
         if (tumble > 0) {
           // tumbling (a roll, a fall, lying down): the cloth stays wrapped along the body instead of

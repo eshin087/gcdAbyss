@@ -5,6 +5,7 @@ import {
 } from '../heroGeo.js';
 import { hangSheet, panelSkirt } from './sheet.js';
 import { buildFreeHand } from './hands.js';
+import { shapedHand } from './handShape.js';
 
 // OUTFIT OPTION "Costume 11" (gear/looks.js `ref11`, ADR-291; the owner's "COSTUME REFERENCE / 11", 2026-11-28:
 // "Make the character where this design from the reference art. Make it have the same look and vibe to test out
@@ -18,14 +19,14 @@ import { buildFreeHand } from './hands.js';
 // stone `facing`. The owner's third pass (2026-11-28, the sheet "LAYERED WANDERER / ALTERNATIVE 13": "more like
 // this"): silver only on the gauntlets (and the boots, the belt and the clasp, as the sheet draws them); no strap,
 // no line down the back; the skirts the tunic's own black cloth, so they do not read as a second cloak; the mantle
-// over the shoulders in three torn tiers; the long cloak one wide drape whose black passes through two dusk steps
-// (`collarIn`, `collar`) into the lavender rags; gold hair at the sides of the shadowed face; the free hand a
+// over the shoulders in three torn tiers; the long cloak one wide drape whose black passes through a dusk step
+// (`collar`) into the lavender rags; gold hair at the sides of the shadowed face; the free hand a
 // closed gauntlet fist. The sword draws in armor / trim / leather / blade / bladeTip / gem: none is tinted.
 //   head   ref11.hood    the deep hood (hidesHair, shadowsFace)
 //   chest  ref11.tunic   the wrap tunic and its crossing edge, the belt and its stone
 //   arms   ref11.arms    loose sleeves, the silver gauntlets (both hands in silver)
 //   legs   ref11.legs    trousers, the silver boots
-//   waist  ref11.skirt   the tunic's long skirts, its own black
+//   waist  ref11.skirt   short fitted skirts in the trousers' charcoal
 //   back   ref11.cloak   the tiered mantle, the clasp, REF11_SHEETS (the long cloak)
 // Heights in comments are metres in the idle stance. Built from heroGeo.js sheets and shells, nothing sculpted.
 
@@ -97,20 +98,20 @@ function buildTunic({ spine, M, BODY, REST, mesh }) {
 }
 
 // ---------------------------------------------------------------- arms: loose sleeves, silver gauntlets
-/** The free hand closed as a gauntlet's fist, in fore space (the arm down -Y, the wrist at y = -len, the back of the
- *  left hand +X, the thumb +Z), shifted into the wrist joint's space when the rig has one (`wp`): the sword hand's
- *  four finger rolls and knuckle ridge (gripFist) turned so they stack front to back under the wrist, the back of
- *  the hand over them, the thumb down the front of the index finger (the owner, 2026-11-28: "his left hand doesn't
- *  look like a fist"; the default free hand is a fist by its overall shape only, a smooth lump in plate). */
-function gauntletFist(len, HK, wp) {
-  const F = gripFist(HK), y0 = -len, cy = y0 - 0.062 * HK;
-  const at = (g) => g.rotateX(Math.PI).translate(0.002, cy, 0.004);
-  const back = ellipsoidGeometry(0.03 * HK, 0.044 * HK, 0.05 * HK, { widthSegs: 10, heightSegs: 6 }).translate(0.01 * HK, y0 - 0.03 * HK, 0.004);
-  const thumb = sub(ellipsoidGeometry(0.014 * HK, 0.03 * HK, 0.013 * HK, { widthSegs: 8, heightSegs: 5 }).translate(-0.006 * HK, cy + 0.006, 0.048 * HK), 1);
-  const g = mergeGeometries([at(F.fingers), at(F.ridge), back, thumb]);
+/** The free hand as an open gauntlet, in fore space (the arm down -Y, the wrist at y = -len, the back of the left
+ *  hand +X, the thumb +Z), shifted into the wrist joint's space when the rig has one (`wp`): the reshaped hand's
+ *  palm, its four jointed fingers a little curled and its thumb (handShape.js), drawn larger than the default hand
+ *  so the plated fingers read from the game camera. (The owner, 2026-11-28: the fist before "doesn't look like a
+ *  fist", then the fist made of finger rolls "looks very stubby from the player's perspective ... make it show more
+ *  like a hand": an open hand, the owner's pick of three.) */
+export const REF11_HAND = { k: 1.22, curl: 0.32 };
+function gauntletHand(len, wp) {
+  const H = shapedHand(len, 1, REF11_HAND.k, REF11_HAND.curl);
+  const g = mergeGeometries([H.palm, H.fingers, H.tips, H.thumb]);
   if (wp) g.translate(-wp.x, -wp.y, -wp.z);
   return g;
 }
+
 function buildArms(ctx) {
   const { arms, sword, M, DIM, BODY, mesh } = ctx;
   const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
@@ -144,7 +145,7 @@ function buildArms(ctx) {
   const open = out.offHand?.open;
   if (open) {
     open.geometry.dispose();
-    open.geometry = gauntletFist(DIM.foreArm - 0.03, HK, arms.L.wrist?.position);
+    open.geometry = gauntletHand(DIM.foreArm - 0.03, arms.L.wrist?.position);
   }
   return out;
 }
@@ -182,16 +183,17 @@ function buildLegs({ pelvis, legs, M, DIM, BODY, mesh }) {
 }
 
 // ---------------------------------------------------------------- waist: the layered skirts
-/** The tunic's skirts on the pelvis (panelSkirt), in its own black (`mat` 'shirt'): the front pair long and
- *  overlapping (the wrap), cut on a slant; the sides shorter; the back pair short under the cloak. Plain hems, no
- *  rags, no lavender (the owner, 2026-11-28: "make his 1st layer not look like another cloak layer"). */
+/** The tunic's skirts on the pelvis (panelSkirt): short and fitted, to above the knee, in the trousers' charcoal
+ *  (`mat` 'pants'), plain hems, slow to swing and barely fluttering (`lagK`, `flutK`: anim.js _coat), so only the
+ *  cloak flows (the owner, 2026-11-28: "when i'm running left the bottom layer looks like another layer of the
+ *  cloak": they were long, black and swung like it). */
 export const REF11_PANELS = [
-  { az: 0.4, w: [0.15, 0.19, 0.24], len: [0.28, 0.34], strips: [], fork: [], out: 0.006, flare: 0.16, skew: 0.8, slant: 0.06, jag: 0.008, mat: 'shirt' },
-  { az: -0.4, w: [0.15, 0.19, 0.24], len: [0.28, 0.36], strips: [], fork: [], out: 0.01, flare: 0.16, skew: -0.8, slant: 0.06, jag: 0.008, mat: 'shirt' },
-  { az: 1.35, w: [0.15, 0.19, 0.24], len: [0.27, 0.27], strips: [], fork: [], out: 0, flare: 0.36, jag: 0.008, mat: 'shirt' },
-  { az: -1.35, w: [0.15, 0.19, 0.24], len: [0.27, 0.27], strips: [], fork: [], out: 0, flare: 0.36, jag: 0.008, mat: 'shirt' },
-  { az: 2.6, w: [0.16, 0.21, 0.26], len: [0.25, 0.18], strips: [], fork: [], out: 0.006, flare: 0.3, jag: 0.008, mat: 'shirt' },
-  { az: -2.6, w: [0.16, 0.21, 0.26], len: [0.25, 0.18], strips: [], fork: [], out: 0.006, flare: 0.3, jag: 0.008, mat: 'shirt' },
+  { az: 0.4, w: [0.15, 0.18, 0.21], len: [0.25, 0.17], strips: [], fork: [], out: 0.004, flare: 0.06, cone: 0.12, skew: 0.8, slant: 0.04, jag: 0.006, mat: 'pants', lagK: 0.45, flutK: 0.25 },
+  { az: -0.4, w: [0.15, 0.18, 0.21], len: [0.25, 0.18], strips: [], fork: [], out: 0.008, flare: 0.06, cone: 0.12, skew: -0.8, slant: 0.04, jag: 0.006, mat: 'pants', lagK: 0.45, flutK: 0.25 },
+  { az: 1.35, w: [0.15, 0.18, 0.21], len: [0.24, 0.15], strips: [], fork: [], out: 0, flare: 0.08, cone: 0.12, jag: 0.006, mat: 'pants', lagK: 0.45, flutK: 0.25 },
+  { az: -1.35, w: [0.15, 0.18, 0.21], len: [0.24, 0.15], strips: [], fork: [], out: 0, flare: 0.08, cone: 0.12, jag: 0.006, mat: 'pants', lagK: 0.45, flutK: 0.25 },
+  { az: 2.6, w: [0.16, 0.19, 0.22], len: [0.22, 0.12], strips: [], fork: [], out: 0.004, flare: 0.08, cone: 0.12, jag: 0.006, mat: 'pants', lagK: 0.45, flutK: 0.25 },
+  { az: -2.6, w: [0.16, 0.19, 0.22], len: [0.22, 0.12], strips: [], fork: [], out: 0.004, flare: 0.08, cone: 0.12, jag: 0.006, mat: 'pants', lagK: 0.45, flutK: 0.25 },
 ];
 
 function buildSkirt(ctx) {
@@ -199,26 +201,38 @@ function buildSkirt(ctx) {
 }
 
 // ---------------------------------------------------------------- back: the tiered mantle, the clasp, the long cloak
-/** The cloak's sheets (hangSheet, on the chest): one down the middle of his back and one each side, hung close under
- *  the mantle and widening down to a broad hem (the sheet's cloak is one wide drape), the side sheets overlapping
- *  the middle one so the hem runs on as one, all three the same length, to mid-calf with their torn points (no
- *  sheet over the flanks under the arms: there the thighs and the free hand went into it). Black, then two dusk
- *  steps from `fadeFrom` of the lower sheet (`collarIn`, `collar`; softly ragged lines) into the lavender rags from
- *  `hemFrom` (a torn line). `inMax`: the roots held a little out, the lower halves free to wrap in so a roll lifts
- *  them off the grass (`floor`). `strips`: the torn points' lengths (m). */
+/** The cloak's sheets (hangSheet, on the chest): one down the middle of his back and one each side, all three on
+ *  ONE cone (the same centre in front of the root, the same curve and flare: the side sheets' roots stand round
+ *  that circle at ±`REF11_CLOAK.side` rad, a centimetre outside it so where they overlap the middle one they lie
+ *  over it), so the cloak reads as one drape (the owner, 2026-11-28: parts "protruding" from the middle of the back
+ *  like feathers: each sheet fanned out its own pleats on its own curve), wrapping round to his sides so it shows
+ *  from the side and the front. The same flare (`out`) for all three; soft pleats (`pleat`, `foldK`). Black, then
+ *  a dusk step from `fadeFrom` of the lower sheet (`collar`, the coat's own ink part: no line where it turns) into the lavender from `hemFrom` along
+ *  a gently torn line (`tear`), a few short torn points. `inMax`: the roots held a little out, the lower halves
+ *  free to wrap in so a roll lifts them off the grass (`floor`). */
+export const REF11_CLOAK = { y: 0.2, z: -0.155, R: 0.32, side: 0.68 };
+const cloakSheet = (phi, w, strips, fork, seed) => {
+  const C = REF11_CLOAK, R = phi ? C.R + 0.01 : C.R, cz = C.z + C.R;
+  return {
+    at: [Math.sin(phi) * R, C.y, cz - Math.cos(phi) * R], ry: Math.PI - phi, w, len: [0.48, 0.43], out: 0.08, wrap: R, lag: 0.42, max: 1.35,
+    inMax: phi ? [-0.06, 0.12] : [-0.04, 0.3], floor: true, fadeFrom: [0.14], hemFrom: 0.62, tear: 0.016, pleat: 0.45, foldK: 0.5,
+    strips, fork, seed,
+  };
+};
 export const REF11_SHEETS = [
-  { at: [0, 0.2, -0.155], ry: Math.PI, w: [0.3, 0.4, 0.52], len: [0.48, 0.43], out: 0.08, wrap: 0.32, lag: 0.42, max: 1.35, inMax: [-0.04, 0.3], floor: true, fadeFrom: [0.14, 0.38], hemFrom: 0.64, strips: [0.14, 0.09, 0.17, 0.1, 0.15, 0.11], fork: [0, 1, 0, 0, 1, 0], seed: 7 },
-  { at: [0.15, 0.19, -0.1], ry: Math.PI - 0.72, w: [0.15, 0.24, 0.32], len: [0.48, 0.43], out: 0.13, wrap: 0.26, lag: 0.42, max: 1.35, inMax: [-0.06, 0.12], floor: true, fadeFrom: [0.14, 0.38], hemFrom: 0.64, strips: [0.13, 0.09, 0.15], fork: [0, 1, 0], seed: 13 },
-  { at: [-0.15, 0.19, -0.1], ry: Math.PI + 0.72, w: [0.15, 0.24, 0.32], len: [0.48, 0.43], out: 0.13, wrap: 0.26, lag: 0.42, max: 1.35, inMax: [-0.06, 0.12], floor: true, fadeFrom: [0.14, 0.38], hemFrom: 0.64, strips: [0.15, 0.08, 0.13], fork: [1, 0, 0], seed: 19 },
+  cloakSheet(0, [0.3, 0.4, 0.5], [0.08, 0.06, 0.09, 0.07], [0, 1, 0, 0], 7),
+  cloakSheet(REF11_CLOAK.side, [0.2, 0.27, 0.34], [0.07, 0.06], [0, 1], 13),
+  cloakSheet(-REF11_CLOAK.side, [0.2, 0.27, 0.34], [0.06, 0.07], [1, 0], 19),
 ];
 /** The mantle over the shoulders: three short capes one over another (the sheet's layered hood and shoulders), each
- *  a shell open at the throat with a torn lower edge, the lowest the widest and longest, down over the upper arms
- *  (world idle heights; rx / rz the half widths, cz the centre's shift, gap the opening at the throat). Each tier
- *  starts outside the one under it where they overlap, so every torn edge shows. `tear`: how deep its points go. */
+ *  a shell open at the throat with a scalloped lower edge (soft rounded lobes, `lobes` round it: points read as
+ *  feathers), the lowest the widest and longest, down over the upper arms (world idle heights; rx / rz the half
+ *  widths, cz the centre's shift, gap the opening at the throat). Each tier starts outside the one under it where
+ *  they overlap, so every edge shows. `tear`: how deep its scallops go. */
 export const REF11_MANTLE = [
-  { tear: 0.034, ph: 0, rings: [[1.27, 0.302, 0.214, -0.03, 0.12], [1.35, 0.292, 0.206, -0.026, 0.09], [1.42, 0.262, 0.19, -0.02, 0.07]] },
-  { tear: 0.028, ph: 1, rings: [[1.34, 0.314, 0.224, -0.026, 0.1], [1.41, 0.288, 0.207, -0.022, 0.08], [1.47, 0.222, 0.166, -0.012, 0.056]] },
-  { tear: 0.024, ph: 2, rings: [[1.41, 0.3, 0.215, -0.02, 0.085], [1.46, 0.262, 0.19, -0.012, 0.064], [1.495, 0.19, 0.146, -0.004, 0.046], [1.522, 0.12, 0.1, 0, 0.034]] },
+  { tear: 0.024, ph: 0, lobes: 7, rings: [[1.27, 0.302, 0.214, -0.03, 0.12], [1.35, 0.292, 0.206, -0.026, 0.09], [1.42, 0.262, 0.19, -0.02, 0.07]] },
+  { tear: 0.02, ph: 1, lobes: 6, rings: [[1.34, 0.314, 0.224, -0.026, 0.1], [1.41, 0.288, 0.207, -0.022, 0.08], [1.47, 0.222, 0.166, -0.012, 0.056]] },
+  { tear: 0.018, ph: 2, lobes: 5, rings: [[1.41, 0.3, 0.215, -0.02, 0.085], [1.46, 0.262, 0.19, -0.012, 0.064], [1.495, 0.19, 0.146, -0.004, 0.046], [1.522, 0.12, 0.1, 0, 0.034]] },
 ];
 
 function buildCloak(ctx) {
@@ -229,11 +243,11 @@ function buildCloak(ctx) {
     for (const T of REF11_MANTLE) {
       const rings = T.rings.map(([y, rx, rz, cz, gap]) => ({ y: yCh(y), rx, rz, cz, gap }));
       const g = foldLines(sub(shellGeometry(rings, { sub: 2, cols: COLS }), T.ph & 1), (x, y, z, u) => 0.5 + 0.6 * Math.sin(u * 30 + y * 14 + T.ph * 1.7));
-      // its torn lower edge: points of three depths round it, a different run on each tier
+      // its scalloped lower edge: rounded lobes round it, each tier's set turned a little from the one under it
       const p = g.attributes.position;
       for (let i = 0; i <= COLS; i++) {
-        const k = (i + T.ph) % 3;
-        p.setY(i, p.getY(i) + (k === 0 ? -T.tear : k === 1 ? T.tear * 0.3 : -T.tear * 0.45));
+        const c = Math.cos((i / COLS) * Math.PI * 2 * T.lobes + T.ph * 1.9);
+        p.setY(i, p.getY(i) - T.tear * (0.5 + 0.5 * c) * (0.75 + 0.25 * Math.abs(c)));
       }
       g.computeVertexNormals();
       mesh(chest, g, M.coat);
@@ -255,7 +269,7 @@ function buildCloak(ctx) {
     mesh(cl, mergeGeometries([boxGeometry(0.004, 0.016, 0.003, -0.003, 0, 0.011), boxGeometry(0.01, 0.003, 0.003, 0.001, 0.004, 0.011)]), M.welt);
   }
   const streamers = REF11_SHEETS.map((d) => {
-    const S = hangSheet(ctx, chest, d, { face: M.coat, back: M.lining, hem: M.hem, fade: [M.collarIn, M.collar] });
+    const S = hangSheet(ctx, chest, d, { face: M.coat, back: M.lining, hem: M.hem, fade: [M.collar] });
     // the torn points along its hem, rigid on the lower sheet, in the lavender
     const [w0, , w2] = d.w, [L0, L1] = d.len, n = d.strips.length;
     const R1 = d.wrap + 0.25 * L0, R2 = R1 + 0.25 * L1, wr = w2 / Math.max(1, n);
@@ -276,7 +290,7 @@ export const REF11_ITEMS = [
   { id: 'ref11.tunic', slot: 'chest', name: 'Wrap Tunic and Plate Belt', build: buildTunic },
   { id: 'ref11.arms', slot: 'arms', name: 'Loose Sleeves and Silver Gauntlets', build: buildArms },
   { id: 'ref11.legs', slot: 'legs', name: 'Silver Plated Boots', build: buildLegs },
-  { id: 'ref11.skirt', slot: 'waist', name: 'Long Tunic Skirts', build: buildSkirt },
+  { id: 'ref11.skirt', slot: 'waist', name: 'Short Fitted Skirts', build: buildSkirt },
   { id: 'ref11.cloak', slot: 'back', name: 'Tiered Mantle and Long Torn Cloak', build: buildCloak },
 ];
 
@@ -286,7 +300,7 @@ export const REF11_LOADOUT = Object.freeze({
 });
 
 /** Its colours (model.js tintHero, this rig only): the cloak and the hood today's black cloth (`coat` untinted);
- *  a near-black tunic, its skirts and trousers; the cloak's two dusk steps and its lavender rags (the owner: not
+ *  a near-black tunic, its skirts and trousers; the cloak's dusk step and its lavender rags (the owner: not
  *  near white at the bottom, a subtle change); bright silver plate (`spike`: gauntlets, boots, belt, clasp) and its
  *  lines (`bevel`); the clasp's mark near black (`welt`); the belt's green stone self-lit (`facing`). */
 /** Its slash line's colours (slashFx.js, HERO_LOOKS.ref11.slash): the flash, the line, what it cools to, the heavy
@@ -298,12 +312,13 @@ export const REF11_SLASH = Object.freeze({
 
 export const REF11_TINT = {
   shirt: { fill: [0.075, 0.07, 0.1] },
-  pants: { fill: [0.055, 0.055, 0.07] },
-  collarIn: { fill: [0.125, 0.11, 0.16] },
-  collar: { fill: [0.17, 0.14, 0.24] },
+  pants: { fill: [0.12, 0.115, 0.13] },
+  // the cloak's dusk step: `collar`, the coat's own ink part, so the art pass draws no line where the black turns
+  // to it (a step in another part drew a line across the cloak: another layer's edge)
+  collar: { fill: [0.165, 0.135, 0.23] },
+  welt: { fill: [0.07, 0.07, 0.08] },
   hem: { fill: [0.27, 0.22, 0.38], ink: [0.5, 0.42, 0.68] },
   spike: { fill: [0.5, 0.52, 0.58], sub: 0.55, spec: [1.3, 22] },
   bevel: { fill: [0.72, 0.74, 0.82] },
-  welt: { fill: [0.07, 0.07, 0.08] },
   facing: { fill: [0.12, 0.6, 0.22], ink: [0.4, 1.35, 0.5], inkGlow: 0.5, glowK: 0.7 },
 };
