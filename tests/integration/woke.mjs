@@ -1095,7 +1095,7 @@ async function scenarioPace() {
       if (ST.gear) d.debug.setGear(ST.gear, true);
       Math.random = mulberry32(seed * 7 + ph + (ST.gear === 2 ? 101 : 0));
       const flashes = [], acts = [], cats = {}, busyT = [];
-      let frames = 0, peakFire = 0;
+      let frames = 0, peakFire = 0, bent = 0;
       const s0 = { ...(d.brain.stats ?? {}) };
       G.watch = (n, e) => {
         if (n === 'combat:flash' && (e?.source === 'dragon' || e?.source === 'world')) flashes.push([game.time, e.tell, e.attack, e.source]);
@@ -1119,6 +1119,13 @@ async function scenarioPace() {
         }
         game.mouseGround.set(d.position.x, 0, d.position.z);
         G.tick(DT);
+        // (THE BEND, phase 2: a parried shot sent back makes him bend under it, and he cues nothing meanwhile. Since
+        // one parry (ADR-279) every parried shot comes back, so the bend is the hero's answer, not his pace: its
+        // time is busy for the gaps and left out of his cues a minute)
+        if (d.brain.react?.kind === 'bend') {
+          bent += DT;
+          if (frames % 6 === 0) busyT.push(game.time);
+        }
         peakFire = Math.max(peakFire, game.fx.fire.count ?? 0);
         if (d.brain.pendingPhase > ph) d.brain.pendingPhase = 0;
         // (his bar must not run out under the defender's riposte-less guard: kept full)
@@ -1148,7 +1155,7 @@ async function scenarioPace() {
       for (const x of flashes) if (answer(x[1]) === 'dodge') dodges++;
       const st = d.brain.stats ?? {};
       const dlt = (k) => (st[k] ?? 0) - (s0[k] ?? 0);
-      rows.push({ seed, ph: si, tag: ST.tag, T, cues: flashes.length, perMin: (flashes.length * 60) / T, gapMax, gapAt, cats, picks: acts.length, conflicts, conflictAt, dodge: dodges / (flashes.length || 1), holds: dlt('holds'), feints: dlt('feints'), links: dlt('links'), peakFire });
+      rows.push({ seed, ph: si, tag: ST.tag, T, cues: flashes.length, perMin: (flashes.length * 60) / Math.max(1, T - bent), bent, gapMax, gapAt, cats, picks: acts.length, conflicts, conflictAt, dodge: dodges / (flashes.length || 1), holds: dlt('holds'), feints: dlt('feints'), links: dlt('links'), peakFire });
     }
   }
   out(`   ${SECS} s per phase, seeds ${SEEDS.join(', ')}`);

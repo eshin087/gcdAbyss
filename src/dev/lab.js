@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config.js';
-import { DEFENSE, TELL } from '../combat/rules.js';
+import { DEFENSE, TELL, PARRY_KIND, setParryKind } from '../combat/rules.js';
 import { ARTS } from '../entities/player/flurry.js';
 import { el, setText, setClass, button, slider, section } from './labDom.js';
 import { injectLabStyle } from './labStyle.js';
@@ -1390,6 +1390,12 @@ export class Lab {
       this._syncCutBtns();
     });
     this.ui.dbreadBtn.title = "the parry -> deathblow exchange made readable (?dbread=; ADR-264): a the break (he is thrown open, reeling, and the hero holds a beat before he steps in), b space (the hero strikes from 1.3 m and every blow drives him back), c a clean contact (the contact's flash smaller and off the wound, the exit burst thinner, his white hurt flash dim), all the three, 0 as before. Read at the parry";
+    this.ui.parryKindBtn = button(stkGrid, `parry ${PARRY_KIND.mode}`, () => {
+      const M = PARRY_KIND.opts;
+      setParryKind(M[(M.indexOf(PARRY_KIND.mode) + 1) % M.length]);
+      this._syncCutBtns();
+    });
+    this.ui.parryKindBtn.title = "the parry (?parry=; ADR-279): one, every parry is a perfect parry (its look, freeze and rewards) anywhere in the 0.22 s window; two, as before: a press 0.20 - 0.22 s early is a plain parry";
     this.ui.dbLockBtn = button(stkGrid, `dbLock ${dbLockMode()}`, () => {
       const M = DB_LOCK.opts;
       setDbLock(M[(M.indexOf(dbLockMode()) + 1) % M.length]);
@@ -1715,6 +1721,7 @@ export class Lab {
     if (this.ui.dbfxBtn) this.ui.dbfxBtn.textContent = `dbfx ${getDbFx()}`;
     if (this.ui.dbreadBtn) this.ui.dbreadBtn.textContent = `dbread ${dbReadMode()}`;
     if (this.ui.dbLockBtn) this.ui.dbLockBtn.textContent = `dbLock ${dbLockMode()}`;
+    if (this.ui.parryKindBtn) this.ui.parryKindBtn.textContent = `parry ${PARRY_KIND.mode}`;
     if (this.ui.strikeGapBtn) this.ui.strikeGapBtn.textContent = `strikeGap ${strikeGapMode()}`;
     if (this.ui.parryClashBtn) this.ui.parryClashBtn.textContent = `parryClash ${parryClashMode()}`;
     if (this.ui.blueTellBtn) this.ui.blueTellBtn.textContent = `blueTell ${blueTellMode()}`;

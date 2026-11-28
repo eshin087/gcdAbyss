@@ -8151,6 +8151,28 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   guard mashed through a combo, and (h), a perfect parry of Falling Ash under both modes. Not filmed: the visible
   change is a combo where a lock was.
 
+## ADR-279 — One parry: every parry is a perfect parry (`?parry=one|two`) (2026-11-28)
+
+- **Context:** the owner: not every parry shows the parry spark, and parries should read clearly. An audit wrapping
+  the effects over a fight found no missing spawn. But there were two parries: a perfect one (pressed 0 - 0.20 s
+  before the blow; since ADR-227 nearly every parry) drawing the small spark spit and no clash burst
+  (ADR-264's `?parryClash=c`), and a plain one (0.20 - 0.22 s) that still drew the big clash. Asked the difference,
+  the owner said: keep one type of parry, so the parry's look happens on every parry.
+- **Decision:** `rules.js` `PARRY_KIND` (`?parry=one|two`, the Lab's `parry`), default `one`: `perfectParryWindow()`
+  is the whole `DEFENSE.parryWindow`, so every parry is perfect: its look, its freeze and its rewards (posture x1.5,
+  the counter cut, a shot sent back, a count toward the deathblow). `two` is the parry before. Player.js reads it
+  at the parry; `DEFENSE.perfectParryWindow` (0.2 s) stays the number `two` uses.
+- **Consequences:** a press 0.20 - 0.22 s early now gets the perfect parry's rewards too (it was a 0.02 s band).
+  The scenarios that press a plain parry on purpose (a perfect one would lock the blades, break him or send a shot
+  back) run with `two`: duel `clash`, `parryfx`, `streak`, `impact`, `moments`, `perfect`, `deathblow`, `flare`; asc
+  `flare`, `shots`, `lantern`, `clash`; fox `clones`; integ `timestep`, `bullets`; lord `spells` (also where `fxlooks` replays it), `flare`. New duel
+  `oneparry` checks both modes. Two bosses read a perfect parry, and the owner kept both outcomes (asked after CI
+  showed them): Bai Wuji's barrier opens for 6 s on every parry (its cracks, two plain parries, are `two`'s only;
+  veil `barrier` checks both), and every parried shot of Xin Yi's flies back (phase 2: he Bends under it). Woke
+  `pace` counts the Bend as busy time and leaves it out of his cues a minute: it is the hero's answer, not his pace.
+  How the one parry LOOKS (the spark spit is small next to the boss's guard) is still
+  the owner's call: options to come.
+
 ## ADR-285 — The Last Foundry and the False Saint: a tenth level, a four-phase duelist, four move handlers on one routing contract (2026-11-28)
 
 - **Context:** the owner asked for a new boss, "the false saint", drawn after their concept sheet (four milestones of a

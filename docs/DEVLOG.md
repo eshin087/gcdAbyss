@@ -159,6 +159,10 @@ to cancel it; the streak's flurry teleports gcd with no cue.
 - **Also on main, fixed here:** duel `parryfx`'s "ten in a row: at most 48 sparks" failed on main too (51): it
   reads the live hero's streak through `?parryGrow=a` (cap 104 from tier 1). It now asks for the base spit (`grow: '0'`).
 - **The parry press and the parry sparks:** a second PR (`fix/parry-press`, ADR-275).
+- **One parry (ADR-279; `player/one-parry`, stacked on this PR):** asked the difference between a parry and a perfect
+  parry (0 - 0.20 s vs 0.20 - 0.22 s early; only the perfect one pays posture x1.5, the counter cut, a returned shot,
+  the deathblow's count and the freeze), the owner said keep one type. `?parry=one`, the default: every parry is
+  perfect. The plain-parry scenarios run with `two`; new duel `oneparry`. The parry's look itself is still open.
 - **Checked:** duel `deathblow` (new (g), (h)), `moments`, `clash`, `training`; fox `training`; asc `bare`; the full
   `npm test`.
 - **Open / next:** the flurry's opening blink. The owner means the START: right after the perfect dodge he vanishes

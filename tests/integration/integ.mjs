@@ -15861,6 +15861,24 @@ const SCENARIOS = {
   // (last: its Math.random draws shift no other scenario's seeded run)
   pawtells: scenarioPawTells,
 };
+// (one parry, ADR-279: ?parry=one, the default, makes every parry perfect. These scenarios press a PLAIN parry on purpose
+// (a perfect one would lock the blades, break him, or send a shot back): they run with ?parry=two)
+{
+  const RULES = await imp('src/combat/rules.js');
+  for (const k of ['timestep', 'bullets']) {
+    const f = SCENARIOS[k];
+    if (typeof f !== 'function') continue;
+    SCENARIOS[k] = async () => {
+      const m0 = RULES.PARRY_KIND.mode;
+      RULES.setParryKind('two');
+      try {
+        return await f();
+      } finally {
+        RULES.setParryKind(m0);
+      }
+    };
+  }
+}
 const runs = [];
 const OPT_IN = new Set(['probe', 'strategy', 'wyrmaudit', 'wyrmanatomy', 'wyrmhead', 'wyrmmotion']); // run only when named
 // GCD_SKIP: scenarios left out of `all` because the caller runs them beside this process

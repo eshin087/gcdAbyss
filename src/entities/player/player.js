@@ -3,7 +3,7 @@ import { CONFIG } from '../../core/config.js';
 import { clamp, damp, dampAngle, turnToward, wrapAngle, smoothstep, lerp } from '../../core/math.js';
 import { markCaster } from '../../render/pipeline.js';
 import { batchRigid } from '../../render/rigidBatch.js';
-import { TELL, RESULT, DEFENSE, GUARD, tellDefaults, facingDelta, dodgeOnly, tellOf } from '../../combat/rules.js';
+import { TELL, RESULT, DEFENSE, GUARD, tellDefaults, facingDelta, dodgeOnly, tellOf, perfectParryWindow } from '../../combat/rules.js';
 import { buildHero, setHeroGlyphScale, installLean, tintHero, LEAN, PLAYER_SCALE, BLADE_BASE, HERO_INK, DIM } from './model.js';
 import { HERO_LOOKS, DEFAULT_LOOK, LOOK_IDS, getLook } from './gear/looks.js';
 import { HeroAnimator, ROLL_SLIDE } from './anim.js';
@@ -539,7 +539,7 @@ export class Player {
       this.time - this.rmb.parryT <= DEFENSE.parryWindow &&
       (hit.around || this._inArc(DEFENSE.parryArc, hasFrom, fx, fz, hasAtk ? ap : null))
     ) {
-      const perfect = this.time - this.rmb.parryT <= DEFENSE.perfectParryWindow;
+      const perfect = this.time - this.rmb.parryT <= perfectParryWindow(); // (?parry=one, the default: every parry; ADR-279)
       this._parry(tell, attack, hasSrc ? sx : NaN, hasSrc ? sz : NaN, !!hit.light, perfect, hit);
       return RESULT.PARRIED;
     }

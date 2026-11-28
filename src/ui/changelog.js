@@ -19,6 +19,15 @@ export const RELEASES = [
     entries: [
       {
         date: '2026-11-28',
+        title: 'One kind of parry',
+        notes: [
+          'Every parry is now a perfect parry: the same sparks, freeze and rewards every time you parry on time.',
+          'A parry pressed a touch early no longer counts as a weaker, different-looking parry.',
+          "So Bai Wuji's barrier now opens on every parry, and every bullet you parry flies back at whoever fired it.",
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: 'A tenth level: the Last Foundry and the False Saint',
         notes: [
           'A new level, the Last Foundry: a steel mill at the end of a war with the machines, at night, still running with no one left to feed it. Pick it on the title screen.',

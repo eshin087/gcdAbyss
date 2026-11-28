@@ -1816,7 +1816,18 @@ async function scenarioFxlooks() {
     b: { star: 'b', sky: 'b', ignite: 'b', void: 'a', presence: 'a', qi: 'c', lordLook: 'a' },
     ship: {},
   };
-  for (const [key, title, fn] of [['spells', 'SPELLS', scenarioSpells], ['terrain', 'TERRAIN', scenarioTerrain]]) {
+  // (SPELLS presses a plain parry on purpose: it replays here with ?parry=two, as its own entry does; ADR-279)
+  const RULES1 = await imp('src/combat/rules.js');
+  const spellsTwo = async () => {
+    const m0 = RULES1.PARRY_KIND.mode;
+    RULES1.setParryKind('two');
+    try {
+      return await scenarioSpells();
+    } finally {
+      RULES1.setParryKind(m0);
+    }
+  };
+  for (const [key, title, fn] of [['spells', 'SPELLS', spellsTwo], ['terrain', 'TERRAIN', scenarioTerrain]]) {
     const looks = Object.keys(LOOKS).filter((l) => fxPart('same', `same-${key}`, `same-${key}@${l}`));
     if (!looks.length) continue;
     SAME = [fn];
@@ -2358,6 +2369,24 @@ const S = {
   lordform: scenarioLordForm,
   lordref: scenarioLordRef,
 };
+// (one parry, ADR-279: ?parry=one, the default, makes every parry perfect. These scenarios press a PLAIN parry on purpose
+// (a perfect one would lock the blades, break him, or send a shot back): they run with ?parry=two)
+{
+  const RULES = await imp('src/combat/rules.js');
+  for (const k of ['spells', 'flare']) {
+    const f = S[k];
+    if (typeof f !== 'function') continue;
+    S[k] = async () => {
+      const m0 = RULES.PARRY_KIND.mode;
+      RULES.setParryKind('two');
+      try {
+        return await f();
+      } finally {
+        RULES.setParryKind(m0);
+      }
+    };
+  }
+}
 /**
  * LORDREF (ADR-277): Varr Nihil after the reference pack (docs/art/character-packs-v04/varr-nihil).
  * `?lordRefMove=a` changes poses only: every move, form, branch and flurry count realised with it on and off

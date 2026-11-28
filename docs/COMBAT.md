@@ -45,9 +45,12 @@ each actor's `tuning`.
    (`player:parry.perfect`): a perfectly parried bullet comes back as a damaging shot (ADR-051,
    *Bullets* below); a perfectly parried blow of the body or the blade deals × 1.5 posture and readies
    the **counter cut** (the first light started within 0.9 s winds up twice as fast and crits; ADR-102).
-   Since ADR-227 (the owner: parrying felt too tight) nearly every parry is perfect: a plain parry is
-   only a press 0.20 – 0.22 s early. The plain parry's own answers (a string's riposte, the counter
-   of a blue flare blow) are unchanged and come with a perfect parry too.
+   **One parry (ADR-279, `?parry=one`, the default):** every parry is a perfect parry, anywhere in the 0.22 s
+   window, with the perfect parry's look, freeze and rewards; there is no plain parry. (Since ADR-227 nearly
+   every parry was perfect already: a plain parry was only a press 0.20 – 0.22 s early, and it drew the big
+   clash while the perfect one drew small sparks, so parries looked inconsistent. `?parry=two` gives the
+   plain parry back.) The plain parry's own answers (a string's riposte, the counter of a blue flare blow)
+   are unchanged and come with a perfect parry too.
    Mashing is prevented: RMB must be released `parryRearm` (0.25 s) before a new press counts —
    **except right after a successful parry**: a deflect re-arms at once, so the next press counts as
    soon as RMB was released, even when the guard was held between blows (ADR-032). A press that

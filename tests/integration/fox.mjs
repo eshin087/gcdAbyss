@@ -1944,6 +1944,24 @@ const S = {
   smoke: scenarioSmoke,
   beam: scenarioBeam,
 };
+// (one parry, ADR-279: ?parry=one, the default, makes every parry perfect. These scenarios press a PLAIN parry on purpose
+// (a perfect one would lock the blades, break him, or send a shot back): they run with ?parry=two)
+{
+  const RULES = await imp('src/combat/rules.js');
+  for (const k of ['clones']) {
+    const f = S[k];
+    if (typeof f !== 'function') continue;
+    S[k] = async () => {
+      const m0 = RULES.PARRY_KIND.mode;
+      RULES.setParryKind('two');
+      try {
+        return await f();
+      } finally {
+        RULES.setParryKind(m0);
+      }
+    };
+  }
+}
 // (smoke is opt-in: a minute per phase of a fight, for a quick look)
 const OPT_IN = new Set(['smoke', 'cost', 'audit', 'anatomy']);
 const list = SCEN === 'all' ? Object.keys(S).filter((k) => !OPT_IN.has(k)) : SCEN.split(',');

@@ -6025,6 +6025,49 @@ async function scenarioAudit() {
   return last;
 }
 
+// ================================================================== scenario: oneparry (ADR-279)
+// ?parry=one (the default): every parry anywhere in DEFENSE.parryWindow is a perfect parry, with its look (the spark spit
+// at the blades) and its rewards; ?parry=two: a press 0.20 - 0.22 s early is a plain parry, as before.
+async function scenarioOneParry() {
+  out('\n== scenario ONEPARRY (?parry=one: every parry is a perfect parry; two: the plain parry as before) ==');
+  const RULES = await imp('src/combat/rules.js'), PS = await imp('src/combat/parrySparks.js');
+  const G = build();
+  duel(G, { dist: 2.2 });
+  const { game, input } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.god = true;
+  p.debug.noRiposte = true;
+  run(G, 0.4);
+  const answer = (lead) => {
+    settle(G, 8); home(G); place(G, 2.2); run(G, 0.3);
+    let par = null, res = null;
+    const n0 = PS.PARRY_SPARKS_LAST.n;
+    const w = G.watch;
+    G.watch = (n, e) => { w?.(n, e); if (n === 'player:parry' && !par) par = { ...e }; if (n === 'combat:answer' && res === null && e.attack === 'plumThrust') res = e.result; };
+    answerMove(G, 'plumThrust', (left) => {
+      if (left > lead) return false;
+      input.up(1);
+      input.click(1);
+      return true;
+    }, 3);
+    G.watch = w;
+    return { par, res, spit: PS.PARRY_SPARKS_LAST.n > n0 };
+  };
+  const m0 = RULES.PARRY_KIND.mode;
+  assert(RULES.PARRY_KIND_DEFAULT === 'one' && m0 === 'one', `one parry is the default (${m0})`);
+  for (const lead of [0.05, 0.15, PLAIN_LEAD]) {
+    const t = answer(lead);
+    assert(t.res === RESULT.PARRIED && t.par?.perfect === true && t.spit, `one: a press ${lead.toFixed(3)} s before the blow is a perfect parry with its spark spit (${t.res}, perfect ${t.par?.perfect}, spit ${t.spit})`);
+  }
+  const late = answer(DEFENSE.parryWindow + 0.04);
+  assert(late.res !== RESULT.PARRIED, `one: a press ${(DEFENSE.parryWindow + 0.04).toFixed(2)} s before (outside the window) parries nothing (${late.res})`);
+  RULES.setParryKind('two');
+  const plain = answer(PLAIN_LEAD);
+  RULES.setParryKind(m0);
+  assert(plain.res === RESULT.PARRIED && plain.par?.perfect === false && !plain.spit, `two: a press ${PLAIN_LEAD.toFixed(3)} s before is a plain parry, no spark spit (${plain.res}, perfect ${plain.par?.perfect})`);
+  return G;
+}
+
 const SCENARIOS = {
   motion: scenarioMotion,
   react: scenarioReact,
@@ -6077,6 +6120,7 @@ const SCENARIOS = {
   flashchain: scenarioFlashChain,
   clashdance: scenarioClashDance,
   deflect: scenarioDeflect,
+  oneparry: scenarioOneParry,
   ghostep: scenarioGhostep,
   tempo: scenarioTempo,
   chain: scenarioChain,
@@ -6116,6 +6160,24 @@ const SCENARIOS = {
     return await contactCheck({ THREE, imp, build, duel, place, run, settle, home, DT, assert, out, RESULT, moves });
   },
 };
+// (one parry, ADR-279: ?parry=one, the default, makes every parry perfect. These scenarios press a PLAIN parry on purpose
+// (a perfect one would lock the blades, break him, or send a shot back): they run with ?parry=two)
+{
+  const RULES = await imp('src/combat/rules.js');
+  for (const k of ['clash', 'parryfx', 'streak', 'impact', 'moments', 'perfect', 'deathblow', 'flare']) {
+    const f = SCENARIOS[k];
+    if (typeof f !== 'function') continue;
+    SCENARIOS[k] = async () => {
+      const m0 = RULES.PARRY_KIND.mode;
+      RULES.setParryKind('two');
+      try {
+        return await f();
+      } finally {
+        RULES.setParryKind(m0);
+      }
+    };
+  }
+}
 const runs = [];
 const OPT_IN = new Set(['probe', 'strategy', 'bots', 'ranged', 'answer', 'audit']); // run only when named
 // `all`, one scenario or a comma list; GCD_SKIP (a comma list) leaves scenarios out of `all`

@@ -1067,7 +1067,8 @@ posture by `DEFENSE.clashDance.mult[n - 1]`. The run starts over on a new move (
 `player.hurtN` moved (every blow that lands on the hero or breaks his guard; not a contact stream's chip), or
 after `gap` s. Thrown things are no part of it. `_updatePosture` multiplies the recovery by `clashRegenK(hp
 fraction)`; the Lord, Tian Lei and Xin Yi use it in place of their `posture.regenByHp` curve.
-**Perfect parry** (ADR-051): a parry whose RMB press came ≤ `DEFENSE.perfectParryWindow` (0.08 s)
+**Perfect parry** (ADR-051; the window read through `rules.js` `perfectParryWindow()`: the whole `DEFENSE.parryWindow` with
+`?parry=one`, the default, ADR-279; `DEFENSE.perfectParryWindow` with `two`): a parry whose RMB press came ≤ `DEFENSE.perfectParryWindow` (0.08 s)
 before the impact is perfect: `_parry(tell, attack, sx, sz, light, perfect)` stores it on
 `deflect.perfect` and adds `perfect` to `player:parry`. It is computed for every parry; only bullets
 consume it today (a light perfect parry: hit-stop `TUNE.returnStop` 0.05 s, a gold burst
