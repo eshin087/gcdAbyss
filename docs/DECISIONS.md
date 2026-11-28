@@ -8151,7 +8151,7 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   guard mashed through a combo, and (h), a perfect parry of Falling Ash under both modes. Not filmed: the visible
   change is a combo where a lock was.
 
-## ADR-290 — gcd's light combo polished: the cloak held calm, the left hand in sight, the ending slash on the sword's path, a chiburi and a prouder bearing (2026-11-28)
+## ADR-292 — gcd's light combo polished: the cloak held calm, the left hand in sight, the ending slash on the sword's path, a chiburi and a prouder bearing (2026-11-28)
 
 - **Context:** the owner: "the bottom left part of the cloak feathered part appears during the 5th light attack combo
   and makes it look bad ... its flapping too much", "the left arm and hand seems to be missing during the light attack

@@ -267,7 +267,7 @@ function buildCloak({ chest, arms, M, REST, mesh, joint }) {
     }
     // `w` (widths) and `arm` (1 / 2: hung on the right / left upper arm, which then does not push it)
     // feed the animator's cloth-vs-steel bound; `wrap` (the root curve) is for the tests' sheet model
-    // (`calm`: held calm in the swings, clothCalm.js, ADR-290)
+    // (`calm`: held calm in the swings, clothCalm.js, ADR-292)
     streamers.push({ segs: [s0, s1], len: d.len, out: d.out, lag: d.lag ?? SHROUD_LAG, max: SHROUD_MAX, w: d.w, arm: d.on === 'armR' ? 1 : d.on === 'armL' ? 2 : 0, wrap: d.wrap, calm: true });
   });
   return { streamers };

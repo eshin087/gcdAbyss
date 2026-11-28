@@ -3668,7 +3668,7 @@ export class HeroAnimator {
     actStart();
   }
 
-  /** THE BEARING (bearing.js, ADR-290): the chest carried up and the chin lifted, standing and between the hits
+  /** THE BEARING (bearing.js, ADR-292): the chest carried up and the chin lifted, standing and between the hits
    *  of a chain (from the end of a swing's active frames). On the target pose; its weight eased in and out. */
   _bearing(dt) {
     const pl = this.player, t = this.target;

@@ -5754,7 +5754,7 @@ async function scenarioHero() {
       // (ADR-114: 10 cm, was 5. Knocked down out of the fencer's guard the hilt falls from 0.25 m
       // higher than it did out of the old low stance, and the ribbon's springs lag that much more)
       assert(lowest >= 0 && lowestDown >= -0.1, `the ribbon never sinks into the grass through a run, a sprint, a roll, the chain and the cleave (lowest ${lowest.toFixed(3)} m), nor more than 10 cm landing in a knockdown (${lowestDown.toFixed(3)} m)`);
-      // (ADR-290: 28°, was 25. The bearing carries his chest up and the blade with it, and a ribbon hung off the sword
+      // (ADR-292: 28°, was 25. The bearing carries his chest up and the blade with it, and a ribbon hung off the sword
       // hangs ~2° further off the blade's line at rest)
       assert(swing >= 35 && rest <= 28, `the ribbon swings out through a cut (${swing.toFixed(0)}° ≥ 35°) and hangs again at rest (${rest.toFixed(0)}° ≤ 28°)`);
       RIB.setIdles(ribIdles);
@@ -6476,7 +6476,7 @@ async function scenarioOffHand() {
   return last;
 }
 
-// HEROPOLISH (ADR-290; the owner, 2026-11-28: the finisher's cloak "flapping too much", the left hand "missing", the
+// HEROPOLISH (ADR-292; the owner, 2026-11-28: the finisher's cloak "flapping too much", the left hand "missing", the
 // slashes not "accurate based on the sword swing ... no matter which camera view", and an anime hero's confidence).
 // (a) the cloak (clothCalm.js): through the chain the drape on the left arm swings at most CLOTH.armMax from hanging
 // and every sheet's fastest step is under 0.13 rad a frame (CLOTH.push: a backhand's blade crossing the drape snapped
@@ -6487,7 +6487,7 @@ async function scenarioOffHand() {
 // (the old `enemy` place hung it END.ahead out), its ends finite and its length within SWEEP.len. (d) the bearing: standing at
 // ease the head is lifted (hdX lower than with `?bearing=0`).
 async function scenarioHeroPolish() {
-  out('\n== scenario HEROPOLISH (the cloak held calm, the chiburi, the slash on the sword, the bearing: ADR-290) ==');
+  out('\n== scenario HEROPOLISH (the cloak held calm, the chiburi, the slash on the sword, the bearing: ADR-292) ==');
   const CL = await imp('src/entities/player/clothCalm.js');
   const BE = await imp('src/entities/player/bearing.js');
   const SL = await imp('src/entities/player/slashFx.js');

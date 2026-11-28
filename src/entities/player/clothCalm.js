@@ -1,4 +1,4 @@
-// THE CLOAK HELD CALM IN THE SWINGS (ADR-290; the owner, 2026-11-28: "the bottom left part of the cloak feathered
+// THE CLOAK HELD CALM IN THE SWINGS (ADR-292; the owner, 2026-11-28: "the bottom left part of the cloak feathered
 // part appears during the 5th light attack combo and makes it look bad. make sure his cloak feathers aren't
 // clipping anywhere or moving randomly like in the 5th attack. its flapping too much"). Two causes, measured on
 // the light chain (the cloak's sheets are anim.js `_streamers`, gear/shroud.js SHROUD_SHEETS):

@@ -5,7 +5,7 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
-## 2026-11-28 — gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi, a prouder bearing (ADR-290; `player/hero-anim-polish`)
+## 2026-11-28 — gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi, a prouder bearing (ADR-292; `player/hero-anim-polish`)
 
 **Owner:** in the fifth light hit the bottom-left feathered part of the cloak appears and flaps too much; the left arm
 and hand seem missing in the light combo; the instant slashes do not match the sword swing from every camera view;

@@ -771,7 +771,7 @@ function spellBreath(p, P, A, u, e) {
   p[P.hdX] += 0.2 * w;
 }
 
-/** The chiburi after the chain (bearing.js FLICK, ADR-290): the flick's motion on a quicker clock (the snap
+/** The chiburi after the chain (bearing.js FLICK, ADR-292): the flick's motion on a quicker clock (the snap
  *  FLICK.snap of the way in), the eyes kept on the foe instead of turned down to the blade, the chin up through
  *  the hold. Played in either stance, only as the chain ends (anim.js _idleLife). */
 function comboFlick(p, P, A, u, e) {

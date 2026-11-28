@@ -1,4 +1,4 @@
-// THE HERO'S BEARING (ADR-290; the owner, 2026-11-28: "try to make gcd feel like the main character of an anime in
+// THE HERO'S BEARING (ADR-292; the owner, 2026-11-28: "try to make gcd feel like the main character of an anime in
 // terms of vibe and confidence"; asked which touches, they picked a taller, chin-up posture and a blade flick
 // after the combo). Two layers over the poses (anim.js HeroAnimator.update), each with its switch:
 //

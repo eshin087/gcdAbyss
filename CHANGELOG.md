@@ -5,7 +5,7 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 One hundred and forty-seven pieces of work since 0.4.0:
-- **gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi and a prouder bearing** (2026-11-28, ADR-290). *Fixed:* in the light chain's fifth hit the torn drape on gcd's left upper
+- **gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi and a prouder bearing** (2026-11-28, ADR-292). *Fixed:* in the light chain's fifth hit the torn drape on gcd's left upper
   arm stood straight out from his shoulder as both hands took the grip (its pale torn points a wing at shoulder height
   from behind, at its swing limit every finisher); a sheet on an arm now hangs from the shoulder as that arm lifts or
   crosses his chest, and every cloak sheet keeps the whip of the arms and the chest's turn out of its swing (his own

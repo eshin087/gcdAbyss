@@ -54,7 +54,7 @@ export function setSlash(m) {
  *  and when: '0' as the swing ends (default), 'beat' END.beat s later (the 'already cut' beat, the pose held). */
 export const PLACE_IDS = ['sweep', 'enemy', 'target', 'body', 'blade'];
 export const BEAT_IDS = ['0', 'beat'];
-// THE SWEEP (ADR-290, the default; the owner, 2026-11-28: "the instant slashes coming from the auto attacks don't
+// THE SWEEP (ADR-292, the default; the owner, 2026-11-28: "the instant slashes coming from the auto attacks don't
 // look accurate based on the sword swing. make sure it looks good and accurate no matter which camera view the
 // player is facing"). Measured: on a whiff `enemy` hung the line END.ahead (1.9 m) out in front of him, which the
 // camera behind him draws ABOVE his head (the finisher's violet band floated a body's height over a blade that

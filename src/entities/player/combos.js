@@ -8,7 +8,7 @@
 // and its windup / active / recovery / chain (s); a finisher that is not the slam is a light-kind heavy blow
 // (`kind: 'light', heavy: true`: the heavy ending slash, no ground shards; a heavy after it is the lone heavy,
 // as after the slam). Damage, posture, reach and the rest of each hit are production's. '0' = production.
-//   a  Iai       draws: each cut leaves from a still pose and stops dead in another, the free arm out from his side (ADR-290; behind his back before)
+//   a  Iai       draws: each cut leaves from a still pose and stops dead in another, the free arm out from his side (ADR-292; behind his back before)
 //                (feel snap); a two-handed falling cut to finish
 //   b  Tempest   quick strokes back and forth, no holds, the moves of the hand pulled in (feel flow); a full
 //                turn to finish
@@ -22,7 +22,7 @@ const hit = (clip, w, a, r, ch, extra = null, fin = null) => ({ anim: { kind: 'c
 const FIN = { kind: 'light', heavy: true, contact: 'sweep' }; // a finisher that is not the slam
 export const COMBOS = {
   a: {
-    // (the hand: `out` since ADR-290, the owner: "the left arm and hand seems to be missing during the light attack
+    // (the hand: `out` since ADR-292, the owner: "the left arm and hand seems to be missing during the light attack
     // combos"; `back`, behind his back, was under the cloak from the game camera. `?offhand=back|side|sign` the others)
     name: 'Iai', feel: 'snap', hand: 'out',
     hits: [

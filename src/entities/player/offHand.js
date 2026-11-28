@@ -37,7 +37,7 @@ export const OFFHAND = {
     ...COMMON, hang: [-0.1, -0.42, -0.21], thigh: [0, 0, 0], hip: 0, near: 0.3, w: 12, z: 0.55, k: 0.25, sway: 0.04, thighR: 0,
     pole: [0.85, -0.15, -0.5], ld: [-0.9, -0.25, -0.2], ln: [0, 0, -1], lw: 0.8, hs: 0, keep: 0,
   },
-  // (ADR-290; the owner, 2026-11-28: "the left arm and hand seems to be missing during the light attack combos":
+  // (ADR-292; the owner, 2026-11-28: "the left arm and hand seems to be missing during the light attack combos":
   // combo A's `back` hand sits on the small of his back, under the cloak from the game camera behind him. Two
   // looks that keep the arm in sight from every side, shown beside `back` and `side` for the owner's pick)
   //   out    the counterweight: the arm out from his left side, a forearm's length off the hip and a little
