@@ -2669,7 +2669,7 @@ Up to 4 at once (the oldest gives way). `Dragon.update` calls `update(dt)` after
 with the brood (an error logs; a seal whose drawing throws is dropped); `reset()` on the wyrm's reset,
 its death and the phase roar.
 - `cast({ x, y, z, r, dur, kind, color, under })` → an id (`under`: a ground circle round the wyrm's feet that
-  follows its root while it burns: the drakelings' and the wisps' casts, ADR-277; the wisps' seal no longer hangs before the jaws): kind `'ground'` (flat round x, z; its lines stand
+  follows its root while it burns: the drakelings' and the wisps' casts, ADR-281; the wisps' seal no longer hangs before the jaws): kind `'ground'` (flat round x, z; its lines stand
   `groundY` 0.55 m up and `groundGain` × hotter, the field's soft depth fades lower heat) or `'jaws'`
   (hanging in the air facing the camera; with x unset it hangs `jawOffset` before the mouth and follows
   it); `r` m (default 6 / 2.4); `dur` s, after which it burns out by itself; `color` the ink

@@ -15781,7 +15781,7 @@ async function scenarioWyrmMotion() {
   return G;
 }
 
-// ================================================================== scenario: wyrmfix (2026-11-28, ADR-277)
+// ================================================================== scenario: wyrmfix (2026-11-28, ADR-281)
 // The motion audit's fixes (motionFix.js), held: a few of the worst offenders through the audit
 // (tests/integration/wyrmMotion.mjs), each limit the fix set; and `?wyrmFix=0` gives the motion before back.
 async function scenarioWyrmFix() {

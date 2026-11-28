@@ -24,6 +24,10 @@ export const RELEASES = [
           "The Cinder Wyrm's wings no longer pass through the ground, and its claws, feet and head no longer jump from one place to the next between blows.",
           'Its head stays in line with its neck when it bites or dives, its tail curves smoothly along the ground, and it eases into its turns instead of snapping round.',
           'The circle of burning script it draws for a spell now always stays on the ground under it.',
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: 'One kind of parry',
         notes: [
           'Every parry is now a perfect parry: the same sparks, freeze and rewards every time you parry on time.',

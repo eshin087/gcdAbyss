@@ -5,7 +5,7 @@ versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change)
 
 ## [Unreleased]
 One hundred and forty-nine pieces of work since 0.4.0:
-- **The Cinder Wyrm moves like a living animal** (2026-11-28, ADR-277). *Fixed (the owner: "fix them all", from a frame-by-frame audit of all
+- **The Cinder Wyrm moves like a living animal** (2026-11-28, ADR-281). *Fixed (the owner: "fix them all", from a frame-by-frame audit of all
   59 of its moves and states, `integ wyrmmotion`):* its wings no longer go through the ground (finger tips went up
   to 3.2 m under it in the wing buffet, the sweeps, the slams, stagger and the posture break; 17 moves → 0); its
   paws, hind feet and head no longer jump metres in one frame between blows (the feet's lead along a lunge was

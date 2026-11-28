@@ -8374,6 +8374,8 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   came near the floor at 19 m/s; 0.3 s moved Benediction's pop elsewhere).
 
 ## ADR-277 — The wyrm's motion audit: every unnatural motion flagged, and fixed behind one switch (`?wyrmFix`) (2026-11-28)
+
+## ADR-281 — The wyrm's motion audit: every unnatural motion flagged, and fixed behind one switch (`?wyrmFix`) (2026-11-28)
 - **Context:** the owner: "there are still some weird dragon animations and movement that looks unnatural and off
   ... analyze all the movements and flag the ones to be fixed", then "Yes, fix them all"; and "the dragon
   incantation randomly appears not beneath him but next to him and moves like an object".

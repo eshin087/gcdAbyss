@@ -99,9 +99,9 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] The wyrm's death: the neck falls as one curve, the head in line (ADR-274)
 - [x] Every white / blue timing glint seen through the body and inside the frame (ADR-274)
 - [x] The wyrm's blue and red paw blows told apart: the scythe and the leap, the owner's picks (ADR-274)
-- [x] The wyrm's motion audit: wings, teleports, the head on its neck, the tail, turns, landings fixed (ADR-277)
-- [ ] The wyrm's tail sweeps and whips: an aimed spin instead of ~700°/s (ADR-277)
-- [ ] The wyrm's feet pinned in the death and the wake (ADR-277)
+- [x] The wyrm's motion audit: wings, teleports, the head on its neck, the tail, turns, landings fixed (ADR-281)
+- [ ] The wyrm's tail sweeps and whips: an aimed spin instead of ~700°/s (ADR-281)
+- [ ] The wyrm's feet pinned in the death and the wake (ADR-281)
 - [ ] The wyrm presses in when the hero stands out among the trees (it fights at range there)
 - [x] Hero motion: world-planted feet, blade paths, portrait idle, new windups, two-step dash,
       sliding kneel, crescent trails (ADR-023)

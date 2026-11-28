@@ -5,7 +5,7 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
-## 2026-11-28 — The wyrm's motion audit and its fixes; the incantation under the wyrm (ADR-277; branch `dragon/motion-audit-fixes`)
+## 2026-11-28 — The wyrm's motion audit and its fixes; the incantation under the wyrm (ADR-281; branch `dragon/motion-audit-fixes`)
 
 **Owner:** "there are still some weird dragon animations and movement that looks unnatural and off ... analyze all
 the movements and flag the ones to be fixed" → the flagged list → "Yes, fix them all"; and "the dragon incantation
