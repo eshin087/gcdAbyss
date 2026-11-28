@@ -1004,7 +1004,12 @@ camera in. If the target dies or disappears he comes down where he is (`_bail`).
 `flurry.lines` (drawn every frame from `_updateFx`) until the last blow lands: `flurry.burst`,
 called by the art or by the plunge's impact. (A planted answer, ADR-211: `player/riposteCut.js` and
 `player/deathblow.js` emit the same events with the field planted true and the art riposte, counter or
-deathblow, no flash cuts; flow.js leaves the grade alone for them.) Events: `player:flurry`, `player:flurryHit` per blow,
+deathblow, no flash cuts; flow.js leaves the grade alone for them. ADR-294: the deathblow is armed by a parry that
+breaks his posture or by a parry of ANY blue blow whose hit says `melee: true` and not `ranged` (duelist.hitPlayer:
+`ranged` = a projectile, a crescent, or a beat that `cast`s, `release`s, is a `selfHit` beam or a `sustain`ed stream);
+a blue one reaches `DEFENSE.deathblow.close.reach` m (the first blow runs in). Its default look `?dbfx=e` reads
+`DEFENSE.deathblow.weight` (`deathblow.js` `dbWeight()`), skips the hero's `fx.contact` / `_edgeFlash` /
+`cleaveImpact` for its blows and takes no cold cast.) Events: `player:flurry`, `player:flurryHit` per blow,
 `player:flurryArt` as the art's coil starts, `player:flurryEnd`; the air arts also emit
 `player:plunge` / `player:plungeHit`. The animator's clip `flurry` reads `player.flurryAnim`
 ({ pose: 'cut' | 'coil' | 'raise' | 'crouch' | 'flip', clip, u, air, k }): a flash cut plays one of
@@ -1058,7 +1063,7 @@ press needs the full re-arm again (ADR-032). Parries ≤ `TUNE.deflectChainGap` 
 the clang); each parry slides him `TUNE.deflectPush` 0.16 m back (×1.6 for blue); between parries
 the guard lingers (`guardHold` eases 1 → 0 over `TUNE.guardLinger` [0.32, 0.6] s after the last one).
 `player:parry.chain` is the hero's own rhythm count and can run across two strings; the HUD's
-"DEFLECT ×N" uses the attacker's `combat:deflectChain` (one string).
+"PARRY ×N" (ADR-294: the hero's side never says DEFLECT; a blue parry reads PARRY) uses the attacker's `combat:deflectChain` (one string).
 **The clash dance** (`combat/clashDance.js`, ADR-247; the game's default, `?clash=0` off; the headless sims keep it off unless a scenario sets it): a duelist keeps the run of
 parries inside one of his moves on `_clash {act, n, t, hurt}`. `clashPeek()` gives the run a parry would make now
 (0: off) and the hero reads it in `_parry` for `player:parry {clash}` (audio.js rings it a little higher and

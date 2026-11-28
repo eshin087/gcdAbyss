@@ -153,7 +153,7 @@ const SCENARIOS = {
     assert(S.nan === 0 && !FX.deathblowFxBusy(), 'it ends clean: nothing alive, no NaN');
     assert(S.maxCh <= 0.55 + 1e-6 && S.randCalls === 0, 'under the bloom threshold, no Math.random');
     FX.setDbFx('zzz');
-    assert(FX.getDbFx() === 'b', 'an unknown look falls back to b (the default, Shatter Web)');
+    assert(FX.getDbFx() === 'e', 'an unknown look falls back to e (the default, Weight)');
     out(`   peak alive ${S.peak}`);
   },
 

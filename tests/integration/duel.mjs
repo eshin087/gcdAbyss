@@ -4419,6 +4419,8 @@ async function scenarioDeathblow() {
   const { deathblowMoves } = await imp('src/entities/player/deathblow.js');
   const DR0 = await imp('src/entities/player/deathblow.js');
   DR0.setDbRead('0'); // (a) - (e) measure ADR-211's combo as built: the read (ADR-264, the default 'all') is part (f)
+  const DBFX = await imp('src/combat/deathblowFx.js');
+  DBFX.setDbFx('b'); // (and with its look and timing before the weight, ADR-294: the default 'e' is part (w))
   const MOVES = deathblowMoves();
   assert(MOVES.length >= 8, `the move library has at least 8 moves (${MOVES.length})`);
   run(G, 0.4);
@@ -4670,6 +4672,22 @@ async function scenarioDeathblow() {
     }
     DF.setBlueTell(DF.BLUE_TELL_DEFAULT);
   }
+  // (w) THE WEIGHT (`?dbfx=e`, the default; ADR-294): the hit-pause grows from weight.hold[0] to hold[1] and the finisher
+  // holds finHold, its wind-up finWind; every blow drives him back further; the screen takes no cold cast
+  {
+    const W = DB.weight;
+    DBFX.setDbFx('e');
+    assert(DBFX.DBFX_DEFAULT === 'e', `(w) the weight is the default look (${DBFX.DBFX_DEFAULT})`);
+    const t = take('deathblow', { near: true, run: 6 });
+    const n = t.hits.length, H = t.holds.map((h) => h.hold);
+    out(`   (w) weight: ${n} blows · holds ${H.map((h) => h.toFixed(2)).join(' ')} · winds ${t.winds.map((w) => w.toFixed(2)).join(' ')} · ghost ${t.ghost.toFixed(2)} · hp ${t.hpLost}`);
+    assert(n === 7 && t.hurt === 0 && t.end?.art === 'deathblow', `(w) the combo of 7 runs, never hurt (${n})`);
+    assert(Math.abs(H[0] - W.hold[0]) < 1e-3 && Math.abs(H[n - 2] - W.hold[1]) < 1e-3 && H.slice(1, n - 1).every((h, i) => h >= H[i] - 1e-6), `(w) the hit-pause grows ${W.hold[0]} → ${W.hold[1]} (${H.map((h) => h.toFixed(2)).join(' ')})`);
+    assert(Math.abs(H[n - 1] - W.finHold) < 1e-3 && Math.abs(t.winds[n - 1] - W.finWind) < 1e-6, `(w) the finisher: held ${W.finHold} s, wound up ${W.finWind} s`);
+    assert(t.ghost < 0.05, `(w) no cold cast on the screen (grade.ghost ${t.ghost.toFixed(2)})`);
+    DBFX.setDbFx('b');
+  }
+  DBFX.setDbFx(DBFX.DBFX_DEFAULT);
   RC.setRiposteMode(RC.RIPOSTE_DEFAULT);
   assert(RC.RIPOSTE_CUT.opts.includes('old') && RC.RIPOSTE_CUT.opts.includes('planted') && RC.RIPOSTE_DEFAULT === 'deathblow', 'deathblow is the default; old and planted stay options');
   return G;

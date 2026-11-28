@@ -11,6 +11,7 @@ import { Recorder } from './recorder.js';
 import { formatTime } from './records.js';
 import { burstScreen } from '../entities/player/flurryBurst.js';
 import { fpsCapOn } from '../render/autoQuality.js';
+import { getDbFx } from '../combat/deathblowFx.js';
 
 // Game flow: owns game.state and every transition
 //   title → explore → bossIntro → boss → dead | victory   (+ paused from explore/bossIntro/boss)
@@ -211,7 +212,8 @@ export class GameFlow {
     // blow flashes it
     ev?.on('player:flurry', (d) => {
       // (the deathblow combo, a planted answer, takes the same cold cast for its whole length; a single planted cut none)
-      if ((finite(d?.strikes) >= 2 && !d?.planted) || d?.art === 'deathblow') this.grade.ghostPulse(finite(d?.dur, 0.6));
+      // (the deathblow's weight, `?dbfx=e`, ADR-294: no cast at all; the screen never changes colour for it)
+      if ((finite(d?.strikes) >= 2 && !d?.planted) || (d?.art === 'deathblow' && getDbFx() !== 'e')) this.grade.ghostPulse(finite(d?.dur, 0.6));
     });
     ev?.on('player:flurryHit', (d) => {
       // the burst level (player/flurryBurst.js; ?burst=): 1 / 1 / 1 at level 0, as before

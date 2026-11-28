@@ -32,6 +32,8 @@ const { Halcyon } = await imp('src/entities/enemies/halcyon/halcyon.js');
 const { MOVES, MOVE_NAMES, CLIP, TRANSITIONS, realise } = await imp('src/entities/enemies/halcyon/moves.js');
 const { TUNING } = await imp('src/entities/enemies/halcyon/tuning.js');
 const { Hud } = await imp('src/ui/hud.js');
+const { setRiposteMode, riposteMode } = await imp('src/entities/player/riposteCut.js');
+const { deathblowTotal } = await imp('src/entities/player/deathblow.js');
 const { Bindings, installActions } = await imp('src/core/bindings.js');
 const { TouchControls } = await imp('src/ui/touch.js');
 const { AudioEngine } = await imp('src/audio/audio.js');
@@ -626,7 +628,33 @@ async function scenarioGlare() {
 
 // ================================================================== scenario: pass (Fly-By, the crash)
 async function scenarioPass() {
-  out('\n== scenario PASS (Fly-By: a parry gives the crash into the first cover on his line; nothing there, the skid) ==');
+  out('\n== scenario PASS (Fly-By is blue: a parry beats him out of the air and the deathblow lands; with ?parryRiposte=old the crash into the first cover on his line, nothing there the skid) ==');
+  {
+    // ADR-294: every blue blow of a body takes the deathblow, his flying ones too: he drops in front of the hero, no crash
+    const G = build(SEED, true);
+    const { game } = G;
+    const d = game.dragon, p = game.player;
+    duel(G, { dist: 5 });
+    p.debug.god = true;
+    const step = parryAt(G, 'flyBy', false);
+    let crash = null, db = null, firstY = NaN, hits = 0;
+    const w = G.watch;
+    G.watch = (n, e) => {
+      w(n, e);
+      if (n === 'dragon:crash') crash = { ...e };
+      if (n === 'player:flurry' && e?.art === 'deathblow') db = { ...e };
+      if (n === 'player:flurryHit' && e?.planted) { if (!hits) firstY = d.position.y; hits++; }
+    };
+    const hp0 = d.hp;
+    d.debug.trigger('flyBy');
+    run(G, 6, step, () => db && p.db.phase === '' && hits > 0);
+    out(`     deathblow: ${JSON.stringify(db && { strikes: db.strikes })}, ${hits} blows, him at ${firstY.toFixed(2)} m at the first, ${hp0 - d.hp} damage, crash ${JSON.stringify(crash)}`);
+    assert(db && hits >= 1 && !crash && d.flight.stats.crashes === 0, 'a parried blue pass: the deathblow, no crash');
+    assert(hp0 - d.hp >= deathblowTotal(1) - 1, `the combo's damage lands on him (${hp0 - d.hp})`);
+    assert(firstY < 1.0, `he is out of the air when the first blow lands (${firstY.toFixed(2)} m)`);
+  }
+  const was = riposteMode();
+  setRiposteMode('old');
   for (const withCover of [true, false]) {
     const G = build(SEED, true);
     const { game } = G;
@@ -648,6 +676,7 @@ async function scenarioPass() {
     if (withCover) assert(crash && crash.why === 'parry' && crash.cover && hp0 - d.hp >= TUNING.crash.damage - 1, `a parried pass: THE CRASH into a ${crash?.cover} (${hp0 - d.hp} damage)`);
     else assert(crash && crash.cover === null && d.flight.stats.skids === 1, 'nothing on his line: he skids');
   }
+  setRiposteMode(was);
 }
 
 // ================================================================== scenario: car (Curbside, the fuses)
