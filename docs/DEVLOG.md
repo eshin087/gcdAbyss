@@ -5,6 +5,29 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — The wyrm's motion audit and its fixes; the incantation under the wyrm (ADR-277; branch `dragon/motion-audit-fixes`)
+
+**Owner:** "there are still some weird dragon animations and movement that looks unnatural and off ... analyze all
+the movements and flag the ones to be fixed" → the flagged list → "Yes, fix them all"; and "the dragon incantation
+randomly appears not beneath him but next to him and moves like an object".
+
+**What:** a frame-by-frame motion audit of all 59 moves and states (`tests/integration/wyrmMotion.mjs`, opt-in
+`integ wyrmmotion`); four read-only investigations (wings, limbs, head, body) found the causes; the fixes behind one
+switch (`motionFix.js`, `?wyrmFix=0`, the Lab's `wyrmFix`): the wings' soft floor and hinge clamps, eased foot leads
+and plants, the bite snap spread over the lead on an arc (on the beat), the neck carrying the head at a rate, dives
+clear of the ground, turns that ramp, tail / neck kinks relaxed, slower wing sweeps, landings planted where drawn, a
+lying foreleg's elbow up, the sky strafe's braking glide. The wisps' incantation is a ground circle under the wyrm
+that follows it (`under`). Also: two stray latin-1 bytes in rig/anim.js (a comment of mine in PR 202) made UTF-8.
+
+**Measured** (before → after, 59 rows): under the ground 17 → 0, tail kinks > 50° 37 → 2, paw snaps 9 → 1, head off
+the neck > 70° 11 → 2, skating 10 → 2, snout in the chest 2 → 0. Integ timing: string contacts within ±85 ms (worst
+67; the spread snap first put four bites 100 - 133 ms early: `biteEarly`).
+
+**Verified:** integ wyrmfix (new), pawtells, brood, strings, timing, melee, reach, red, plunge, deflect, flight, die,
+wyrmheld; duel fxlooks. Not run here (the owner's new rule): the full suite; CI runs it.
+
+**Open / next:** the tail sweeps' ~700°/s spin (an aimed spin), the death / wake foot skating, the measured neck at
+its limit in strikes, the neck's resting curve (a look: the owner's call); a film of before / after for the owner.
 ## 2026-11-28 — The tenth level: the Last Foundry and the False Saint (ADR-285 – ADR-288; enemies/false-saint)
 
 **Owner:** "let's make a new boss called the false saint and make it look like the reference image": a machine

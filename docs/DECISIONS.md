@@ -8372,3 +8372,42 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
 - **Alternatives turned down:** the faster phase scales (the table); a lower damage scale with them (x1.45: 1 of 3);
   the step only in a breather (phase 4 never stepped); a 0.12 s or 0.3 s foot ease (the 0.12 s ease's own last jump
   came near the floor at 19 m/s; 0.3 s moved Benediction's pop elsewhere).
+
+## ADR-277 — The wyrm's motion audit: every unnatural motion flagged, and fixed behind one switch (`?wyrmFix`) (2026-11-28)
+- **Context:** the owner: "there are still some weird dragon animations and movement that looks unnatural and off
+  ... analyze all the movements and flag the ones to be fixed", then "Yes, fix them all"; and "the dragon
+  incantation randomly appears not beneath him but next to him and moves like an object".
+- **The audit** (`tests/integration/wyrmMotion.mjs`, opt-in `integ wyrmmotion`; `GCD_MOVES`, `GCD_POPDBG`,
+  `GCD_AUDIT_OUT`): every attack, idle, a chase round the hero, stagger, posture break, phases 2 / 3, the wake and
+  the death, frame by frame (hit-stop frames skipped): a part's one-frame change of velocity (a snap), its speed,
+  the head off the neck's last segment, the sharpest neck and tail joint, planted feet skating, anything under the
+  ground or inside the trunk, spins in place, limb stretch. Four read-only investigations found the causes.
+- **Decision** (all behind `motionFix.js` `fixOn()`: `?wyrmFix=0` / `GCD_NOFIX=1` = before; the Lab's `wyrmFix`):
+  1. WINGS: a soft floor on the flap angle (the wing swung rigidly about its root, bisected so every point keeps
+     0.3 x SCALE; the stroke slows into it), the finger clamps lift by a hinge about the flap axis (they set y and
+     normalized, which undid them), the beat's fold eases in, spread and flap amplitude are critically damped springs.
+  2. LIMBS: the feet's lead along the body's travel is eased (a lunge moved every home 2.2 m in a frame), a foot
+     landing does not take a home that just jumped, the overhead's paw slides onto its plant, a landing foot plants
+     where it is drawn (only its height eases from the air pose), an elbow that would go under the ground bends up.
+  3. HEAD: the bite's snap starts `pre` s (0.2, less for a later impact) before the active, from rest (a Hermite to
+     0.9 x its average speed), on an arc round the neck's base, arriving on the beat; the held colour pose leaves
+     the head to it; a bite connects no sooner than `biteEarly` (0.06 s) before its impact; the neck pulls a head
+     outside its cone back in at 18 rad/s after the turn-rate limit; the snout keeps 0.3 m above the ground; dives
+     carry the head 2.2 m up and tip it less; a banking wheel's head follows faster and looks along the flight.
+  4. BODY: the yaw rate grows at most 25 rad/s a second (turnToward); wing sweeps pivot 0.9 rad over the whole
+     stroke; `Chain.relaxKinks` on the tail (every frame) and the drawn neck (when the head is not pinned); the sky
+     strafe's landing glide starts at the pass's speed.
+  5. THE INCANTATION: the wisps cast on the ground under the wyrm (`under`: a circle that follows its root).
+- **Measured** (59 moves and states, before → after): under the ground 17 → 0; tail kinks > 50° 37 → 2; paw
+  snaps > 120 m/s 9 → 1; head > 70° off the neck 11 → 2; feet skating > 0.3 m 10 → 2; snout in the chest 2 → 0;
+  worst paw / head / wing snap 297 / 247 / 350 → 124 / 137 / 221 m/s. Integ timing: every string contact within
+  ±85 ms (worst 67).
+- **Not done:** the tail sweeps / whips (tail, tail lash, pivot lash, rear guard, cinder rake, cataclysm) still turn
+  the body ~700°/s: a slower spin needs the turn aimed at the hero's bearing (a fixed slower profile missed the hit
+  timing by up to 283 ms); the death's and the wake's feet still skate (~0.4 - 0.6 m: the hind toe is not pinned
+  while the ankle sinks); the measured neck still meets its bend limit in strikes (its FABRIK starts from a high
+  base); the neck's resting curve could spread its bend further (a look change: the owner's call).
+- **Consequences:** the hit spheres ride on what moved (the snout, the paws, the wing tips now at hero height
+  instead of under the ground): the timing, strings, melee, reach, flight, plunge, death, brood and paw-tell
+  suites pass. `integ wyrmfix` holds the worst offenders under the new limits.
+

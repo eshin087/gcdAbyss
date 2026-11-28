@@ -2668,7 +2668,8 @@ field through the wyrm's `DuelFx` (`d.fx.tells`: `_ink`, one blob per cell, on t
 Up to 4 at once (the oldest gives way). `Dragon.update` calls `update(dt)` after the hazards, guarded
 with the brood (an error logs; a seal whose drawing throws is dropped); `reset()` on the wyrm's reset,
 its death and the phase roar.
-- `cast({ x, y, z, r, dur, kind, color })` → an id: kind `'ground'` (flat round x, z; its lines stand
+- `cast({ x, y, z, r, dur, kind, color, under })` → an id (`under`: a ground circle round the wyrm's feet that
+  follows its root while it burns: the drakelings' and the wisps' casts, ADR-277; the wisps' seal no longer hangs before the jaws): kind `'ground'` (flat round x, z; its lines stand
   `groundY` 0.55 m up and `groundGain` × hotter, the field's soft depth fades lower heat) or `'jaws'`
   (hanging in the air facing the camera; with x unset it hangs `jawOffset` before the mouth and follows
   it); `r` m (default 6 / 2.4); `dur` s, after which it burns out by itself; `color` the ink
