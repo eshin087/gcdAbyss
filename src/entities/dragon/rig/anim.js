@@ -404,6 +404,78 @@ const mixParams = (a, b, t, out) => {
   return out;
 };
 
+
+// THE WINGS (the motion audit, 2026-11-28; motionFix.js): the flap angle has a soft floor so no part of the wing
+// goes under the ground (band, rad: the stroke slows into it), its finger clamps lift by a hinge
+const WING_FLOOR = 0.3; // m x SCALE above the ground every wing point keeps
+const WING_FLOOR_BAND = 0.35;
+/** The flap angle (theta, + = up) raised just enough that the wing (wrist target + the straight finger tips),
+ *  swung rigidly about its root by the flap, keeps every point >= floor (world y). Same maths as the solve. */
+function _flapFloor(theta, side, K, CW, rx, ry, rz, ox, oy, floor) {
+  const e = CW.elements, m10 = e[1], m11 = e[5], m12 = e[9], m13 = e[13];
+  const sc = Math.hypot(e[0], e[1], e[2]) || 1;
+  const g = (psi) => {
+    const ph = side * psi, c = Math.cos(ph), s = Math.sin(ph);
+    let lo = Infinity;
+    for (let f = -1; f < 4; f++) {
+      let X = ox, Y = oy, Z = K.wrist[2] - rz;
+      if (f >= 0) {
+        const kd = K.fingers[f], n = Math.hypot(kd[0], kd[1], kd[2]) || 1, len = (A.fingers[f] * S) / sc / n;
+        X += side * kd[0] * len; Y += kd[1] * len; Z += kd[2] * len;
+      }
+      const y = m10 * (rx + X * c - Y * s) + m11 * (ry + X * s + Y * c) + m12 * (rz + Z) + m13;
+      if (y < lo) lo = y;
+    }
+    return lo;
+  };
+  const B = WING_FLOOR_BAND;
+  if (g(theta - B) >= floor) return theta;
+  let a = theta - B, b = theta + 1.4;
+  if (g(b) < floor) return b;
+  for (let i = 0; i < 12; i++) { const m = 0.5 * (a + b); if (g(m) >= floor) b = m; else a = m; }
+  // b = the lowest flap angle the floor allows; a soft floor (band B rad, C1): the stroke slows into it
+  if (!(B > 0)) return Math.max(theta, b);
+  return theta >= b + B ? theta : b + B * Math.exp((theta - b - B) / B);
+}
+
+/** Critically damped step toward T (exact per frame); v = [velocity] slot. w = 2.15 x the old damp rate
+ *  (the same 63 % time as damp), so a target that steps no longer steps the velocity. */
+function _spring(x, T, rate, dt, V, i, snap) {
+  if (snap || !(dt > 0)) { V[i] = 0; return T; }
+  const w = 2.15 * rate, x0 = x - T, e = Math.exp(-w * dt), j = (V[i] + w * x0) * dt;
+  V[i] = (V[i] - w * j) * e;
+  return T + (x0 + j) * e;
+}
+
+
+const _hA = new THREE.Vector3(), _hP = new THREE.Vector3(), _hQ = new THREE.Vector3();
+/** Lift unit dir d (in place) to d.y >= my by turning it about the wing's flap axis (chest +Z x side), in the
+ *  lifting sense only (undoing the downstroke): stable where d points straight down. (The motion audit: the
+ *  old clamp set y then normalized, which pushed y back under the floor; a finger pointing down kept 3 m under.) */
+function _hingeUp(d, my, qChest, side) {
+  if (!(d.y < my)) return;
+  my = Math.min(my, 0.95);
+  const a = _hA.set(0, 0, side).applyQuaternion(qChest);
+  const dp = d.dot(a);
+  const p = _hP.copy(d).addScaledVector(a, -dp), q = _hQ.crossVectors(a, p);
+  const c0 = a.y * dp, R = Math.hypot(p.y, q.y);
+  if (R > 1e-5) {
+    const b = Math.atan2(q.y, p.y), r = (my - c0) / R;
+    let sg = r >= 1 ? b : b - Math.acos(Math.max(-1, r));
+    sg = ((sg % TAU) + TAU) % TAU;
+    const cs = Math.cos(sg), sn = Math.sin(sg);
+    d.set(a.x * dp + p.x * cs + q.x * sn, a.y * dp + p.y * cs + q.y * sn, a.z * dp + p.z * cs + q.z * sn);
+  }
+  if (d.y < my) {
+    const h = Math.hypot(d.x, d.z), hs = Math.sqrt(1 - my * my);
+    if (h > 1e-6) {
+      d.x *= hs / h;
+      d.z *= hs / h;
+    }
+    d.y = my;
+  }
+}
+
 export class Rig {
   constructor(model, dragon) {
     this.m = model;
@@ -604,7 +676,7 @@ export class Rig {
     const restT = pose.head === null && pose.lookDown <= 0.14 + 1e-6 ? (1 - pose.stagger) * (1 - pose.sleep) * (1 - pose.dead) * (1 - pose.airborne) * clamp(1 - s.sleep / WAKE_REST_SLEEP, 0, 1) : 0;
     s.rest = sm(s.rest, restT, restT > s.rest ? 2.5 : 9);
     for (let k = 0; k < 2; k++) {
-      s.spread[k] = sm(s.spread[k], pose.spread[k], pose.spreadRate);
+      s.spread[k] = fixOn() ? _spring(s.spread[k], pose.spread[k], pose.spreadRate, dt, (this._spV ??= [0, 0, 0]), k, snap) : sm(s.spread[k], pose.spread[k], pose.spreadRate);
       s.pawW[k] = sm(s.pawW[k], pose.pawOv[k].w, pose.pawOvRate);
       // a paw that lands (rake end, slam) becomes a ground contact at once (within the leg's reach);
       // the gait steps it home
@@ -628,7 +700,7 @@ export class Rig {
     s.hover = sm(s.hover, pose.hover, 4);
     s.glide = sm(s.glide, pose.glide, 3.5);
     s.dive = sm(s.dive, pose.dive, 7);
-    s.flapAmp = sm(s.flapAmp, pose.flap, 5);
+    s.flapAmp = fixOn() ? _spring(s.flapAmp, pose.flap, 5, dt, (this._spV ??= [0, 0, 0]), 2, snap) : sm(s.flapAmp, pose.flap, 5);
     if (s.flapAmp > 0.02) {
       s.flapPhase += dt * pose.flapHz * TAU;
       const c = Math.cos(s.flapPhase);
@@ -1453,7 +1525,7 @@ export class Rig {
       }
       // wing beats: the fingers fold ~30 % on the upstroke (theta rising) and fan out on the downstroke
       if (s.flapAmp > 0.25) {
-        const up = Math.max(0, Math.cos(s.flapPhase)) * 0.3;
+        const up = Math.max(0, Math.cos(s.flapPhase)) * 0.3 * (fixOn() ? Math.min(1, (s.flapAmp - 0.25) / 0.2) : 1); // (eased in with the beat: it switched on in one frame)
         const F = WING_KEYS.FOLD.fingers;
         for (let f = 0; f < 4; f++) for (let i = 0; i < 3; i++) K.fingers[f][i] += (F[f][i] - K.fingers[f][i]) * up;
       }
@@ -1490,7 +1562,7 @@ export class Rig {
       // wrist target in the chest frame, rotated about the root's forward axis by the flap angle
       const rx = side * A.wingRoot[0], ry = A.wingRoot[1], rz = A.wingRoot[2];
       const ox = side * K.wrist[0] - rx, oy = K.wrist[1] - ry;
-      const phi = side * theta;
+      const phi = side * (fixOn() ? _flapFloor(theta, side, K, CW, rx, ry, rz, ox, oy, WING_FLOOR * S) : theta);
       const c = Math.cos(phi), sn = Math.sin(phi);
       const wx = rx + ox * c - oy * sn, wy = ry + ox * sn + oy * c;
       const wristT = v[5].set(wx, wy, K.wrist[2]).applyMatrix4(CW);
@@ -1541,7 +1613,8 @@ export class Rig {
         const len = A.fingers[f] * S, l0 = len * A.knuckle[f], l1 = len - l0;
         // keep finger tips above the ground (crouched / rolled / collapsed body)
         const minDy = (0.15 * S - out.wrist.y) / len;
-        if (dirW.y < minDy) {
+        if (fixOn()) _hingeUp(dirW, minDy, qChest, side);
+      else if (dirW.y < minDy) {
           dirW.y = Math.min(minDy, 0.95);
           dirW.normalize();
         }
@@ -1557,7 +1630,8 @@ export class Rig {
           dist.copy(dirW).multiplyScalar(Math.cos(kk)).addScaledVector(perp, Math.sin(kk));
         } else dist.copy(dirW);
         const minD = (0.12 * S - out.knuckles[f].y) / Math.max(1e-3, l1);
-        if (dist.y < minD) {
+        if (fixOn()) _hingeUp(dist, minD, qChest, side);
+        else if (dist.y < minD) {
           dist.y = Math.min(minD, 0.95);
           dist.normalize();
         }
