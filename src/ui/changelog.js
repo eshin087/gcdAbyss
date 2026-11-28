@@ -28,6 +28,13 @@ export const RELEASES = [
       },
       {
         date: '2026-11-28',
+        title: "The Cinder Wyrm's feet stay planted as it dies and as it wakes",
+        notes: [
+          'When the Cinder Wyrm falls dead or gets up from its sleep, its feet stay where they stand instead of sliding over the ground.',
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: 'The Cinder Wyrm moves like a living animal',
         notes: [
           "The Cinder Wyrm's wings no longer pass through the ground, and its claws, feet and head no longer jump from one place to the next between blows.",

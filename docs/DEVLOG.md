@@ -78,6 +78,23 @@ anchor 00 and the corrected sheets 01 - 07), on the shared rig, with no balance 
   compares a cape size with its own look's count (86 under `?halRef`, 90 shipped).
 - **Open:** the owner picks from the films; the pack's airborne stagger / recoil / reeling / trampled stay on the
   floor (his height is gameplay); the strap and clasps are under a letter at 720p.
+## 2026-11-28 — The wyrm's feet planted in the death and the wake (ADR-293; branch `dragon/planted-death-wake`)
+
+**Owner:** "fix the death and wake foot sliding next" (left by ADR-281).
+
+**What:** the hind hock's and the fore wrist's offsets from the toe are scaled to the bone that joins them, so the
+toe drawn at its end lands on the planted contact while the offsets blend from standing to lying. The audit names
+the skating foot and its time, and `GCD_FOOTDBG=0..3` traces one foot frame by frame.
+
+**Measured:** death slide 0.60 → 0.05 m, wake 0.38 → 0.06 m. The full audit before / after: no other row worse
+beyond the run-order noise (checked: the same subset with the old code gives the same spread).
+
+**Verified:** integ wyrmfix (a new death / wake slide check), pawtells, melee, reach, die, timing, strings, plunge,
+red, wyrmheld, flight, deflect. The full suite: CI.
+
+**Open / next:** the tail sweeps' ~700°/s spin (an aimed spin was tried and dropped by the owner: it kept tripping
+the seeded pressure fight); the measured neck at its bend limit in strikes; a film for the owner.
+
 ## 2026-11-28 — The wyrm's motion audit and its fixes; the incantation under the wyrm (ADR-281; branch `dragon/motion-audit-fixes`)
 
 **Owner:** "there are still some weird dragon animations and movement that looks unnatural and off ... analyze all

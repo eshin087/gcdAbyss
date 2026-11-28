@@ -4,7 +4,7 @@ All notable changes to this project. Format: [Keep a Changelog](https://keepacha
 versioning: [SemVer](https://semver.org/) (0.x = pre-alpha, anything may change).
 
 ## [Unreleased]
-One hundred and fifty pieces of work since 0.4.0:
+One hundred and fifty-one pieces of work since 0.4.0:
 - **Halcyon after the reference pack, to try** (2026-11-28, ADR-289). *Added (options, off by default: the owner
   picks):* `?halRef=a` rebuilds Halcyon after the owner's character pack (`docs/art/character-packs-v04/halcyon`):
   a lean, long-legged man (about 8 heads) printed solid in his own colours, in navy plates (chest, abdomen,
@@ -16,6 +16,11 @@ One hundred and fifty pieces of work since 0.4.0:
   landing, the car on his right palm and the statue's arm thrown from his right hand. The same
   timing, zones, damage and travel (`city.mjs . halref` checks every move, phase and branch). The Lab's `halRef` and
   `halRefMove` rows.
+- **The Cinder Wyrm's feet stay planted as it dies and as it wakes** (2026-11-28, ADR-293). *Fixed (the owner: "fix the death and wake foot sliding next"):* while
+  the body sank to lie down in the death or rose in the wake, its hind toes slid up to 0.3 m forward and back over
+  the ground (0.6 m in all in the death, 0.4 m in the wake) and a forepaw settled 0.1 m off where it stood. The
+  hock and the wrist are now always a bone's length from the toe, so the toe drawn at the end of that bone lands on
+  its planted spot: the death's feet slide 0.05 m, the wake's 0.06 m. `?wyrmFix=0` as before.
 - **The Cinder Wyrm moves like a living animal** (2026-11-28, ADR-281). *Fixed (the owner: "fix them all", from a frame-by-frame audit of all
   59 of its moves and states, `integ wyrmmotion`):* its wings no longer go through the ground (finger tips went up
   to 3.2 m under it in the wing buffet, the sweeps, the slams, stagger and the posture break; 17 moves → 0); its
@@ -30,7 +35,7 @@ One hundred and fifty pieces of work since 0.4.0:
   ground under the wyrm like every cast (it hung beside it before its jaws and followed the head about like a thing
   of its own), and a circle cast round its feet stays under it while it burns. `?wyrmFix=0` moves it as before (the
   Lab's `wyrmFix` row). Still to do: the tail sweeps and whips spin the body ~700°/s (a slower spin needs to be
-  aimed at the hero to keep its hit on the beat), and the feet still skate in the death and the wake.
+  aimed at the hero to keep its hit on the beat), and the feet still skate in the death and the wake (since fixed: ADR-293).
 - **One kind of parry** (2026-11-28, ADR-279). *Changed:* every parry is now a perfect parry, anywhere in the
   parry window: the same look, freeze and rewards every time (more posture damage, the counter cut, a bullet sent
   back, a count toward the deathblow). Before, a press 0.20 - 0.22 s early was a plain parry with a different look.
