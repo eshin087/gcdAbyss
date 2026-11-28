@@ -8418,3 +8418,20 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   meter's `burnt` bound 12 → 20 (seeds 1 - 6 burn 1 - 14 pieces on main and 3 - 13 with the fixes: the bound sat
   inside the fights' spread).
 
+## ADR-293 — The wyrm's feet planted while it lies down or rises: the hock and wrist a bone's length from the toe (2026-11-28)
+- **Context:** ADR-281 left the death's and the wake's feet skating (the motion audit: 0.60 m / 0.38 m, the right
+  hind foot). The owner: "fix the death and wake foot sliding next". The trace (`GCD_FOOTDBG`, new in the audit): the
+  foot's contact never moved (locked dying); the DRAWN toe did. The hind leg's IK aims the hock at the toe contact
+  plus an offset that lerps from the standing one ((0.75, -0.15), 0.765 long) to the lying one ((0.22, -0.72), 0.753)
+  with `lying`, and the toe is drawn a metatarsus (0.78) from the hock toward the contact: halfway the offset is only
+  ~0.65 long, so the toe was drawn up to 0.3 m past its contact and came back as the body settled. The forepaw's wrist
+  offset does the same against the hand (0.45): it settled 0.09 m off its spot.
+- **Decision** (`rig/anim.js` `_updateLegs`, behind `?wyrmFix`): the offset keeps its direction and is scaled to the
+  bone's length: the hind one to `meta` on the ground (eased back to the old length in the air, where the toe is a
+  tuck pose, not a contact), the fore one to `hand` (a free paw already hung a hand's length under the wrist).
+- **Measured** (the audit): the death's slide 0.60 → 0.05 m, the wake's 0.38 → 0.06 m; the wake's worst foot snap
+  9.6 → 3.6 m/s. Standing, the offsets were within 2 cm of the bones' lengths: the other moves' feet barely move (their
+  audit rows differ by the run order's chaos: the same five moves give the same spread with the old code).
+- **Consequences:** `integ wyrmfix` holds the death's and the wake's slide ≤ 0.15 m. The audit names the skating foot
+  and when (`slideFoot`).
+
