@@ -43,6 +43,17 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
   the page, so the worktree has its own install now. Checked: `looks` (cloth in the body 0.9 %, hand near 1.8 %,
   25.3k triangles, 20 draws), the full `npm test`, turnarounds against the last preview, the fist up close, two films.
   Open: the owner's verdict; the cloak still ends at mid-calf (the sheet's is longer: the roll).
+- **Fourth pass (same day).** Owner: feather-like parts sticking out mid-back; no cloak from the side or front;
+  the left hand stubby; the skirts read as another cloak running left; more mystique and power. Asked four
+  questions (their picks: a softer hem fade; short fitted charcoal skirts; an open gauntlet hand; show the wisps,
+  sway and aura presences). Found: each cloak sheet fanned its own pleats on its own curve; the first dusk step's
+  material (`collarIn`) draws only back faces, so a band of the cloak was missing from outside, which read as a
+  second layer; a step in another ink part draws a line across the cloak. Done: one cone for the three sheets,
+  softer pleats, scalloped mantle edges, one dusk step in `collar` and a gently torn line into the lavender with
+  fewer points; short charcoal skirts that barely move (`lagK` / `flutK`); the open hand; `presence.js` with
+  wisps / sway / aura behind `?presence=` (the Lab's row), off by default. Checked: `looks` (cloth in the body
+  0.6 %, hand near 1.5 %, 24.9k triangles, 19 draws), `presence`, `heropolish`, `offhand`, `heroidles`, the full
+  `npm test`; close-ups, a turnaround, films of the combo and of the presences. Open: the owner's presence pick.
 
 ---
 

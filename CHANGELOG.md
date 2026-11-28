@@ -30,7 +30,17 @@ One hundred and forty-eight pieces of work since 0.4.0:
   skirts are the tunic's own black with plain hems (they read as a second cloak); the mantle over the shoulders is
   three torn tiers; the cloak one wide drape, black through two dusk steps into the lavender rags; gold locks at the
   sides of the shadowed face; the free hand a closed gauntlet fist. Cloth in the body 0.9 %, the free hand near a
-  sheet 1.8 %, 25.3k triangles, 20 draws.
+  sheet 1.8 %, 25.3k triangles, 20 draws. *Fourth pass:* the cloak's three sheets stand on one cone, so it hangs as
+  one smooth drape from behind and wraps round to show from the side and the front (each had fanned its own pleats:
+  "feather looking parts"); softer pleats; the mantle's edges soft scallops; one dusk step in the coat's own ink
+  part (a step in another part drew a line across the cloak, and its first step had drawn only its inside face), a
+  gently torn line into the lavender, fewer and shorter torn points; the skirts short, fitted and charcoal, slow to
+  swing and barely fluttering (`lagK` / `flutK`), so they no longer read as a second cloak when he runs; the free
+  hand an open gauntlet with jointed plated fingers. *Added (options, off by default: the owner picks):*
+  `?presence=wisps|sway|aura` (the Lab's `presence` row; `src/entities/player/presence.js`), for costume 11: faint
+  lavender letters drifting off the cloak's hem on the wind; a heavy cloak swelling slowly and pushed by the wind;
+  a dark-violet pulse of tiny letters on heavy hits and the chain's finisher. Cloth in the body 0.6 %, the free hand
+  near a sheet 1.5 %, 24.9k triangles, 19 draws.
 - **gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi and a prouder bearing** (2026-11-28, ADR-292). *Fixed:* in the light chain's fifth hit the torn drape on gcd's left upper
   arm stood straight out from his shoulder as both hands took the grip (its pale torn points a wing at shoulder height
   from behind, at its swing limit every finisher); a sheet on an arm now hangs from the shoulder as that arm lifts or

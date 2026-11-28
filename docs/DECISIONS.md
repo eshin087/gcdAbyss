@@ -8197,6 +8197,22 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   hip seam (at the seam it drew a straight line, a second layer again). The hood keeps the cap, the fringe and the
   left lock (the sheet's gold under the hood). The free hand is a gauntlet's fist made of the sword hand's finger
   rolls (`gauntletFist`): the default fist is a smooth lump in plate. The lavender slash stays (the owner saw it).
+- **Fourth pass (the owner: "near the middle of the back of the cloak there are some feather looking parts
+  protruding ... make sure it looks smooth like a cloak. same with the side angles, doesnt seem like theres a cloak
+  from the side or front ... the left hand looks very stubby ... when i'm running left the bottom layer looks like
+  another layer of the cloak ... somehow make him feel mystique and powerful"; asked, they picked: a softer hem
+  fade, short fitted charcoal skirts, an open gauntlet hand, and to see three presences: wisps, sway, aura):** the
+  cloak's sheets now share one cone (`REF11_CLOAK`: the side sheets' roots on the middle one's circle, 1 cm out,
+  the same curve, flare and `out`), so the three read as one drape and wrap to ±57° from his back; their pleats
+  softened (`hangSheet` `pleat` / `foldK`). The mantle's tiers end in scallops, not points. The fade is one dusk
+  step in `collar` (the coat's ink part 6: the art pass draws a line at every part boundary, so a step in another
+  part drew a stripe across the cloak; and `collarIn`, used before, is a BackSide material: the band was missing
+  from outside, the "second layer" at the hip). The skirts: the trousers' charcoal, above the knee, `lagK` 0.45 /
+  `flutK` 0.25 (anim.js `_coat`: a panel's share of the swing and the flutter; 1 = as before). The free hand: the
+  reshaped open hand (handShape.js) at 1.22x, curl 0.32, in steel. The presences: `presence.js`, behind
+  `?presence=` for a look with `presence: true` (costume 11), off by default: wisps and the aura print in the
+  living world's tiny letters (a LetterBatch, a seeded stream, the wind), the sway sets the streamers' `breeze`
+  and a new `windPush` (anim.js) and takes them off again. Test: integ `presence`.
 
 ## ADR-292 — gcd's light combo polished: the cloak held calm, the left hand in sight, the ending slash on the sword's path, a chiburi and a prouder bearing (2026-11-28)
 
