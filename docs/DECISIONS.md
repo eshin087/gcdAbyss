@@ -8149,3 +8149,16 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
 - **Consequences:** the default is unchanged until the owner picks from the films and the preview. Drawn-follow
   effects (a limb's trail, the palms' cue point) follow the new poses as they always followed the limbs. Known
   limits are in the DEVLOG entry; per-move corrections wait for the owner's notes.
+- **Redo (the same day, after the owner: "im not really seeing much was changed"):** the first pass kept his
+  rebuild's silhouette and only added details; the sheets differ most in the figure and the hands. `?oneRef=a` now
+  builds the pack's figure on `?oneBody`'s rig: the torso slimmer (SHELL_REF), slim sleeves with a flared cuff, no
+  padded shoulder; the coat open from the collar to the hem (V_GAP_REF; no coat belt, the trousers' belt in the
+  opening), its fronts turned open in every phase with their inner edges drifting out (skew 1.5) and a wider A hem
+  (cone 0.2); the jade seam wider and inked brighter (REF_JADE); fourteen hair locks swept back (refLocks). The
+  right hand: a second, open hand on the right forearm and a palm bent back at the wrist; look.js `handNow` shows
+  the open hand, the palm (palm / double blows, the palms' beats) or the fist (fist blows, elbows, the Falling Fist,
+  the Still Hand, the guns) for the beat in progress. The fist stays on the sword joint: his blade segment
+  (ONE_FIST) and every hit are unchanged. `?oneRefMove=a` adds per-primitive contact poses from A1 / A2: palm
+  blows upright and straight-armed at chest height from a long stance (A1.5 / A1.6), the front kick to head
+  height (A2.1), round and side kicks to chest height (A2.2 / A2.3), the low sweep in a deep crouch with the leg
+  along the floor (A2.5). Still no root field is written; `woke.mjs . oneref` passes unchanged.

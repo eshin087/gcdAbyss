@@ -16,7 +16,14 @@ One hundred and forty-seven pieces of work since 0.4.0:
   rise off the floor, bigger leans and recoils, a deeper Bend. Every effect, projectile, cue and number is as
   before: the same timing, zones, damage, root motion and effects (`woke.mjs . oneref` checks every move, phase,
   gear, branch and count, and that seeded fights fire the same effects and shots at the same times). The Lab's
-  `oneRef` and `oneRefMove` rows.
+  `oneRef` and `oneRefMove` rows. *Redone after the owner's note that little had changed:* `?oneRef=a` now also
+  builds the pack's tall, slim figure (the torso drawn in, slim sleeves with a flared cuff, no padded shoulder),
+  the coat open from the collar to the hem with no belt (its fronts parting down to the floor, the legs and the
+  trousers' belt in the opening, a wider A hem), the jade seam and cuffs bright enough to read, swept-back uneven
+  hair over the crown and the collar, and an open right hand: open in his guard (the offer), a palm turned out
+  through palm blows, a fist only through fist blows and with the guns. `?oneRefMove=a` lands palm blows upright
+  with the arm straight at the chest's height (it was a deep crouch, the hand at the belly), kicks the front kick
+  to the head's height and the round kick to the chest's, and drops the low sweep into a deep crouch.
 - **The deathblow is not cut short** (2026-11-28, ADR-280). *Fixed:* pressing guard during a deathblow ended it at
   once with nothing dealt; the press now waits and the guard comes up as the finisher ends. A perfect parry of a
   boss's blue blow that would cross the blades now gives the deathblow (he recoils, the combo follows) instead of

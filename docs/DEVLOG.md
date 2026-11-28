@@ -5,7 +5,22 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
-## 2026-11-28 — Xin Yi after the reference pack, to try (ADR-285; branch `enemies/xinyi-ref-anim`)
+## 2026-11-28 — Xin Yi after the reference pack, redone closer to the sheets (ADR-285)
+
+**Owner:** "im not really seeing much was changed to look like the reference image": the first pass (below) kept
+the rebuild's silhouette and poses and only added details. Redone, still behind `?oneRef=a` / `?oneRefMove=a`:
+- the figure: a slimmer torso and sleeves (flared cuffs, no padded shoulders), the coat open from the collar to the
+  floor with no belt (the fronts part the whole way down; the trousers' belt shows), a wider hem, the jade seam and
+  cuffs bright enough to read at the game camera, swept-back uneven hair instead of a cap;
+- the right hand: open in his guard (T1.9's offer), a palm turned out through palm blows, a fist only through fist
+  blows and with the guns (look.js handNow; the fist stays on the sword joint, so his blade is unchanged);
+- the attacks: palm blows upright and straight-armed at chest height (they were a deep crouch at belly height), the
+  front kick head high, round / side kicks chest high, the low sweep in a deep crouch.
+Checked with stills (guards from four sides, anticipation / contact frames per primitive, hand close-ups) instead
+of films; `woke.mjs . oneref` and the whole `woke` suite pass. **Open:** the aerial kicks (A3), the gun poses (A4)
+and the Source's spells (S1 - S3) are still the first pass's; the drop heel's contact differs from A2.6 (his
+legs split, the sheet's heel planted); mirrored moves throw with the left hand open.
+
 
 **Owner:** implement Xin Yi's selected appearance and character animation from the reference pack
 (`docs/art/character-packs-v04/xin-yi`) on the existing rig; keep every spell, weapon and special effect exactly
