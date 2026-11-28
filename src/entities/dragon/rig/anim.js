@@ -408,6 +408,8 @@ const mixParams = (a, b, t, out) => {
 // THE WINGS (the motion audit, 2026-11-28; motionFix.js): the flap angle has a soft floor so no part of the wing
 // goes under the ground (band, rad: the stroke slows into it), its finger clamps lift by a hinge
 const WING_FLOOR = 0.3; // m x SCALE above the ground every wing point keeps
+const LIMB_FLOOR = 0.15; // an elbow below this (x SCALE) bends upward instead
+const LIMB_BAND = 0.5; // ... eased in over this band above it
 const WING_FLOOR_BAND = 0.35;
 /** The flap angle (theta, + = up) raised just enough that the wing (wrist target + the straight finger tips),
  *  swung rigidly about its root by the flap, keeps every point >= floor (world y). Same maths as the solve. */
@@ -1434,6 +1436,14 @@ export class Rig {
       const bend = this._bend.arms[k];
       if (snap) bend.set(0, 0, 0);
       solveTwoBone(out.shoulder, wristT, A.humerus * S, A.forearm * S, pole, out.elbow, out.wrist, bend);
+      if (fixOn() && out.elbow.y < (LIMB_FLOOR + LIMB_BAND) * S) {
+        // (the motion audit) a body lying on its side: "outward" points into the ground, and the lower
+        // foreleg's elbow went 1.6 m under it; the lower the elbow would go, the more it bends up toward the
+        // sky instead (blended over a band: a switch made it jump)
+        const w = clamp(((LIMB_FLOOR + LIMB_BAND) * S - out.elbow.y) / (LIMB_BAND * 2 * S), 0, 1);
+        const pole2 = v[10].set(0, 1, 0).addScaledVector(left, side * 0.4).multiplyScalar(pole.length() || 1).lerp(pole, 1 - w);
+        solveTwoBone(out.shoulder, wristT, A.humerus * S, A.forearm * S, pole2, out.elbow, out.wrist, bend);
+      }
       this._wq(arm.shoulder, qa);
       aimJointStable(arm.humerus, v[9].subVectors(out.elbow, out.shoulder), qa, qb, snap);
       aimJointStable(arm.forearm, v[9].subVectors(out.wrist, out.elbow), qb, qc, snap);
