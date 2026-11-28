@@ -50,6 +50,45 @@ function refKey(u, k, b, ctx) {
       o.lF = rearLong(k.lF, REF.rear);
     }
   }
+  if (grounded && (b.blow === 'palm' || b.blow === 'double')) {
+    // A1.5 / A1.6: the palm (or both) pushed out straight at his chest's height from an upright, long stance
+    // (the rebuild drove it from a deep crouch, the lead knee far forward); drawn back to the shoulder first
+    const two = b.blow === 'double';
+    if (hit || follow) {
+      const f = hit ? 1 : 0.85;
+      Object.assign(o, { bY: Math.max(k.bY ?? 0, -0.12), pitch: 0.08, lF: [0.16, 0.38], rF: [-0.18, -0.36] });
+      o.rH = two ? [0.1, 0.04, 0.54 * f] : [0.06, 0.05, 0.57 * f];
+      if (two) o.lH = [-0.1, 0.04, 0.54 * f];
+    } else if (u >= 0.6) {
+      o.bY = Math.max(k.bY ?? 0, -0.16);
+      o.rH = [0.08, 0.06, 0.12];
+      if (two) o.lH = [-0.08, 0.06, 0.12];
+    }
+  }
+  if (b.blow === 'front' && (hit || follow)) {
+    // A2.1: the snap kick to the head's height, the body leaning back over the support leg
+    for (const f of ['rF', 'lF']) if (Array.isArray(k[f]) && k[f].length === 3 && k[f][1] > 0.4) o[f] = [k[f][0], k[f][1] + (hit ? 0.24 : 0.16), k[f][2]];
+    o.pitch = (k.pitch ?? 0) - 0.08;
+  }
+  if ((b.blow === 'round' || b.blow === 'side') && (hit || follow)) {
+    // A2.2 / A2.3: the kick at the chest's height, not the hip's
+    for (const f of ['rF', 'lF']) if (Array.isArray(k[f]) && k[f].length === 3 && k[f][1] > 0.4) o[f] = [k[f][0], k[f][1] + (hit ? 0.14 : 0.1), k[f][2]];
+  }
+  if (b.blow === 'sweep' && u >= 0.6) {
+    // A2.5: down into a deep crouch, the sweeping leg out straight along the floor at the ankle's height,
+    // the right hand down by the floor (the rebuild swung it at knee height from a standing stance)
+    const deep = hit || follow ? -0.66 : -0.46;
+    o.bY = Math.min(k.bY ?? 0, deep);
+    o.pitch = Math.max(k.pitch ?? 0, 0.22);
+    const sw = String(b.part ?? 'footR').endsWith('L') ? 'lF' : 'rF', st = sw === 'rF' ? 'lF' : 'rF';
+    const v = k[sw];
+    if ((hit || follow) && Array.isArray(v)) {
+      const x = v[0], z = v.length === 3 ? v[2] : v[1], r = Math.hypot(x, z) || 1, L = Math.max(r, 0.75);
+      o[sw] = [x / r * L, 0.06, z / r * L];
+    }
+    o[st] = [st === 'lF' ? 0.14 : -0.14, 0.06];
+    o.rH = [0.06, -0.52, 0.34];
+  }
   if (b.beckon && Array.isArray(k.rH)) o.rH = [k.rH[0] - 0.02, k.rH[1] + 0.02, k.rH[2] * 1.12];
   if (b.iron === 'reload') {
     // A4.5: both arms thrown wide (the guns tossed), the hands into the coat at his hips, the new pair low

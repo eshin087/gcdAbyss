@@ -227,8 +227,8 @@ function bodyTable(look, phase) {
   };
 }
 
-/** The reference's jade-grey (ADR-285): parts 7 and 9 (no ink gain over 1.5: printed as his cloth is). */
-export const REF_JADE = Object.freeze({ ink: [0.62, 0.92, 0.8, 0.8], rim: [0.55, 0.85, 0.72, 0.9], fill: [1.2, 8, 0, 0.9] });
+/** The reference's jade (ADR-285): parts 7 and 9, the seam's bright line (no ink gain over 1.5: printed as his cloth is). */
+export const REF_JADE = Object.freeze({ ink: [0.42, 1.3, 0.78, 1.4], rim: [0.5, 1.35, 0.85, 1.3], fill: [1.2, 8, 0, 0.9] });
 
 /** The table his parts are written with (tests, the Lab). */
 export const oneInkTable = (look, phase, print, body) => inkTable(look, phase, print, body);
@@ -270,8 +270,8 @@ export function tintOne(M) {
   }
   // (ADR-285, `?oneRef`: the jade-grey seam, cuffs and inner band; the grey streak in his hair)
   if (oneRefNow()) {
-    setFill(M.facing, 0.16, 0.3, 0.24);
-    setFill(M.piping, 0.16, 0.3, 0.24);
+    setFill(M.facing, 0.2, 0.52, 0.34);
+    setFill(M.piping, 0.2, 0.52, 0.34);
     setFill(M.hairTip, 0.3, 0.32, 0.33);
   }
   const quiet = onePrintNow() !== '0';
@@ -310,6 +310,23 @@ COAT_QUIET.c = COAT_QUIET.a;
 const fin = (x, d = 0) => (Number.isFinite(x) ? x : d);
 /** How long into his reload the guns are gone (s: thrown away, the next pair not yet drawn). */
 const RELOAD_EMPTY = 0.32;
+
+/** The blows thrown with the right hand closed (A1.1 - A1.4, the Falling Fist); the rest open (ADR-285). */
+const FIST_BLOWS = new Set(['cross', 'backfist', 'hook', 'jab', 'uppercut', 'hammer']);
+/** His right hand now: 'fist' through a fist blow, 'palm' through a palm blow (and the Source's palms), else
+ *  'open' (the guard's offer, kicks, reactions): through the beat in progress, from its windup on. */
+function handNow(A) {
+  const B = A?.beats;
+  if (!B?.length) return 'open';
+  const t = fin(A.t, 0);
+  let b = B[B.length - 1];
+  for (const x of B) if (t <= x.end) { b = x; break; }
+  if (t > b.end + 0.25) return 'open'; // (into the recovery: the hand opens again)
+  const f = b.def ?? {};
+  if (FIST_BLOWS.has(f.blow) || f.fist || f.iron || f.stance || String(f.part ?? '').startsWith('elbowR')) return 'fist';
+  if (f.blow === 'palm' || f.blow === 'double' || f.part === 'palms') return 'palm';
+  return 'open';
+}
 
 /** A coat anchor turned to `az` round the pelvis (sheet.js panelSkirt's placement, the same numbers). */
 function turnFront(F, az) {
@@ -377,7 +394,7 @@ export function dressOne(d, dt) {
     const TAB = D.print === '0' && D.body === '0' ? COAT_DRESS : COAT_QUIET;
     const S0 = (TAB[D.look] ?? TAB.a)[n];
     // (the Open Coat and the Duster stand open from phase 1: the legs walk in the split)
-    const S = (D.body === 'b' || D.body === 'c') && !S0.open ? { ...S0, open: true, front: 0.8 } : S0;
+    const S = (D.body === 'b' || D.body === 'c' || (D.ref && D.body !== '0')) && !S0.open ? { ...S0, open: true, front: 0.8 } : S0;
     const fk = S.front ?? 1;
     for (const F of D.fronts) turnFront(F, S.open ? F.open : F.closed);
     for (const P of D.panels) {
@@ -388,6 +405,16 @@ export function dressOne(d, dt) {
     D.reload = !D.reload; // (re-read the guns below)
   }
   if (D.print !== '0' || D.body !== '0') clampCoat(d, D.body !== '0' ? COAT_SWING_ONE : COAT_SWING);
+  // (ADR-285: the reference's right hand: open, a fist only through a fist blow and with the guns)
+  if (D.rOpen) {
+    const h = n === 2 ? 'fist' : handNow(d.brain?.act);
+    if (h !== D.rHand) {
+      D.rHand = h;
+      D.rOpen.visible = h === 'open';
+      if (D.rPalm) D.rPalm.visible = h === 'palm';
+      for (const m of D.rFist) m.visible = h === 'fist';
+    }
+  }
   // the guns: phase 2 only; gone from the start of his reload until he draws the next pair
   const empty = !!d.iron?.reloading && fin(d.brain?.act?.t, 1) < RELOAD_EMPTY;
   if (empty !== D.reload) {

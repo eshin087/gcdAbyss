@@ -1,6 +1,7 @@
 import { ellipsoidGeometry } from '../../../render/glyphGeometry.js';
 import { registerItem } from '../../player/gear/index.js';
 import { buildFreeHand } from '../../player/gear/hands.js';
+import { shapedHand } from '../../player/gear/handShape.js';
 import { panelSkirt } from '../../player/gear/sheet.js';
 import {
   gridGeometry, shellGeometry, bandGeometry, boxGeometry, mergeGeometries, sub, foldLines, lerp, limb, gripFist, orient,
@@ -79,10 +80,48 @@ function hairGeometry(DIM) {
       o[4] = o[1];
     }, flip);
     const streak = mergeGeometries([band(false), band(true)]);
-    return { cap: sub(crown, 0), back: sub(back, 1), streak: sub(streak, 0) };
+    return { cap: sub(crown, 0), back: sub(back, 1), streak: sub(streak, 0), locks: refLocks(sx, sy, sz) };
   }
   const back = ellipsoidGeometry(0.086, 0.098, 0.088, { widthSegs: 16, heightSegs: 10 }).translate(sx, sy + 0.012, sz - 0.026);
   return { cap: partGeometry('hair.cap'), back: sub(back, 1) };
+}
+
+/** The reference's hair (ADR-285, head space): not a cap but swept-back, uneven locks: spikes off the crown
+ *  raked back, longer ones over the back of the skull to the collar, a few over the ears, two loose ones
+ *  falling over his brow (T1, the anchor's face). Each a tapered clump (heroGeo clumpGeometry) rooted just
+ *  inside the scalp, curling away from it. */
+function refLocks(sx, sy, sz) {
+  const C1 = [sx, sy + 0.05, sz - 0.012], R1 = [0.1, 0.085, 0.112];
+  const C2 = [sx, sy + 0.006, sz - 0.03], R2 = [0.098, 0.104, 0.1];
+  const on = (C, R, az, el, k = 0.9) => [C[0] + Math.sin(az) * Math.cos(el) * R[0] * k, C[1] + Math.sin(el) * R[1] * k, C[2] + Math.cos(az) * Math.cos(el) * R[2] * k];
+  const out = (az, el) => [Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)];
+  // [which shell, az, el, dir, length, width, curl]
+  const L = [
+    // the crown: swept back along the skull, the tips lifting a little off it
+    [1, 0.25, 1.0, [0.08, -0.12, -1], 0.13, 0.026, 0.1],
+    [1, -0.2, 1.05, [-0.1, -0.08, -1], 0.14, 0.028, 0.12],
+    [1, 0.62, 0.8, [0.4, -0.2, -1], 0.12, 0.024, 0.1],
+    [1, -0.66, 0.78, [-0.45, -0.22, -1], 0.12, 0.024, 0.1],
+    [1, 0.0, 0.72, [0.0, 0.1, -1], 0.11, 0.03, 0.14],
+    // the back: down over the skull to the collar, the ends flicking out a little
+    [2, Math.PI, 0.3, [0, -0.95, -0.28], 0.12, 0.032, 0.1],
+    [2, Math.PI - 0.55, 0.25, [0.25, -0.95, -0.25], 0.11, 0.028, 0.12],
+    [2, Math.PI + 0.55, 0.25, [-0.25, -0.95, -0.25], 0.11, 0.028, 0.12],
+    [2, Math.PI - 1.0, 0.05, [0.35, -0.95, -0.1], 0.09, 0.024, 0.14],
+    [2, Math.PI + 1.0, 0.05, [-0.35, -0.95, -0.1], 0.09, 0.024, 0.14],
+    // over the ears
+    [2, 1.45, 0.15, [0.2, -0.95, -0.2], 0.075, 0.02, 0.12],
+    [2, -1.45, 0.15, [-0.2, -0.95, -0.2], 0.075, 0.02, 0.12],
+    // two loose locks over his brow (his left, and one at the parting)
+    [1, 0.42, 0.45, [0.3, -0.8, 0.5], 0.085, 0.018, 0.2],
+    [1, 0.1, 0.55, [0.05, -0.65, 0.75], 0.07, 0.016, 0.25],
+  ];
+  const g = [];
+  for (const [w, az, el, dir, len, wd, curl] of L) {
+    const base = w === 1 ? on(C1, R1, az, el) : on(C2, R2, az, el);
+    g.push(orientTo(clumpGeometry(len, wd, wd * 0.5, { curl, taper: 1.2, cols: 6, rows: 3 }), base, dir, out(az, el)));
+  }
+  return sub(mergeGeometries(g), 0);
 }
 
 /** The glasses (head space): two small dark lenses and a bridge across the eyes, thin arms back to the
@@ -132,6 +171,7 @@ function buildHead(ctx) {
   mesh(head, H.cap, M.hair);
   mesh(head, H.back, M.hair);
   if (H.streak) mesh(head, H.streak, M.hairTip);
+  if (H.locks) mesh(head, H.locks, M.hair);
   const G = onePrintNow() === '0' ? glassesGeometry(DIM) : bandGlassesGeometry(DIM);
   mesh(head, G.band, M.eye);
   mesh(head, G.glint, M.flask);
@@ -167,9 +207,29 @@ const SHELL_MAN = [
   { rx: 0.042, rz: 0.012 },
   { rx: 0.02, rz: 0.004 },
 ];
-const shellOf = () => (oneBodyNow() === '0' ? SHELL : SHELL.map((r, i) => ({ ...r, rx: r.rx + SHELL_MAN[i].rx, rz: r.rz + SHELL_MAN[i].rz })));
+/** `?oneRef=a` (ADR-285): the pack's tall, slim build (shoulders 0.26 of his height, A2's proportion
+ *  chart): the shipped torso drawn in a little at the chest and the waist, the shoulders unpadded. */
+const SHELL_REF = [
+  { rx: -0.016, rz: -0.008 },
+  { rx: -0.012, rz: -0.006 },
+  { rx: -0.01, rz: -0.004 },
+  { rx: -0.006, rz: -0.002 },
+  { rx: -0.008, rz: 0.0 },
+  { rx: -0.006, rz: 0.0 },
+  { rx: -0.004, rz: 0.0 },
+];
+/** The reference's figure is on (the look switch, on `?oneBody`'s redraws). */
+const refFig = () => oneRefNow() && oneBodyNow() !== '0';
+const shellOf = () => (oneBodyNow() === '0' ? SHELL : SHELL.map((r, i) => {
+  const A = refFig() ? SHELL_REF[i] : SHELL_MAN[i];
+  return { ...r, rx: r.rx + A.rx, rz: r.rz + A.rz };
+}));
 /** The open coat's V: wide at the collar, closing at the belt line (half-chord, m). */
 const V_GAP = [0.0, 0.006, 0.026, 0.05, 0.06, 0.05, 0.03];
+/** ... the reference's: open from the collar all the way down (one coat, never buttoned): the shirt in a
+ *  narrow strip at the chest, the edges parting toward the waist, where the skirt's fronts take over. */
+const V_GAP_REF = [0.07, 0.062, 0.052, 0.046, 0.044, 0.04, 0.03];
+const vGap = () => (refFig() ? V_GAP_REF : V_GAP);
 const rings = (d, gap = null) => shellOf().map((r, i) => ({ ...r, rx: r.rx + d, rz: r.rz + d, gap: gap ? gap[i] : 0, y: ySp(r.y) }));
 /** A crease down each side and across the back (the coat's seams). */
 const coatSeams = (x, y, z) => 0.5 + 0.7 * Math.sin(Math.atan2(x, z) * 2 + 0.6);
@@ -223,15 +283,28 @@ function beltGeometry() {
   });
 }
 
+/** The reference's trousers' belt (spine space): a narrow dark band at the hips, seen in the coat's opening. */
+function trouserBelt() {
+  const S = shellOf()[0], y = 1.075;
+  return gridGeometry(20, 1, (u, t, o) => {
+    const a = (u - 0.5) * Math.PI * 1.1;
+    o[0] = Math.sin(a) * (S.rx - 0.004);
+    o[1] = ySp(y + (t - 0.5) * 0.03);
+    o[2] = Math.cos(a) * (S.rz + 0.004);
+    o[3] = a * 0.1;
+    o[4] = o[1];
+  });
+}
+
 /** The offset seam (ADR-285, spine space): a narrow strip down his LEFT side of the open V, `off` m outside
  *  its edge, on the coat's surface, from the collar line to the belt. */
-function seamGeometry(off = 0.016, w = 0.012) {
+function seamGeometry(off = 0.008, w = 0.022) {
   const R = shellOf(), n = R.length;
   return sub(gridGeometry(1, 8, (u, t, o) => {
     const f0 = t * (n - 2), k = Math.min(n - 3, Math.floor(f0)), f = f0 - k;
     const A = R[k], B = R[k + 1];
     const y = lerp(A.y, B.y, f), rx = lerp(A.rx, B.rx, f) + 0.016, rz = lerp(A.rz, B.rz, f) + 0.016, cz = lerp(A.cz ?? 0, B.cz ?? 0, f);
-    const g = lerp(V_GAP[k], V_GAP[k + 1], f) + off + u * w;
+    const V = vGap(), g = lerp(V[k], V[k + 1], f) + off + u * w;
     const a = Math.asin(Math.min(0.95, g / rx));
     o[0] = Math.sin(a) * rx;
     o[1] = ySp(y);
@@ -247,7 +320,7 @@ function chestCoat(ctx) {
   const { spine, chest, M, mesh } = ctx;
   const D = dressOf(ctx.root, oneLookNow());
   const closed = mesh(spine, foldLines(shellGeometry(rings(0.012), { sub: 3, cols: 28 }), coatSeams), M.coat);
-  const open = mesh(spine, foldLines(shellGeometry(rings(0.012, V_GAP), { sub: 3, cols: 28 }), coatSeams), M.coat);
+  const open = mesh(spine, foldLines(shellGeometry(rings(0.012, vGap()), { sub: 3, cols: 28 }), coatSeams), M.coat);
   // (ADR-285, `?oneRef`: one OPEN coat in every phase, the shirt showing in its V)
   const ref = oneRefNow() && oneBodyNow() !== '0';
   at(D, closed, ref ? 9 : 1, ref ? 9 : 1);
@@ -257,7 +330,10 @@ function chestCoat(ctx) {
   // the redraws: a belt at the waist (the coat drawn in: the waist reads), the collar lower and open
   // wider (the head and the neck stand clear of it from above)
   if (oneBodyNow() !== '0') {
-    mesh(spine, beltGeometry(), M.armor);
+    // (the reference's coat has no belt: one garment from the collar to the floor; the trousers' belt shows
+    // in the opening instead)
+    if (ref) mesh(spine, trouserBelt(), M.armor);
+    else mesh(spine, beltGeometry(), M.armor);
     if (ref) {
       // the tall split collar: up beside the jaw, open in front of the chin over the pale inner band
       collarFaces(ctx, [1.615, 0.48, 0.024, 0.055]);
@@ -326,8 +402,23 @@ function buildArms(ctx) {
   const { arms, sword, M, DIM, BODY, mesh } = ctx;
   const [ua0, ua1] = BODY.upperArm, [fa0, fa1] = BODY.foreArm, HK = BODY.hand;
   const pad = oneBodyNow() === '0' ? 0 : 0.01; // (the redraws: a coat's squared shoulder over the arm)
+  const slim = refFig(); // (ADR-285: the reference's long slim sleeves, the shoulder unpadded, a flared cuff)
   for (const side of [-1, 1]) {
     const { upper, fore } = arms[side < 0 ? 'R' : 'L'];
+    if (slim) {
+      const y1 = -DIM.foreArm + 0.06;
+      mesh(upper, mergeGeometries([
+        sub(limb({ length: DIM.upperArm, r0: ua0 + 0.002, r1: ua1 + 0.004, bulge: 0.004 }), 1),
+        sub(ellipsoidGeometry(BODY.deltoid[0] + 0.003, BODY.deltoid[1] + 0.002, BODY.deltoid[2] + 0.003, { widthSegs: 12, heightSegs: 8 }).translate(side * 0.004, -0.014, 0), 0),
+      ]), M.coat);
+      mesh(fore, mergeGeometries([
+        sub(limb({ length: 0.09, r0: ua1 + 0.004, r1: ua1 + 0.002 }), 1),
+        sub(limb({ length: -y1 - 0.03, r0: fa0 + 0.006, r1: fa1 + 0.016, radial: 12, rings: 3, bulge: 0.002 }).translate(0, -0.05, 0), 0),
+        sub(limb({ length: 0.04, r0: fa1 + 0.02, r1: fa1 + 0.026, radial: 12, rings: 1, capSegs: 1 }).translate(0, y1 + 0.03, 0), 1),
+      ]), M.coat);
+      mesh(fore, sub(limb({ length: 0.018, r0: fa1 + 0.029, r1: fa1 + 0.029, radial: 12, rings: 1, capSegs: 1 }).translate(0, y1 + 0.006, 0), 0), M.facing);
+      continue;
+    }
     mesh(upper, mergeGeometries([
       sub(limb({ length: DIM.upperArm, r0: ua0 + 0.006, r1: ua1 + 0.008, bulge: 0.008 }), 1),
       sub(ellipsoidGeometry(BODY.deltoid[0] + 0.01 + pad, BODY.deltoid[1] + 0.004 + pad * 0.5, BODY.deltoid[2] + 0.01 + pad, { widthSegs: 12, heightSegs: 8 }).translate(side * (0.008 + pad), -0.018 + pad * 0.6, 0), 0),
@@ -344,10 +435,26 @@ function buildArms(ctx) {
   }
   // the right fist on the sword joint; the wrist under it
   const F = gripFist(HK);
-  mesh(sword, mergeGeometries([F.fingers, F.thumb, F.ridge]), M.skin);
+  const fist = mesh(sword, mergeGeometries([F.fingers, F.thumb, F.ridge]), M.skin);
   mesh(arms.R.fore, ellipsoidGeometry(0.032 * HK, 0.04 * HK, 0.036 * HK, { widthSegs: 10, heightSegs: 6 }), M.skin, 0, -DIM.foreArm + 0.025, 0.004);
   const free = buildFreeHand(ctx, M.skin);
-  return { offHand: free.offHand, keep: free.keep };
+  if (!refFig()) return { offHand: free.offHand, keep: free.keep };
+  // (ADR-285: the reference's open right hand (T1.9's offer, A1.5's palm, the Source's open hands): a second
+  // hand on the right forearm, shown instead of the fist except through a fist blow and while he holds the
+  // guns (look.js dressOne: D.rOpen / D.rFist). The fist stays on the sword joint: his blade is unchanged.)
+  const D = dressOf(ctx.root, oneLookNow());
+  const H = shapedHand(DIM.foreArm - 0.03, -1, HK, 0.12);
+  const open = mesh(arms.R.fore, mergeGeometries([H.palm, H.fingers, H.tips, H.thumb]), M.skin);
+  open.visible = false;
+  // ... and the palm turned out (A1.5's push, the Source's palms): the same hand bent back at the wrist
+  const wy = -(DIM.foreArm - 0.03);
+  const P = shapedHand(DIM.foreArm - 0.03, -1, HK, 0.05);
+  const palm = mesh(arms.R.fore, mergeGeometries([P.palm, P.fingers, P.tips, P.thumb]).translate(0, -wy, 0).rotateZ(-1.3).translate(0, wy, 0), M.skin);
+  palm.visible = false;
+  D.rOpen = open;
+  D.rPalm = palm;
+  D.rFist = [fist];
+  return { offHand: free.offHand, keep: [...free.keep, fist, open, palm] };
 }
 
 // ================================================================= the legs
@@ -412,7 +519,16 @@ const COAT_MAN = {
 COAT_MAN.b = COAT_MAN.a;
 /** `?oneRef=a` (ADR-285): the reference's coat: b's five panels to the floor, the hem wider (the coat falls
  *  in an A from the belt), the offset seam down the inner edge of his left front panel (`edge`: piping). */
-const COAT_REF = COAT_MAN.a.map((p) => ({ ...p, cone: 0.15, len: [0.47, p.tail ? 0.52 : 0.51], ...(p.front && p.az > 0 ? { edge: -1 } : {}) }));
+const COAT_REF = [
+  // the fronts: thrown open (look.js turns them to `open` in every phase), their inner edges drifting out
+  // toward the hem (|skew| > 1) so the legs show the whole way down (A2's notes: "panels part to show legs,
+  // no skirt blob"); his left one carries the seam down its inner edge
+  { az: 0.4, open: 0.98, w: [0.12, 0.16, 0.22], len: [0.47, 0.51], skew: 1.5, out: 0.0, front: true, cone: 0.2, jag: 0, edge: 1 },
+  { az: -0.4, open: -0.98, w: [0.12, 0.16, 0.22], len: [0.47, 0.51], skew: -1.5, out: 0.0, front: true, cone: 0.2, jag: 0 },
+  { az: 1.7, w: [0.16, 0.22, 0.3], len: [0.47, 0.51], out: 0.012, cone: 0.2, jag: 0 },
+  { az: -1.7, w: [0.16, 0.22, 0.3], len: [0.47, 0.51], out: 0.012, cone: 0.2, jag: 0 },
+  { az: Math.PI, w: [0.3, 0.44, 0.6], len: [0.47, 0.52], out: 0.0, tail: true, cone: 0.2, jag: 0 },
+];
 COAT_MAN.c = COAT_MAN.a.map((p) => ({ ...p, len: [0.42, p.tail ? 0.29 : 0.28] }));
 
 function buildCoat(ctx) {
