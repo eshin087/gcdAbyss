@@ -3,6 +3,7 @@ import { SHROUD_ITEMS } from './shroud.js';
 import { MOON_ITEMS } from './moon.js';
 import { SWALLOW_ITEMS } from './swallow.js';
 import { WARDEN_ITEMS } from './warden.js';
+import { REF11_ITEMS } from './ref11.js';
 import { BASE_ITEMS, BASE_LOADOUT } from './base.js';
 import { MOONBLADE_ITEMS, SWORD_PARAM } from './moonblade.js';
 
@@ -35,7 +36,7 @@ export function getItem(id) {
 // (the outfit options' items, moon / swallow / warden: gear/looks.js; the sword looks:
 // gear/moonblade.js. Both are kept for later use: the owner, 2026-11-14, keeps today's look and sword
 // as the default)
-for (const item of [...WANDERER_ITEMS, ...SHROUD_ITEMS, ...MOON_ITEMS, ...SWALLOW_ITEMS, ...WARDEN_ITEMS, ...BASE_ITEMS, ...MOONBLADE_ITEMS]) registerItem(item);
+for (const item of [...WANDERER_ITEMS, ...SHROUD_ITEMS, ...MOON_ITEMS, ...SWALLOW_ITEMS, ...WARDEN_ITEMS, ...REF11_ITEMS, ...BASE_ITEMS, ...MOONBLADE_ITEMS]) registerItem(item);
 
 /** ?sword= (the owner's pick of the sword looks, gear/moonblade.js): value → weapon item id. */
 export { SWORD_PARAM };

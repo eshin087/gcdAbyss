@@ -19,6 +19,15 @@ export const RELEASES = [
     entries: [
       {
         date: '2026-11-28',
+        title: 'Costume 11 for gcd, to try',
+        notes: [
+          'A new outfit for gcd after the costume reference: a deep hood with his face in shadow, a heavy cowl with a silver clasp, silver gauntlets and plated boots, a silver belt with a green stone.',
+          'His long cloak turns to torn lavender rags below the knee, with a line of pale glyphs down his back.',
+          'Add heroLook=ref11 to the address to try it, or pick Costume 11 in the Lab.',
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: 'Swipe to dodge on touch',
         notes: [
           'Touch: flick your thumb on the right half of the screen and the hero dodges that way at once (SWIPE DODGE in the pause menu turns it off).',
