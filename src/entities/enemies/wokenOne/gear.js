@@ -454,7 +454,19 @@ function buildArms(ctx) {
   D.rOpen = open;
   D.rPalm = palm;
   D.rFist = [fist];
-  return { offHand: free.offHand, keep: [...free.keep, fist, open, palm] };
+  // ... and the left the same (the free hand is a closed fist, ?handLook's default: the sheets open it in
+  // phase 3, gear 2's guard and the both-palm blows; look.js dressOne swaps it in after the animator)
+  const len = DIM.foreArm - 0.03, wj = arms.L.wrist ?? arms.L.fore, wp = arms.L.wrist?.position;
+  const toWrist = (g) => (wp ? g.translate(-wp.x, -wp.y, -wp.z) : g);
+  const HL = shapedHand(len, 1, HK, 0.12);
+  const lOpen = mesh(wj, toWrist(mergeGeometries([HL.palm, HL.fingers, HL.tips, HL.thumb])), M.skin);
+  lOpen.visible = false;
+  const PL = shapedHand(len, 1, HK, 0.05);
+  const lPalm = mesh(wj, toWrist(mergeGeometries([PL.palm, PL.fingers, PL.tips, PL.thumb]).translate(0, len, 0).rotateZ(1.3).translate(0, -len, 0)), M.skin);
+  lPalm.visible = false;
+  D.lOpen = lOpen;
+  D.lPalm = lPalm;
+  return { offHand: free.offHand, keep: [...free.keep, fist, open, palm, lOpen, lPalm] };
 }
 
 // ================================================================= the legs

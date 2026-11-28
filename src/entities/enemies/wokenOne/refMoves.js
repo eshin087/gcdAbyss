@@ -35,6 +35,14 @@ const rearLong = (v, d) => {
   return v[2] < 0 && v[1] <= 0.12 ? [v[0], v[1], v[2] - d] : v;
 };
 const lifted = (k) => Math.abs(k.pitch ?? 0) > 0.9 || Math.abs(k.roll ?? 0) > 0.9;
+/** The acrobatic kicks (strikes.js) that take off and land (A3.1 - A3.4; the flying knee by its part). */
+const AIR = new Set(['tornado', 'butterfly', 'flash', 'aerial']);
+/** A pitch leaning forward at least `p` (a key that ends a whole flip keeps its turns: -2π + p, not p). */
+function leanTo(pitch, p) {
+  const a = pitch ?? 0, w = a - TAU * Math.round(a / TAU);
+  return a + Math.max(0, p - w);
+}
+const TAU = Math.PI * 2;
 
 /** One key of a beat in the reference's poses. `ctx.oneHand`: phase 1 gear 1 (the left hand stays). */
 function refKey(u, k, b, ctx) {
@@ -113,6 +121,64 @@ function refKey(u, k, b, ctx) {
     Object.assign(o, { rH: [-0.2, -0.42, 0.06], rP: [-0.9, -0.1, -0.3], lH: [0.2, -0.42, 0.06], lP: [0.9, -0.1, -0.3] });
   }
   if (b.fist && u >= 1 - 1e-6 && k.bY != null) o.bY = Math.min(k.bY, -0.62); // S2.2: down on the fist, low
+  if (b.fist && Math.abs(u - 0.4) < 1e-6) {
+    // S2.2's chamber: upright in the hover, the right fist drawn up by his ear before the dive
+    Object.assign(o, { pitch: 0.06, rH: [0.04, 0.34, -0.02], lH: [0.3, -0.24, 0.16] });
+  }
+  if (b.rise && Math.abs(u - (b.cock ?? 0.7)) < 1e-6) {
+    // S2.1's telegraph: down in a deep crouch, the right hand on the floor
+    Object.assign(o, { bY: Math.min(k.bY ?? 0, -0.62), pitch: Math.max(k.pitch ?? 0, 0.36), hdX: 0.0, rH: [0.06, -0.62, 0.36] });
+  }
+  const aero = AIR.has(b.blow) || (b.air && String(b.part ?? '').startsWith('knee') && b.dash);
+  if (aero && u >= 2 - 1e-6) {
+    // A3.x's return: he lands low and long (the lead leg bent, the rear one out behind), not half standing
+    o.bY = Math.min(k.bY ?? 0, -0.44);
+    o.pitch = leanTo(k.pitch, 0.26);
+    for (const f of ['rF', 'lF']) {
+      const v = k[f];
+      if (Array.isArray(v) && v.length === 2) o[f] = [v[0] * 1.15, v[1] < 0 ? -0.46 : 0.32];
+    }
+  }
+  if (aero && u < (b.cock ?? 0.5) * 0.5 + 1e-6 && (b.blow === 'tornado' || b.blow === 'aerial' || b.blow === 'butterfly')) {
+    // A3.1 / A3.2 / A3.4's anticipation: sunk deep into the lunge before the jump
+    o.bY = Math.min(k.bY ?? 0, -0.44);
+    o.pitch = leanTo(k.pitch, 0.28);
+  }
+  if (aero && !AIR.has(b.blow) && u > (b.cock ?? 0.6) + 1e-6 && u <= 1 + 1e-6) {
+    // A3.6: the flying knee driven up, the knee's fist drawn up by the head, the other hand reaching ahead
+    const L = String(b.part).endsWith('L');
+    o[L ? 'lH' : 'rH'] = [L ? -0.04 : 0.04, 0.32, 0.04];
+    o[L ? 'rH' : 'lH'] = [L ? 0.1 : -0.1, 0.12, 0.46];
+  }
+  if (b.blow === 'dropHeel' && u >= 1 - 1e-6) {
+    // A2.6: the heel slammed down just ahead of him, upright over it (the rebuild split the legs a metre)
+    const sw = String(b.part ?? 'footR').endsWith('L') ? 'lF' : 'rF', st = sw === 'rF' ? 'lF' : 'rF';
+    const v = k[sw], w = k[st];
+    o.bY = Math.max(k.bY ?? 0, hit ? -0.18 : -0.14);
+    o.pitch = Math.min(k.pitch ?? 0, 0.06);
+    if (Array.isArray(v) && v.length === 3) o[sw] = [v[0], v[1], hit ? 0.42 : 0.38];
+    if (Array.isArray(w) && w.length === 2) o[st] = [w[0], -0.14];
+  }
+  // the guns and the palm bolt: only the legs and the free hand change, the body and the firing arm stay as
+  // drawn (a shot or a bolt leaves from the hand: the same point, the same speed, the same line)
+  const gun = (b.aim || (b.iron === 'rain' && !b.air) || b.iron === 'wheel') && u >= (b.cock ?? 0.7) - 1e-6;
+  if (gun && !lifted(k)) {
+    // A4.1 / A4.2 / A4.4: shooting from a wide stance (at the height drawn: a heavy shot's speed is set by
+    // where it leaves, so the shoulders stay exactly where they were)
+    for (const f of ['rF', 'lF']) if (Array.isArray(k[f]) && k[f].length === 2) o[f] = [k[f][0] * 1.4, k[f][1] * 1.35];
+  }
+  if ((b.bolt || b.send) && u >= (b.cock ?? 0.72) - 1e-6) {
+    // S1.1 / S1.3: pushed from a shorter stance than the lunge, the free hand down at his side (his height
+    // and the pushing arm as drawn: the arm is at full stretch, so any change of the shoulder moves the bolt)
+    for (const f of ['rF', 'lF']) if (Array.isArray(k[f]) && k[f].length === 2) o[f] = [k[f][0] * 0.85, k[f][1] * 0.75];
+    if (b.bolt && Array.isArray(k.lH)) o.lH = [0.06, -0.5, 0.06];
+  }
+  if (b.stance) {
+    // S1.6: the Still Hand raised flat from an upright, narrow stance, the arm out straighter
+    if (k.bY != null) o.bY = k.bY + 0.1;
+    for (const f of ['rF', 'lF']) if (Array.isArray(k[f]) && k[f].length === 2) o[f] = [k[f][0] * 0.7, k[f][1] * 0.7];
+    if (u >= 0.8 - 1e-6) o.rH = [0.04, 0.12, 0.56];
+  }
   if (ctx.oneHand) {
     o.lH = BEHIND.lH;
     o.lP = BEHIND.lP;

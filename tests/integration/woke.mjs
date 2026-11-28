@@ -1542,10 +1542,13 @@ async function scenarioOneRef() {
     const tag = `phase ${ph}${ph === 1 ? ` gear ${gear}` : ''}`;
     const fd = A.hits.findIndex((h, i) => h !== B.hits[i]);
     const xd = A.fxCalls.findIndex((c, i) => c !== B.fxCalls[i]);
-    let far = 0, dirOk = true, tOk = A.births.length === B.births.length;
+    let far = 0, dirOk = true, tOk = A.births.length === B.births.length, bd = '';
     for (let i = 0; tOk && i < A.births.length; i++) {
       const a = A.births[i], b = B.births[i];
-      if (Math.abs(a.t - b.t) > 1e-6 || a.iron !== b.iron || a.heavy !== b.heavy || Math.abs((a.v ?? 0) - (b.v ?? 0)) > 1e-6) tOk = false;
+      if (Math.abs(a.t - b.t) > 1e-6 || a.iron !== b.iron || a.heavy !== b.heavy || Math.abs((a.v ?? 0) - (b.v ?? 0)) > 1e-6) {
+        tOk = false;
+        bd = `; #${i} differs: t ${a.t.toFixed(3)} / ${b.t.toFixed(3)}, v ${a.v} / ${b.v}, heavy ${a.heavy} / ${b.heavy}`;
+      }
       far = Math.max(far, Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z));
       const ha = Math.atan2(a.dx ?? 0, a.dz ?? 1), hb = Math.atan2(b.dx ?? 0, b.dz ?? 1);
       if (Math.abs(Math.atan2(Math.sin(ha - hb), Math.cos(ha - hb))) > 0.06) dirOk = false;
@@ -1556,7 +1559,7 @@ async function scenarioOneRef() {
     assert(A.fxCalls.length === B.fxCalls.length && xd < 0,
       `${tag}: every effect of his fires at the same time (${A.fxCalls.length} fx calls off, ${B.fxCalls.length} on${xd >= 0 ? `; first differs: ${A.fxCalls[xd]} / ${B.fxCalls[xd]}` : ''})`);
     assert(tOk && dirOk && far <= 0.08,
-      `${tag}: ${A.births.length} shots / bolts born at the same times, kinds and speeds, the same heading (${dirOk}), the first point at most ${(far * 100).toFixed(1)} cm apart (<= 8: it leaves from the hand as drawn)`);
+      `${tag}: ${A.births.length} shots / bolts born at the same times, kinds and speeds, the same heading (${dirOk}), the first point at most ${(far * 100).toFixed(1)} cm apart (<= 8: it leaves from the hand as drawn)${bd}`);
   }
   // the look: builds in every phase, the pieces it adds, nothing NaN
   {

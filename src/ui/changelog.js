@@ -24,6 +24,7 @@ export const RELEASES = [
           'A new look for Xin Yi to try before it becomes his own: the long coat open in every phase down to the floor, a tall split collar, a jade-grey seam down his front and jade at his cuffs and glasses.',
           'And a new way for him to stand and move: the right hand held out in his offer, the guns low at his sides, the open hands of the Source, blows that land into a lunge, bigger leans and recoils. His timing, damage and every effect are exactly as before.',
           'Redone closer to the sheets: a taller, slimmer Xin Yi, the coat open from the collar to the floor with no belt, swept-back hair, a bright jade seam, and an open right hand (a palm turned out for his palm strikes, a fist only for his punches). Palm strikes land upright at chest height, the front kick goes head high, and the low sweep drops into a deep crouch.',
+          'Third pass: his jumping kicks crouch deeper and land low, the drop heel lands upright, the guns fire from a wider stance, the Still Hand and the palm push stand taller, and his left hand opens and closes like the right.',
           'Add oneRef=a and oneRefMove=a to the address to try them.',
         ],
       },

@@ -313,19 +313,36 @@ const RELOAD_EMPTY = 0.32;
 
 /** The blows thrown with the right hand closed (A1.1 - A1.4, the Falling Fist); the rest open (ADR-285). */
 const FIST_BLOWS = new Set(['cross', 'backfist', 'hook', 'jab', 'uppercut', 'hammer']);
-/** His right hand now: 'fist' through a fist blow, 'palm' through a palm blow (and the Source's palms), else
- *  'open' (the guard's offer, kicks, reactions): through the beat in progress, from its windup on. */
+/** In gear 2's opening (the left hand comes out from behind his back). */
+function inSecondHand(A) {
+  const B = A?.beats;
+  if (!B) return false;
+  for (const b of B) if (b.def?.secondHand && fin(A.t, 0) <= b.end + 0.25) return true;
+  return false;
+}
+/** The [right, left] hand records handNow returns (no allocation per frame). */
+const HANDS = ['open', 'palm', 'fist'];
+const HAND_OUT = Object.fromEntries(HANDS.map((r) => [r, Object.fromEntries(HANDS.map((l) => [l, { r, l }]))]));
+/** His hands now: 'fist' through a fist blow (the hand that throws it; both through the chain punches),
+ *  'palm' through a palm blow (and the Source's palms), else 'open' (the guard's offer, kicks, reactions):
+ *  through the beat in progress, from its windup on. A mirrored blow (its part on the left) closes the left. */
 function handNow(A) {
   const B = A?.beats;
-  if (!B?.length) return 'open';
+  if (!B?.length) return HAND_OUT.open.open;
   const t = fin(A.t, 0);
   let b = B[B.length - 1];
   for (const x of B) if (t <= x.end) { b = x; break; }
-  if (t > b.end + 0.25) return 'open'; // (into the recovery: the hand opens again)
-  const f = b.def ?? {};
-  if (FIST_BLOWS.has(f.blow) || f.fist || f.iron || f.stance || String(f.part ?? '').startsWith('elbowR')) return 'fist';
-  if (f.blow === 'palm' || f.blow === 'double' || f.part === 'palms') return 'palm';
-  return 'open';
+  if (t > b.end + 0.25) return HAND_OUT.open.open; // (into the recovery: the hands open again)
+  const f = b.def ?? {}, part = String(f.part ?? ''), fk = f.flurry?.kind;
+  const lead = part.endsWith('L') ? 'l' : 'r';
+  const fistBlow = FIST_BLOWS.has(f.blow) || part.startsWith('elbow'), palmBlow = f.blow === 'palm';
+  const both = f.blow === 'double' || part === 'palms';
+  // (the Still Hand's raised flat palm and the bolt's push are palms: S1.6, S1.1)
+  const r = (lead === 'r' && fistBlow) || f.fist || f.iron || fk === 'chain' || fk === 'right' ? 'fist'
+    : (lead === 'r' && palmBlow) || both || f.stance || f.bolt ? 'palm' : 'open';
+  const l = (lead === 'l' && (fistBlow || (part === 'fistL' && !palmBlow))) || fk === 'chain' ? 'fist'
+    : (lead === 'l' && palmBlow) || both ? 'palm' : 'open';
+  return HAND_OUT[r][l];
 }
 
 /** A coat anchor turned to `az` round the pelvis (sheet.js panelSkirt's placement, the same numbers). */
@@ -407,12 +424,28 @@ export function dressOne(d, dt) {
   if (D.print !== '0' || D.body !== '0') clampCoat(d, D.body !== '0' ? COAT_SWING_ONE : COAT_SWING);
   // (ADR-285: the reference's right hand: open, a fist only through a fist blow and with the guns)
   if (D.rOpen) {
-    const h = n === 2 ? 'fist' : handNow(d.brain?.act);
+    const act = d.brain?.act, H = n === 2 ? HAND_OUT.fist.fist : handNow(act), h = H.r;
     if (h !== D.rHand) {
       D.rHand = h;
       D.rOpen.visible = h === 'open';
       if (D.rPalm) D.rPalm.visible = h === 'palm';
       for (const m of D.rFist) m.visible = h === 'fist';
+    }
+    // the left: phase 1's first gear keeps it closed behind his back (open only as it comes out: the Second
+    // Hand); else as handNow says. The animator shows its fist every frame (offHand.open): hidden here after it
+    if (D.lOpen) {
+      const g1 = n === 1 && fin(d.gear, 1) < 2 && !inSecondHand(act);
+      const l = g1 ? 'fist' : H.l, O = d.rig?.offHand;
+      if (l !== 'fist' && O?.open) {
+        O.open.visible = false;
+        if (O.grip) O.grip.visible = false;
+        if (O.fingers) O.fingers.visible = false;
+      }
+      if (l !== D.lHand) {
+        D.lHand = l;
+        D.lOpen.visible = l === 'open';
+        D.lPalm.visible = l === 'palm';
+      }
     }
   }
   // the guns: phase 2 only; gone from the start of his reload until he draws the next pair
