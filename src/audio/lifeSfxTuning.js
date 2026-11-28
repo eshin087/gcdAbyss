@@ -137,6 +137,8 @@ export const LIFE_SFX_TUNE = Object.freeze({
     city: lv({ birds: 'pigeon', ground: 'stone', tree: 'dead' }),
     // the Veiled Crossing: no birds, no animals, no leaves, no trees; stone, metal and grit
     veil: lv({ off: ['flockBurst', 'animalBolt', 'leafSkitter', 'treeCreak', 'treeShudder'], ground: 'stone', tree: 'dead' }),
+    // the Last Foundry: no birds, no animals, no leaves, no trees; steel plate and slag grit
+    foundry: lv({ off: ['flockBurst', 'animalBolt', 'leafSkitter', 'treeCreak', 'treeShudder'], ground: 'stone', tree: 'dead' }),
     // the Hall of Falling Script: indoors, nothing alive
     code: lv({ off: ['flockBurst', 'animalBolt', 'leafSkitter'], ground: 'stone', tree: 'dead' }),
   }),

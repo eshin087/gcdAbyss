@@ -64,6 +64,96 @@ anchor 00 and the corrected sheets 01 - 07), on the shared rig, with no balance 
   compares a cape size with its own look's count (86 under `?halRef`, 90 shipped).
 - **Open:** the owner picks from the films; the pack's airborne stagger / recoil / reeling / trampled stay on the
   floor (his height is gameplay); the strap and clasps are under a letter at 720p.
+## 2026-11-28 — The tenth level: the Last Foundry and the False Saint (ADR-285 – ADR-288; enemies/false-saint)
+
+**Owner:** "let's make a new boss called the false saint and make it look like the reference image": a machine
+infiltrator in the spirit of a film, against an iconic place of that film, "make this boss very fast, strong, able to
+shoot lasers, missiles, crazy artillery attacks", moving with a cyborg disciple's booster movement; "make sure his
+attacks cause destruction in the background terrain. think of bunch of cool epic movesets for him and have opus build
+it out". Their concept sheet (`docs/art/false-saint-reference-v01`: the four milestones, a HANDOFF and a PROMPT), then
+two more sheets ("here are some more references if it helps": the milestones again, and a turnaround, the action row
+and the guard in all four states), and mid-build the v04 pack (`docs/art/character-packs-v04/the-false-saint`; its
+`anchor.png` is the visual authority; visual only: no new move from it, no "pulse"; cyan is cosmetic; COMBAT.md's
+floors). The art folders are in the main checkout, not in the repo. The source's names appear nowhere (the owner's
+homage rule; the suite's ban list).
+
+**How it was built.** Fable (the lead) planned it and reviewed: a brief (the place, the body, 23 moves in a table,
+the interfaces) and a core (wave 0: the level on a stand-in set, the boss folder with the routing contract and the
+four handlers' stubs, `saint.mjs`). Opus agents built it, each in its own worktree on the core: wave 1 world, body,
+effects, melee and boosters; wave 2 arsenal and terrain; then the v04 pass (the owner's pack) and the tuning pass.
+The lead merged each branch (main merged in at cf2130ee) and made the bridging edits: the boosters' jets on the
+body's values, the terrain handler's `onMoment` in `_moment`, one driver for the sensors' death, `beams.eyes` 0.
+
+**What.**
+- `?level=foundry` (`levels/foundry.js`; aliases `saint`, `falsesaint`, `anselm`, `mill`, `machine`), the set
+  `world/lastFoundry.js` + `world/foundryProps.js`: the casting floor (400 plates, 30 m), the pour, four ladles on
+  jib cranes, the press, the line (six conveyors, eight unfinished frames), the blast furnace, six columns under the
+  crane runway, four pipe racks venting steam, five gas tanks, ingots, girders, slag, a catwalk, twelve wall sections,
+  the static wreck field past 30 m. 492 breakables, 296 bones, 109.5k triangles. The hazard surface
+  (`game.world.forest.foundry`), the light by his phase, the `foundry` fire palette, `SCAR.thin.foundry`, a block in
+  every living-world tuning file (no creatures; soot and mill scale; furnace air drawn north), the air's 38 Hz drone,
+  the arrival shot; the music borrows the Obsidian Throne's.
+- `enemies/falseSaint/`: Anselm, the False Saint, on the duelist engine. One bar (18000), four phases (74 / 46 /
+  20 %), 32 moves in four handlers (melee 12 and the grab's lift, boost 7, arsenal 8, terrain 5) and three
+  transitions; `links.js` links them all by id. The shell (`shell.js`) and the body (`gear.js`, `look.js`,
+  `bodyArt.js`: the disguise over the frame, chipped where cuts land). The effects (`fx.js`, `fxArsenal.js`,
+  `fxDebug.js`: the `saint` palette, the flights' pool and ledger, 30 drivers) and 35 sounds (`audio/sfx.js`).
+- The Lab: LOOKS rows `fsLook`, `fsLetters`, `fsMark` (awaiting the owner), the level in the title's `menu` row, his
+  FIGHT buttons (a pool, the shell, his phases, every effect alone). The Training's roles (`ROLES.foundry`).
+- Tests: `tests/integration/saint.mjs` (one block of scenarios per agent; `tuneFight`, `tuneWreck`, `tuneFeet`
+  opt-in), `npm test`'s `saint` task, the world suite's sets row, the life suite's litter and hang tables, a cost row.
+- Sheets for the owner in `docs/looks/foundry/` (26: the arena, its four lights, a fight's wreck, a pool, the
+  arrival; the body's milestones, turnaround, reveal and weapons; every family's moves at the game camera over a 3x
+  crop; the effects; the v04 appearance, turnaround and moves before over after).
+
+**Decisions.** ADR-285 (the level, the boss, the four handlers and the routing contract, the homage rule), ADR-286
+(the shell: look only, one rig, two layers, never regrowing, the anchor, `?fsLook`), ADR-287 (COMBAT.md's floors
+although he is the fastest, cyan cosmetic, the ledger, the pools burn him too, the barrage's lanes), ADR-288 (the
+tuning: the phase scales kept with the settings x bots table, the jet step in place of a pick, FOLLOW links, the feet,
+the tanks spared, Dies Irae's plates, the pools' posture, Rosary's guard costs). The lead's own mistake, corrected:
+the brief's 0.42 s windup floor (COMBAT.md says 0.7 / 0.45 / 0.35). Changed from the brief by the agents (each said
+why): his hands open in every phase (the second sheet), Benediction's last palm the LEFT (the pack's B2), the jet step
+in TUNING.boost.step (`TUNING.fsJet` removed), more moves than the table (Interdict, Cast Out, Lauds, the counters
+Penance / Anathema / Requiem, Offertory, Prostration, Dies Irae), the tanks moved to the floor's corners.
+
+**Verified.** Each agent ran its own `saint.mjs` block and the suites it touched: world (`saint.mjs . world`,
+`world.mjs` sets and bite, the life suite's litter and hang, `cost.mjs`), body (`bodyReveal`, `bodyMilestones`,
+`bodyWeapons`, `bodyDeath`), effects (`fx`, `fxFlights`, `fxSounds`, `fxCost`; `?level=foundry` loads with no console
+error in headless Edge with the GPU), melee (`mlreach`, `mlgrab`, `mlwalk`, `mlworld`, `mllinks`), boosters (the
+`boost*` scenarios), arsenal (`ar*`, `arFair` on 10 seeds), terrain (`tr*`), v04 (`v04Timing` 36 of 36 moves timed as
+before, `v04Shell`, `v04Hands`, `v04Alloc`, `v04Motion`), tuning (`tunePace`, `tuneTraining`, `tuneFight`,
+`tuneWreck`, `tuneFeet`); the glyph check. `npm run perf` (the tuning agent, this RTX 4090): phase 1 GPU 1.63 ms at
+1080p, 2.04 ms at the phone's size, 3.89 ms at 4K, script 4.93 ms (p95 7.3); the heaviest moments phase 4 at rest
+(2.00 / 2.21 / 5.03 ms) and Revelation (script 5.83 ms, p95 8.9); the Veiled Crossing 1.96 / 2.67 / 5.09 ms, script
+3.98 ms. Fire field peaks: Kyrie 3309 blobs, Choir 1847, Verdict 1798 (of 6000); nothing drawn when idle. The test
+rule of ADR-276 (PR 201): no full `npm test` on this machine; the lead runs the changed set
+(`npm test -- --changed`, or `--only` with `saint`, `world`, `life`, `cost`, `glyphcheck`, `changelogcheck`,
+`changedcheck`) before the PR and CI runs the rest.
+
+**Open.**
+- His look switches await the owner (`?fsLook`: `a` follows the second sheet and the v04 pack, `b` the anchor's 03;
+  `?fsLetters`, `?fsMark`). His reward: none chosen. His music is the Obsidian Throne's.
+- The look: the close-up face is better after the v04 pass but still far from the anchor; at the game camera the
+  face is a few pixels and the phases read apart mostly by brightness and the level's light; the skirt is not seen in
+  fast moves; the rig is heavy (252 meshes, 43.6k triangles: sleeve rims and seeds could go); the palm's and the
+  foot's contacts and the shell's strip are faint at 36 m; the missiles' smoke is faint; the pools read red-orange
+  without a yellow heart; pale grit marks read white on the dark plates.
+- The motion: the poses of the arsenal and the terrain moves are unaudited (films only); Anathema's (0.67 m) and
+  Thurible's (1.46 m, the spun elbow's whole turn) pops and the gavel's hand (0.62 m) remain; Rebuke's slip is hard to
+  see; the grab's catch frame is not filmed; the fetch's jet hop runs ~35 m/s; the press has no ram stroke (a
+  `foundry.pressSlam()` would help).
+- The rules: a perfect dodge of Verdict's pillar starts the hero's flurry out of the ring's reach (the ring is then
+  not cued); a `fixed` Passing Bell the guard cannot clear becomes a feint; a tank's or a column's damage to the hero
+  goes through the world, not `d.hitPlayer`; the pace meter's floors are loose (phase 4 moved 8 cues a minute between
+  two builds); in the pace runs Crucible was never picked in phase 3, and the Long Walk, Relic and Prostration never in
+  phase 4; a bot that never strikes does not kill him in 480 s.
+- Not playtested by a human; not checked on the owner's iPhone (the world's phone camera was not applied in its
+  rig); the GPU numbers are this machine's.
+
+**Next.** The owner's picks from the sheets (`docs/looks/foundry/`) and a playtest on the preview; his reward; his own
+music; the press's stroke; an audit of the arsenal and terrain poses at the game camera.
+
+---
 ## 2026-11-28 — Swipe to dodge on touch, the guard on the left to try (ADR-278; `ui/touch-swipe-dodge`)
 
 **Owner:** too slow to parry or dodge on the phone compared with mouse / keyboard / controller; picked "guard on the
@@ -128,6 +218,10 @@ to cancel it; the streak's flurry teleports gcd with no cue.
 - **Also on main, fixed here:** duel `parryfx`'s "ten in a row: at most 48 sparks" failed on main too (51): it
   reads the live hero's streak through `?parryGrow=a` (cap 104 from tier 1). It now asks for the base spit (`grow: '0'`).
 - **The parry press and the parry sparks:** a second PR (`fix/parry-press`, ADR-275).
+- **One parry (ADR-279; `player/one-parry`, stacked on this PR):** asked the difference between a parry and a perfect
+  parry (0 - 0.20 s vs 0.20 - 0.22 s early; only the perfect one pays posture x1.5, the counter cut, a returned shot,
+  the deathblow's count and the freeze), the owner said keep one type. `?parry=one`, the default: every parry is
+  perfect. The plain-parry scenarios run with `two`; new duel `oneparry`. The parry's look itself is still open.
 - **Checked:** duel `deathblow` (new (g), (h)), `moments`, `clash`, `training`; fox `training`; asc `bare`; the full
   `npm test`.
 - **Open / next:** the flurry's opening blink. The owner means the START: right after the perfect dodge he vanishes

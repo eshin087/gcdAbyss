@@ -4093,6 +4093,24 @@ const S = {
     return contactCheck({ THREE, imp, build, duel, place, run, settle, home, DT, assert, out, RESULT, moves });
   },
 };
+// (one parry, ADR-279: ?parry=one, the default, makes every parry perfect. These scenarios press a PLAIN parry on purpose
+// (a perfect one would lock the blades, break him, or send a shot back): they run with ?parry=two)
+{
+  const RULES = await imp('src/combat/rules.js');
+  for (const k of ['flare', 'shots', 'lantern', 'clash']) {
+    const f = S[k];
+    if (typeof f !== 'function') continue;
+    S[k] = async () => {
+      const m0 = RULES.PARRY_KIND.mode;
+      RULES.setParryKind('two');
+      try {
+        return await f();
+      } finally {
+        RULES.setParryKind(m0);
+      }
+    };
+  }
+}
 // --- tune (opt-in: run only when named)
 const OPT_IN = { shotcost: scenarioShotCost, picks: scenarioPicks, probe: scenarioProbe, defend: scenarioDefend, audit: scenarioAudit, auditfight: scenarioAuditFight, whiff: scenarioWhiff,
   // (the bench, tests/integration/bench.mjs: the same mortal bots as veil.mjs)

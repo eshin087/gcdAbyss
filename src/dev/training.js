@@ -1,5 +1,4 @@
 import { CONFIG } from '../core/config.js';
-import { DEFENSE } from '../combat/rules.js';
 import { riposteMode, setRiposteMode } from '../entities/player/riposteCut.js';
 import { dbLockMode, setDbLock } from '../entities/player/deathblow.js';
 import { ARTS } from '../entities/player/flurry.js';
@@ -68,6 +67,10 @@ const ROLES = {
   // Bai Wuji (the Veiled Crossing): no blade lock, no perilous thrust (core's working set; the melee agent
   // brings the roles up to date with his moves)
   veil: { single: 'palm', string: 'threeCount', long: 'tooSlow', red: 'longStep' },
+  // the False Saint (the Last Foundry; the tuning pass): his phase-1 moves (a role's move is not put in its
+  // phase): the counter's elbow (blue), Benediction, his flurry; red Laying On of Hands (the grab: a hit is
+  // the catch, then the throw)
+  foundry: { single: 'rebuke', blue: 'rebuke', string: 'benediction', long: 'litany', red: 'layHands' },
 };
 
 export function bossKinds(game) {
@@ -77,7 +80,7 @@ export function bossKinds(game) {
   if (typeof d?.debug?.flurry === 'function') {
     k.add('duel');
     // (a three-bar boss is not the Lord: Tian Lei has his own kind, the Lord's situations need the crater)
-    k.add(d?.kit?.id === 'ascendant' ? 'asc' : d?.kit?.id === 'sheathed' ? 'sheathed' : d?.kit?.id === 'thousandFox' ? 'fox' : d?.kit?.id === 'wokenOne' ? 'woke' : d?.kit?.id === 'halcyon' ? 'halcyon' : d?.kit?.id === 'untouched' ? 'untouched' : d?.lives ? 'lord' : 'ash');
+    k.add(d?.kit?.id === 'ascendant' ? 'asc' : d?.kit?.id === 'sheathed' ? 'sheathed' : d?.kit?.id === 'thousandFox' ? 'fox' : d?.kit?.id === 'wokenOne' ? 'woke' : d?.kit?.id === 'halcyon' ? 'halcyon' : d?.kit?.id === 'untouched' ? 'untouched' : d?.kit?.id === 'saint' ? 'saint' : d?.lives ? 'lord' : 'ash');
   }
   return k;
 }
@@ -115,7 +118,7 @@ add('HERO ARTS', [
 
 add('PARRY & RIPOSTE', [
   { id: 'parry', name: 'Parry a single blow', boss: 'any', streak: 0, role: 'single', answer: 'parry', riposte: 'old', desc: 'A single blow parried with the old riposte (?parryRiposte=old): the clash, then one flash cut and back where you stood. Today a duelist recoils instead and your own counter cut is open (see Parry a string).', expect: ['player:parry', 'player:flurryEnd'] },
-  { id: 'perfectParry', name: 'Perfect parry', boss: 'any', streak: 0, role: 'single', answer: 'perfect', desc: `Pressed within ${DEFENSE.perfectParryWindow} s of the impact: the gold clash and a beat of slow motion.`, expect: ['player:parry'] },
+  { id: 'perfectParry', name: 'Perfect parry', boss: 'any', streak: 0, role: 'single', answer: 'perfect', desc: 'Every parry is perfect (?parry=one): the clash at the blades and a beat of slow motion. With ?parry=two only a press within 0.2 s of the impact.', expect: ['player:parry'] },
   ...[3, 7].map((n) => ({ id: `riposte${n}`, name: `Riposte ${N(n)} (old)`, boss: 'any', streak: n - 1, role: 'single', answer: 'parry', riposte: 'old', desc: `A parry at a streak of ${n}: ${n} flash cuts.`, expect: ['player:flurryEnd'] })),
   // the deathblow combo (?parryRiposte=deathblow): a parry that breaks his posture, or one of a blue blow, is answered by N blows
   ...[3, 7].map((n) => ({ id: `deathblow${n}`, name: `Deathblow ${N(n)}`, boss: 'duel', streak: 0, role: 'single', answer: 'perfect', riposte: 'deathblow', parryRun: n - 1, postureNear: true, desc: `${n - 1} perfect parries behind him, his posture one parry from breaking: the perfect parry breaks it and a planted combo of ${n} blows follows, every one another clip of your own, the last the heaviest (${(22 + 2 * n) * (n - 1) + 40 + 15 * n} damage).`, expect: ['player:parry', 'player:flurryEnd'] })),
@@ -418,7 +421,7 @@ export class Training {
     const id = this.game.level?.id;
     if (ROLES[id]) return ROLES[id];
     const k = bossKinds(this.game);
-    return (k.has('wyrm') ? ROLES.cinderwood : k.has('asc') ? ROLES.ring : k.has('fox') ? ROLES.fox : k.has('halcyon') ? ROLES.city : k.has('untouched') ? ROLES.veil : k.has('lord') ? ROLES.starless : k.has('ash') ? ROLES.ash : null) ?? {};
+    return (k.has('wyrm') ? ROLES.cinderwood : k.has('asc') ? ROLES.ring : k.has('fox') ? ROLES.fox : k.has('halcyon') ? ROLES.city : k.has('untouched') ? ROLES.veil : k.has('saint') ? ROLES.foundry : k.has('lord') ? ROLES.starless : k.has('ash') ? ROLES.ash : null) ?? {};
   }
 
   find(id) {

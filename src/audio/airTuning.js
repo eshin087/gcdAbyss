@@ -105,6 +105,15 @@ export const AIR_TUNE = Object.freeze({
       drone: { f: 41, fifth: 61.5, gain: 0.01, sway: [0.25, 18] },
       hushWind: 0.45,
     }),
+    // the Last Foundry: the furnace's low roar under everything (a deep drone and its fifth, swelling slowly),
+    // the draught through the broken walls, grit; no creature, no water
+    foundry: Object.freeze({
+      old: { wind: 0, voices: 0 },
+      wind: { gain: 0.2, base: 0.4, level: 0.45, gust: 0.55, idle: 0.45, sway: [0.2, 14], lp: [160, 460], hp: 28, q: 0.9, rate: [0.85, 0.95], pan: 0.4 },
+      grit: { gain: 0.01, hp: 3400, level: 0.2 },
+      drone: { f: 38, fifth: 57, gain: 0.022, sway: [0.35, 11] },
+      hushWind: 0.4,
+    }),
   }),
 
   /** a level with no block of its own: a low breeze, nothing else */

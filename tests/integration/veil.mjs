@@ -22,7 +22,7 @@ const { LightPool } = await imp('src/render/lights.js');
 const { GlyphParticles } = await imp('src/render/particles.js');
 const { FireField } = await imp('src/render/fireField.js');
 const { Colliders } = await imp('src/world/colliders.js');
-const { TELL, RESULT, POSTURE } = await imp('src/combat/rules.js');
+const { TELL, RESULT, POSTURE, PARRY_KIND, setParryKind } = await imp('src/combat/rules.js');
 const { LEVELS, getLevel, levelFromSearch, applyLevel } = await imp('src/levels/index.js');
 const { createVeiledCrossing, CROSSING } = await imp('src/world/veiledCrossing.js');
 const { Destructibles } = await imp('src/world/destructibles.js');
@@ -656,12 +656,20 @@ async function scenarioBarrier() {
     const G = build();
     const d = G.game.dragon;
     duel(G, { dist: 2 });
+    // (one parry, ADR-279, the default: every parry is perfect, so the first one opens it; the cracks are ?parry=two's)
+    blowAnd(G, 'flick', 'parry');
+    assert(!d.barrier.up && d.barrier.why === 'parry' && d.barrier.cracks === 0, `one parry: the first parry opens it (${d.barrier.why}; cracks ${d.barrier.cracks})`);
+    run(G, B.open[0] + 0.5);
+    d.barrier.up || d.barrier.close?.();
+    const pk0 = PARRY_KIND.mode;
+    setParryKind('two');
     const seen = [];
     for (let i = 0; i < B.cracks; i++) {
       blowAnd(G, 'flick', 'parry');
       seen.push(d.barrier.up ? d.barrier.cracks : 'open');
     }
     assert(seen.join(',') === [...Array.from({ length: B.cracks - 1 }, (_, i) => i + 1), 'open'].join(',') && d.barrier.why === 'cracks' && Math.abs(d.barrier.openDur - B.openCracked[0]) < 1e-9, `ordinary parries crack it: ${seen.join(', ')}; open for ${d.barrier.openDur} s (${d.barrier.why}; ${JSON.stringify(d.barrier.stats.opens)})`);
+    setParryKind(pk0);
     run(G, B.openCracked[0] + 0.5);
     d.barrier.crack();
     run(G, B.crackFade + 0.5);

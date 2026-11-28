@@ -130,7 +130,7 @@ export const DEFENSE = Object.freeze({
   // back as a shot (ADR-051), a blow pays x POSTURE.perfect and the counter cut (ADR-102), a `lock`
   // blow locks the blades. The owner's number (ADR-227): the perfect dodge's window, so a parry is as
   // forgiving as a dodge (it was 0.08 s). A press 0.20 - 0.22 s early is still a plain parry
-  perfectParryWindow: 0.2,
+  perfectParryWindow: 0.2, // (read through perfectParryWindow(): with ?parry=one, the default, every parry is perfect)
   parryRearm: 0.25, // s RMB must be released before a new press can parry again (anti-mash)
   parryArc: (110 * Math.PI) / 180, // the attacker must be within this cone in front of the defender
   // --- the trade clash: a blade's blow (hit.steel, not red) that arrives while the defender's own
@@ -424,6 +424,24 @@ export const DEFENSE = Object.freeze({
     regenByHp: [[0.75, 1], [0.66, 0.85], [0.33, 0.75], [0.1, 0.5], [0, 0.25]],
   },
 });
+
+// ONE PARRY (`?parry=one|two`, the Lab's `parry`; ADR-279). `one` (the owner's pick, 2026-11-28): every parry is a
+// perfect parry, its look, its freeze and its rewards (posture x POSTURE.perfect, the counter cut, a shot sent back,
+// a count toward the deathblow), anywhere in DEFENSE.parryWindow. `two`: as before, a press 0.20 - 0.22 s early is a
+// plain parry (DEFENSE.perfectParryWindow). Read at the parry (player.js `_takeHit`).
+const PARRY_OPTS = ['one', 'two'];
+const parryQ = (() => {
+  try {
+    return typeof location !== 'undefined' ? new URLSearchParams(location.search).get('parry') : null;
+  } catch {
+    return null;
+  }
+})();
+export const PARRY_KIND_DEFAULT = 'one';
+export const PARRY_KIND = { opts: PARRY_OPTS, mode: PARRY_OPTS.includes(parryQ) ? parryQ : PARRY_KIND_DEFAULT };
+export const setParryKind = (m) => (PARRY_KIND.mode = PARRY_OPTS.includes(m) ? m : PARRY_KIND_DEFAULT);
+/** How close before the impact a parry must be pressed to be perfect (s): the whole parry window with `one`. */
+export const perfectParryWindow = () => (PARRY_KIND.mode === 'two' ? DEFENSE.perfectParryWindow : DEFENSE.parryWindow);
 
 /**
  * The hero's guard meter (ADR-095). A blocked blow costs GUARD instead of HP: its damage ×

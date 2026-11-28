@@ -1,5 +1,5 @@
 import { CONFIG } from '../core/config.js';
-import { DEFENSE, TELL } from '../combat/rules.js';
+import { DEFENSE, TELL, PARRY_KIND, setParryKind } from '../combat/rules.js';
 import { ARTS } from '../entities/player/flurry.js';
 import { el, setText, setClass, button, slider, section } from './labDom.js';
 import { injectLabStyle } from './labStyle.js';
@@ -825,7 +825,7 @@ export class Lab {
    *  reload. Only in a duelist's level; collapsed by default (it is long). */
   _buildLooks(root) {
     const id = this.game.level?.id;
-    if (id !== 'ash' && id !== 'starless' && id !== 'ring' && id !== 'fox' && id !== 'grove' && id !== 'city' && id !== 'veil') return;
+    if (id !== 'ash' && id !== 'starless' && id !== 'ring' && id !== 'fox' && id !== 'grove' && id !== 'city' && id !== 'veil' && id !== 'foundry') return;
     if (this.prefs.collapsed && !('looks' in this.prefs.collapsed)) this.prefs.collapsed.looks = true;
     const { body } = this._section(root, 'looks', 'LOOKS');
     this.ui.looksSync = buildLooks(body, id, (t) => this._status(t, 'ok'));
@@ -946,6 +946,18 @@ export class Lab {
       button(grid, 'Void break', () => D().domain('break')).title = 'the void breaks: the crossing returns';
       button(grid, 'Pull', () => D().pull()).title = 'an Azure Draw knot where the hero stands (it drags him)';
       button(grid, 'Blink', () => D().blink('behind')).title = 'he is behind the hero now';
+    }
+    // the False Saint (ADR-285): his shell, a molten pool, his phases through their changes, every effect alone
+    if (typeof this.game.dragon?.debug?.fx === 'function' && Array.isArray(this.game.dragon?.debug?.fxNames)) {
+      const D = () => this.game.dragon.debug;
+      button(grid, 'Pool here', () => D().pool()).title = 'a molten pool at the hero\'s feet (cued red, then it burns)';
+      button(grid, 'Shell whole', () => D().shell(0)).title = 'no part bared (until his next cut; a phase\'s floor holds)';
+      button(grid, 'Shell half', () => D().shell(0.5)).title = 'every part at least half bared';
+      button(grid, 'Shell bare', () => D().shell(1)).title = 'the true frame everywhere';
+      for (const n of [2, 3, 4]) button(grid, `Into P${n}`, () => D().setPhase(n)).title = `the next change on the way to phase ${n} (press again after each)`;
+      button(grid, 'Tidy', () => D().tidy()).title = 'every handler stops what it holds; he stands at the middle';
+      const fxRow = el('div', 'lab-grid c4', null, body);
+      for (const n of this.game.dragon.debug.fxNames) button(fxRow, n, () => D().fx(n)).title = `fx: ${n} alone (fxDebug.js; nothing dealt, nothing broken)`;
     }
     const row = el('div', 'lab-row', null, body);
     el('span', 'lab-lbl', 'HP', row);
@@ -1378,6 +1390,12 @@ export class Lab {
       this._syncCutBtns();
     });
     this.ui.dbreadBtn.title = "the parry -> deathblow exchange made readable (?dbread=; ADR-264): a the break (he is thrown open, reeling, and the hero holds a beat before he steps in), b space (the hero strikes from 1.3 m and every blow drives him back), c a clean contact (the contact's flash smaller and off the wound, the exit burst thinner, his white hurt flash dim), all the three, 0 as before. Read at the parry";
+    this.ui.parryKindBtn = button(stkGrid, `parry ${PARRY_KIND.mode}`, () => {
+      const M = PARRY_KIND.opts;
+      setParryKind(M[(M.indexOf(PARRY_KIND.mode) + 1) % M.length]);
+      this._syncCutBtns();
+    });
+    this.ui.parryKindBtn.title = "the parry (?parry=; ADR-279): one, every parry is a perfect parry (its look, freeze and rewards) anywhere in the 0.22 s window; two, as before: a press 0.20 - 0.22 s early is a plain parry";
     this.ui.dbLockBtn = button(stkGrid, `dbLock ${dbLockMode()}`, () => {
       const M = DB_LOCK.opts;
       setDbLock(M[(M.indexOf(dbLockMode()) + 1) % M.length]);
@@ -1703,6 +1721,7 @@ export class Lab {
     if (this.ui.dbfxBtn) this.ui.dbfxBtn.textContent = `dbfx ${getDbFx()}`;
     if (this.ui.dbreadBtn) this.ui.dbreadBtn.textContent = `dbread ${dbReadMode()}`;
     if (this.ui.dbLockBtn) this.ui.dbLockBtn.textContent = `dbLock ${dbLockMode()}`;
+    if (this.ui.parryKindBtn) this.ui.parryKindBtn.textContent = `parry ${PARRY_KIND.mode}`;
     if (this.ui.strikeGapBtn) this.ui.strikeGapBtn.textContent = `strikeGap ${strikeGapMode()}`;
     if (this.ui.parryClashBtn) this.ui.parryClashBtn.textContent = `parryClash ${parryClashMode()}`;
     if (this.ui.blueTellBtn) this.ui.blueTellBtn.textContent = `blueTell ${blueTellMode()}`;

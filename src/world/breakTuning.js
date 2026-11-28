@@ -372,6 +372,9 @@ export const SCAR = Object.freeze({
     // Halcyon Plaza: no thinning; its metal rubble lies cold grey (the owner, from round 2's sheet: "if it
     // looks better grey then yes"; `?coolRubble=0` gives the orange back)
     city: Object.freeze({ grit: 1, rubble: 1, ground: 1, cool: true }),
+    // the Last Foundry: dark steel plates at night read every pale letter (the veil's precedent), so the
+    // grit and the rubble thin; its metal rubble glows as embers (a steel mill: hot scrap is the place)
+    foundry: Object.freeze({ grit: 0.5, rubble: 0.45, ground: 0.6, cool: false }),
   }),
   /** at the cap this share of the oldest marks goes, fading out over `fade` s (never a pop in view) */
   evict: 0.15,

@@ -1273,6 +1273,9 @@ is the look as it was before the option existed, `a` its author's proposal, `b` 
 | `?wjMotion=` | Bai Wuji's melee motion (ADR-250; live: from his next move) | the melee as first shipped | pocket kicks: his hands in his pockets, short straight kicks | the glide: the same, and every later blow of a string out of a short blink round the hero | turned away: back kicks, spinning heels, backhand flicks, looking over his shoulder | **b**, the owner's pick (2026-11-27) |
 | `?wjStrike=` | a cut stopped on his barrier (ADR-266; live; sheet `docs/looks/veil/wjStrike-patch.jpg`) | the ripple of rings as first shipped | a patch of the shell where it landed: a faint net of crossing strokes opening out from the point, gone in 0.22 s; nothing else | - | - | **a**, the owner's own description (2026-11-28; four filmed looks turned down) |
 | `?wjSign=` | the ring on the floor counting his barrier's opening down (ADR-266) | off (the owner's call) | the ring | - | - | **0** |
+| `?fsLook=` | the False Saint's third milestone (ADR-286; read when his rig is built) | - | both legs plated in phase 3 (the second sheet's 03, the v04 pack) | the right leg plated, the left trouser whole until phase 4 (the first sheet's 03: the anchor) | - | awaiting the owner (a drawn) |
+| `?fsLetters=` | the False Saint's letters (live) | the bosses' fixed fine cell | they follow his size on screen by the hero's rule | - | - | awaiting the owner (a drawn) |
+| `?fsMark=` | the marks of his missiles and shells on the floor (live; the values are `disc` and `ring`) | - | `disc`: a dim red disc under the ring, filling as the shot comes (drawn) | `ring`: a ring of red blobs and a ring closing in | - | awaiting the owner (disc drawn) |
 | `?gradeLook=` | the record screen's grade (ADR-179; `ui/recordLooks.js`; sheet `docs/looks/records/grade-options.jpg`) | - | the grade in block letters over its time, marks and the best before | the block letters beside those lines | the banners' plain `#` letters, the time beside | **a**, the owner's pick (2026-11-24) |
 | `?recLook=` | the title's best under each level (ADR-179; sheet `docs/looks/records/title-options.jpg`) | - | a small line under each button: grade and time | the grade in the button after the name, the time on a second line | one line under the picker for the button the mouse or pad is on | **b**, the owner's pick (2026-11-24; sheet `docs/looks/records/title-shipped.jpg`) |
 | `?incant=` | the wyrm's seal of burning script, opening each roar-cast move (ADR-197; read once; no Lab row) | - | **the seal (default)**: rings, a band of sigils, a seven-point star and a small ring at its heart, all flat on the ground (a seal before the jaws stands upright, facing the camera) | the rings and star flat, the sigils standing up on the ring as burning letters 2 m tall that face the camera (they read at the game camera, where flat ones are 2 - 3 rows tall); `c` (script streaming off its body as motes) was dropped in round 2 | - | **a**, the owner’s pick (2026-11-25: the defaults kept) |
@@ -1905,6 +1908,52 @@ down"), and none of it touches the hero, the boss or the HUD.
   a blade nears lit; cracks; shards of strokes falling when it opens. `?wjNull=a` (the pick) a hard-edged violet
   slab with crisp edges and a pale core; the wide trench it leaves has pale violet-grey edges and rows of glass.
   Weight is a skid of two pale lines that stay 3 s and grit fanned forward. Every slot comes back on reset.
+
+### The Last Foundry and the False Saint (2026-11-28, ADR-285, ADR-286; `world/lastFoundry.js`, `enemies/falseSaint/`, `?level=foundry`)
+- **The foundry** (prop art throughout; the floor in the dragon print): a casting floor of riveted dark steel plates
+  and a few gratings at night, the plates by the pour warmer; the pour along the top of the frame at the game camera;
+  the jib cranes' arms and the ladles at the sides; the press, the line of unfinished frames (his brothers: headless,
+  one-armed, half-shelled) and the blast furnace with its lit tap hole past the floor's edges; broken walls, and past
+  them a static wreck field of machine husks and a tracked hulk. The molten steel (the pour, a ladle's stream, the
+  pools) is heat in the fire field: the level's FIRE slot is the **`foundry`** palette (the cues' red rim kept, an
+  orange body, a heavy yellow-white heart; low licks and a slow boil, so molten metal lies and churns as a surface).
+  Steam and smoke are a `LetterBatch` of tiny faint letters on the level's wind; sparks off the furnace are the
+  weather's embers. Floor marks are thinned on the dark plates (`SCAR.thin.foundry`) and the metal rubble keeps its
+  ember glow (a steel mill: hot scrap is the place). The light follows his phase: a quiet furnace glow, then colder
+  with amber warning lamps, then red alarm light with a beacon turning round the hall, then the furnace roaring with
+  sparks raining and the sky flashing; the moon always from the south-west.
+- **His figure** (`falseSaint/gear.js`, `look.js`, `bodyArt.js`): ONE rig with TWO LAYERS, aligned, the same height in
+  every phase, printed the human bosses' way. The disguise: olive synthetic skin, short black hair parted on his left
+  and swept right with a lock over the right brow, an asymmetric charcoal jacket to the upper thigh closing on a
+  diagonal to his left hip, a short collar over a pale stone-grey shirt, a pale seam over both shoulders and down the
+  sleeves, slim black trousers, black boots. Under it the frame: matte titanium and smoked-ceramic plates, dark woven
+  microfilament between them, a faceted head with a diagonal black sensor slot and three tiny pale-cyan sensors, jaw
+  plates, gimbal rings at the joints, metal hands. No blood, no skull, no red eyes, no liquid metal.
+- **The reveal** (ADR-286): the disguise is cut into shards with pale, jagged laminate rims; a cut that lands chips
+  the shell where it lands (a few small pale chips flying OUTWARD, a cyan spark off the bare metal), old damage
+  stays, nothing regrows, a bonfire rest makes him whole. Each phase starts him at a milestone of the owner's sheet:
+  02 the right cheek and temple to titanium, the right forearm bare, a crack at the left collarbone; 03 the right
+  half of the head and jaw, the right chest and arm, the legs plated (`?fsLook`); 04 all but a scrap of jacket at the
+  left hip and a few skin flakes at the shoulder. His weapons show only once their part is bare: the elbow boosters
+  and the palm's iris (P2), the shoulder petals and the back and calf thrusters (P3), the core slit and the mortar
+  tubes (P4).
+- **The anchor** (the v04 pack's `anchor.png`, the visual authority): the v04 pass sculpted the face (cheekbones, a
+  brow ridge, the nose, almond eyes, straight brows), gave the hair its side part, set the skin olive, the cloth darker
+  and matte, the titanium brighter and cooler, the rims paler and the sensors dimmer. His hands are open in every
+  phase (reach on a palm's contact, the half-curled guard otherwise, a fist only on the booster punch). At the game
+  camera the face is a few pixels and the phases read apart mostly by brightness and the level's light.
+- **His effects** (`falseSaint/fx.js`, `fxArsenal.js`): everything that burns, glows or strikes as a body is HEAT
+  in the fire field. The void slot is his **`saint`** palette (swapped in as his effects are built, as the Ring swaps
+  in gold): INCANDESCENT, a dark amber rim, a pale amber-white body, a white heart; his jets, the charges, the lance
+  and the beams' bodies. The fire slot draws what burns, the molten steel and every RED cue (the marks, the sight
+  line's cross, the locked reticle); `steel` the white-hot cores. Small things that fly are glyph particles of one
+  letter cell: sparks, shell chips, brass casings, grit. Nothing is a big glowing sprite.
+- **Cyan is cosmetic only** (the owner's v04 rule): his sensors and his shell's sparks are tiny cyan glyph particles
+  and a small light, never heat, never brightening with an attack. Blue means parry here, so nothing of his that
+  signals an attack is cyan or blue: the sight lines are pale white with a red cross, the pass lines pale white, the
+  marks red (`?fsMark`). The engine's white contact glint stays the brightest thing at a contact.
+- **His death**: down on one knee, an arm half raised; the three sensors go out one by one (`look.js` `SENSOR_OUT`
+  1.0 / 1.65 / 2.3 s, flickering first), the power-down's sound.
 
 ### The Training Room (2026-11-15, ADR-099; `world/trainingRoom.js`, `?stage=lab`)
 A lab stage for any boss: a dark dojo of light (the owner's pick of three looks: "Holo", over a

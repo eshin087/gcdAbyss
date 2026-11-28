@@ -81,6 +81,12 @@ export const TREMOR_TUNING = Object.freeze({
     stone: { ...DEFAULT.stone, color: [0.46, 0.46, 0.47] },
     floor: { ...DEFAULT.floor, color: [0.4, 0.4, 0.41] },
   }),
+  // the Last Foundry: no trees; scale and rust dust shaken off the steel, slag grit on the plates
+  foundry: level({
+    tree: { ...DEFAULT.tree, leaves: 0 },
+    stone: { ...DEFAULT.stone, color: [0.45, 0.4, 0.36] },
+    floor: { ...DEFAULT.floor, color: [0.42, 0.38, 0.35] },
+  }),
   grove: level({
     gust: { ...DEFAULT.gust, min: 99 },
     stone: { ...DEFAULT.stone, color: [0.4, 0.42, 0.38] },
