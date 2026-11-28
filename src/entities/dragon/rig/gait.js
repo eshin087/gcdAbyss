@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fixOn } from '../motionFix.js';
 
 // Foot planting for the four ground contacts of the drake: two hind feet and two front paws.
 // A contact stays planted until its home (root-relative rest spot + velocity / turn lead) drifts
@@ -336,10 +337,12 @@ export class Gait {
       // pops of 55-65°). The part of the home's move beyond what the root's travel and turn explain is
       // taken into `off`, which fades out by the landing: the foot sweeps over smoothly and still lands
       // exactly on the home (step decisions, lift timing and landing spots are unchanged)
+      let dl, expect;
       {
-        const dx = l.home.x - l.to.x, dz = l.home.z - l.to.z, dl = Math.hypot(dx, dz);
+        const dx = l.home.x - l.to.x, dz = l.home.z - l.to.z;
+        dl = Math.hypot(dx, dz);
         const r = Math.hypot(l.home.x - this.pivot.x, l.home.z - this.pivot.z);
-        const expect = (Math.abs(speed) * 1.25 + this.turnRate * r * 1.25 + 1.5 * sc) * dt;
+        expect = (Math.abs(speed) * 1.25 + this.turnRate * r * 1.25 + 1.5 * sc) * dt;
         const fade = l._tPrev < 1 ? Math.max(0, Math.min(1, (1 - t) / Math.max(1e-4, 1 - l._tPrev))) : 0;
         l.off.multiplyScalar(fade);
         if (dl > expect && Number.isFinite(dl)) {
@@ -351,7 +354,9 @@ export class Gait {
         if (!Number.isFinite(l.off.x + l.off.z)) l.off.set(0, 0, 0);
         l._tPrev = t;
       }
-      l.to.copy(l.home);
+      // (the motion audit: on its landing frame a foot does not take a home that just jumped; it lands where
+      // it was going and steps again)
+      if (!(t >= 1 && dl > expect && fixOn())) l.to.copy(l.home);
       l.posRef.lerpVectors(l.from, l.to, e);
       l.lift = Math.sin(Math.PI * t);
       l.posRef.y = l.to.y + l.lift * l.height;

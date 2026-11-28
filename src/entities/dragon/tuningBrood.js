@@ -125,7 +125,7 @@ export const BROOD = {
     wisps: {
       label: 'Kamikaze wisps', tell: TELL.RED, phase: 1, category: 'spell',
       windup: 1.25, cast: 1.1, recovery: 0.8,
-      r: 2.6, // m: the seal before its jaws
+      r: 10, // m: the circle round its feet, as the drakelings' (it was a 2.6 m seal hanging before its jaws)
       minDist: 7,
       weight: [0, 0.5, 0.5], cooldown: 24,
       // late in phase 1: below this share of its life, at this weight (kept out of `weight`: the

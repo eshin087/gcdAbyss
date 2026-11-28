@@ -8,11 +8,14 @@ import { FIRE_PALETTES } from '../../render/firePalettes.js';
 // (game.fx.fire, docs/STYLE.md "The fire field"). Every roar-cast spell (spellsFire.js,
 // broodAttacks.js) calls cast() at its windup and reads back where the circle stands.
 //
-//   cast({ x, y, z, r, dur, kind, color }) -> id
+//   cast({ x, y, z, r, dur, kind, color, under }) -> id
 //                     a circle at (x, y, z), radius r m, burning `dur` s (then it burns out by itself;
 //                     end() sooner). kind 'ground' (flat on the ground round x, z) | 'jaws' (a seal
 //                     hanging in the air, facing the camera; with x unset it hangs before the wyrm's
 //                     mouth and follows it). color: the ink ('script' | 'fire' | 'blood'; ?incantInk).
+//                     under: a ground circle round the wyrm's feet that stays under it while it burns
+//                     (it turns and shuffles through a cast: left where it was cast, the circle was
+//                     seen beside it; 2026-11-28)
 //   flare(id, k)      the circle's power 0..1 (it brightens as the spell charges; a rise to 1 flashes)
 //   end(id)           the circle burns out (its lines tear up into tongues over a short tail)
 //   update(dt)        every frame (Dragon.update; never throws)
@@ -91,7 +94,7 @@ const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 function blank() {
   return {
-    alive: false, id: 0, kind: 'ground', follow: false, look: 'a', ink: 'fire',
+    alive: false, id: 0, kind: 'ground', follow: false, under: false, look: 'a', ink: 'fire',
     x: 0, y: 0, z: 0, r: 4, dur: 3, t: 0, k: 0, kPrev: 0, flashT: 9, ending: false, endT: 0,
     // the plane: u (right) and v (up / outward) axes; ground: u = +x, v = +z
     ux: 1, uy: 0, uz: 0, vx: 0, vy: 0, vz: 1, rot0: 0, rot1: 0, seed: 0, lickAcc: 0,
@@ -145,7 +148,13 @@ export class Incantation {
     c.rot1 = hash(c.id, 2) * TAU;
     c.lickAcc = 0;
     c.follow = c.kind === 'jaws' && !Number.isFinite(o.x);
+    c.under = c.kind === 'ground' && !!o.under;
     if (c.follow) this._toJaws(c);
+    else if (c.under) {
+      this._toRoot(c);
+      c.y = fin(o.y, 0);
+      this._flat(c);
+    }
     else {
       c.x = fin(o.x, d.position?.x ?? 0);
       c.z = fin(o.z, d.position?.z ?? 0);
@@ -224,6 +233,7 @@ export class Incantation {
       }
       n++;
       if (c.follow) this._toJaws(c);
+      else if (c.under) this._toRoot(c);
       else if (c.kind === 'jaws') this._toCamera(c);
       try {
         this._draw(c, step);
@@ -248,6 +258,13 @@ export class Incantation {
     c.vx = 0;
     c.vy = 0;
     c.vz = 1;
+  }
+
+  _toRoot(c) {
+    const p = this.d.position;
+    if (!p || !Number.isFinite(p.x + p.z)) return;
+    c.x = p.x;
+    c.z = p.z;
   }
 
   _toJaws(c) {

@@ -4736,7 +4736,9 @@ async function scenarioAblaze() {
   // firestorm, drakelings, wisps; no existing attack changed: without them it still hashes to 103cbc42)
   // (3c37e8c0 since ADR-223: the table gained the quick Snap swipe (its weight read through its switch, the
   // owner's pick a); no existing attack changed: without it it still hashes to c08725a9)
-  const BASE_ATTACKS = '3c37e8c0';
+  // (4838366d since ADR-281: the wisps cast their circle round the wyrm's feet, its r 2.6 → 10 m, as the
+  // drakelings'; no other attack changed: with the wisps' r at 2.6 it still hashes to 3c37e8c0)
+  const BASE_ATTACKS = '4838366d';
   const table0 = JSON.stringify(TUNING.attacks);
   M.setAblazeLook('b');
   const G = build();
@@ -6320,7 +6322,9 @@ async function scenarioCombos() {
         p.slashFx.onLine = () => lines++;
         for (let k = 0; k < n; k++) {
           if (k === n - 1) {
-            p.debug.teleport(c.x + fx * (c.r + 2), c.z + fz * (c.r + 2));
+            // (1.5 m off the body's front sphere, inside every hit's reach (2.1 - 2.3 m): at 2 m combo a's
+            // fifth hit only grazed the head 9 m up, and a 4 cm change of the wyrm's idle head made it miss)
+            p.debug.teleport(c.x + fx * (c.r + 1.5), c.z + fz * (c.r + 1.5));
             p.yaw = Math.atan2(c.x - p.position.x, c.z - p.position.z);
             lines = 0;
             G.watch = (nn, e) => { if (nn === 'player:hitDragon' && !hit) hit = { combo: p.atk?.def?.combo, t: p.atk?.t ?? NaN, def: p.atk?.def, guarded: e.guarded }; };
@@ -11038,6 +11042,11 @@ async function scenarioBroodBusy() {
   const { BULLET, CUE } = await imp('src/entities/dragon/bullets.js');
   const answerOf = (tell) => (tell === TELL.RED || tell === TELL.BLACK ? 'dodge' : 'guard');
   const lead = TUNING.flashLead, HM = BROOD.hold.max, LT = BROOD.late;
+  // (the motion before ADR-281's fixes, `?wyrmFix=0`: this scripted spell was tuned so one cue's hold runs
+  // out under it; the fixes' eased turns move the moves a frame or two and no cue waits out its hold. The
+  // brood's scheduling is the subject here, not the wyrm's motion)
+  const { setLook } = await imp('src/entities/enemies/duelist/lookSwitch.js');
+  setLook('wyrmFix', '0');
   const G = build();
   const { game } = G;
   fightSetup(G);
@@ -11151,6 +11160,7 @@ async function scenarioBroodBusy() {
   assert(ember === CUE.CLASH && orb === CUE.NEW, 'a red brood cue bars embers due beside it (a dud: CLASH), not orbs (they cue themselves)');
   B.clear();
   G.watch = null;
+  setLook('wyrmFix', null);
   return G;
 }
 
@@ -11252,7 +11262,16 @@ async function scenarioBrood() {
   circle = null;
   assert(d.debug.trigger('wisps') === true, 'Lab: wisps forced');
   run(G, 0.05, { passive: true });
-  assert(circle && circle.kind === 'jaws', 'the wisps incantation hangs before its jaws');
+  assert(circle && circle.kind === 'ground' && circle.under, 'the wisps incantation is a circle on the ground under the wyrm (no longer a seal hanging before its jaws)');
+  {
+    // it stays under the wyrm while it burns: the wyrm moved 3 m, the circle with it
+    const I2 = game.dragon.incantation, at = {};
+    game.dragon.position.x += 3;
+    run(G, 0.05, { passive: true });
+    const ok = I2.at(circle.id, at) && Math.hypot(at.x - game.dragon.position.x, at.z - game.dragon.position.z) < 0.05;
+    game.dragon.position.x -= 3;
+    assert(ok, `the circle follows the wyrm while it burns (${JSON.stringify(at)})`);
+  }
   const nw = BROOD.wisp.count[1];
   run(G, 10, { passive: true }, () => { p.hp = p.maxHp; return B.count('wisp') === 0 && spawns.length > 0; });
   G.watch = null;
@@ -15772,6 +15791,52 @@ async function scenarioWyrmMotion() {
   return G;
 }
 
+// ================================================================== scenario: wyrmfix (2026-11-28, ADR-281)
+// The motion audit's fixes (motionFix.js), held: a few of the worst offenders through the audit
+// (tests/integration/wyrmMotion.mjs), each limit the fix set; and `?wyrmFix=0` gives the motion before back.
+async function scenarioWyrmFix() {
+  out('\n== scenario WYRMFIX (the motion audit fixes: wings out of the ground, no teleports, the head on its neck, a smooth tail, planted landings) ==');
+  const { makeWyrmMotion } = await import(pathToFileURL(`${ROOT}/tests/integration/wyrmMotion.mjs`).href);
+  const { setLook } = await imp('src/entities/enemies/duelist/lookSwitch.js');
+  const { ATTACKS } = await imp('src/entities/dragon/attacks.js');
+  const G = build();
+  fightSetup(G);
+  const { game } = G;
+  const d = game.dragon, p = game.player;
+  p.debug.noRiposte = true;
+  p.debug.god = true;
+  const A = makeWyrmMotion({ THREE, G, DT, SCALE, place, settle });
+  const move = (name, dist = 5.5, ang = 0.1) => A.measure(name, () => {
+    settle(G);
+    const ph = Math.max(1, TUNING.attacks[name]?.phase ?? ATTACKS[name].phase ?? 1);
+    if (d.phase !== ph) d.enterPhase(ph);
+    d.hazards?.clear?.();
+    d.brood?.clear?.();
+    place(G, dist, ang);
+    d.brain.startAction(ATTACKS[name]);
+  }, { secs: 14, done: () => !d.brain.action });
+  // 1. the wing buffet: before, its finger tips went 3 m under the ground; the switch gives that back
+  setLook('wyrmFix', '0');
+  const wb0 = move('wingBuffet');
+  setLook('wyrmFix', null);
+  const wb = move('wingBuffet');
+  out(`  wingBuffet: under the ground ${wb0.under.toFixed(2)} m before, ${wb.under.toFixed(2)} m now (${wb.underK}); wing pop ${wb0.pop.wing.toFixed(0)} -> ${wb.pop.wing.toFixed(0)} m/s`);
+  assert(wb0.under > 1 && wb.under <= 0.15, `the wing buffet's wings stay out of the ground (${wb.under.toFixed(2)} m; ?wyrmFix=0: ${wb0.under.toFixed(2)} m)`);
+  // 2. a string of claws and bites: no paw or head teleports, the head on its neck, the tail smooth
+  const cf = move('cinderFlurry');
+  out(`  cinderFlurry: pops head ${cf.pop.head.toFixed(0)} paw ${cf.pop.paw.toFixed(0)} foot ${cf.pop.foot.toFixed(0)} m/s, hinge ${cf.hinge.toFixed(0)}°, tail ${cf.tailK.toFixed(0)}°`);
+  assert(cf.pop.head < 80 && cf.pop.paw < 140 && cf.pop.foot < 80 && cf.hinge < 72 && cf.tailK < 50 && cf.under <= 0.15, `the cinder flurry: no teleport (head ${cf.pop.head.toFixed(0)} < 80, paw ${cf.pop.paw.toFixed(0)} < 140, foot ${cf.pop.foot.toFixed(0)} < 80 m/s), the head on its neck (${cf.hinge.toFixed(0)}° < 72), a smooth tail (${cf.tailK.toFixed(0)}° < 50)`);
+  // 3. a dive: the snout above the ground, the feet planted on landing
+  const db = move('diveBomb', 11, 0);
+  out(`  diveBomb: under ${db.under.toFixed(2)} m (${db.underK}), slide ${db.slide.toFixed(2)} m, hinge ${db.hinge.toFixed(0)}°`);
+  assert(db.under <= 0.15 && db.slide <= 0.2 && db.hinge < 72, `the dive bomb: the snout clear of the ground (${db.under.toFixed(2)}), the feet plant on landing (slide ${db.slide.toFixed(2)} m)`);
+  // 4. the death: nothing through the ground, the neck whole
+  const de = A.measure('death', () => { settle(G); place(G, 9, 0.3); d.debug.kill(); }, { secs: 3 });
+  out(`  death: under ${de.under.toFixed(2)} m, hinge ${de.hinge.toFixed(0)}°`);
+  assert(de.under <= 0.15 && de.hinge < 45, `the death: nothing through the ground (${de.under.toFixed(2)} m), the head on its neck (${de.hinge.toFixed(0)}°)`);
+  return G;
+}
+
 const SCENARIOS = {
   wyrmmotion: scenarioWyrmMotion,
   wyrmhead: scenarioWyrmHead,
@@ -15858,8 +15923,9 @@ const SCENARIOS = {
   breach: scenarioBreach,
   forestedge: scenarioForestEdge,
   probe: scenarioProbe,
-  // (last: its Math.random draws shift no other scenario's seeded run)
+  // (last: their Math.random draws shift no other scenario's seeded run)
   pawtells: scenarioPawTells,
+  wyrmfix: scenarioWyrmFix,
 };
 // (one parry, ADR-279: ?parry=one, the default, makes every parry perfect. These scenarios press a PLAIN parry on purpose
 // (a perfect one would lock the blades, break him, or send a shot back): they run with ?parry=two)

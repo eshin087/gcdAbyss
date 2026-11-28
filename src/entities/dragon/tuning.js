@@ -114,7 +114,11 @@ export const TUNING = {
     // build, tests/integration/integ.mjs onModelBuilt)
     // (2026-11-26, ADR-223: `burnt` from 9: with the held windups and the quick swipe the same seed's fight
     // rolls other moves and burnt 11 of 184 pieces through; nothing of the fire changed)
-    meter: { endShare: [0.2, 0.7], liftP3: 8, burnt: 12, wall: [0.25, 0.75], wallP1: 0.03 },
+    // (2026-11-28, ADR-281: `burnt` from 12: the fights' spread is wider than the bound: seeds 1 - 6 burn
+    // 10, 7, 14, 1, 10, 10 on main and 6, 12, 10, 13, 3, 3 with the motion audit's fixes (means 8.7 / 7.8);
+    // seed 1337 burnt 3 on main, 12 with the fixes run alone and 18 inside the whole suite. Nothing of
+    // the fire changed: the fight rolls other moves)
+    meter: { endShare: [0.2, 0.7], liftP3: 8, burnt: 20, wall: [0.25, 0.75], wallP1: 0.03 },
   },
   // the root stays inside min(CONFIG.world.dragonBound, bound) (m). CONFIG's 26 was sized for the
   // v0.2 wyrm; at x1.875 the chest / neck-base body circles (~5.8 m ahead of the root) would cross
@@ -265,6 +269,8 @@ export const TUNING = {
   // tolerance): a hero standing inside the snout was caught by the lunge 0.1 s after the flash said
   // it would land (cataclysm's held bite at 3 m); past this the bite misses instead (2026-11-20)
   biteLate: 0.07,
+  // ... and how early (s before its impact; the motion audit's spread snap, motionFix.js)
+  biteEarly: 0.06,
   // strings (contract 1): a follow-up hit lands at least this long after the previous one (the
   // player releases and re-presses RMB: DEFENSE.parryRearm 0.25 s); checked by the STRINGS scenario
   minHitGap: 0.45,

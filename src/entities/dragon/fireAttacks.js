@@ -1,4 +1,5 @@
 import { lookOf } from '../enemies/duelist/lookSwitch.js';
+import { fixOn } from './motionFix.js';
 import * as THREE from 'three';
 import { TUNING, SCALE } from './tuning.js';
 import { clamp, lerp, smoothstep, easeOutCubic, easeInCubic, easeInOutSine, angleDiff } from '../../core/math.js';
@@ -10,6 +11,8 @@ import { APOC_LOOK, skyBolt, skyPillar, skyThroat } from './skyFx.js';
 // The meteors' roar with the head held naturally (ADR-258; `?wyrmHead=a`, the default; '0' as before: the
 // neck swung back past upright, the head behind the neck's base, the snout 15° past vertical toward the tail
 // and the head rolled over on its snout). Root frame, model units: the reared head's spot and its look point.
+// the least height a diving head is carried at (m; the motion audit)
+const DIVE_HEAD_Y = 2.2;
 const HEAD_UP = Object.freeze({ y: 7.6, z: 2.3, lookY: 40, lookZ: 3.5 });
 const headUp = () => (lookOf('wyrmHead', '0') === '0' ? null : HEAD_UP);
 
@@ -295,8 +298,15 @@ const skyStrafe = {
       // the landing on the far side: a braking glide down, legs reaching, the wings snapping open
       const u = clamp(k / 0.55, 0, 1);
       if (!a.landed) {
-        const e = easeOutCubic(u);
-        this.place(d, a, lerp(a.sLand, a.D, e));
+        if (fixOn() && Number.isFinite(a.vf)) {
+          // (the motion audit) the glide starts at the pass's own speed and brakes to a stop (a Hermite):
+          // easeOutCubic started it at 3x its average, a 1 m jump in the body the frame the pass ended
+          const T = 0.55 * Math.max(0.05, a.dur), L = a.D - a.sLand, v0 = clamp(a.vf, 0, (3 * Math.max(0, L)) / T);
+          this.place(d, a, a.sLand + v0 * T * (u - 2 * u * u + u * u * u) + L * (3 * u * u - 2 * u * u * u));
+        } else {
+          const e = easeOutCubic(u);
+          this.place(d, a, lerp(a.sLand, a.D, e));
+        }
         fly(pose, a.altLand * (1 - smoothstep(0, 1, u)), 0.65, 2.7);
         pose.glide = 0.35 * (1 - u);
         pose.airReach = smoothstep(0.2, 0.8, u);
@@ -490,6 +500,10 @@ const diveBomb = {
       pose.head.y -= 1.0 * S;
       pose.headRate = 10;
       pose.lookDown = 1.2;
+      if (fixOn()) {
+        pose.head.y = Math.max(pose.head.y, DIVE_HEAD_Y); // (the motion audit: as the flying combos' dive)
+        pose.lookDown = 0.75;
+      }
       pose.jaw = 1;
       d.throat = 0.8;
     }
@@ -1127,6 +1141,13 @@ function makeFlightCombo(key) {
         pose.headRate = 6;
         pose.jaw = 0.4;
         d.throat = 0.5;
+        if (fixOn()) {
+          // (the motion audit) a banking turn: the head keeps up with the turn and looks along the flight
+          // until it comes round (it trailed 3.9 m behind its goal, looking back down at the hero, and its
+          // snout curled into its own chest)
+          pose.headRate = 12;
+          if (a.phase === 'wheel' && k < 0.7) d.rootPt(pose.look, 0, 0, 14);
+        }
       } else if (a.phase === 'barrage') {
         // hanging beside him on steady strokes, head down, spitting shell after shell
         d.turnToward(s.yawTo, 2.6, dt);
@@ -1197,6 +1218,12 @@ function makeFlightCombo(key) {
         pose.head.y -= 1.0 * S;
         pose.headRate = 10;
         pose.lookDown = 1.2;
+        if (fixOn()) {
+          // (the motion audit) it dives at its mark with the head carried clear of the ground and the snout
+          // not tipped straight down at it (it went 0.45 m into the ground at the dive's end)
+          pose.head.y = Math.max(pose.head.y, DIVE_HEAD_Y);
+          pose.lookDown = 0.75;
+        }
         pose.jaw = 1;
         d.throat = 0.8;
       }

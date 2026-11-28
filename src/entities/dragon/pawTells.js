@@ -37,7 +37,8 @@ export function blueWindup(d, h, k, dt) {
   if (L === 'a') {
     // the scythe: out wide and back at shoulder height, the chest twisted away, the near wing folded
     const B = WYRM_PAW.scythe, e = smoothstep(0, 0.75, k);
-    d.turnToward(d.sense.yawTo + side * B.turn, d.turnRate * (h.spec.turn ?? 0.8), dt);
+    // (its own turn speed: a string's fast turn, the storm flurry's x2.2, swung the 15 m tail 3 m in a frame)
+    d.turnToward(d.sense.yawTo + side * B.turn, d.turnRate * Math.min(h.spec.turn ?? 0.8, 0.9), dt);
     d.rootPt(ov.pos, side * lerp(1.4, B.wind[0], e), lerp(0.6, B.wind[1], e) + 0.2 * Math.sin(k * Math.PI), lerp(2.3, B.wind[2], e));
     pose.twist = side * B.twist * e;
     pose.roll = -side * B.roll * e;

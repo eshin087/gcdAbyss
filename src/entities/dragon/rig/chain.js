@@ -186,12 +186,40 @@ export class Chain {
       p.addScaledVector(v, dt);
     }
     this.enforce();
+    if (this.relax > 0) this.relaxKinks(this.relax);
     if (dt > 1e-5) {
       for (let i = 1; i <= n; i++) {
         this.vel[i].subVectors(this.p[i], this.prev[i]).multiplyScalar(1 / dt);
         if (!Number.isFinite(this.vel[i].x + this.vel[i].y + this.vel[i].z)) this.vel[i].set(0, 0, 0);
         this.vel[i].clampLength(0, 60);
       }
+    }
+  }
+
+  /**
+   * Smooth out joints bent past ~80 % of the bend limit (the motion audit, 2026-11-28): a chain laid along
+   * the ground (groundGlide) kept its bend limit only above the ground, and the clamp folded the tail
+   * 70 - 90 deg at the joint where it met the ground. Each such point moves toward its neighbours' middle,
+   * weighted by how far past it is (continuous: an on / off rule jittered a resting tail), `iters` rounds.
+   */
+  relaxKinks(iters) {
+    const n = this.n, p = this.p, a0 = this.maxBend * 0.8, span = 0.35;
+    for (let it = 0; it < iters; it++) {
+      let any = false;
+      for (let i = 1; i < n; i++) {
+        _d.subVectors(p[i], p[i - 1]).normalize();
+        _rd.subVectors(p[i + 1], p[i]).normalize();
+        const a = Math.acos(Math.max(-1, Math.min(1, _d.dot(_rd))));
+        if (a > a0) {
+          any = true;
+          const w = 0.5 * Math.min(1, (a - a0) / span);
+          _v.addVectors(p[i - 1], p[i + 1]).multiplyScalar(0.5);
+          p[i].lerp(_v, w);
+          if (this.minY && p[i].y < this.minY[i]) p[i].y = this.minY[i];
+        }
+      }
+      if (!any) break;
+      this.enforce();
     }
   }
 
