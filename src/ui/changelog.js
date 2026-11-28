@@ -28,6 +28,16 @@ export const RELEASES = [
       },
       {
         date: '2026-11-28',
+        title: "gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi and a prouder bearing",
+        notes: [
+          'The torn cloth on his left arm no longer sticks out from his shoulder in the fifth light hit, and the whole cloak flaps less in his swings.',
+          'His left hand stays in sight through the light combo: held out from his side as a counterweight instead of hidden behind his back.',
+          'The slash after each swing now lies along the path the sword took on screen, from any side, instead of floating ahead of him.',
+          'Stop after the last light hit and he flicks the blood off his blade. He also stands taller, chest up and chin raised.',
+        ],
+      },
+      {
+        date: '2026-11-28',
         title: 'Swipe to dodge on touch',
         notes: [
           'Touch: flick your thumb on the right half of the screen and the hero dodges that way at once (SWIPE DODGE in the pause menu turns it off).',

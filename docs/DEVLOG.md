@@ -24,6 +24,43 @@ verification, open issues / next steps. Keep entries short; link commits/PRs whe
 
 ---
 
+## 2026-11-28 — gcd's combo polished: a calm cloak, a visible left hand, slashes on the sword's path, a chiburi, a prouder bearing (ADR-292; `player/hero-anim-polish`)
+
+**Owner:** in the fifth light hit the bottom-left feathered part of the cloak appears and flaps too much; the left arm
+and hand seem missing in the light combo; the instant slashes do not match the sword swing from every camera view;
+make gcd feel like an anime main character. Asked: the left hand as options to pick from; for confidence a blade flick
+after the combo and a taller, chin-up posture.
+
+- **Found by filming combo A at the game camera from four sides, then measuring:** the flapping "feathers" were the
+  torn drape on his LEFT UPPER ARM (shroud sheet 3): in the two-handed finisher the arm crosses his chest and the drape
+  stood out level off his shoulder (1.45 rad, its limit), its pale hem a wing from behind; hiding it alone removed
+  the defect. Every cloak sheet trailed its root's own speed: 6 - 9 m/s in a swing (arms, chest turn) against 4.7 at
+  a run. The left hand: combo A's `back` hand sits under the cloak from the camera behind him. The slash: on a whiff
+  `enemy` placed it 1.9 m ahead, drawn above his head from behind, 3.6 - 5.6 m long, along the hand's path.
+- **The cloak (`clothCalm.js`, `?cloth=old`):** an arm's sheet hangs from the shoulder as the arm lifts; the whip of the
+  arms and the chest's turn is held out of every sheet's swing (his travel kept whole, not while tumbling); a sheet is
+  eased onto a bound that jumps when the blade crosses it (production's backhand snapped the drape 0.7 rad in a frame).
+  Only today's cloak (the shroud's sheets carry `calm`): the kept outfits keep their tuning (the robe's cloth test).
+  The drape's widest swing in the finisher 1.45 -> 0.33 rad, its fastest step 0.11 - 0.18 -> 0.04 rad a frame.
+- **The left hand (`offHand.js`):** `out` (counterweight out from his left side, the combo A default for now) and `sign`
+  (sword fingers held out at the foe), both tucked in through a turning swing (`tuck`: held out, a whirl swept them
+  18 - 26 cm a frame). Films of out / sign / back / side for the owner's pick.
+- **The slash (`slashFx.js` `?endslash=sweep`, the default):** way, length and place from three points along the blade
+  as the camera projects them (speed²-weighted), through the contact when it lands, laid in the screen's plane.
+- **Confidence (`bearing.js`):** the chest 0.05 - 0.06 rad up and the chin 0.06 - 0.09 rad up standing and from the end
+  of each swing's active frames (`?bearing=0`); after combo A's fifth hit, standing still, the chiburi (the idle flick
+  on a 1.7 s clock as an idle action of its own; any move, guard or attack cuts it; `?flick=0`). Not after the slam:
+  armed there (the sims' chain), the flick pushed the robe's cloth test from 37 to 71 clipped frames.
+- **Tests:** new integ `heropolish` (the drape under its bound and every sheet's step under 0.13 rad a frame, `old` at
+  1.45; the flick played and cut by a step within 0.17 s, none with `?flick=0`; four facings on a whiff, every slash
+  within 0.86 m of the blade's path, `enemy` 1.71 m; the bearing lifts the chin); `offhand` runs `out` and `sign`
+  (13.0 / 16.5 cm a frame against production's 25.0); the sword ribbon's rest bound 25° -> 28° (the bearing: 24° -> 27°,
+  measured with it off and on).
+- **Open:** the owner's pick of the hand and their playtest on the preview; the flick is not shown after other combos'
+  slam finishers (combo c); the phone not filmed.
+
+---
+
 ## 2026-11-28 — Swipe to dodge on touch, the guard on the left to try (ADR-278; `ui/touch-swipe-dodge`)
 
 **Owner:** too slow to parry or dodge on the phone compared with mouse / keyboard / controller; picked "guard on the

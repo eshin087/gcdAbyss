@@ -3,9 +3,11 @@ import { clamp, lerp, smoothstep, damp, easeOutCubic, wrapAngle, TAU } from '../
 import { DIM, BODY, HAIR_CLUSTERS, HERO_SCALE, sheetOffset } from './model.js';
 import { SWINGS, FH } from './swings.js';
 import { atEase, fencerGuard } from './stances.js';
-import { idlesOld, idlesRef, idlesMode, easeArms, guardArms, newRests, tickRests, pickEase, actStart, lowRest, toLowRest, trailing, easeRests, fightRests, stowHidden, EASE_HABITS, EASE_TRICKS, FIGHT_ACTS, FIGHT_ACTS_REF, EASE_REF_EXTRA, IDLES } from './idles.js';
+import { idlesOld, idlesRef, idlesMode, easeArms, guardArms, newRests, tickRests, pickEase, actStart, lowRest, toLowRest, trailing, easeRests, fightRests, stowHidden, EASE_HABITS, EASE_TRICKS, FIGHT_ACTS, FIGHT_ACTS_REF, EASE_REF_EXTRA, IDLES, COMBO_FLICK } from './idles.js';
 import { refStand, refReady, refGuard, guardMode, REF_GUARD, HOLDS, holdMode, holdHabits } from './refStance.js';
 import { offHandLook } from './offHand.js';
+import { CLOTH, clothMode } from './clothCalm.js';
+import { BEARING, FLICK, bearingOn, flickOn } from './bearing.js';
 import { feelLook, warpPhase } from './feel.js';
 
 // Procedural animation for the Wanderer, keyed to the owner's concept sheets ("Movement" / "Combat
@@ -2681,9 +2683,11 @@ const FIGHT_LIST = FIGHT_ACTS.map(withP);
 // habits that keep both hands on the grip
 const EASE_LIST_REF = [...EASE_LIST, ...EASE_REF_EXTRA.map(withP)];
 const FIGHT_LIST_REF = FIGHT_ACTS_REF.map(withP);
-/** The list an idle action's index refers to (A.fidget.pool: 0 the old ones, 1 at ease, 2 the fight; of
- *  the mode drawn now: _idleLife cuts an action when the mode changes under it). */
-const actList = (pool) => (pool === 1 ? (idlesRef() ? EASE_LIST_REF : EASE_LIST) : pool === 2 ? (idlesRef() ? FIGHT_LIST_REF : FIGHT_LIST) : FIDGETS);
+// (pool 3: the chiburi after the chain, bearing.js FLICK: in either stance, never picked as an idle action)
+const FLICK_LIST = [withP(COMBO_FLICK)];
+/** The list an idle action's index refers to (A.fidget.pool: 0 the old ones, 1 at ease, 2 the fight, 3 the
+ *  flick after the chain; of the mode drawn now: _idleLife cuts an action when the mode changes under it). */
+const actList = (pool) => (pool === 1 ? (idlesRef() ? EASE_LIST_REF : EASE_LIST) : pool === 2 ? (idlesRef() ? FIGHT_LIST_REF : FIGHT_LIST) : pool === 3 ? FLICK_LIST : FIDGETS);
 /** The current idle action's layer (A.fidget, timed in HeroAnimator._idleLife). */
 function idleLife(p, A) {
   const F = A.fidget;
@@ -2906,6 +2910,8 @@ export const OFF_SNAP = [0.035, 0.05, 0.08];
 // elbow of ~155°), eased in from SIDE_FOLD (a hand held folded at the chest is not thrown out in a frame);
 // its lag on the way in (no limit: it falls from wherever it was). The nearest: the look's `near`
 const SIDE_HZ = 240, SIDE_SNAP = 0.1, SIDE_REACH = 0.58, SIDE_FOLD = 0.25, SIDE_FREE = 1.5;
+// … and how long a look's `tuck` (offHand.js) takes to draw it in for a turning swing and let it out again (s)
+const SIDE_TUCK = 0.12;
 const _shR = new THREE.Vector3(), _shO = new THREE.Vector3(), _shQ = new THREE.Vector3(), _shG = new THREE.Vector3(), _shA = new THREE.Vector3(), _shB = new THREE.Vector3(), _shC = new THREE.Vector3();
 // × the arm's length: the free elbow on the grip keeps ≥ 23° of bend (the cleave locked it at 176°)
 const LOCK_REACH = 0.98;
@@ -2937,6 +2943,9 @@ const COL_ARM = new Uint8Array(COL_N); // 0 the blade, 1 the right arm, 2 the le
 const COL_BND = new Float32Array(2); // _sheetBound's result: the least / most outward swing allowed
 const _so = new THREE.Vector3(), _cq = new THREE.Vector3(), _qS = new THREE.Quaternion();
 const _sf = new THREE.Vector3(), _cf = new THREE.Vector3(); // a `floor` streamer's segment root (world, drawn lengths)
+// (the cloak's calm, clothCalm.js: his root, its speed, the chest's and an arm's turn, the sheet's turn on each)
+const _cR = new THREE.Vector3(), _cV = new THREE.Vector3(), _cC = new THREE.Quaternion(), _cA = new THREE.Quaternion();
+const _cS = new THREE.Quaternion(), _cT = new THREE.Quaternion();
 const PAULDRON_FOLLOW = 0.35; // how much of the sword arm's swing the shoulder armour follows
 // the charge's updraft (× A.updraft 0..1): extra outward flare of the coat panels and the
 // torn strips (rad), and an upward pull on the hair tips (m of tip displacement)
@@ -3105,10 +3114,13 @@ export class HeroAnimator {
     this.coatState = rig.coat.map(() => [{ x: 0, vx: 0, z: 0, vz: 0 }, { x: 0, vx: 0, z: 0, vz: 0 }]);
     this.coatSide = new Uint8Array(rig.coat.length).fill(1); // per panel: the steel 1 outside it, 2 under it
     this.stripState = rig.coat.map((C) => C.strips.map(() => ({ x: 0, vx: 0, z: 0, vz: 0 })));
-    this.streamState = (rig.streamers ?? []).map(() => ({
+    this.streamState = (rig.streamers ?? []).map((S) => ({
       segs: [{ x: 0, vx: 0, z: 0, vz: 0 }, { x: 0, vx: 0, z: 0, vz: 0 }], prev: new THREE.Vector3(), vel: new THREE.Vector3(),
       side: new Int8Array(2 * COL_N), // per segment and collision sphere: 1 came from inside, −1 from outside, 0 away
+      rest: S.segs[0].parent.quaternion.clone(), // its hanging joint's turn as built (clothCalm.js: on an arm)
     }));
+    this.clothRoot = new THREE.Vector3(); // his root last frame and its speed (clothCalm.js `rel`)
+    this.clothVel = new THREE.Vector3();
     this.streamInit = false;
     this.coatPrev = rig.coat.map(() => new THREE.Vector3());
     this.coatVel = rig.coat.map(() => new THREE.Vector3());
@@ -3440,6 +3452,7 @@ export class HeroAnimator {
     this._idleLife(dt, sp);
     this.target[P.sd] = 0; // (only a one-handed swing's pose hangs the free hand: attackPose, offHand.js)
     this.poses[this.key](this.target, this);
+    if (this.freeHand) this._bearing(dt);
     if (this.blendT < this.blendDur) {
       this.blendT += dt;
       const u = clamp(this.blendT / this.blendDur, 0, 1);
@@ -3535,6 +3548,20 @@ export class HeroAnimator {
     // (also locked on: the small habits of the guard), never while the stance is changing
     const pool = old ? (still && !pl.lockOn && !(this.fightW > 0.05) ? 0 : -1) : still && this.fightW > 0.95 ? (holdHabits() || !idlesRef() ? 2 : -1) : still && !pl.lockOn && this.fightW < 0.05 ? 1 : -1;
     const calm = pool >= 0;
+    // the chiburi after the chain (bearing.js FLICK): armed by the chain's last hit, it starts once he stands
+    // still after it (within FLICK.within s), in either stance, not while the stance changes; anything else
+    // he does first disarms it
+    const steady = still && (this.fightW > 0.95 || this.fightW < 0.05);
+    // (the chain's fifth when it is a light finisher, the game's combo A: combos.js; not the slam, a leap whose
+    // landing the flick's raise would follow, nor a heavy branch)
+    const d5 = pl.atk?.def;
+    if ((pl.state === 'attack' || pl.state === 'heavy') && d5?.combo === 5 && d5.kind === 'light') {
+      this.flickArm = flickOn();
+      this.flickT = 0;
+    } else if (this.flickArm) {
+      this.flickT = fin(this.flickT) + dt;
+      if (pl.state !== 'idle' || this.flickT > FLICK.within + 1) this.flickArm = false;
+    }
     if (!old) {
       if (!this.rests) this.rests = newRests();
       // a rest changes only standing still with no action running (idles.js)
@@ -3545,7 +3572,7 @@ export class HeroAnimator {
       // that swings the blade (at ease: never in a fight), a block, a drink or a charge brings the blade
       // home over IDLES.cutFade s at least: from a blade behind his back their own fade whipped the point
       // up to 1.4 m a frame
-      if (F.pool === 1 && actList(1)[F.k]?.blade && CUT_SLOW.has(this.key) && this.blendT < this.blendDur) this.blendDur = Math.max(this.blendDur, IDLES.cutFade);
+      if ((F.pool === 1 || F.pool === 3) && actList(F.pool)[F.k]?.blade && CUT_SLOW.has(this.key) && this.blendT < this.blendDur) this.blendDur = Math.max(this.blendDur, IDLES.cutFade);
       F.k = -1;
       F.w = 0;
     } else if (!old && this.key !== this.idleKey && this.idleKey === 'loco' && CUT_SLOW.has(this.key) && this.fightW < 0.05 && trailing(this) && this.blendT < this.blendDur) {
@@ -3565,7 +3592,7 @@ export class HeroAnimator {
       const D = actList(F.pool)[F.k];
       F.t += dt;
       const env = smoothstep(0, IDLE_LIFE.fadeIn, F.t) * (1 - smoothstep(D.dur - IDLE_LIFE.fadeOut, D.dur, F.t));
-      if (!calm || pool !== F.pool) F.cut = true;
+      if (F.pool === 3 ? !steady : !calm || pool !== F.pool) F.cut = true;
       // (one that swings the blade lets go a little slower: cut in 0.16 s, a trick's blade swept 0.5 m a frame)
       F.w = F.cut ? Math.max(0, Math.min(env, F.w - dt / (D.blade ? IDLES.cancelBlade : IDLE_LIFE.cancel))) : env;
       if (D.spell) {
@@ -3580,10 +3607,20 @@ export class HeroAnimator {
         F.w = 0;
         F.name = '';
         F.still = 0;
-        const gap = F.pool === 1 ? IDLES.gapEase : F.pool === 2 ? IDLES.gapFight : IDLE_LIFE.gap;
+        const gap = F.pool === 1 ? IDLES.gapEase : F.pool === 2 || F.pool === 3 ? IDLES.gapFight : IDLE_LIFE.gap;
         F.wait = lerp(gap[0], gap[1], F.pool ? this.idleNoise() : this.noise());
       }
       return;
+    }
+    if (this.flickArm && steady && !old) {
+      if (this.flickT <= FLICK.within) {
+        this.flickArm = false;
+        Object.assign(F, { k: 0, pool: 3, t: 0, w: 0, cut: false, name: COMBO_FLICK.name, queued: '' });
+        F.count++;
+        actStart();
+        return;
+      }
+      this.flickArm = false;
     }
     if (!calm) {
       F.still = 0;
@@ -3629,6 +3666,40 @@ export class HeroAnimator {
     F.count++;
     F.name = list[k].name;
     actStart();
+  }
+
+  /** THE BEARING (bearing.js, ADR-292): the chest carried up and the chin lifted, standing and between the hits
+   *  of a chain (from the end of a swing's active frames). On the target pose; its weight eased in and out. */
+  _bearing(dt) {
+    const pl = this.player, t = this.target;
+    let w = 0, ch = 0, hd = 0;
+    if (bearingOn()) {
+      if (this.key === 'loco') {
+        const f = clamp(fin(this.fightW), 0, 1), still = 1 - clamp(fin(this.moveW), 0, 1);
+        // (an idle action poses the chest and the head itself: the bearing gives way to it, the flick included)
+        const F = this.fidget, act = F && F.k >= 0 ? clamp(fin(F.w), 0, 1) : 0;
+        w = still * (1 - act);
+        ch = lerp(BEARING.chest.ease, BEARING.chest.fight, f);
+        hd = lerp(BEARING.head.ease, BEARING.head.fight, f);
+      } else if (this.key === 'attack' && pl?.atk?.def) {
+        const d = pl.atk.def, a = fin(d.windup) + fin(d.active);
+        w = smoothstep(a, a + BEARING.ease[0], fin(pl.atk.t));
+        ch = BEARING.chest.swing;
+        hd = BEARING.head.swing;
+      }
+    }
+    // (the weight follows: in over BEARING.ease[0] s, out over [1]; the amounts with it)
+    const B = (this.bear ??= { w: 0, ch: 0, hd: 0 });
+    const k = 1 - Math.exp(-dt / Math.max(1e-3, w > B.w ? BEARING.ease[0] / 3 : BEARING.ease[1] / 3));
+    B.w += (w - B.w) * k;
+    if (w > 0) {
+      B.ch += (ch - B.ch) * k;
+      B.hd += (hd - B.hd) * k;
+    }
+    if (!Number.isFinite(B.w + B.ch + B.hd)) B.w = B.ch = B.hd = 0;
+    if (B.w < 1e-4) return;
+    t[P.spX] -= B.ch * B.w;
+    t[P.hdX] -= B.hd * B.w;
   }
 
   /** ADR-186's idles draw on a stream of their own: on the animator's (`noise`, which also picks an attack's
@@ -4219,10 +4290,16 @@ export class HeroAnimator {
     // the anchor: under the shoulder (the chest's yaw), drawn toward beside the hip (the pelvis's)
     {
       const yc = Math.atan2(e[8], e[10]), H = SIDE.hang, c = Math.cos(yc), s = Math.sin(yc);
+      // (a look held away from the body, `tuck`: drawn in toward it through a turning swing, arms in through the
+      // turns: held out, a whirl swept it 18 - 26 cm a frame. Eased in and out over SIDE_TUCK s)
+      const tw = SIDE.tuck ? (this.key === 'attack' && this.atkAnim?.spin ? 1 : 0) : 0;
+      S.tk = fin(S.tk) + clamp(tw - fin(S.tk), -dt / SIDE_TUCK, dt / SIDE_TUCK);
+      const T = SIDE.tuck, tk = S.tk * S.tk * (3 - 2 * S.tk);
+      const hx = tk > 0 ? lerp(H[0], T[0], tk) : H[0], hy = tk > 0 ? lerp(H[1], T[1], tk) : H[1], hz = tk > 0 ? lerp(H[2], T[2], tk) : H[2];
       _shA.setFromMatrixPosition(r.arms.L.upper.matrixWorld).sub(_shO);
-      _shA.x += sc * (H[0] * c + H[2] * s);
-      _shA.y += sc * H[1];
-      _shA.z += sc * (-H[0] * s + H[2] * c);
+      _shA.x += sc * (hx * c + hz * s);
+      _shA.y += sc * hy;
+      _shA.z += sc * (-hx * s + hz * c);
       const Lg = r.legs?.L, k = SIDE.hip;
       if (Lg && k > 0) {
         const pe = r.pelvis.matrixWorld.elements, yp = Math.atan2(pe[8], pe[10]), T = SIDE.thigh, cp = Math.cos(yp), sp = Math.sin(yp);
@@ -5167,14 +5244,50 @@ export class HeroAnimator {
     // how far the torso is from upright (0 standing … 1 at 70° or more)
     const tumble = smoothstep(0.75, 0.3, _e.set(0, 1, 0).applyQuaternion(r.chest.getWorldQuaternion(_q1)).y);
     const lying = tumble >= 1 && LYING_KEYS.has(this.key);
+    // the calm (clothCalm.js): his body's own travel, the part of a sheet's speed it keeps whole
+    const calm = clothMode() === 'calm';
+    r.root.getWorldPosition(_cR);
+    if (this.streamInit && dt > 1e-4) {
+      _cV.subVectors(_cR, this.clothRoot).divideScalar(dt);
+      if (_cV.lengthSq() > 900) _cV.setLength(30);
+      this.clothVel.copy(_cV);
+    } else this.clothVel.set(0, 0, 0);
+    this.clothRoot.copy(_cR);
+    if (calm) r.chest.getWorldQuaternion(_cC);
     for (let i = 0; i < r.streamers.length; i++) {
       const S = r.streamers[i], st = this.streamState[i];
       const j0 = S.segs[0];
+      const calmS = calm && !!S.calm;
+      if (S.arm && st.rest) {
+        // a sheet on an arm: carried by the chest as the arm lifts off hanging (the build's turn on the arm,
+        // laid on the chest as the upper arm is laid in the bind pose: hanging straight under the shoulder)
+        const base = j0.parent, arm = base.parent;
+        let k = 0;
+        if (calmS && arm) {
+          arm.getWorldQuaternion(_cA);
+          const c = _cD.set(0, -1, 0).applyQuaternion(_cA).dot(_cE.set(0, -1, 0).applyQuaternion(_cC));
+          k = CLOTH.hold * smoothstep(CLOTH.lift[0], CLOTH.lift[1], Math.acos(clamp(c, -1, 1)));
+        }
+        if (k > 1e-4) {
+          _cS.copy(_cA).multiply(st.rest);
+          _cT.copy(_cC).multiply(st.rest);
+          _cS.slerp(_cT, k);
+          base.quaternion.copy(_cA.invert()).multiply(_cS);
+        } else base.quaternion.copy(st.rest);
+      }
       j0.parent.getWorldQuaternion(_q0); // also refreshes the arm's matrixWorld
       _w.copy(j0.position).applyMatrix4(j0.parent.matrixWorld);
       if (this.streamInit && dt > 1e-4) {
         _v.subVectors(_w, st.prev).divideScalar(dt);
         if (_v.lengthSq() > 900) _v.setLength(30);
+        if (calmS && !(tumble > 0)) {
+          // the whip of the arms and the chest's turn kept under its bound; his travel whole (not tumbling: a
+          // roll's or a fall's turn of the body is the cloth's to follow, a ribbon's floor bound counts on it)
+          _v.sub(this.clothVel);
+          const rm = CLOTH.rel[S.arm ? 1 : 0];
+          if (_v.lengthSq() > rm * rm) _v.setLength(rm);
+          _v.add(this.clothVel);
+        }
         st.vel.lerp(_v, 1 - Math.exp(-12 * dt));
       }
       st.prev.copy(_w);
@@ -5198,7 +5311,7 @@ export class HeroAnimator {
       const lg = S.lag ?? 1;
       // … and its own swing limit: `max` rad from hanging (a ribbon may whip up past level, 2.6;
       // the cloak stops near level, so a whirl or a lunge never stands a sheet up over his head)
-      const mA = S.max ?? STREAM_A;
+      const mA = calmS && S.arm ? Math.min(S.max ?? STREAM_A, CLOTH.armMax) : S.max ?? STREAM_A;
       _so.copy(_w); // this segment's root (world)
       // `floor`: rolling or falling (not lying: _layFlat), the segments' ends stay over the grass. In
       // drawn metres (the root's world scale: the hero is drawn larger than his model)
@@ -5246,11 +5359,14 @@ export class HeroAnimator {
           c.vx = c.vz = 0;
         }
         c.x = clamp(c.x, -mA, mA);
+        // (a calm sheet, clothCalm.js `push`: eased onto a bound that jumps, the steel crossing it, at most that
+        // fast; set onto it at once, the drape snapped 0.7 rad in a frame as a backhand's blade went by)
+        const pm = calmS ? CLOTH.push * dt : Infinity;
         if (c.x > hi) {
-          c.x = hi;
+          c.x = Math.max(hi, c.x - pm);
           if (c.vx > 0) c.vx = 0;
         } else if (c.x < lo) {
-          c.x = lo;
+          c.x = Math.min(lo, c.x + pm);
           if (c.vx < 0) c.vx = 0;
         }
         // the grass pushes a lagging end back out (the target clears it): toward the least swing that

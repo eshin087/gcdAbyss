@@ -222,6 +222,12 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` planned
 - [x] Only the drawn letters uploaded, empty batches out of the frame; the step flash and the wake return outside their reach (`?lifeFast=0` = before)
 - [x] BENCH (`?perf`) reads the living world's share
 - [ ] The owner's BENCH on the iPhone and the laptop; the trees' wind vertex cost on a quiet GPU
+## M1.104 — gcd's combo polished: cloak, left hand, slashes, chiburi, bearing (2026-11-28, `player/hero-anim-polish`, ADR-292)
+- [x] The finisher's drape held to the shoulder, the cloak's flap from swings calmed (`clothCalm.js`, `?cloth=old`)
+- [x] The left hand in sight: `?offhand=out` (default) / `sign`, tucked through turns; scenario `offhand` runs both
+- [x] The ending slash on the sword's on-screen path from every side (`?endslash=sweep`)
+- [x] A chiburi after the chain and a chin-up bearing (`bearing.js`, `?flick=0`, `?bearing=0`)
+- [ ] The owner's pick of the left hand (`out` / `sign` / `back` / `side`) and their playtest on the preview
 ## M1.102 — A new fight stance: the middle guard (2026-11-28, `player/stance-four`, ADR-275)
 - [x] Four fight holds as data behind `?hold=` (middle, high, sword fingers, low trailing), filmed close and far in one clip
 - [x] The owner's pick, A the middle guard, the default; ADR-207's hold `?hold=ref`; the Lab's `hold` row

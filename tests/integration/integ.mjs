@@ -5754,7 +5754,9 @@ async function scenarioHero() {
       // (ADR-114: 10 cm, was 5. Knocked down out of the fencer's guard the hilt falls from 0.25 m
       // higher than it did out of the old low stance, and the ribbon's springs lag that much more)
       assert(lowest >= 0 && lowestDown >= -0.1, `the ribbon never sinks into the grass through a run, a sprint, a roll, the chain and the cleave (lowest ${lowest.toFixed(3)} m), nor more than 10 cm landing in a knockdown (${lowestDown.toFixed(3)} m)`);
-      assert(swing >= 35 && rest <= 25, `the ribbon swings out through a cut (${swing.toFixed(0)}° ≥ 35°) and hangs again at rest (${rest.toFixed(0)}° ≤ 25°)`);
+      // (ADR-292: 28°, was 25. The bearing carries his chest up and the blade with it, and a ribbon hung off the sword
+      // hangs ~2° further off the blade's line at rest)
+      assert(swing >= 35 && rest <= 28, `the ribbon swings out through a cut (${swing.toFixed(0)}° ≥ 35°) and hangs again at rest (${rest.toFixed(0)}° ≤ 28°)`);
       RIB.setIdles(ribIdles);
       p.setLoadout(DEFAULT_LOADOUT);
       drive();
@@ -6431,7 +6433,7 @@ async function scenarioOffHand() {
   const off0 = OH.offHandMode();
   let last = null, prodStep = 0;
   try {
-    for (const mode of ['0', 'side', 'back', 'quiet']) {
+    for (const mode of ['0', 'side', 'back', 'quiet', 'out', 'sign']) {
       OH.setOffHand(mode);
       const G = (last = build());
       fightSetup(G);
@@ -6470,6 +6472,142 @@ async function scenarioOffHand() {
     }
   } finally {
     OH.setOffHand(off0);
+  }
+  return last;
+}
+
+// HEROPOLISH (ADR-292; the owner, 2026-11-28: the finisher's cloak "flapping too much", the left hand "missing", the
+// slashes not "accurate based on the sword swing ... no matter which camera view", and an anime hero's confidence).
+// (a) the cloak (clothCalm.js): through the chain the drape on the left arm swings at most CLOTH.armMax from hanging
+// and every sheet's fastest step is under 0.13 rad a frame (CLOTH.push: a backhand's blade crossing the drape snapped
+// it 0.7 rad in a frame); `?cloth=old` swings the drape further (the defect).
+// (b) the flick (bearing.js FLICK): standing still after combo A's fifth hit he plays the chiburi; a step right after
+// it cuts it (its weight gone within 0.3 s); `?flick=0` none. (c) the sweep (slashFx.js): on a whiff from each of four
+// facings every ending slash's middle (a thrust's start) lies within 0.9 m of where the blade passed in that swing
+// (the old `enemy` place hung it END.ahead out), its ends finite and its length within SWEEP.len. (d) the bearing: standing at
+// ease the head is lifted (hdX lower than with `?bearing=0`).
+async function scenarioHeroPolish() {
+  out('\n== scenario HEROPOLISH (the cloak held calm, the chiburi, the slash on the sword, the bearing: ADR-292) ==');
+  const CL = await imp('src/entities/player/clothCalm.js');
+  const BE = await imp('src/entities/player/bearing.js');
+  const SL = await imp('src/entities/player/slashFx.js');
+  const { P } = await imp('src/entities/player/anim.js');
+  const cloth0 = CL.clothMode(), place0 = SL.placeMode(), fl0 = BE.flickOn(), be0 = BE.bearingOn();
+  let last = null;
+  const chain = (G, each) => {
+    const { input } = G, p = G.game.player;
+    for (let i = 0, N = Math.round(2.6 / DT); i < N; i++) {
+      if (i % Math.round(0.42 / DT) === 0 && i < Math.round(2.0 / DT)) input.click(0);
+      G.tick(DT);
+      each?.(i, p);
+    }
+  };
+  const setup = () => {
+    const G = (last = build());
+    fightSetup(G);
+    const { game } = G, p = game.player, d = game.dragon;
+    p.debug.god = true;
+    p.debug.teleport(d.position.x + 14, d.position.z + 14);
+    p.yaw = Math.atan2(d.position.x - p.position.x, d.position.z - p.position.z);
+    aimAt(G);
+    for (let i = 0; i < 40; i++) G.tick(DT);
+    return G;
+  };
+  try {
+    // (a) the cloak
+    const drape = {};
+    for (const m of ['calm', 'old']) {
+      CL.setCloth(m);
+      const G = setup(), A = G.game.player.anim, r = G.game.player.rig;
+      const arm = r.streamers.findIndex((S) => S.arm === 2);
+      let most = 0, step = 0;
+      const was = A.streamState.map((st) => st.segs.map((c) => c.x));
+      chain(G, () => {
+        A.streamState.forEach((st, i) => st.segs.forEach((c, s) => {
+          if (m === 'calm') step = Math.max(step, Math.abs(c.x - was[i][s]));
+          was[i][s] = c.x;
+          if (i === arm) most = Math.max(most, Math.abs(c.x));
+        }));
+      });
+      drape[m] = { most, step, arm };
+    }
+    assert(drape.calm.arm >= 0 && drape.calm.most <= CL.CLOTH.armMax + 1e-6 && drape.calm.step < 0.13 && drape.old.most > drape.calm.most + 0.2,
+      `the cloak through the chain: the left arm's drape at most ${drape.calm.most.toFixed(2)} rad from hanging (old ${drape.old.most.toFixed(2)}, bound ${CL.CLOTH.armMax}), every sheet at most ${drape.calm.step.toFixed(3)} rad a frame`);
+    CL.setCloth('calm');
+    // (b) the flick (after combo A's finisher, the game's chain: the sims' production chain ends on the slam)
+    const CO = await imp('src/entities/player/combos.js'), combo0 = CO.comboMode();
+    CO.setCombo('a');
+    const flick = (on, step) => {
+      BE.setFlick(on);
+      const G = setup(), p = G.game.player, F = p.anim.fidget;
+      let seen = false, gone = -1;
+      chain(G);
+      for (let i = 0, N = Math.round(2.4 / DT); i < N; i++) {
+        if (step && seen && i === Math.round(0.2 / DT) + (flick.at ?? 0)) G.input.axis = { x: 1, y: 0 };
+        G.tick(DT);
+        if (F.k >= 0 && F.name === 'comboFlick' && !seen) { seen = true; flick.at = i; }
+        if (step && seen && gone < 0 && i > flick.at + Math.round(0.2 / DT) && !(F.k >= 0 && F.name === 'comboFlick' && F.w > 0.01)) gone = (i - flick.at) * DT - 0.2;
+      }
+      G.input.axis = { x: 0, y: 0 };
+      return { seen, gone };
+    };
+    const f1 = flick(true, false), f2 = flick(true, true), f0 = flick(false, false);
+    assert(f1.seen && f2.seen && f2.gone >= 0 && f2.gone <= 0.3 && !f0.seen,
+      `the chiburi after the chain: played standing (${f1.seen}), cut ${f2.gone >= 0 ? f2.gone.toFixed(2) + ' s' : 'NEVER'} after a step (≤ 0.3), none with ?flick=0 (${f0.seen})`);
+    BE.setFlick(true);
+    CO.setCombo(combo0);
+    // (c) the slash from four facings, on a whiff: its middle against the nearest place the blade's middle passed in
+    // that swing (a turn draws three cuts round him, a thrust runs on off the point)
+    const near = (place) => {
+      SL.setPlace(place);
+      let far = 0, n = 0, bad = 0;
+      for (const deg of [0, 90, 180, 270]) {
+        const G = setup(), p = G.game.player;
+        const a = (deg * Math.PI) / 180;
+        const aim = () => G.game.mouseGround.set(p.position.x + Math.sin(a) * 6, 0, p.position.z + Math.cos(a) * 6);
+        aim();
+        for (let i = 0; i < 30; i++) { aim(); G.tick(DT); }
+        let path = [], prev = [];
+        let rec = null;
+        p.slashFx.onLine = (ax, ay, az, bx, by, bz, look) => {
+          n++;
+          const len = Math.hypot(bx - ax, by - ay, bz - az), L = SL.SWEEP.len[look === 'heavy' ? 1 : 0], sc = p.drawScale || 1;
+          if (!Number.isFinite(ax + ay + az + bx + by + bz) || (place === 'sweep' && len > L[1] * sc + 0.01)) bad++;
+          // (a thrust's streak runs on off the point: measured from where it starts)
+          const th = p.slashFx.kind === 2, mx = th ? ax : (ax + bx) / 2, my = th ? ay : (ay + by) / 2, mz = th ? az : (az + bz) / 2;
+          let best = Infinity;
+          for (const q of [...prev, ...path]) best = Math.min(best, Math.hypot(q[0] - mx, q[1] - my, q[2] - mz));
+          far = Math.max(far, best);
+        };
+        chain(G, () => {
+          aim();
+          if (p.atk !== rec) { rec = p.atk; prev = path; path = []; }
+          if (p.state !== 'attack' && p.state !== 'heavy') return;
+          const e = p.rig.sword.matrixWorld.elements;
+          for (const f of [0.25, 0.6, 1]) path.push([e[8] * f + e[12], e[9] * f + e[13], e[10] * f + e[14]]);
+        });
+        p.slashFx.onLine = null;
+      }
+      return { far, n, bad };
+    };
+    const sw = near('sweep'), en = near('enemy');
+    assert(sw.n >= 16 && sw.bad === 0 && sw.far <= 0.9 && en.far > sw.far + 0.3,
+      `the slash from four facings on a whiff: ${sw.n} slashes, every middle within ${sw.far.toFixed(2)} m of where the blade passed (≤ 0.9; the old enemy place ${en.far.toFixed(2)} m), ${sw.bad} too long or not finite`);
+    // (d) the bearing
+    const head = (on) => {
+      BE.setBearing(on);
+      const G = setup(), p = G.game.player;
+      p.debug.fightStance = false;
+      for (let i = 0; i < 90; i++) G.tick(DT);
+      return p.anim.cur[P.hdX];
+    };
+    const h1 = head(true), h0 = head(false);
+    assert(h1 < h0 - 0.04, `the bearing lifts his chin standing at ease (head nod ${h1.toFixed(3)} against ${h0.toFixed(3)} without)`);
+  } finally {
+    CL.setCloth(cloth0);
+    SL.setPlace(place0);
+    BE.setFlick(fl0);
+    BE.setBearing(be0);
   }
   return last;
 }
@@ -15835,6 +15973,7 @@ const SCENARIOS = {
   combos: scenarioCombos,
   feel: scenarioFeel,
   offhand: scenarioOffHand,
+  heropolish: scenarioHeroPolish,
   streakfx: scenarioStreakFx,
   timerip: scenarioTimeRip,
   swordmystic: scenarioSwordMystic,

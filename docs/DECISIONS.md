@@ -8170,3 +8170,38 @@ have no switch. Turned down and removed: the dark cloak values, the tall hem, th
   becomes `DEFAULT_LOADOUT` with its tint). The `looks` suite walks it with the others: cloth in the body 1.0 % of
   frames, the free hand near a sheet 1.4 %, the cloth's ends above the grass but for 5 frames of a roll, 24.4k
   triangles. Open: the owner's verdict, the phone.
+
+## ADR-292 — gcd's light combo polished: the cloak held calm, the left hand in sight, the ending slash on the sword's path, a chiburi and a prouder bearing (2026-11-28)
+
+- **Context:** the owner: "the bottom left part of the cloak feathered part appears during the 5th light attack combo
+  and makes it look bad ... its flapping too much", "the left arm and hand seems to be missing during the light attack
+  combos", "the instant slashes coming from the auto attacks don't look accurate based on the sword swing. make sure it
+  looks good and accurate no matter which camera view the player is facing", and "make gcd feel like the main
+  character of an anime in terms of vibe and confidence". Asked, they wanted the left hand as options to pick from,
+  and two confidence touches: a blade flick after the combo and a taller, chin-up posture. Measured on combo A (the
+  game's chain, ADR-240) at the game camera from four sides: (1) the cloak's drape on the left upper arm (gear/shroud.js
+  SHROUD_SHEETS[3]) turned with the arm; in the two-handed finisher the arm crosses the chest to the grip and the drape
+  stood out level, at its 1.45 rad limit, its torn hem a pale wing at shoulder height; hiding it removed the defect.
+  Every sheet trails its own root's speed (anim.js `_streamers`), and in a swing the roots move 6 - 9 m/s with the arms
+  and the chest's turn against 4.7 at a run. (2) Combo A's free hand (`back`) sits on the small of his back, under the
+  cloak from the camera behind him. (3) On a whiff the ending slash (`enemy`) was placed END.ahead (1.9 m) in front of
+  him at the cut's height, which the camera behind him draws above his head, 3.6 - 5.6 m long, along the hand's path.
+- **Decision:** (1) `clothCalm.js` (`?cloth=old`): a sheet hung on an arm is carried by the chest as the arm lifts off
+  hanging (the angle between the arm's down and the chest's down, 0.4 - 1.0 rad), at most 0.95 rad from hanging; the
+  part of every sheet's root speed that is not his body's travel is held under 1.6 m/s (0.8 on an arm), not while
+  tumbling (a roll's and a fall's turn stay the cloth's: the Warden ribbon's floor bound counts on it). The drape's
+  widest swing in the finisher went 1.45 -> 0.33 rad, its fastest step 0.11 - 0.18 -> 0.04 rad a frame. (2) Two hand
+  looks in offHand.js, `out` (the counterweight out from his left side, open, palm back) and `sign` (sword fingers held
+  out at the foe), both drawn in toward him through a turning swing (`tuck`: a whirl swept a hand held out 18 - 26 cm a
+  frame); combo A wears `out`. (3) `?endslash=sweep`, the default: the line's way is the speed²-weighted sum of the
+  screen steps of three points along the blade, its place along that way from the first to the last place the steel
+  reached moving fast (+18 % each end), across it the speed-weighted middle, at the depth of the blade's middle at the
+  fastest frame or of the contact, which it is moved across to run through; 1.1 - 2.6 m light, 1.6 - 3.4 m heavy; laid in
+  the screen's plane. (4) `bearing.js`: the chest 0.05 - 0.06 rad up and the head 0.06 - 0.09 rad up standing (giving
+  way to an idle action) and from the end of a swing's active frames (`?bearing=0`); after the chain's fifth hit, if he
+  stands still within 0.45 s, the idle flick (idles.js trickFlick) on a 1.7 s clock as an idle action of its own
+  (pool 3: either stance, never picked at random; anything he does cuts it) (`?flick=0`).
+- **Consequences:** the sims keep production's chain (combo '0'), so the flick (armed by a light `combo === 5`) and the
+  new hands are checked there by scenario: `offhand` now runs `out` and `sign` (both under 0.7 of production's fastest
+  free-hand frame: 13.0 and 16.5 cm against 25.0). The hand is the owner's pick to make; `out` is the default until
+  then. The bearing moves the standing pose a little in every stance, which the stance and idle suites bound.
