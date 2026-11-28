@@ -4,6 +4,7 @@ import { ANATOMY as A, SCALE as S } from '../tuning.js';
 import { Chain, aimJoint, aimJointStable, constrainDir } from './chain.js';
 import { solveTwoBone } from './ik.js';
 import { Gait } from './gait.js';
+import { fixOn } from '../motionFix.js';
 
 // Procedural animation for the four-legged drake. Each frame the AI writes a `pose` (targets); the
 // rig smooths them and solves: body (hips/chest, breathing, gait bob) -> neck (FABRIK toward a head
@@ -367,10 +368,13 @@ export const NECK_MODE = (() => {
 const HEAD_AIM_RATE = 11;
 /**
  * Dying (s.dead), the head may hang at most this much LESS far off the neck's last segment (rad): the
- * limp head was laid level whatever the neck did, so on the death's raised neck it hinged ~60� off its
- * end, a broken neck (2026-11-27). 1.1 - 0.55 = 0.55 rad (~31�) once dead. `?deathNeck=0`: as before.
+ * limp head was laid level whatever the neck did, so on the death's raised neck it hinged ~60째 off its
+ * end, a broken neck (2026-11-27). 1.1 - 0.55 = 0.55 rad (~31째) once dead. `?deathNeck=0`: as before.
  */
 const DEAD_HINGE = String(new URLSearchParams(globalThis.location?.search ?? '').get('deathNeck') ?? '') === '0' ? 0 : 0.55;
+/** The snout's length from the head joint (model units) and the least height its tip keeps (m; the motion audit). */
+const SNOUT_LEN = 1.05;
+const SNOUT_FLOOR = 0.3;
 /** ... and when a hit sphere rides on it (pose.headExact). */
 const HEAD_EXACT_RATE = 45;
 /** Waking, the resting S only fades in once the sleeping curl (s.sleep) is below this. */
@@ -986,7 +990,8 @@ export class Rig {
     }
     // at most ~63째 off the neck's last segment; resting, ~34째: past that the head reads as hinged off
     // the neck's end (a broken neck), so the resting head looks down less instead
-    constrainDir(dir, last, 1.1 - 0.5 * s.rest - DEAD_HINGE * s.dead);
+    const hMax = 1.1 - 0.5 * s.rest - DEAD_HINGE * s.dead;
+    constrainDir(dir, last, hMax);
     // the head's aim turns at most HEAD_AIM_RATE: a look target passing under or behind the head (the
     // leap's dive onto its mark, the death fall, a target swapped mid-move) flipped it 30-90째 in one
     // frame. Attacks whose hit spheres ride on the snout or the mouth set pose.headExact for their
@@ -995,6 +1000,21 @@ export class Rig {
     // (exact, still at most HEAD_EXACT_RATE: a bite's first frame turned the head alone 75째 as its
     // look jumped onto the hero; two frames now, the snout on its mark from the next; ADR-203)
     if (!snap && hd.lengthSq() > 0.5 && !(pose.headExact && NECK_MODE === '0')) constrainDir(dir, hd, (pose.headExact ? HEAD_EXACT_RATE : HEAD_AIM_RATE) * dt);
+    if (fixOn()) {
+      // (the motion audit, 2026-11-28) the neck CARRIES the head: the turn-rate limit above pulled it back
+      // toward last frame's aim, and a neck swinging faster than that left it bent 75 - 104 deg off the
+      // neck's end (a broken neck); and the snout stays above the ground (a dive's look at its mark
+      // tipped it 0.45 m under)
+      const minY = clamp((SNOUT_FLOOR - hc.p[n].y) / (SNOUT_LEN * S), -1, 1);
+      if (dir.y < minY) {
+        const h = Math.hypot(dir.x, dir.z);
+        if (h > 1e-5) {
+          const k = Math.sqrt(Math.max(0, 1 - minY * minY)) / h;
+          dir.set(dir.x * k, minY, dir.z * k);
+        }
+      }
+      constrainDir(dir, last, hMax); // (the neck has the last word: a head low on a steep neck dips its snout instead)
+    }
     hd.copy(dir);
     aimJoint(m.head, dir, qEnd, this._qHead);
     // the head is held level about its own snout (the brow up, toward the sky and a little toward the

@@ -1,4 +1,5 @@
 import { lookOf } from '../enemies/duelist/lookSwitch.js';
+import { fixOn } from './motionFix.js';
 import * as THREE from 'three';
 import { TUNING, SCALE } from './tuning.js';
 import { clamp, lerp, smoothstep, easeOutCubic, easeInCubic, easeInOutSine, angleDiff } from '../../core/math.js';
@@ -10,6 +11,8 @@ import { APOC_LOOK, skyBolt, skyPillar, skyThroat } from './skyFx.js';
 // The meteors' roar with the head held naturally (ADR-258; `?wyrmHead=a`, the default; '0' as before: the
 // neck swung back past upright, the head behind the neck's base, the snout 15° past vertical toward the tail
 // and the head rolled over on its snout). Root frame, model units: the reared head's spot and its look point.
+// the least height a diving head is carried at (m; the motion audit)
+const DIVE_HEAD_Y = 2.2;
 const HEAD_UP = Object.freeze({ y: 7.6, z: 2.3, lookY: 40, lookZ: 3.5 });
 const headUp = () => (lookOf('wyrmHead', '0') === '0' ? null : HEAD_UP);
 
@@ -490,6 +493,10 @@ const diveBomb = {
       pose.head.y -= 1.0 * S;
       pose.headRate = 10;
       pose.lookDown = 1.2;
+      if (fixOn()) {
+        pose.head.y = Math.max(pose.head.y, DIVE_HEAD_Y); // (the motion audit: as the flying combos' dive)
+        pose.lookDown = 0.75;
+      }
       pose.jaw = 1;
       d.throat = 0.8;
     }
@@ -1127,6 +1134,13 @@ function makeFlightCombo(key) {
         pose.headRate = 6;
         pose.jaw = 0.4;
         d.throat = 0.5;
+        if (fixOn()) {
+          // (the motion audit) a banking turn: the head keeps up with the turn and looks along the flight
+          // until it comes round (it trailed 3.9 m behind its goal, looking back down at the hero, and its
+          // snout curled into its own chest)
+          pose.headRate = 12;
+          if (a.phase === 'wheel' && k < 0.7) d.rootPt(pose.look, 0, 0, 14);
+        }
       } else if (a.phase === 'barrage') {
         // hanging beside him on steady strokes, head down, spitting shell after shell
         d.turnToward(s.yawTo, 2.6, dt);
@@ -1197,6 +1211,12 @@ function makeFlightCombo(key) {
         pose.head.y -= 1.0 * S;
         pose.headRate = 10;
         pose.lookDown = 1.2;
+        if (fixOn()) {
+          // (the motion audit) it dives at its mark with the head carried clear of the ground and the snout
+          // not tipped straight down at it (it went 0.45 m into the ground at the dive's end)
+          pose.head.y = Math.max(pose.head.y, DIVE_HEAD_Y);
+          pose.lookDown = 0.75;
+        }
         pose.jaw = 1;
         d.throat = 0.8;
       }

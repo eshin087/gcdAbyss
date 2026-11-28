@@ -205,7 +205,20 @@ function biteStart(st) {
   st.from = V();
   st.held = false;
   st.snapFrom = false;
+  st.lead = 0; // (strike.js: how long the spread snap ran in the windup; 0 = it did not)
   return st;
+}
+
+/** The bite's goal as the active is about to lock it, for the spread snap (strike.js biteLead). */
+function bitePredict(d, st, reach, impact) {
+  st.impact = impact;
+  st.predict ??= (o) => {
+    biteAim(d, _lead, st.reachNow);
+    o.copy(_lead.goal);
+    return true;
+  };
+  st.reachNow = reach;
+  return st.predict;
 }
 
 /** Lock the bite target: the player's chest (led a little), limited to the neck's reach and arc. */
@@ -263,7 +276,7 @@ function biteWindup(d, a, k, dt, reach = T.bite.reach, st = a) {
   pose.spread[0] = pose.spread[1] = k < 0.75 ? 0.6 : REST_SPREAD;
   pose.spreadRate = 6;
   d.throat = 0.3 * k;
-  if (!biteLead(d, a, st, dt)) strikeLead(d, a, dt, reach);
+  if (!biteLead(d, a, st, dt, bitePredict(d, st, reach, st.impactOf ?? T.bite.impact))) strikeLead(d, a, dt, reach);
 }
 
 /** The neck uncoils and the shoulders drive forward off the planted hind feet; the jaw snaps at k 0.62. */
@@ -1593,6 +1606,7 @@ const BITE = {
     h.st = biteStart({});
   },
   windup(d, a, h, k, dt) {
+    h.st.impactOf = h.spec.impact ?? T.bite.impact;
     biteWindup(d, a, k, dt, h.spec.reach ?? T.bite.reach, h.st);
   },
   aim(d, a, h) {
@@ -1645,7 +1659,7 @@ const REAR_BITE = {
       pose.headOffset.y += Math.sin(d.time * 5.3) * 0.08 * S * w;
       pose.jaw += Math.sin(d.time * 27) * 0.06 * w;
     }
-    if (!biteLead(d, a, h.st, dt)) strikeLead(d, a, dt, h.spec.reach ?? T.bite.reach);
+    if (!biteLead(d, a, h.st, dt, bitePredict(d, h.st, h.spec.reach ?? T.bite.reach, h.spec.impact ?? T.bite.impact))) strikeLead(d, a, dt, h.spec.reach ?? T.bite.reach);
   },
   aim: BITE.aim,
   active: BITE.active,
@@ -1674,7 +1688,7 @@ const LUNGE_BITE = {
     pose.spread[0] = pose.spread[1] = REST_SPREAD + 0.12 * Math.sin(Math.PI * k);
     pose.spreadRate = 8;
     d.throat = 0.25 * k;
-    if (!biteLead(d, a, h.st, dt)) strikeLead(d, a, dt, h.spec.reach);
+    if (!biteLead(d, a, h.st, dt, bitePredict(d, h.st, h.spec.reach, h.spec.impact ?? T.bite.impact))) strikeLead(d, a, dt, h.spec.reach);
   },
   aim(d, a, h) {
     biteAim(d, h.st, h.spec.reach);
