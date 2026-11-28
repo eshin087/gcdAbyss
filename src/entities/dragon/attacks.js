@@ -499,6 +499,87 @@ const tailKeys = (n) => {
   while (TAIL_KEYS.length <= n) TAIL_KEYS.push(`t${TAIL_KEYS.length}`);
   return TAIL_KEYS;
 };
+/**
+ * THE AIMED SPIN (the motion audit, ADR-278; motionFix.js, `?wyrmFix=0` as before). The tail sweeps, whips
+ * and jabs set the body's yaw on a fixed curve through their short active (220 deg in 0.45 s, 180 in 0.3):
+ * a 20 m body spinning 700 - 950 deg/s in place, then ~130 deg more after the blow. Instead the spin starts
+ * `pre` s before the active (after the backswing) and is STEERED: every frame its yaw rate is set from the
+ * angle the tail (its mid joint, the one the hit tracks) still has to travel to the hero's bearing and the
+ * time left to the cue's impact, so the tail crosses him on the beat wherever he stands (and the tail's lag
+ * behind the body is taken up as it goes); the rate grows at most `acc` rad/s a second; past him it brakes
+ * at `dec`. `st.spinW` the yaw rate, `st.spunPast` once the tail has crossed his bearing.
+ */
+const SPIN = Object.freeze({ pre: 0.35, preJab: 0.12, acc: 20, dec: 26, max: 9, wrap: 0.35, follow: 7, minStart: 0.45, behind: 2.95, maxArc: 3.5 });
+/** One frame of the aimed spin, `dir` +1 / -1 (the yaw's sense), `tRem` s to the impact (<= 0: past it).
+ *  `endArc` (rad, read on its first frame): where the old curve ended, from the yaw it starts at. */
+function aimSpin(d, st, dir, tRem, dt, endArc = NaN) {
+  if (!(dt > 0)) return false;
+  if (!st.spinOn && tRem > 0.2 && spinToGo(d, dir) < SPIN.minStart) return false; // (the backswing goes on)
+  if (!st.spinOn && spinToGo(d, dir) > SPIN.maxArc) {
+    st.aimed = false; // (too far round to steer in time: this blow keeps the old curve)
+    return false;
+  }
+  if (!st.spinOn) {
+    st.spinOn = true;
+    st.yawEnd = Number.isFinite(endArc) ? d.yaw + dir * endArc : NaN;
+  }
+  const p = d.game.player?.position, ch = d.rig.tail, mid = ch.p[Math.min(9, ch.n)];
+  const w0 = Number.isFinite(st.spinW) ? st.spinW : 0;
+  let w;
+  if (p && !st.spunPast && tRem > dt) {
+    const heroA = Math.atan2(p.x - d.position.x, p.z - d.position.z);
+    const pd = Math.max(1, Math.hypot(p.x - d.position.x, p.z - d.position.z));
+    const togo = (x, z, lead) => {
+      let r = dir * angleDiff(Math.atan2(x - d.position.x, z - d.position.z), heroA) - lead;
+      if (r < -SPIN.wrap) r += 2 * Math.PI;
+      return r;
+    };
+    // (what touches him first: the mid joint's crossing, less the hit's tolerance, or a tail sphere at
+    // his distance, less its size there: aimed at the mid alone, a slower spin landed 0.1 - 0.23 s early)
+    let r = togo(mid.x, mid.z, (0.9 * S) / pd);
+    const radii = d.model.tailRadii, hr = playerR(d.game);
+    for (let i = 4; i <= ch.n; i++) {
+      const q = ch.p[i], rad = ((radii[Math.min(i, radii.length - 1)] ?? 0.2) + 0.4) * S + hr;
+      if (Math.abs(Math.hypot(q.x - d.position.x, q.z - d.position.z) - pd) > rad) continue;
+      r = Math.min(r, togo(q.x, q.z, Math.asin(Math.min(1, rad / pd))));
+    }
+    if (r <= 0) st.spunPast = true;
+    const want = st.spunPast ? 0 : clamp((dir * r) / tRem, -SPIN.max, SPIN.max);
+    w = clamp(want, w0 - SPIN.acc * dt, w0 + SPIN.acc * dt);
+  } else {
+    st.spunPast = st.spunPast || tRem <= dt;
+    if (Number.isFinite(st.yawEnd)) {
+      // past him the body runs on to where the old spin ended (the next blow of a string starts from that
+      // facing, and was timed on it), on a damped spring: no faster than it was going, easing to a stop
+      const e = angleDiff(d.yaw, st.yawEnd), om = SPIN.follow;
+      w = w0 + (om * om * e - 2 * om * w0) * dt;
+      if (Math.abs(w) > Math.abs(w0) && Math.abs(w0) > 0.5) w = w0;
+    } else w = Math.abs(w0) <= SPIN.dec * dt ? 0 : w0 - Math.sign(w0) * SPIN.dec * dt;
+  }
+  if (!Number.isFinite(w)) w = 0;
+  d.yaw += w * dt;
+  st.spinW = w;
+  return true;
+}
+/** Whether this blow takes the aimed spin (read at its start): not for a hero (nearly) straight behind, where
+ *  the old curve's backswing was tuned for the tail lying on his bearing, nor for a spin of more than `maxArc`
+ *  (the old curve's whole turn: steered, it could not come round in time). Else the old curve. */
+function spinAimed(d) {
+  return fixOn() && d.sense.absAng < SPIN.behind;
+}
+/** The angle the tail's middle still has to travel to the hero's bearing, in the spin's sense (rad, 0..2pi). */
+function spinToGo(d, dir) {
+  const p = d.game.player?.position, ch = d.rig.tail, mid = ch.p[Math.min(9, ch.n)];
+  if (!p) return Infinity;
+  let r = dir * angleDiff(Math.atan2(mid.x - d.position.x, mid.z - d.position.z), Math.atan2(p.x - d.position.x, p.z - d.position.z));
+  if (r < 0) r += 2 * Math.PI;
+  return r;
+}
+/** Before the aimed spin: keep its yaw rate continuous with what the body did (the backswing). */
+function spinTrack(d, st, yaw0, dt) {
+  if (dt > 0) st.spinW = angleDiff(yaw0, d.yaw) / dt;
+}
+
 /** 0 = the player straight behind the wyrm .. 1 = at the flank (~80 deg off the nose). */
 const tailFlank = (d) => clamp((Math.PI - d.sense.absAng) / (Math.PI - 1.4), 0, 1);
 /** The sweep's spin plan (on `st`: the action, or a string hit's scratch): rotate away, then into the player. */
@@ -518,6 +599,10 @@ function tailSweepStart(d, st) {
   st.back = 0.35 + 0.3 * smoothstep(2.85, Math.PI, d.sense.absAng);
   st.yawW = st.yaw0 - st.dir * st.back;
   st.tailAng = undefined;
+  st.spinW = 0;
+  st.spunPast = false;
+  st.spinOn = false;
+  st.aimed = spinAimed(d);
 }
 /** Sweep pose per stage ('windup' | 'active' | 'recovery'), k = progress in it. */
 function tailSweepPose(d, st, stage, k, dt, spec) {
@@ -534,7 +619,11 @@ function tailSweepPose(d, st, stage, k, dt, spec) {
     // feet brace wide, the tail coils to the opposite side (away from the player, with the body's
     // backswing: curling its tip back over a hero standing straight behind landed the sweep on the
     // first active frame, ~0.2 s before its combat:flash + flashLead)
-    d.yaw = turnToward(d.yaw, st.yawW, 2.2 * dt);
+    if (!(st.aimed && Number.isFinite(st.tRem) && st.tRem < (st.impactAt ?? 0.2) + SPIN.pre && aimSpin(d, st, st.dir, st.tRem, dt, angleDiff(d.yaw, st.yawW) * st.dir + spec.spin + (st.back ?? 0.35)))) {
+      const y0 = d.yaw;
+      d.yaw = turnToward(d.yaw, st.yawW, 2.2 * dt);
+      spinTrack(d, st, y0, dt);
+    }
     pose.lower = 0.25;
     pose.pitch = 0.08;
     pose.tailCurl = -st.dir * 0.06;
@@ -545,8 +634,11 @@ function tailSweepPose(d, st, stage, k, dt, spec) {
   } else if (stage === 'active') {
     // spins about the root, feet shuffling (gait at speed), tail stiff and whipping through, head
     // leading the turn
-    const e = easeInOutSine(k);
-    d.yaw = st.yawW + st.dir * (spec.spin + (st.back ?? 0.35)) * e;
+    if (st.aimed && st.spinOn && Number.isFinite(st.tRem)) aimSpin(d, st, st.dir, st.tRem, dt, spec.spin + (st.back ?? 0.35));
+    else {
+      const e = easeInOutSine(k);
+      d.yaw = st.yawW + st.dir * (spec.spin + (st.back ?? 0.35)) * e;
+    }
     pose.tailCurl = -st.dir * 0.05;
     pose.tailStiff = 2.6;
     pose.lower = 0.3;
@@ -558,6 +650,7 @@ function tailSweepPose(d, st, stage, k, dt, spec) {
   } else {
     pose.lower = 0.25 * (1 - k);
     pose.speed = 2;
+    if (st.aimed && st.spinOn && Number.isFinite(st.tRem)) aimSpin(d, st, st.dir, -1, dt); // (it brakes out of the spin)
   }
 }
 /** Sweep hit test (after the rig, every frame of the hit: the tail's angle is tracked from its windup). */
@@ -607,8 +700,10 @@ const tail = {
   },
   start(d, a) {
     tailSweepStart(d, a);
+    a.impactAt = T.tail.impact + T.tail.impactFlank * tailFlank(d);
   },
   update(d, a, dt) {
+    a.tRem = a.phase === 'windup' ? a.dur - a.t + a.impactAt : a.phase === 'active' ? a.impactAt - a.t : -1;
     tailSweepPose(d, a, a.phase, a.k, dt, T.tail);
   },
   hit(d, a) {
@@ -1832,12 +1927,22 @@ const TAIL_JAB = {
     // the lash comes from the side the hero stands on (the pivot turns that way)
     h.st.dir = d.sense.ang >= 0 ? 1 : -1;
     h.st.tailAng = undefined;
+    h.st.spinW = 0;
+    h.st.spunPast = false;
+    h.st.spinOn = false;
+    h.st.aimed = false; // (the jab keeps its curve: steered, it reached a close hero early, and the sweep after it with it)
   },
   windup(d, a, h, k, dt) {
     const pose = d.pose, st = h.st, off = h.spec.offset ?? 0.6;
     // the pivot: its back to the hero, the tail stopping `off` short of him. Its speed is capped (rad/s,
     // not the phase's turn rate): a faster spin flung the trailing tail past its stop, onto him
-    d.turnToward(d.sense.yawTo + Math.PI + st.dir * off, h.spec.pivotRate ?? 4.0, dt);
+    const left = a.dur - a.t;
+    // (the jab's tail waits `off` short of him: it sets off late)
+    if (!(st.aimed && left < SPIN.preJab && aimSpin(d, st, -st.dir, left + h.spec.impact, dt, -st.dir * angleDiff(d.yaw, d.sense.yawTo + Math.PI + st.dir * off) + off + (h.spec.past ?? 0.45)))) {
+      const y0 = d.yaw;
+      d.turnToward(d.sense.yawTo + Math.PI + st.dir * off, h.spec.pivotRate ?? 4.0, dt);
+      spinTrack(d, st, y0, dt);
+    }
     pose.speed = Math.max(pose.speed, 3.5);
     pose.tailLegacy = true;
     pose.tailLift = 0;
@@ -1860,7 +1965,8 @@ const TAIL_JAB = {
   active(d, a, h, k, dt) {
     const pose = d.pose, st = h.st, off = h.spec.offset ?? 0.6;
     // the lash: a short, fast spin back through the hero's bearing (and `past` beyond it)
-    d.yaw = st.yawW - st.dir * (off + (h.spec.past ?? 0.45)) * easeInOutSine(k);
+    if (st.aimed && st.spinOn) aimSpin(d, st, -st.dir, h.spec.impact - a.t, dt, off + (h.spec.past ?? 0.45));
+    else d.yaw = st.yawW - st.dir * (off + (h.spec.past ?? 0.45)) * easeInOutSine(k);
     pose.tailLegacy = true;
     pose.tailLift = 0;
     pose.tailCurl = -st.dir * 0.05;
@@ -1875,13 +1981,14 @@ const TAIL_JAB = {
     // the hips thrust back into it
     if (h.v > 0) d.moveForward(-h.v * 2 * (1 - k), dt);
   },
-  recover(d, a, h, k) {
+  recover(d, a, h, k, dt) {
     const pose = d.pose;
     pose.tailLegacy = true;
     pose.tailLift = k > 0.5 ? 1 : 0;
     pose.lower = 0.3 * (1 - k);
     pose.pitch = 0.14 * (1 - k);
     pose.spread[0] = pose.spread[1] = 0;
+    if (h.st.aimed && h.st.spinOn) aimSpin(d, h.st, -h.st.dir, -1, dt);
   },
   hit(d, a, h, stage, k) {
     tailSweepHit(d, a, h.st, h.spec, stage, k);
@@ -1899,14 +2006,19 @@ const TAIL_SWEEP = {
     // re-time this hit's flash from where the hero stands now (behind vs at the flank)
     const b = a.beats?.[h.idx];
     if (b && !b.told) b.impactIn = Math.max(0.05, a.dur + h.spec.impact + (h.spec.impactFlank ?? 0) * tailFlank(d));
+    h.st.impactAt = h.spec.impact + (h.spec.impactFlank ?? 0) * tailFlank(d);
+    h.st.aimed = false; // (a string's sweep keeps its curve: steered, it reached the hero early after the jab)
   },
   windup(d, a, h, k, dt) {
+    h.st.tRem = a.dur - a.t + (h.st.impactAt ?? h.spec.impact);
     tailSweepPose(d, h.st, 'windup', k, dt, h.spec);
   },
   active(d, a, h, k, dt) {
+    h.st.tRem = (h.st.impactAt ?? h.spec.impact) - a.t;
     tailSweepPose(d, h.st, 'active', k, dt, h.spec);
   },
   recover(d, a, h, k, dt) {
+    h.st.tRem = -1;
     tailSweepPose(d, h.st, 'recovery', k, dt, h.spec);
   },
   hit(d, a, h, stage, k) {
@@ -2324,12 +2436,22 @@ const TAIL_WHIP = {
     st.back = sp.back ?? 0.3;
     st.yawW = d.sense.yawTo - st.at - st.dir * st.back;
     st.tailAng = undefined;
+    st.spinW = 0;
+    st.spunPast = false;
+    st.spinOn = false;
+    // (a string's second whip keeps its curve: steered, it landed up to 0.12 s off either way)
+    st.aimed = spinAimed(d) && !(a.hits ?? []).slice(0, h.idx).some((q) => q.spec?.kind === 'tailWhip');
   },
   windup(d, a, h, k, dt) {
     const pose = d.pose, st = h.st;
     // the pivot tracks him until the last fifth (then it is set), capped so the tail isn't flung
     if (k < 0.8) st.yawW = d.sense.yawTo - st.at - st.dir * st.back;
-    d.turnToward(st.yawW, h.spec.pivotRate ?? 5, dt);
+    const left = a.dur - a.t;
+    if (!(st.aimed && left < SPIN.pre && aimSpin(d, st, st.dir, left + h.spec.impact, dt, st.dir * angleDiff(d.yaw, st.yawW) + (h.spec.spin ?? 2.1) + st.back))) {
+      const y0 = d.yaw;
+      d.turnToward(st.yawW, h.spec.pivotRate ?? 5, dt);
+      spinTrack(d, st, y0, dt);
+    }
     pose.speed = Math.max(pose.speed, 4);
     pose.tailLegacy = true;
     pose.tailLift = 0;
@@ -2352,7 +2474,8 @@ const TAIL_WHIP = {
   },
   active(d, a, h, k, dt) {
     const pose = d.pose, st = h.st;
-    d.yaw = st.yawW + st.dir * ((h.spec.spin ?? 2.1) + st.back) * easeInOutSine(k);
+    if (st.aimed && st.spinOn) aimSpin(d, st, st.dir, h.spec.impact - a.t, dt, (h.spec.spin ?? 2.1) + st.back);
+    else d.yaw = st.yawW + st.dir * ((h.spec.spin ?? 2.1) + st.back) * easeInOutSine(k);
     pose.tailLegacy = true;
     pose.tailLift = 0;
     pose.tailCurl = -st.dir * 0.03; // the whip: the tip trails, then cracks through
@@ -2367,10 +2490,11 @@ const TAIL_WHIP = {
     pose.spread[0] = pose.spread[1] = 0;
     d.rootPt(pose.look, st.dir * 7, 1, 3);
   },
-  recover(d, a, h, k) {
+  recover(d, a, h, k, dt) {
     const pose = d.pose;
     pose.tailLegacy = true;
     pose.tailLift = k > 0.4 ? 1 : 0;
+    if (h.st.aimed && h.st.spinOn) aimSpin(d, h.st, h.st.dir, -1, dt);
     pose.lower = 0.3 * (1 - k);
     pose.pitch = 0.12 * (1 - k);
     pose.speed = 2;
