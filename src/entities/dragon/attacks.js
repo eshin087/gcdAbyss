@@ -2150,9 +2150,12 @@ const WING_SWEEP = {
     // down, then across: the beat's downstroke brings the wing low in the first part of the stroke,
     // then the body pivots it over the ground to the far side (the fingers rake through him)
     const u = smoothstep(0, W.drop ?? 0.4, k);
-    const sweep = easeInOutSine(clamp((k - (W.sweepAt ?? 0.2)) / (1 - (W.sweepAt ?? 0.2)), 0, 1));
+    // (the motion audit: the body pivots through the whole stroke, 0.9 rad, instead of 1.2 rad packed into
+    // its last 80 %: a 260 deg/s turntable spin)
+    const fx = fixOn(), sAt = fx ? 0 : (W.sweepAt ?? 0.2);
+    const sweep = easeInOutSine(clamp((k - sAt) / (1 - sAt), 0, 1));
     flapTo(d, h.top + Math.PI * u, W.amp ?? 0.9, dt);
-    d.yaw = h.yaw0 - side * (W.sweep ?? 1.2) * sweep;
+    d.yaw = h.yaw0 - side * (fx ? Math.min(W.sweep ?? 1.2, 0.9) : (W.sweep ?? 1.2)) * sweep;
     pose.spread[h.wi] = W.spread ?? 0.85;
     pose.spread[1 - h.wi] = 0.25;
     pose.spreadRate = 8;

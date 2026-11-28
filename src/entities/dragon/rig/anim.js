@@ -976,6 +976,15 @@ export class Rig {
       for (let i = 0; i <= n; i++) this._swingP[i].copy(vis.p[i]);
       this._swingAt = this._frame;
     }
+    if (fixOn() && this._swingAt !== this._frame) {
+      // (not while a driven move pins the head to the measured chain: the drawn neck would part from it)
+      // (the motion audit) the neck's bend spread along it: a FABRIK solve toward a low goal from the high
+      // resting curve left one joint at its limit in nearly every move (a kink); relax, then reach again
+      const E2 = (this._nrE ??= V()).copy(vis.p[n]);
+      vis.relaxKinks(4);
+      vis.solve(E2, 3);
+      vis.relaxKinks(1);
+    }
     vis.apply(qNeckBase, this._qNeckEnd);
     // (pinned: the head is placed as if the measured chain were shown; not while a strike leads it)
     const pin = this._swingAt === this._frame && pose.headLead.lengthSq() < 1e-8;
@@ -1242,6 +1251,7 @@ export class Rig {
     if (snap) tail.snap();
     else {
       this._stiff = damp(this._stiff ?? 1, stiff, 6, dt);
+      tail.relax = !legacy && fixOn() ? 4 : 0; // (the motion audit: kinks where it meets the ground smoothed out)
       tail.spring(Math.min(dt, 1 / 30), 70 * this._stiff, 10 * this._stiff * this._stiff, 0.5);
     }
     tail.apply(qTailBase, this._q[2]);
